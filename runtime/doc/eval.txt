@@ -5660,9 +5660,13 @@ mode([expr])	Return a string that indicates the current mode.
 			S	Select by line
 			CTRL-S	Select blockwise
 			i	Insert
+			ic	Insert mode completion |compl-generic|
+			ix	Insert mode |i_CTRL-X| completion
 			R	Replace |R|
+			Rc	Replace mode completion |compl-generic|
 			Rv	Virtual Replace |gR|
-			c	Command-line
+			Rx	Replace mode |i_CTRL-X| completion
+			c	Command-line editing
 			cv	Vim Ex mode |gQ|
 			ce	Normal Ex mode |Q|
 			r	Hit-enter prompt
@@ -5811,7 +5815,7 @@ pathshorten({expr})					*pathshorten()*
 		components in the path are reduced to single letters.  Leading
 		'~' and '.' characters are kept.  Example: >
 			:echo pathshorten('~/.config/nvim/autoload/file1.vim')
-<			~/.v/a/file1.vim ~
+<			~/.c/n/a/file1.vim ~
 		It doesn't matter if the path exists or not.
 
 pow({x}, {y})						*pow()*
