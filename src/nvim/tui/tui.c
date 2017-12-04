@@ -23,6 +23,7 @@
 #include "nvim/map.h"
 #include "nvim/main.h"
 #include "nvim/memory.h"
+#include "nvim/option.h"
 #include "nvim/api/vim.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/event/loop.h"
@@ -166,6 +167,31 @@ static size_t unibi_pre_fmt_str(TUIData *data, unsigned int unibi_index,
   return unibi_run(str, data->params, buf, len);
 }
 
+/// Emits some termcodes after Nvim startup, which were observed to slowdown
+/// rendering during startup in tmux 2.3 (+focus-events). #7649
+static void terminfo_after_startup_event(void **argv)
+{
+  UI *ui = argv[0];
+  bool defer = argv[1] != NULL;  // clever(?) boolean without malloc() dance.
+  TUIData *data = ui->data;
+  if (defer) {  // We're on the main-loop. Now forward to the TUI loop.
+    loop_schedule(data->loop,
+                  event_create(terminfo_after_startup_event, 2, ui, NULL));
+    return;
+  }
+  // Enable bracketed paste
+  unibi_out_ext(ui, data->unibi_ext.enable_bracketed_paste);
+  // Enable focus reporting
+  unibi_out_ext(ui, data->unibi_ext.enable_focus_reporting);
+}
+
+static void termname_set_event(void **argv)
+{
+  char *termname = argv[0];
+  set_tty_option("term", termname);
+  // Do not free termname, it is freed by set_tty_option.
+}
+
 static void terminfo_start(UI *ui)
 {
   TUIData *data = ui->data;
@@ -190,12 +216,20 @@ static void terminfo_start(UI *ui)
   data->unibi_ext.reset_cursor_style = -1;
   data->out_fd = 1;
   data->out_isatty = os_isatty(data->out_fd);
-  // setup unibilium
+
+  // Set up unibilium/terminfo.
   const char *term = os_getenv("TERM");
   data->ut = unibi_from_env();
+  char *termname = NULL;
   if (!data->ut) {
-    data->ut = terminfo_from_builtin(term);
+    data->ut = terminfo_from_builtin(term, &termname);
+  } else {
+    termname = xstrdup(term);
   }
+  // Update 'term' option.
+  loop_schedule_deferred(&main_loop,
+                         event_create(termname_set_event, 1, termname));
+
   // None of the following work over SSH; see :help TERM .
   const char *colorterm = os_getenv("COLORTERM");
   const char *termprg = os_getenv("TERM_PROGRAM");
@@ -228,10 +262,6 @@ static void terminfo_start(UI *ui)
   unibi_out(ui, unibi_enter_ca_mode);
   unibi_out(ui, unibi_keypad_xmit);
   unibi_out(ui, unibi_clear_screen);
-  // Enable bracketed paste
-  unibi_out_ext(ui, data->unibi_ext.enable_bracketed_paste);
-  // Enable focus reporting
-  unibi_out_ext(ui, data->unibi_ext.enable_focus_reporting);
   uv_loop_init(&data->write_loop);
   if (data->out_isatty) {
     uv_tty_init(&data->write_loop, &data->output_handle.tty, data->out_fd, 0);
@@ -244,6 +274,9 @@ static void terminfo_start(UI *ui)
     uv_pipe_init(&data->write_loop, &data->output_handle.pipe, 0);
     uv_pipe_open(&data->output_handle.pipe, data->out_fd);
   }
+
+  loop_schedule(&main_loop,
+                event_create(terminfo_after_startup_event, 2, ui, ui));
 }
 
 static void terminfo_stop(UI *ui)
@@ -326,7 +359,7 @@ static void tui_main(UIBridgeData *bridge, UI *ui)
   CONTINUE(bridge);
 
   while (!data->stop) {
-    loop_poll_events(&tui_loop, -1);
+    loop_poll_events(&tui_loop, -1);  // tui_loop.events is never processed
   }
 
   ui_bridge_stopped(bridge);
@@ -344,7 +377,7 @@ static void tui_scheduler(Event event, void *d)
 {
   UI *ui = d;
   TUIData *data = ui->data;
-  loop_schedule(data->loop, event);
+  loop_schedule(data->loop, event);  // `tui_loop` local to tui_main().
 }
 
 #ifdef UNIX
@@ -940,10 +973,9 @@ static void tui_scroll(UI *ui, Integer count)
     }
     cursor_goto(ui, saved_row, saved_col);
 
-    if (!scroll_clears_to_current_colour && grid->bg != -1) {
-      // Scrolling may leave wrong background in the cleared area on non-bge
-      // terminals. Update the cleared area of the terminal if its builtin
-      // scrolling facility was used and bg color is not the default.
+    if (!scroll_clears_to_current_colour) {
+      // Scrolling will leave wrong background in the cleared area on non-BCE
+      // terminals. Update the cleared area.
       clear_region(ui, clear_top, clear_bot, grid->left, grid->right);
     }
   } else {
@@ -1612,9 +1644,8 @@ static void augment_terminfo(TUIData *data, const char *term,
         ut, NULL, "\033]12;#%p1%06x\007");
   }
 
-  /// Terminals generally ignore private modes that they do not recognize,
-  /// and there is no known ambiguity with these modes from terminal type to
-  /// terminal type, so we can afford to just set these unconditionally.
+  /// Terminals usually ignore unrecognized private modes, and there is no
+  /// known ambiguity with these. So we just set them unconditionally.
   data->unibi_ext.enable_lr_margin = (int)unibi_add_ext_str(ut, NULL,
       "\x1b[?69h");
   data->unibi_ext.disable_lr_margin = (int)unibi_add_ext_str(ut, NULL,
@@ -1624,9 +1655,9 @@ static void augment_terminfo(TUIData *data, const char *term,
   data->unibi_ext.disable_bracketed_paste = (int)unibi_add_ext_str(ut, NULL,
       "\x1b[?2004l");
   data->unibi_ext.enable_focus_reporting = (int)unibi_add_ext_str(ut, NULL,
-      "\x1b[?1004h");
+      rxvt ? "\x1b]777;focus;on\x7" : "\x1b[?1004h");
   data->unibi_ext.disable_focus_reporting = (int)unibi_add_ext_str(ut, NULL,
-      "\x1b[?1004l");
+      rxvt ? "\x1b]777;focus;off\x7" : "\x1b[?1004l");
   data->unibi_ext.enable_mouse = (int)unibi_add_ext_str(ut, NULL,
       "\x1b[?1002h\x1b[?1006h");
   data->unibi_ext.disable_mouse = (int)unibi_add_ext_str(ut, NULL,
