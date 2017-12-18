@@ -151,6 +151,7 @@ UI *tui_start(void)
   ui->suspend = tui_suspend;
   ui->set_title = tui_set_title;
   ui->set_icon = tui_set_icon;
+  ui->option_set= tui_option_set;
   ui->event = tui_event;
 
   memset(ui->ui_ext, 0, sizeof(ui->ui_ext));
@@ -166,24 +167,6 @@ static size_t unibi_pre_fmt_str(TUIData *data, unsigned int unibi_index,
     return 0U;
   }
   return unibi_run(str, data->params, buf, len);
-}
-
-/// Emits some termcodes after Nvim startup, which were observed to slowdown
-/// rendering during startup in tmux 2.3 (+focus-events). #7649
-static void terminfo_after_startup_event(void **argv)
-{
-  UI *ui = argv[0];
-  bool defer = argv[1] != NULL;  // clever(?) boolean without malloc() dance.
-  TUIData *data = ui->data;
-  if (defer) {  // We're on the main-loop. Now forward to the TUI loop.
-    loop_schedule(data->loop,
-                  event_create(terminfo_after_startup_event, 2, ui, NULL));
-    return;
-  }
-  // Enable bracketed paste
-  unibi_out_ext(ui, data->unibi_ext.enable_bracketed_paste);
-  // Enable focus reporting
-  unibi_out_ext(ui, data->unibi_ext.enable_focus_reporting);
 }
 
 static void termname_set_event(void **argv)
@@ -265,6 +248,9 @@ static void terminfo_start(UI *ui)
   unibi_out(ui, unibi_enter_ca_mode);
   unibi_out(ui, unibi_keypad_xmit);
   unibi_out(ui, unibi_clear_screen);
+  // Enable bracketed paste
+  unibi_out_ext(ui, data->unibi_ext.enable_bracketed_paste);
+
   uv_loop_init(&data->write_loop);
   if (data->out_isatty) {
     uv_tty_init(&data->write_loop, &data->output_handle.tty, data->out_fd, 0);
@@ -277,9 +263,6 @@ static void terminfo_start(UI *ui)
     uv_pipe_init(&data->write_loop, &data->output_handle.pipe, 0);
     uv_pipe_open(&data->output_handle.pipe, data->out_fd);
   }
-
-  loop_schedule(&main_loop,
-                event_create(terminfo_after_startup_event, 2, ui, ui));
 }
 
 static void terminfo_stop(UI *ui)
@@ -316,6 +299,16 @@ static void tui_terminal_start(UI *ui)
   update_size(ui);
   signal_watcher_start(&data->winch_handle, sigwinch_cb, SIGWINCH);
   term_input_start(&data->input);
+}
+
+static void tui_terminal_after_startup(UI *ui)
+  FUNC_ATTR_NONNULL_ALL
+{
+  TUIData *data = ui->data;
+
+  // Emit this after Nvim startup, not during.  This works around a tmux
+  // 2.3 bug(?) which caused slow drawing during startup.  #7649
+  unibi_out_ext(ui, data->unibi_ext.enable_focus_reporting);
 }
 
 static void tui_terminal_stop(UI *ui)
@@ -363,6 +356,17 @@ static void tui_main(UIBridgeData *bridge, UI *ui)
   loop_schedule_deferred(&main_loop,
                          event_create(show_termcap_event, 1, data->ut));
 
+  // "Active" loop: first ~100 ms of startup.
+  for (size_t ms = 0; ms < 100 && !data->stop;) {
+    ms += (loop_poll_events(&tui_loop, 20) ? 20 : 1);
+  }
+  if (!data->stop) {
+    tui_terminal_after_startup(ui);
+    // Tickle `main_loop` with a dummy event, else the initial "focus-gained"
+    // terminal response may not get processed until user hits a key.
+    loop_schedule_deferred(&main_loop, event_create(tui_dummy_event, 0));
+  }
+  // "Passive" (I/O-driven) loop: TUI thread "main loop".
   while (!data->stop) {
     loop_poll_events(&tui_loop, -1);  // tui_loop.events is never processed
   }
@@ -376,6 +380,10 @@ static void tui_main(UIBridgeData *bridge, UI *ui)
   kv_destroy(data->invalid_regions);
   xfree(data);
   xfree(ui);
+}
+
+static void tui_dummy_event(void **argv)
+{
 }
 
 static void tui_scheduler(Event event, void *d)
@@ -1099,6 +1107,7 @@ static void suspend_event(void **argv)
     loop_poll_events(data->loop, -1);
   }
   tui_terminal_start(ui);
+  tui_terminal_after_startup(ui);
   if (enable_mouse) {
     tui_mouse_on(ui);
   }
@@ -1134,6 +1143,14 @@ static void tui_set_title(UI *ui, String title)
 
 static void tui_set_icon(UI *ui, String icon)
 {
+}
+
+static void tui_option_set(UI *ui, String name, Object value)
+{
+  if (strequal(name.data, "termguicolors")) {
+    // NB: value for bridge is set in ui_bridge.c
+    ui->rgb = value.data.boolean;
+  }
 }
 
 // NB: if we start to use this, the ui_bridge must be updated
