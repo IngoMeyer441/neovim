@@ -3148,10 +3148,9 @@ void ex_make(exarg_T *eap)
   }
   msg_start();
   MSG_PUTS(":!");
-  msg_outtrans((char_u *) cmd);  // show what we are doing
+  msg_outtrans((char_u *)cmd);  // show what we are doing
 
-  // let the shell know if we are redirecting output or not
-  do_shell((char_u *) cmd, *p_sp != NUL ? kShellOptDoOut : 0);
+  do_shell((char_u *)cmd, 0);
 
 
   res = qf_init(wp, fname, (eap->cmdidx != CMD_make
@@ -3910,6 +3909,7 @@ load_dummy_buffer (
   bufref_T newbuf_to_wipe;
   int failed = true;
   aco_save_T aco;
+  int readfile_result;
 
   // Allocate a buffer without putting it in the buffer list.
   newbuf = buflist_new(NULL, NULL, (linenr_T)1, BLN_DUMMY);
@@ -3923,7 +3923,9 @@ load_dummy_buffer (
 
   /* need to open the memfile before putting the buffer in a window */
   if (ml_open(newbuf) == OK) {
-    /* set curwin/curbuf to buf and save a few things */
+    // Make sure this buffer isn't wiped out by auto commands.
+    newbuf->b_locked++;
+    // set curwin/curbuf to buf and save a few things
     aucmd_prepbuf(&aco, newbuf);
 
     /* Need to set the filename for autocommands. */
@@ -3937,9 +3939,11 @@ load_dummy_buffer (
     curbuf->b_flags &= ~BF_DUMMY;
 
     newbuf_to_wipe.br_buf = NULL;
-    if (readfile(fname, NULL,
-            (linenr_T)0, (linenr_T)0, (linenr_T)MAXLNUM,
-            NULL, READ_NEW | READ_DUMMY) == OK
+    readfile_result = readfile(fname, NULL, (linenr_T)0, (linenr_T)0,
+                               (linenr_T)MAXLNUM, NULL,
+                               READ_NEW | READ_DUMMY);
+    newbuf->b_locked--;
+    if (readfile_result == OK
         && !got_int
         && !(curbuf->b_flags & BF_NEW)) {
       failed = FALSE;
