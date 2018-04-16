@@ -6300,15 +6300,18 @@ static void ex_stop(exarg_T *eap)
     if (!eap->forceit) {
       autowrite_all();
     }
+    apply_autocmds(EVENT_VIMSUSPEND, NULL, NULL, false, NULL);
     ui_cursor_goto((int)Rows - 1, 0);
     ui_linefeed();
     ui_flush();
     ui_call_suspend();  // call machine specific function
+
     ui_flush();
     maketitle();
     resettitle();  // force updating the title
     redraw_later_clear();
     ui_refresh();  // may have resized window
+    apply_autocmds(EVENT_VIMRESUME, NULL, NULL, false, NULL);
   }
 }
 
@@ -6975,12 +6978,10 @@ do_exedit (
   ex_no_reprint = TRUE;
 }
 
-/*
- * ":gui" and ":gvim" when there is no GUI.
- */
+/// ":gui" and ":gvim" when there is no GUI.
 static void ex_nogui(exarg_T *eap)
 {
-  eap->errmsg = e_nogvim;
+  eap->errmsg = (char_u *)N_("E25: Nvim does not have a built-in GUI");
 }
 
 
