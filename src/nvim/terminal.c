@@ -359,6 +359,15 @@ void terminal_resize(Terminal *term, uint16_t width, uint16_t height)
     return;
   }
 
+  FOR_ALL_TAB_WINDOWS(tp, wp) {
+    if (wp->w_buffer && wp->w_buffer->terminal == term) {
+      const uint16_t win_width =
+        (uint16_t)(MAX(0, wp->w_width - win_col_off(wp)));
+      width = MAX(width, win_width);
+      height = (uint16_t)MAX(height, wp->w_height);
+    }
+  }
+
   vterm_set_size(term->vt, height, width);
   vterm_screen_flush_damage(term->vts);
   term->pending_resize = true;
@@ -1088,7 +1097,6 @@ static void refresh_terminal(Terminal *term)
     refresh_size(term, buf);
     refresh_scrollback(term, buf);
     refresh_screen(term, buf);
-    redraw_buf_later(buf, NOT_VALID);
   });
   long ml_added = buf->b_ml.ml_line_count - ml_before;
   adjust_topline(term, buf, ml_added);
@@ -1098,6 +1106,7 @@ static void refresh_timer_cb(TimeWatcher *watcher, void *data)
 {
   refresh_pending = false;
   if (exiting  // Cannot redraw (requires event loop) during teardown/exit.
+      || (State & CMDPREVIEW)
       // WM_LIST (^D) is not redrawn, unlike the normal wildmenu. So we must
       // skip redraws to keep it visible.
       || wild_menu_showing == WM_LIST) {

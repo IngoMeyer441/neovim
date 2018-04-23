@@ -306,12 +306,10 @@ local function retry(max, max_ms, fn)
     end
     luv.update_time()  -- Update cached value of luv.now() (libuv: uv_now()).
     if (max and tries >= max) or (luv.now() - start_time > timeout) then
-      if type(result) == "string" then
-        result = "\nretry() attempts: "..tostring(tries).."\n"..result
-      end
-      error(result)
+      error("\nretry() attempts: "..tostring(tries).."\n"..tostring(result))
     end
     tries = tries + 1
+    luv.sleep(20)  -- Avoid hot loop...
   end
 end
 
@@ -470,14 +468,7 @@ end
 
 -- sleeps the test runner (_not_ the nvim instance)
 local function sleep(ms)
-  local function notification_cb(method, _)
-    if method == "redraw" then
-      error("Screen is attached; use screen:sleep() instead.")
-    end
-    return true
-  end
-
-  run(nil, notification_cb, nil, ms)
+  luv.sleep(ms)
 end
 
 local function curbuf_contents()
