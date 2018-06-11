@@ -16,6 +16,7 @@
 #include "nvim/api/private/dispatch.h"
 #include "nvim/api/buffer.h"
 #include "nvim/msgpack_rpc/channel.h"
+#include "nvim/msgpack_rpc/helpers.h"
 #include "nvim/lua/executor.h"
 #include "nvim/vim.h"
 #include "nvim/buffer.h"
@@ -101,12 +102,13 @@ Dictionary nvim_get_hl_by_id(Integer hl_id, Boolean rgb, Error *err)
   return hl_get_attr_by_id(attrcode, rgb, err);
 }
 
-/// Passes input keys to Nvim.
+/// Sends input-keys to Nvim, subject to various quirks controlled by `mode`
+/// flags. This is a blocking call, unlike |nvim_input()|.
 ///
 /// On execution error: does not fail, but updates v:errmsg.
 ///
 /// @param keys         to be typed
-/// @param mode         mapping options
+/// @param mode         behavior flags, see |feedkeys()|
 /// @param escape_csi   If true, escape K_SPECIAL/CSI bytes in `keys`
 /// @see feedkeys()
 /// @see vim_strsave_escape_csi
@@ -168,12 +170,11 @@ void nvim_feedkeys(String keys, String mode, Boolean escape_csi)
   }
 }
 
-/// Passes keys to Nvim as raw user-input.
+/// Queues raw user-input. Unlike |nvim_feedkeys()|, this uses a low-level
+/// input buffer and the call is non-blocking (input is processed
+/// asynchronously by the eventloop).
 ///
 /// On execution error: does not fail, but updates v:errmsg.
-///
-/// Unlike `nvim_feedkeys`, this uses a lower-level input buffer and the call
-/// is not deferred. This is the most reliable way to send real user input.
 ///
 /// @note |keycodes| like <CR> are translated, so "<" is special.
 ///       To input a literal "<", send <LT>.
@@ -1163,6 +1164,11 @@ Array nvim_call_atomic(uint64_t channel_id, Array calls, Error *err)
 
     MsgpackRpcRequestHandler handler = msgpack_rpc_get_handler_for(name.data,
                                                                    name.size);
+    if (handler.fn == msgpack_rpc_handle_missing_method) {
+      api_set_error(&nested_error, kErrorTypeException, "Invalid method: %s",
+                    name.size > 0 ? name.data : "<empty>");
+      break;
+    }
     Object result = handler.fn(channel_id, args, &nested_error);
     if (ERROR_SET(&nested_error)) {
       // error handled after loop
