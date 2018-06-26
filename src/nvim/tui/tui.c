@@ -1414,7 +1414,7 @@ static void patch_terminfo_bugs(TUIData *data, const char *term,
     }
   }
 
-  if (!true_xterm) {
+  if (!true_xterm && !tmux) {
     // Cannot trust terminfo; safer to disable BCE. #7624
     unibi_set_bool(ut, unibi_back_color_erase, false);
   }
