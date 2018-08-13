@@ -2998,8 +2998,8 @@ count({comp}, {expr} [, {ic} [, {start}]])			*count()*
 		When {ic} is given and it's |TRUE| then case is ignored.
 
 		When {comp} is a string then the number of not overlapping
-		occurences of {expr} is returned.
-
+		occurrences of {expr} is returned. Zero is returned when
+		{expr} is an empty string.
 
 							*cscope_connection()*
 cscope_connection([{num} , {dbpath} [, {prepend}]])
@@ -6914,7 +6914,8 @@ setqflist({list} [, {action}[, {what}]])		*setqflist()*
 		    title	quickfix list title text
 		Unsupported keys in {what} are ignored.
 		If the "nr" item is not present, then the current quickfix list
-		is modified.
+		is modified. When creating a new quickfix list, "nr" can be
+		set to a value one greater than the quickfix stack size.
 
 		Examples: >
 			:call setqflist([], 'r', {'title': 'My search'})

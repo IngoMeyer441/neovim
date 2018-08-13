@@ -307,9 +307,12 @@ static int linelen(int *has_tab)
     ;
   save = *last;
   *last = NUL;
-  len = linetabsize(line);              /* get line length */
-  if (has_tab != NULL)                  /* check for embedded TAB */
-    *has_tab = (vim_strrchr(first, TAB) != NULL);
+  // Get line length.
+  len = linetabsize(line);
+  // Check for embedded TAB.
+  if (has_tab != NULL) {
+    *has_tab = STRRCHR(first, TAB) != NULL;
+  }
   *last = save;
 
   return len;
@@ -716,11 +719,13 @@ void ex_retab(exarg_T *eap)
             memmove(new_line + start_col + len,
                 ptr + col, (size_t)(old_len - col + 1));
             ptr = new_line + start_col;
-            for (col = 0; col < len; col++)
+            for (col = 0; col < len; col++) {
               ptr[col] = (col < num_tabs) ? '\t' : ' ';
-            ml_replace(lnum, new_line, FALSE);
-            if (first_line == 0)
+            }
+            ml_replace(lnum, new_line, false);
+            if (first_line == 0) {
               first_line = lnum;
+            }
             last_line = lnum;
             ptr = new_line;
             col = start_col + len;
@@ -1598,6 +1603,7 @@ void ex_file(exarg_T *eap)
     // print full file name if :cd used
     fileinfo(false, false, eap->forceit);
   }
+  redraw_tabline = true;
 }
 
 /*
@@ -3624,7 +3630,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout,
                 // before the cursor.
                 len_change = (int)STRLEN(new_line) - (int)STRLEN(orig_line);
                 curwin->w_cursor.col += len_change;
-                ml_replace(lnum, new_line, FALSE);
+                ml_replace(lnum, new_line, false);
               }
 
               search_match_lines = regmatch.endpos[0].lnum
@@ -3666,9 +3672,10 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout,
               msg_col = 0;
               gotocmdline(TRUE);
 
-              /* restore the line */
-              if (orig_line != NULL)
-                ml_replace(lnum, orig_line, FALSE);
+              // restore the line
+              if (orig_line != NULL) {
+                ml_replace(lnum, orig_line, false);
+              }
             }
 
             need_wait_return = FALSE;             /* no hit-return prompt */
@@ -3925,9 +3932,10 @@ skip:
             prev_matchcol = (colnr_T)STRLEN(sub_firstline)
                             - prev_matchcol;
 
-            if (u_savesub(lnum) != OK)
+            if (u_savesub(lnum) != OK) {
               break;
-            ml_replace(lnum, new_start, TRUE);
+            }
+            ml_replace(lnum, new_start, true);
 
             if (nmatch_tl > 0) {
               /*
@@ -5011,8 +5019,8 @@ void fix_help_buffer(void)
                 if (fnamencmp(f1, f2, t1 - f1) != 0) {
                   continue;
                 }
-                const char_u *const e1 = vim_strrchr(t1, '.');
-                const char_u *const e2 = vim_strrchr(path_tail(f2), '.');
+                const char_u *const e1 = STRRCHR(t1, '.');
+                const char_u *const e2 = STRRCHR(path_tail(f2), '.');
                 if (e1 == NULL || e2 == NULL) {
                   continue;
                 }
@@ -5641,7 +5649,7 @@ void ex_sign(exarg_T *eap)
             // Count cells and check for non-printable chars
             cells = 0;
             for (s = arg; s < p; s += (*mb_ptr2len)(s)) {
-              if (!vim_isprintc((*mb_ptr2char)(s))) {
+              if (!vim_isprintc(utf_ptr2char(s))) {
                 break;
               }
               cells += (*mb_ptr2cells)(s);

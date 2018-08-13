@@ -7603,7 +7603,7 @@ static void f_count(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     const char_u *expr = (char_u *)tv_get_string_chk(&argvars[1]);
     const char_u *p = argvars[0].vval.v_string;
 
-    if (!error && expr != NULL && p != NULL) {
+    if (!error && expr != NULL && *expr != NUL && p != NULL) {
       if (ic) {
         const size_t len = STRLEN(expr);
 
@@ -9493,6 +9493,9 @@ static void f_getchar(typval_T *argvars, typval_T *rettv, FunPtr fptr)
         /* Find the window at the mouse coordinates and compute the
          * text position. */
         win = mouse_find_win(&row, &col);
+        if (win == NULL) {
+          return;
+        }
         (void)mouse_comp_pos(win, &row, &col, &lnum);
         for (wp = firstwin; wp != win; wp = wp->w_next)
           ++winnr;
@@ -10207,32 +10210,34 @@ static void f_gettabinfo(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 static void f_gettabvar(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   win_T *oldcurwin;
-  tabpage_T *tp, *oldtabpage;
-  dictitem_T  *v;
+  tabpage_T *oldtabpage;
   bool done = false;
 
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;
 
   const char *const varname = tv_get_string_chk(&argvars[1]);
-  tp = find_tabpage((int)tv_get_number_chk(&argvars[0], NULL));
+  tabpage_T *const tp = find_tabpage((int)tv_get_number_chk(&argvars[0], NULL));
   if (tp != NULL && varname != NULL) {
     // Set tp to be our tabpage, temporarily.  Also set the window to the
     // first window in the tabpage, otherwise the window is not valid.
-    win_T *window = tp->tp_firstwin == NULL ? firstwin : tp->tp_firstwin;
+    win_T *const window = tp == curtab || tp->tp_firstwin == NULL
+        ? firstwin
+        : tp->tp_firstwin;
     if (switch_win(&oldcurwin, &oldtabpage, window, tp, true) == OK) {
       // look up the variable
       // Let gettabvar({nr}, "") return the "t:" dictionary.
-      v = find_var_in_ht(&tp->tp_vars->dv_hashtab, 't',
-                         varname, strlen(varname), false);
+      const dictitem_T *const v = find_var_in_ht(&tp->tp_vars->dv_hashtab, 't',
+                                                 varname, strlen(varname),
+                                                 false);
       if (v != NULL) {
         tv_copy(&v->di_tv, rettv);
         done = true;
       }
     }
 
-    /* restore previous notion of curwin */
-    restore_win(oldcurwin, oldtabpage, TRUE);
+    // restore previous notion of curwin
+    restore_win(oldcurwin, oldtabpage, true);
   }
 
   if (!done && argvars[2].v_type != VAR_UNKNOWN) {
@@ -12222,7 +12227,7 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
   long start = 0;
   long nth = 1;
   colnr_T startcol = 0;
-  int match = 0;
+  bool match = false;
   list_T      *l = NULL;
   listitem_T  *li = NULL;
   long idx = 0;
@@ -12320,7 +12325,7 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
     for (;; ) {
       if (l != NULL) {
         if (li == NULL) {
-          match = FALSE;
+          match = false;
           break;
         }
         xfree(tofree);
@@ -12346,7 +12351,7 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
         startcol = (colnr_T)(regmatch.startp[0]
                              + (*mb_ptr2len)(regmatch.startp[0]) - str);
         if (startcol > (colnr_T)len || str + startcol <= regmatch.startp[0]) {
-            match = FALSE;
+            match = false;
             break;
         }
       }
@@ -12419,13 +12424,13 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
     vim_regfree(regmatch.regprog);
   }
 
-  if (type == kSomeMatchStrPos && l == NULL) {
+theend:
+  if (type == kSomeMatchStrPos && l == NULL && rettv->vval.v_list != NULL) {
     // matchstrpos() without a list: drop the second item
     list_T *const ret_l = rettv->vval.v_list;
     tv_list_item_remove(ret_l, TV_LIST_ITEM_NEXT(ret_l, tv_list_first(ret_l)));
   }
 
-theend:
   xfree(tofree);
   p_cpo = save_cpo;
 }
@@ -15893,7 +15898,7 @@ static void f_strgetchar(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   while (charidx >= 0 && byteidx < len) {
     if (charidx == 0) {
-      rettv->vval.v_number = mb_ptr2char((const char_u *)str + byteidx);
+      rettv->vval.v_number = utf_ptr2char((const char_u *)str + byteidx);
       break;
     }
     charidx--;

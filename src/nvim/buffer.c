@@ -505,14 +505,20 @@ void close_buffer(win_T *win, buf_T *buf, int action, int abort_if_last)
 
   int nwindows = buf->b_nwindows;
 
-  /* decrease the link count from windows (unless not in any window) */
-  if (buf->b_nwindows > 0)
-    --buf->b_nwindows;
+  // decrease the link count from windows (unless not in any window)
+  if (buf->b_nwindows > 0) {
+    buf->b_nwindows--;
+  }
+
+  if (diffopt_hiddenoff() && !unload_buf && buf->b_nwindows == 0) {
+    diff_buf_delete(buf);   // Clear 'diff' for hidden buffer.
+  }
 
   /* Return when a window is displaying the buffer or when it's not
    * unloaded. */
-  if (buf->b_nwindows > 0 || !unload_buf)
+  if (buf->b_nwindows > 0 || !unload_buf) {
     return;
+  }
 
   if (buf->terminal) {
     terminal_close(buf->terminal, NULL);
@@ -3220,10 +3226,11 @@ int build_stl_str_hl(
   // Get the byte value now, in case we need it below. This is more
   // efficient than making a copy of the line.
   int byteval;
-  if (wp->w_cursor.col > (colnr_T)STRLEN(line_ptr))
+  if (wp->w_cursor.col > (colnr_T)STRLEN(line_ptr)) {
     byteval = 0;
-  else
-    byteval = (*mb_ptr2char)(line_ptr + wp->w_cursor.col);
+  } else {
+    byteval = utf_ptr2char(line_ptr + wp->w_cursor.col);
+  }
 
   int groupdepth = 0;
 
