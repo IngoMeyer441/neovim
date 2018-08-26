@@ -276,7 +276,7 @@ static void insert_enter(InsertState *s)
 
     set_vim_var_string(VV_INSERTMODE, (char *) s->ptr, 1);
     set_vim_var_string(VV_CHAR, NULL, -1);
-    apply_autocmds(EVENT_INSERTENTER, NULL, NULL, false, curbuf);
+    ins_apply_autocmds(EVENT_INSERTENTER);
 
     // Make sure the cursor didn't move.  Do call check_cursor_col() in
     // case the text was modified.  Since Insert mode was not started yet
@@ -469,7 +469,7 @@ static void insert_enter(InsertState *s)
 
   foldUpdateAfterInsert();
   if (s->cmdchar != 'r' && s->cmdchar != 'v') {
-    apply_autocmds(EVENT_INSERTLEAVE, NULL, NULL, false, curbuf);
+    ins_apply_autocmds(EVENT_INSERTLEAVE);
   }
   did_cursorhold = false;
 }
@@ -1376,7 +1376,7 @@ ins_redraw (
       // Make sure curswant is correct, an autocommand may call
       // getcurpos()
       update_curswant();
-      apply_autocmds(EVENT_CURSORMOVEDI, NULL, NULL, false, curbuf);
+      ins_apply_autocmds(EVENT_CURSORMOVEDI);
     }
     if (curwin->w_p_cole > 0) {
       conceal_old_cursor_line = last_cursormoved.lnum;
@@ -1390,8 +1390,18 @@ ins_redraw (
   if (ready && has_event(EVENT_TEXTCHANGEDI)
       && curbuf->b_last_changedtick != buf_get_changedtick(curbuf)
       && !pum_visible()) {
+    aco_save_T aco;
+    varnumber_T tick = buf_get_changedtick(curbuf);
+
+    // save and restore curwin and curbuf, in case the autocmd changes them
+    aucmd_prepbuf(&aco, curbuf);
     apply_autocmds(EVENT_TEXTCHANGEDI, NULL, NULL, false, curbuf);
+    aucmd_restbuf(&aco);
     curbuf->b_last_changedtick = buf_get_changedtick(curbuf);
+    if (tick != buf_get_changedtick(curbuf)) {  // see ins_apply_autocmds()
+      u_save(curwin->w_cursor.lnum,
+             (linenr_T)(curwin->w_cursor.lnum + 1));
+    }
   }
 
   // Trigger TextChangedP if changedtick differs. When the popupmenu closes
@@ -1400,8 +1410,18 @@ ins_redraw (
   if (ready && has_event(EVENT_TEXTCHANGEDP)
       && curbuf->b_last_changedtick_pum != buf_get_changedtick(curbuf)
       && pum_visible()) {
-      apply_autocmds(EVENT_TEXTCHANGEDP, NULL, NULL, false, curbuf);
-      curbuf->b_last_changedtick_pum = buf_get_changedtick(curbuf);
+    aco_save_T aco;
+    varnumber_T tick = buf_get_changedtick(curbuf);
+
+    // save and restore curwin and curbuf, in case the autocmd changes them
+    aucmd_prepbuf(&aco, curbuf);
+    apply_autocmds(EVENT_TEXTCHANGEDP, NULL, NULL, false, curbuf);
+    aucmd_restbuf(&aco);
+    curbuf->b_last_changedtick_pum = buf_get_changedtick(curbuf);
+    if (tick != buf_get_changedtick(curbuf)) {  // see ins_apply_autocmds()
+      u_save(curwin->w_cursor.lnum,
+             (linenr_T)(curwin->w_cursor.lnum + 1));
+    }
   }
 
   if (must_redraw)
@@ -3392,12 +3412,12 @@ static bool ins_compl_prep(int c)
         do_c_expr_indent();
       /* Trigger the CompleteDone event to give scripts a chance to act
        * upon the completion. */
-      apply_autocmds(EVENT_COMPLETEDONE, NULL, NULL, FALSE, curbuf);
+      ins_apply_autocmds(EVENT_COMPLETEDONE);
     }
   } else if (ctrl_x_mode == CTRL_X_LOCAL_MSG)
     /* Trigger the CompleteDone event to give scripts a chance to act
      * upon the (possibly failed) completion. */
-    apply_autocmds(EVENT_COMPLETEDONE, NULL, NULL, FALSE, curbuf);
+    ins_apply_autocmds(EVENT_COMPLETEDONE);
 
   /* reset continue_* if we left expansion-mode, if we stay they'll be
    * (re)set properly in ins_complete() */
@@ -4486,7 +4506,7 @@ static int ins_complete(int c, bool enable_pum)
            * first non_blank in the line, if it is not a wordchar
            * include it to get a better pattern, but then we don't
            * want the "\\<" prefix, check it bellow */
-          compl_col = (colnr_T)(skipwhite(line) - line);
+          compl_col = (colnr_T)getwhitecols(line);
           compl_startpos.col = compl_col;
           compl_startpos.lnum = curwin->w_cursor.lnum;
           compl_cont_status &= ~CONT_SOL;             /* clear SOL if present */
@@ -4605,7 +4625,7 @@ static int ins_complete(int c, bool enable_pum)
         }
       }
     } else if (CTRL_X_MODE_LINE_OR_EVAL(ctrl_x_mode)) {
-      compl_col = (colnr_T)(skipwhite(line) - line);
+      compl_col = (colnr_T)getwhitecols(line);
       compl_length = (int)curs_col - (int)compl_col;
       if (compl_length < 0)             /* cursor in indent: empty pattern */
         compl_length = 0;
@@ -6899,7 +6919,7 @@ bool in_cinkeys(int keytyped, int when, bool line_is_empty)
         p = look + STRLEN(look);
       if ((try_match || try_match_word)
           && curwin->w_cursor.col >= (colnr_T)(p - look)) {
-        int match = FALSE;
+        bool match = false;
 
         if (keytyped == KEY_COMPLETE) {
           char_u      *s;
@@ -6924,29 +6944,30 @@ bool in_cinkeys(int keytyped, int when, bool line_is_empty)
               && (icase
                   ? mb_strnicmp(s, look, (size_t)(p - look))
                   : STRNCMP(s, look, p - look)) == 0)
-            match = TRUE;
-        } else
-        /* TODO: multi-byte */
-        if (keytyped == (int)p[-1] || (icase && keytyped < 256
-                                       && TOLOWER_LOC(keytyped) ==
-                                       TOLOWER_LOC((int)p[-1]))) {
-          line = get_cursor_pos_ptr();
-          assert(p >= look && (uintmax_t)(p - look) <= SIZE_MAX);
-          if ((curwin->w_cursor.col == (colnr_T)(p - look)
-               || !vim_iswordc(line[-(p - look) - 1]))
-              && (icase
-                  ? mb_strnicmp(line - (p - look), look, (size_t)(p - look))
-                  : STRNCMP(line - (p - look), look, p - look))
-              == 0)
-            match = TRUE;
+            match = true;
+        } else {
+          // TODO(@brammool): multi-byte
+          if (keytyped == (int)p[-1]
+              || (icase && keytyped < 256
+                  && TOLOWER_LOC(keytyped) == TOLOWER_LOC((int)p[-1]))) {
+            line = get_cursor_pos_ptr();
+            assert(p >= look && (uintmax_t)(p - look) <= SIZE_MAX);
+            if ((curwin->w_cursor.col == (colnr_T)(p - look)
+                 || !vim_iswordc(line[-(p - look) - 1]))
+                && (icase
+                    ? mb_strnicmp(line - (p - look), look, (size_t)(p - look))
+                    : STRNCMP(line - (p - look), look, p - look)) == 0) {
+              match = true;
+            }
+          }
         }
         if (match && try_match_word && !try_match) {
           /* "0=word": Check if there are only blanks before the
            * word. */
-          line = get_cursor_line_ptr();
-          if ((int)(skipwhite(line) - line) !=
-              (int)(curwin->w_cursor.col - (p - look)))
-            match = FALSE;
+          if (getwhitecols(line) !=
+              (int)(curwin->w_cursor.col - (p - look))) {
+            match = false;
+          }
         }
         if (match) {
           return true;
@@ -7399,7 +7420,7 @@ static void ins_insert(int replaceState)
   set_vim_var_string(VV_INSERTMODE, ((State & REPLACE_FLAG) ? "i" :
                                      replaceState == VREPLACE ? "v" :
                                      "r"), 1);
-  apply_autocmds(EVENT_INSERTCHANGE, NULL, NULL, false, curbuf);
+  ins_apply_autocmds(EVENT_INSERTCHANGE);
   if (State & REPLACE_FLAG) {
     State = INSERT | (State & LANGMAP);
   } else {
@@ -8661,18 +8682,36 @@ static char_u *do_insert_char_pre(int c)
   set_vim_var_string(VV_CHAR, buf, -1);
 
   char_u *res = NULL;
-  if (apply_autocmds(EVENT_INSERTCHARPRE, NULL, NULL, FALSE, curbuf)) {
-    /* Get the value of v:char.  It may be empty or more than one
-     * character.  Only use it when changed, otherwise continue with the
-     * original character to avoid breaking autoindent. */
-    if (STRCMP(buf, get_vim_var_str(VV_CHAR)) != 0)
+  if (ins_apply_autocmds(EVENT_INSERTCHARPRE)) {
+    // Get the value of v:char.  It may be empty or more than one
+    // character.  Only use it when changed, otherwise continue with the
+    // original character to avoid breaking autoindent.
+    if (STRCMP(buf, get_vim_var_str(VV_CHAR)) != 0) {
       res = vim_strsave(get_vim_var_str(VV_CHAR));
+    }
   }
 
   set_vim_var_string(VV_CHAR, NULL, -1);
   textlock--;
 
   return res;
+}
+
+/// Trigger "event" and take care of fixing undo.
+static int ins_apply_autocmds(event_T event)
+{
+  varnumber_T tick = buf_get_changedtick(curbuf);
+  int r;
+
+  r = apply_autocmds(event, NULL, NULL, false, curbuf);
+
+  // If u_savesub() was called then we are not prepared to start
+  // a new line.  Call u_save() with no contents to fix that.
+  if (tick != buf_get_changedtick(curbuf)) {
+    u_save(curwin->w_cursor.lnum, (linenr_T)(curwin->w_cursor.lnum + 1));
+  }
+
+  return r;
 }
 
 static void show_pum(int prev_w_wrow, int prev_w_leftcol)

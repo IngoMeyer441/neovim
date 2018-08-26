@@ -296,6 +296,11 @@ open_buffer (
   }
   save_file_ff(curbuf);                 // keep this fileformat
 
+  // Set last_changedtick to avoid triggering a TextChanged autocommand right
+  // after it was added.
+  curbuf->b_last_changedtick = buf_get_changedtick(curbuf);
+  curbuf->b_last_changedtick_pum = buf_get_changedtick(curbuf);
+
   /* require "!" to overwrite the file, because it wasn't read completely */
   if (aborting())
     curbuf->b_flags |= BF_READERR;
@@ -2654,9 +2659,8 @@ buf_T *setaltfname(char_u *ffname, char_u *sfname, linenr_T lnum)
  * Get alternate file name for current window.
  * Return NULL if there isn't any, and give error message if requested.
  */
-char_u *
-getaltfname (
-    int errmsg                     /* give error message */
+char_u * getaltfname(
+    bool errmsg                   // give error message
 )
 {
   char_u      *fname;

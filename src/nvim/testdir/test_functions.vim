@@ -701,6 +701,7 @@ endfunc
 
 func Test_byte2line_line2byte()
   new
+  set endofline
   call setline(1, ['a', 'bc', 'd'])
 
   set fileformat=unix
@@ -721,7 +722,16 @@ func Test_byte2line_line2byte()
   call assert_equal([-1, -1, 1, 4, 8, 11, -1],
   \                 map(range(-1, 5), 'line2byte(v:val)'))
 
-  set fileformat&
+  bw!
+  set noendofline nofixendofline
+  normal a-
+  for ff in ["unix", "mac", "dos"]
+    let &fileformat = ff
+    call assert_equal(1, line2byte(1))
+    call assert_equal(2, line2byte(2))  " line2byte(line("$") + 1) is the buffer size plus one (as per :help line2byte).
+  endfor
+
+  set endofline& fixendofline& fileformat&
   bw!
 endfunc
 
@@ -925,4 +935,27 @@ func Test_redo_in_nested_functions()
   nunmap g.
   delfunc Operator
   delfunc Apply
+endfunc
+
+func Test_trim()
+  call assert_equal("Testing", trim("  \t\r\r\x0BTesting  \t\n\r\n\t\x0B\x0B"))
+  call assert_equal("Testing", trim("  \t  \r\r\n\n\x0BTesting  \t\n\r\n\t\x0B\x0B"))
+  call assert_equal("RESERVE", trim("xyz \twwRESERVEzyww \t\t", " wxyz\t"))
+  call assert_equal("wRE    \tSERVEzyww", trim("wRE    \tSERVEzyww"))
+  call assert_equal("abcd\t     xxxx   tail", trim(" \tabcd\t     xxxx   tail"))
+  call assert_equal("\tabcd\t     xxxx   tail", trim(" \tabcd\t     xxxx   tail", " "))
+  call assert_equal(" \tabcd\t     xxxx   tail", trim(" \tabcd\t     xxxx   tail", "abx"))
+  call assert_equal("RESERVE", trim("你RESERVE好", "你好"))
+  call assert_equal("您R E SER V E早", trim("你好您R E SER V E早好你你", "你好"))
+  call assert_equal("你好您R E SER V E早好你你", trim(" \n\r\r   你好您R E SER V E早好你你    \t  \x0B", ))
+  call assert_equal("您R E SER V E早好你你    \t  \x0B", trim("    你好您R E SER V E早好你你    \t  \x0B", " 你好"))
+  call assert_equal("您R E SER V E早好你你    \t  \x0B", trim("    tteesstttt你好您R E SER V E早好你你    \t  \x0B ttestt", " 你好tes"))
+  call assert_equal("您R E SER V E早好你你    \t  \x0B", trim("    tteesstttt你好您R E SER V E早好你你    \t  \x0B ttestt", "   你你你好好好tttsses"))
+  call assert_equal("留下", trim("这些些不要这些留下这些", "这些不要"))
+  call assert_equal("", trim("", ""))
+  call assert_equal("a", trim("a", ""))
+  call assert_equal("", trim("", "a"))
+
+  let chars = join(map(range(1, 0x20) + [0xa0], {n -> nr2char(n)}), '')
+  call assert_equal("x", trim(chars . "x" . chars))
 endfunc
