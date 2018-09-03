@@ -550,7 +550,7 @@ size_t mb_string2cells(const char_u *str)
   size_t clen = 0;
 
   for (const char_u *p = str; *p != NUL; p += (*mb_ptr2len)(p)) {
-    clen += (*mb_ptr2cells)(p);
+    clen += utf_ptr2cells(p);
   }
 
   return clen;
@@ -1710,7 +1710,7 @@ void mb_check_adjust_col(void *win_)
         win->w_cursor.col = len - 1;
       }
       // Move the cursor to the head byte.
-      win->w_cursor.col -= (*mb_head_off)(p, p + win->w_cursor.col);
+      win->w_cursor.col -= utf_head_off(p, p + win->w_cursor.col);
     }
 
     // Reset `coladd` when the cursor would be on the right half of a
@@ -2124,8 +2124,9 @@ static char_u *iconv_string(const vimconv_T *const vcp, char_u *str,
        * conversion from 'encoding' to something else.  In other
        * situations we don't know what to skip anyway. */
       *to++ = '?';
-      if ((*mb_ptr2cells)((char_u *)from) > 1)
+      if (utf_ptr2cells((char_u *)from) > 1) {
         *to++ = '?';
+      }
       l = utfc_ptr2len_len((const char_u *)from, (int)fromlen);
       from += l;
       fromlen -= l;
