@@ -8872,9 +8872,14 @@ static void f_foldtextresult(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   char_u buf[FOLD_TEXT_LEN];
   foldinfo_T foldinfo;
   int fold_count;
+  static bool entered = false;
 
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;
+  if (entered) {
+    return;  // reject recursive use
+  }
+  entered = true;
   linenr_T lnum = tv_get_lnum(argvars);
   // Treat illegal types and illegal string values for {lnum} the same.
   if (lnum < 0) {
@@ -8888,6 +8893,8 @@ static void f_foldtextresult(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     }
     rettv->vval.v_string = text;
   }
+
+  entered = false;
 }
 
 /*
@@ -9943,7 +9950,7 @@ static void get_qf_loc_list(int is_qf, win_T *wp, typval_T *what_arg,
   if (what_arg->v_type == VAR_UNKNOWN) {
     tv_list_alloc_ret(rettv, kListLenMayKnow);
     if (is_qf || wp != NULL) {
-      (void)get_errorlist(wp, -1, rettv->vval.v_list);
+      (void)get_errorlist(NULL, wp, -1, rettv->vval.v_list);
     }
   } else {
     tv_dict_alloc_ret(rettv);
