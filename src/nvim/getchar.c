@@ -315,7 +315,7 @@ static void add_char_buff(buffheader_T *buf, int c)
   if (IS_SPECIAL(c)) {
     len = 1;
   } else {
-    len = mb_char2bytes(c, bytes);
+    len = utf_char2bytes(c, bytes);
   }
 
   for (int i = 0; i < len; i++) {
@@ -978,7 +978,7 @@ void ins_char_typebuf(int c)
     buf[2] = (char_u)K_THIRD(c);
     buf[3] = NUL;
   } else {
-    buf[(*mb_char2bytes)(c, buf)] = NUL;
+    buf[utf_char2bytes(c, buf)] = NUL;
   }
   (void)ins_typebuf(buf, KeyNoremap, 0, !KeyTyped, cmd_silent);
 }
@@ -1670,7 +1670,7 @@ static int vgetorpeek(int advance)
     }
     if (c != NUL && !got_int) {
       if (advance) {
-        // KeyTyped = FALSE;  When the command that stuffed something
+        // KeyTyped = false;  When the command that stuffed something
         // was typed, behave like the stuffed command was typed.
         // needed for CTRL-W CTRL-] to open a fold, for example.
         KeyStuffed = true;
@@ -3655,16 +3655,14 @@ int check_abbr(int c, char_u *ptr, int col, int mincol)
           tb[j++] = (char_u)K_SECOND(c);
           tb[j++] = (char_u)K_THIRD(c);
         } else {
-          if (c < ABBR_OFF && (c < ' ' || c > '~'))
-            tb[j++] = Ctrl_V;                   /* special char needs CTRL-V */
-          if (has_mbyte) {
-            /* if ABBR_OFF has been added, remove it here */
-            if (c >= ABBR_OFF)
-              c -= ABBR_OFF;
-            j += (*mb_char2bytes)(c, tb + j);
-          } else {
-            tb[j++] = (char_u)c;
+          if (c < ABBR_OFF && (c < ' ' || c > '~')) {
+            tb[j++] = Ctrl_V;                   // special char needs CTRL-V
           }
+          // if ABBR_OFF has been added, remove it here.
+          if (c >= ABBR_OFF) {
+            c -= ABBR_OFF;
+          }
+          j += utf_char2bytes(c, tb + j);
         }
         tb[j] = NUL;
         /* insert the last typed char */
@@ -4317,8 +4315,14 @@ char_u * getcmdkeycmd(int promptc, void *cookie, int indent)
       EMSG(e_cmdmap_repeated);
       aborted = true;
     } else if (IS_SPECIAL(c1)) {
-      EMSG2(e_cmdmap_key, get_special_key_name(c1, cmod));
-      aborted = true;
+      if (c1 == K_SNR) {
+        ga_append(&line_ga, (char)K_SPECIAL);
+        ga_append(&line_ga, (char)KS_EXTRA);
+        ga_append(&line_ga, (char)KE_SNR);
+      } else {
+        EMSG2(e_cmdmap_key, get_special_key_name(c1, cmod));
+        aborted = true;
+      }
     } else {
       ga_append(&line_ga, (char)c1);
     }
