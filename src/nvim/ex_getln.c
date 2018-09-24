@@ -1469,7 +1469,7 @@ static int command_line_handle_key(CommandLineState *s)
     if (s->ignore_drag_release) {
       return command_line_not_changed(s);
     }
-  // FALLTHROUGH
+    FALLTHROUGH;
   case K_LEFTMOUSE:
   case K_RIGHTMOUSE:
     if (s->c == K_LEFTRELEASE || s->c == K_RIGHTRELEASE) {
@@ -1587,7 +1587,7 @@ static int command_line_handle_key(CommandLineState *s)
       }
       return command_line_not_changed(s);
     }
-    // fallthrough
+    FALLTHROUGH;
 
   case K_UP:
   case K_DOWN:
@@ -1787,7 +1787,7 @@ static int command_line_not_changed(CommandLineState *s)
 /// as a trailing \|, which can happen while typing a pattern.
 static int empty_pattern(char_u *p)
 {
-  int n = STRLEN(p);
+  size_t n = STRLEN(p);
 
   // remove trailing \v and the like
   while (n >= 2 && p[n - 2] == '\\'
@@ -3354,9 +3354,6 @@ void cmdline_paste_str(char_u *s, int literally)
       }
       if (cv == Ctrl_V || c == ESC || c == Ctrl_C
           || c == CAR || c == NL || c == Ctrl_L
-#ifdef UNIX
-          || c == intr_char
-#endif
           || (c == Ctrl_BSL && *s == Ctrl_N)) {
         stuffcharReadbuff(Ctrl_V);
       }
