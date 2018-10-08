@@ -93,7 +93,7 @@ get_vim_sources() {
       exit 1
     fi
     echo "Updating Vim sources: ${VIM_SOURCE_DIR}"
-    git pull &&
+    git pull --ff &&
       msg_ok "Updated Vim sources." ||
       msg_err "Could not update Vim sources; ignoring error."
   fi
@@ -156,8 +156,8 @@ preprocess_patch() {
   # Remove "Last change ..." changes in doc files.
   2>/dev/null $nvim --cmd 'set dir=/tmp' +'%s/^@@.*\n.*For Vim version.*Last change.*\n.*For Vim version.*Last change.*//' +w +q "$file"
 
-  # Remove some testdir/Make_*.mak files
-  local na_src_testdir='Make_amiga.mak\|Make_dos.mak\|Make_ming.mak\|Make_vms.mms'
+  # Remove screen dumps, testdir/Make_*.mak files
+  local na_src_testdir='Make_amiga.mak\|Make_dos.mak\|Make_ming.mak\|Make_vms.mms\|dumps/.*.dump'
   2>/dev/null $nvim --cmd 'set dir=/tmp' +'g@^diff --git a/src/testdir/\<\%('${na_src_testdir}'\)\>@norm! d/\v(^diff)|%$' +w +q "$file"
 
   # Remove version.c #7555

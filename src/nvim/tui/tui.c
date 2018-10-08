@@ -118,6 +118,7 @@ typedef struct {
     int resize_screen;
     int reset_scroll_region;
     int set_cursor_style, reset_cursor_style;
+    int enter_undercurl_mode, exit_undercurl_mode, set_underline_color;
   } unibi_ext;
 } TUIData;
 
@@ -156,7 +157,7 @@ UI *tui_start(void)
   ui->raw_line = tui_raw_line;
 
   memset(ui->ui_ext, 0, sizeof(ui->ui_ext));
-  ui->ui_ext[kUINewgrid] = true;
+  ui->ui_ext[kUILinegrid] = true;
 
   return ui_bridge_attach(ui, tui_main, tui_scheduler);
 }
@@ -438,15 +439,16 @@ static void sigwinch_cb(SignalWatcher *watcher, int signum, void *data)
 static bool attrs_differ(HlAttrs a1, HlAttrs a2, bool rgb)
 {
   if (rgb) {
-    // TODO(bfredl): when we start to support special color,
-    // rgb_sp_color must be added here
     return a1.rgb_fg_color != a2.rgb_fg_color
       || a1.rgb_bg_color != a2.rgb_bg_color
-      || a1.rgb_ae_attr != a2.rgb_ae_attr;
+      || a1.rgb_ae_attr != a2.rgb_ae_attr
+      || a1.rgb_sp_color != a2.rgb_sp_color;
   } else {
     return a1.cterm_fg_color != a2.cterm_fg_color
       || a1.cterm_bg_color != a2.cterm_bg_color
-      || a1.cterm_ae_attr != a2.cterm_ae_attr;
+      || a1.cterm_ae_attr != a2.cterm_ae_attr
+      || (a1.cterm_ae_attr & (HL_UNDERLINE|HL_UNDERCURL)
+          && a1.rgb_sp_color != a2.rgb_sp_color);
   }
 }
 
@@ -483,13 +485,21 @@ static void update_attrs(UI *ui, HlAttrs attrs)
   bool italic = attr & HL_ITALIC;
   bool reverse = attr & HL_INVERSE;
   bool standout = attr & HL_STANDOUT;
-  bool underline = attr & HL_UNDERLINE;
-  bool undercurl = attr & HL_UNDERCURL;
+
+  bool underline;
+  bool undercurl;
+  if (data->unibi_ext.enter_undercurl_mode) {
+    underline = attr & HL_UNDERLINE;
+    undercurl = attr & HL_UNDERCURL;
+  } else {
+    underline = (attr & HL_UNDERLINE) || (attr & HL_UNDERCURL);
+    undercurl = false;
+  }
 
   if (unibi_get_str(data->ut, unibi_set_attributes)) {
-    if (bold || reverse || underline || undercurl || standout) {
+    if (bold || reverse || underline || standout) {
       UNIBI_SET_NUM_VAR(data->params[0], standout);
-      UNIBI_SET_NUM_VAR(data->params[1], underline || undercurl);
+      UNIBI_SET_NUM_VAR(data->params[1], underline);
       UNIBI_SET_NUM_VAR(data->params[2], reverse);
       UNIBI_SET_NUM_VAR(data->params[3], 0);   // blink
       UNIBI_SET_NUM_VAR(data->params[4], 0);   // dim
@@ -508,7 +518,7 @@ static void update_attrs(UI *ui, HlAttrs attrs)
     if (bold) {
       unibi_out(ui, unibi_enter_bold_mode);
     }
-    if (underline || undercurl) {
+    if (underline) {
       unibi_out(ui, unibi_enter_underline_mode);
     }
     if (standout) {
@@ -520,6 +530,18 @@ static void update_attrs(UI *ui, HlAttrs attrs)
   }
   if (italic) {
     unibi_out(ui, unibi_enter_italics_mode);
+  }
+  if (undercurl && data->unibi_ext.enter_undercurl_mode) {
+    unibi_out_ext(ui, data->unibi_ext.enter_undercurl_mode);
+  }
+  if ((undercurl || underline) && data->unibi_ext.set_underline_color) {
+    int color = attrs.rgb_sp_color;
+    if (color != -1) {
+        UNIBI_SET_NUM_VAR(data->params[0], (color >> 16) & 0xff);  // red
+        UNIBI_SET_NUM_VAR(data->params[1], (color >> 8) & 0xff);   // green
+        UNIBI_SET_NUM_VAR(data->params[2], color & 0xff);          // blue
+        unibi_out_ext(ui, data->unibi_ext.set_underline_color);
+    }
   }
   if (ui->rgb) {
     if (fg != -1) {
@@ -574,7 +596,7 @@ static void print_cell(UI *ui, UCell *ptr)
     // Printing the next character finally advances the cursor.
     final_column_wrap(ui);
   }
-  update_attrs(ui, ptr->attrs);
+  update_attrs(ui, kv_A(data->attrs, ptr->attr));
   out(ui, ptr->data, strlen(ptr->data));
   grid->col++;
   if (data->immediate_wrap_after_last_column) {
@@ -590,7 +612,8 @@ static bool cheap_to_print(UI *ui, int row, int col, int next)
   UCell *cell = grid->cells[row] + col;
   while (next) {
     next--;
-    if (attrs_differ(cell->attrs, data->print_attrs, ui->rgb)) {
+    if (attrs_differ(kv_A(data->attrs, cell->attr),
+                     data->print_attrs, ui->rgb)) {
       if (data->default_attr) {
         return false;
       }
@@ -764,43 +787,31 @@ static void clear_region(UI *ui, int top, int bot, int left, int right,
   cursor_goto(ui, data->row, data->col);
 }
 
-static bool can_use_scroll(UI * ui)
+static void set_scroll_region(UI *ui, int top, int bot, int left, int right)
 {
   TUIData *data = ui->data;
   UGrid *grid = &data->grid;
 
-  return data->scroll_region_is_full_screen
-    || (data->can_change_scroll_region
-        && ((grid->left == 0 && grid->right == ui->width - 1)
-            || data->can_set_lr_margin
-            || data->can_set_left_right_margin));
-}
-
-static void set_scroll_region(UI *ui)
-{
-  TUIData *data = ui->data;
-  UGrid *grid = &data->grid;
-
-  UNIBI_SET_NUM_VAR(data->params[0], grid->top);
-  UNIBI_SET_NUM_VAR(data->params[1], grid->bot);
+  UNIBI_SET_NUM_VAR(data->params[0], top);
+  UNIBI_SET_NUM_VAR(data->params[1], bot);
   unibi_out(ui, unibi_change_scroll_region);
-  if (grid->left != 0 || grid->right != ui->width - 1) {
+  if (left != 0 || right != ui->width - 1) {
     unibi_out_ext(ui, data->unibi_ext.enable_lr_margin);
     if (data->can_set_lr_margin) {
-      UNIBI_SET_NUM_VAR(data->params[0], grid->left);
-      UNIBI_SET_NUM_VAR(data->params[1], grid->right);
+      UNIBI_SET_NUM_VAR(data->params[0], left);
+      UNIBI_SET_NUM_VAR(data->params[1], right);
       unibi_out(ui, unibi_set_lr_margin);
     } else {
-      UNIBI_SET_NUM_VAR(data->params[0], grid->left);
+      UNIBI_SET_NUM_VAR(data->params[0], left);
       unibi_out(ui, unibi_set_left_margin_parm);
-      UNIBI_SET_NUM_VAR(data->params[0], grid->right);
+      UNIBI_SET_NUM_VAR(data->params[0], right);
       unibi_out(ui, unibi_set_right_margin_parm);
     }
   }
   unibi_goto(ui, grid->row, grid->col);
 }
 
-static void reset_scroll_region(UI *ui)
+static void reset_scroll_region(UI *ui, bool fullwidth)
 {
   TUIData *data = ui->data;
   UGrid *grid = &data->grid;
@@ -812,7 +823,7 @@ static void reset_scroll_region(UI *ui)
     UNIBI_SET_NUM_VAR(data->params[1], ui->height - 1);
     unibi_out(ui, unibi_change_scroll_region);
   }
-  if (grid->left != 0 || grid->right != ui->width - 1) {
+  if (!fullwidth) {
     if (data->can_set_lr_margin) {
       UNIBI_SET_NUM_VAR(data->params[0], 0);
       UNIBI_SET_NUM_VAR(data->params[1], ui->width - 1);
@@ -849,7 +860,7 @@ static void tui_grid_resize(UI *ui, Integer g, Integer width, Integer height)
     unibi_out_ext(ui, data->unibi_ext.resize_screen);
     // DECSLPP does not reset the scroll region.
     if (data->scroll_region_is_full_screen) {
-      reset_scroll_region(ui);
+      reset_scroll_region(ui, ui->width == grid->width);
     }
   } else {  // Already handled the SIGWINCH signal; avoid double-resize.
     got_winch = false;
@@ -1007,28 +1018,35 @@ static void tui_mode_change(UI *ui, String mode, Integer mode_idx)
   data->showing_mode = (ModeShape)mode_idx;
 }
 
-static void tui_grid_scroll(UI *ui, Integer g, Integer top, Integer bot,
-                            Integer left, Integer right,
+static void tui_grid_scroll(UI *ui, Integer g, Integer startrow, Integer endrow,
+                            Integer startcol, Integer endcol,
                             Integer rows, Integer cols)
 {
   TUIData *data = ui->data;
   UGrid *grid = &data->grid;
-  ugrid_set_scroll_region(&data->grid, (int)top, (int)bot-1,
-                          (int)left, (int)right-1);
+  int top = (int)startrow, bot = (int)endrow-1;
+  int left = (int)startcol, right = (int)endcol-1;
 
-  data->scroll_region_is_full_screen =
-    left == 0 && right == ui->width
-    && top == 0 && bot == ui->height;
+  bool fullwidth = left == 0 && right == ui->width-1;
+  data->scroll_region_is_full_screen = fullwidth
+        && top == 0 && bot == ui->height-1;
 
   int clear_top, clear_bot;
-  ugrid_scroll(grid, (int)rows, &clear_top, &clear_bot);
+  ugrid_scroll(grid, top, bot, left, right, (int)rows,
+               &clear_top, &clear_bot);
 
-  if (can_use_scroll(ui)) {
+  bool can_scroll = data->scroll_region_is_full_screen
+                    || (data->can_change_scroll_region
+                        && ((left == 0 && right == ui->width - 1)
+                            || data->can_set_lr_margin
+                            || data->can_set_left_right_margin));
+
+  if (can_scroll) {
     // Change terminal scroll region and move cursor to the top
     if (!data->scroll_region_is_full_screen) {
-      set_scroll_region(ui);
+      set_scroll_region(ui, top, bot, left, right);
     }
-    cursor_goto(ui, grid->top, grid->left);
+    cursor_goto(ui, top, left);
     // also set default color attributes or some terminals can become funny
     update_attrs(ui, data->clear_attrs);
 
@@ -1050,19 +1068,19 @@ static void tui_grid_scroll(UI *ui, Integer g, Integer top, Integer bot,
 
     // Restore terminal scroll region and cursor
     if (!data->scroll_region_is_full_screen) {
-      reset_scroll_region(ui);
+      reset_scroll_region(ui, fullwidth);
     }
     cursor_goto(ui, data->row, data->col);
 
     if (!(data->bce || no_bg(ui, data->clear_attrs))) {
       // Scrolling will leave wrong background in the cleared area on non-BCE
       // terminals. Update the cleared area.
-      clear_region(ui, clear_top, clear_bot, grid->left, grid->right,
+      clear_region(ui, clear_top, clear_bot, left, right,
                    data->clear_attrs);
     }
   } else {
     // Mark the entire scroll region as invalid for redrawing later
-    invalidate(ui, grid->top, grid->bot, grid->left, grid->right);
+    invalidate(ui, top, bot, left, right);
   }
 }
 
@@ -1221,7 +1239,8 @@ static void tui_raw_line(UI *ui, Integer g, Integer linerow, Integer startcol,
   UGrid *grid = &data->grid;
   for (Integer c = startcol; c < endcol; c++) {
     memcpy(grid->cells[linerow][c].data, chunk[c-startcol], sizeof(schar_T));
-    grid->cells[linerow][c].attrs = kv_A(data->attrs, attrs[c-startcol]);
+    assert((size_t)attrs[c-startcol] < kv_size(data->attrs));
+    grid->cells[linerow][c].attr = attrs[c-startcol];
   }
   UGRID_FOREACH_CELL(grid, (int)linerow, (int)linerow, (int)startcol,
                      (int)endcol-1, {
@@ -1232,7 +1251,7 @@ static void tui_raw_line(UI *ui, Integer g, Integer linerow, Integer startcol,
   if (clearcol > endcol) {
     HlAttrs cl_attrs = kv_A(data->attrs, (size_t)clearattr);
     ugrid_clear_chunk(grid, (int)linerow, (int)endcol, (int)clearcol,
-                      cl_attrs);
+                      (sattr_T)clearattr);
     clear_region(ui, (int)linerow, (int)linerow, (int)endcol, (int)clearcol-1,
                  cl_attrs);
   }
@@ -1420,6 +1439,18 @@ static int unibi_find_ext_str(unibi_term *ut, const char *name)
   return -1;
 }
 
+static int unibi_find_ext_bool(unibi_term *ut, const char *name)
+{
+  size_t max = unibi_count_ext_bool(ut);
+  for (size_t i = 0; i < max; i++) {
+    const char * n = unibi_get_ext_bool_name(ut, i);
+    if (n && 0 == strcmp(n, name)) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
 /// Patches the terminfo records after loading from system or built-in db.
 /// Several entries in terminfo are known to be deficient or outright wrong;
 /// and several terminal emulators falsely announce incorrect terminal types.
@@ -1447,6 +1478,7 @@ static void patch_terminfo_bugs(TUIData *data, const char *term,
     || terminfo_is_term_family(term, "iterm2")
     || terminfo_is_term_family(term, "iTerm.app")
     || terminfo_is_term_family(term, "iTerm2.app");
+  bool alacritty = terminfo_is_term_family(term, "alacritty");
   // None of the following work over SSH; see :help TERM .
   bool iterm_pretending_xterm = xterm && iterm_env;
   bool konsole_pretending_xterm = xterm && konsole;
@@ -1641,6 +1673,7 @@ static void patch_terminfo_bugs(TUIData *data, const char *term,
             // per analysis of VT100Terminal.m
             || iterm || iterm_pretending_xterm
             || teraterm    // per TeraTerm "Supported Control Functions" doco
+            || alacritty  // https://github.com/jwilm/alacritty/pull/608
             // Some linux-type terminals implement the xterm extension.
             // Example: console-terminal-emulator from the nosh toolset.
             || (linuxvt
@@ -1825,6 +1858,22 @@ static void augment_terminfo(TUIData *data, const char *term,
       ut, "ext.enable_mouse", "\x1b[?1002h\x1b[?1006h");
   data->unibi_ext.disable_mouse = (int)unibi_add_ext_str(
       ut, "ext.disable_mouse", "\x1b[?1002l\x1b[?1006l");
+
+  int ext_bool_Su = unibi_find_ext_bool(ut, "Su");  // used by kitty
+  if (vte_version >= 5102
+      || (ext_bool_Su != -1 && unibi_get_ext_bool(ut, (size_t)ext_bool_Su))) {
+      data->unibi_ext.enter_undercurl_mode = (int)unibi_add_ext_str(
+          ut, "ext.enter_undercurl_mode", "\x1b[4:3m");
+      data->unibi_ext.exit_undercurl_mode = (int)unibi_add_ext_str(
+          ut, "ext.exit_undercurl_mode", "\x1b[4:0m");
+      if (has_colon_rgb) {
+          data->unibi_ext.set_underline_color = (int)unibi_add_ext_str(
+              ut, "ext.set_underline_color", "\x1b[58:2:%p1%d:%p2%d:%p3%dm");
+      } else {
+          data->unibi_ext.set_underline_color = (int)unibi_add_ext_str(
+              ut, "ext.set_underline_color", "\x1b[58:2:%p1%d:%p2%d:%p3%dm");
+      }
+  }
 }
 
 static void flush_buf(UI *ui)
