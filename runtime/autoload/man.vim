@@ -392,15 +392,17 @@ function! man#init_pager() abort
     keepjumps 1
   endif
   lua require("man").highlight_man_page()
-  " This is not perfect. See `man glDrawArraysInstanced`. Since the title is
-  " all caps it is impossible to tell what the original capitilization was.
+  " Guess the ref from the heading (which is usually uppercase, so we cannot
+  " know the correct casing, cf. `man glDrawArraysInstanced`).
   let ref = substitute(matchstr(getline(1), '^[^)]\+)'), ' ', '_', 'g')
   try
     let b:man_sect = man#extract_sect_and_name_ref(ref)[0]
   catch
     let b:man_sect = ''
   endtry
-  execute 'silent file man://'.fnameescape(ref)
+  if -1 == match(bufname('%'), 'man:\/\/')  " Avoid duplicate buffers, E95.
+    execute 'silent file man://'.tolower(fnameescape(ref))
+  endif
 endfunction
 
 call s:init()
