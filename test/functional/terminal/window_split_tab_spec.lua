@@ -6,6 +6,8 @@ local feed_command = helpers.feed_command
 local command = helpers.command
 local eq = helpers.eq
 local eval = helpers.eval
+local iswin = helpers.iswin
+local retry = helpers.retry
 
 describe('terminal', function()
   local screen
@@ -67,6 +69,18 @@ describe('terminal', function()
 
   it('forwards resize request to the program', function()
     feed([[<C-\><C-N>:]])  -- Go to cmdline-mode, so cursor is at bottom.
+
+    if iswin() then
+      retry(3, 30000, function()
+        -- win: SIGWINCH is unreliable. #7506
+        screen:try_resize(screen._width - 3, screen._height - 2)
+        screen:expect{any='rows: 7, cols: 47'}
+        screen:try_resize(screen._width - 6, screen._height - 3)
+        screen:expect{any='rows: 4, cols: 41'}
+      end)
+      return
+    end
+
     screen:try_resize(screen._width - 3, screen._height - 2)
     screen:expect([[
       tty ready                                      |
