@@ -119,8 +119,8 @@ addons:
       - xclip
 
 branches:
-  except:
-    - nightly
+  only:
+    - master
 
 cache:
   apt: true
