@@ -1052,6 +1052,7 @@ static void tui_grid_scroll(UI *ui, Integer g, Integer startrow, Integer endrow,
                             Integer startcol, Integer endcol,
                             Integer rows, Integer cols)
 {
+  (void)cols;  // unused
   TUIData *data = ui->data;
   UGrid *grid = &data->grid;
   int top = (int)startrow, bot = (int)endrow-1;
@@ -1174,7 +1175,7 @@ static void tui_flush(UI *ui)
       }
 
       UGRID_FOREACH_CELL(grid, row, r.left, clear_col, {
-        cursor_goto(ui, row, col);
+        cursor_goto(ui, row, curcol);
         print_cell(ui, cell);
       });
       if (clear_col < r.right) {
@@ -1283,7 +1284,7 @@ static void tui_raw_line(UI *ui, Integer g, Integer linerow, Integer startcol,
     grid->cells[linerow][c].attr = attrs[c-startcol];
   }
   UGRID_FOREACH_CELL(grid, (int)linerow, (int)startcol, (int)endcol, {
-    cursor_goto(ui, (int)linerow, col);
+    cursor_goto(ui, (int)linerow, curcol);
     print_cell(ui, cell);
   });
 

@@ -1,11 +1,11 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
-/*
- * normal.c:	Contains the main routine for processing characters in command
- *		mode.  Communicates closely with the code in ops.c to handle
- *		the operators.
- */
+//
+// normal.c:    Contains the main routine for processing characters in command
+//              mode.  Communicates closely with the code in ops.c to handle
+//              the operators.
+//
 
 #include <assert.h>
 #include <inttypes.h>
@@ -2761,10 +2761,9 @@ do_mouse (
   } else if ((mod_mask & MOD_MASK_MULTI_CLICK) && (State & (NORMAL | INSERT))
              && mouse_has(MOUSE_VISUAL)) {
     if (is_click || !VIsual_active) {
-      if (VIsual_active)
+      if (VIsual_active) {
         orig_cursor = VIsual;
-      else {
-        check_visual_highlight();
+      } else {
         VIsual = curwin->w_cursor;
         orig_cursor = VIsual;
         VIsual_active = true;
@@ -2932,22 +2931,6 @@ static int get_mouse_class(char_u *p)
   if (c != NUL && vim_strchr((char_u *)"-+*/%<>&|^!=", c) != NULL)
     return 1;
   return c;
-}
-
-/*
- * Check if  highlighting for visual mode is possible, give a warning message
- * if not.
- */
-void check_visual_highlight(void)
-{
-  static bool did_check = false;
-
-  if (full_screen) {
-    if (!did_check && HL_ATTR(HLF_V) == 0) {
-      MSG(_("Warning: terminal cannot highlight"));
-    }
-    did_check = true;
-  }
 }
 
 /*
@@ -3956,9 +3939,11 @@ static bool nv_screengo(oparg_T *oap, int dir, long dist)
             (void)hasFolding(curwin->w_cursor.lnum,
                 &curwin->w_cursor.lnum, NULL);
           linelen = linetabsize(get_cursor_line_ptr());
-          if (linelen > width1)
-            curwin->w_curswant += (((linelen - width1 - 1) / width2)
-                                   + 1) * width2;
+          if (linelen > width1) {
+            int w = (((linelen - width1 - 1) / width2) + 1) * width2;
+            assert(curwin->w_curswant <= INT_MAX - w);
+            curwin->w_curswant += w;
+          }
         }
       } else { /* dir == FORWARD */
         if (linelen > width1)
@@ -6418,9 +6403,8 @@ static void nv_visual(cmdarg_T *cap)
       VIsual_mode = cap->cmdchar;
       showmode();
     }
-    redraw_curbuf_later(INVERTED);          /* update the inversion */
-  } else {                /* start Visual mode */
-    check_visual_highlight();
+    redraw_curbuf_later(INVERTED);          // update the inversion
+  } else {                // start Visual mode
     if (cap->count0 > 0 && resel_VIsual_mode != NUL) {
       /* use previously selected part */
       VIsual = curwin->w_cursor;

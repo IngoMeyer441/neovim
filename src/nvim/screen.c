@@ -73,6 +73,7 @@
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
+#include "nvim/cursor_shape.h"
 #include "nvim/diff.h"
 #include "nvim/eval.h"
 #include "nvim/ex_cmds.h"
@@ -476,6 +477,25 @@ void update_screen(int type)
 
 }
 
+// Prepare for updating one or more windows.
+// Caller must check for "updating_screen" already set to avoid recursiveness.
+static void update_prepare(void)
+{
+  updating_screen = true;
+  start_search_hl();
+}
+
+// Finish updating one or more windows.
+static void update_finish(void)
+{
+  if (redraw_cmdline) {
+    showmode();
+  }
+
+  end_search_hl();
+  updating_screen = false;
+}
+
 /*
  * Return TRUE if the cursor line in window "wp" may be concealed, according
  * to the 'concealcursor' option.
@@ -521,52 +541,28 @@ void update_single_line(win_T *wp, linenr_T lnum)
   if (linebuf_char == NULL || updating_screen) {
     return;
   }
-  updating_screen = true;
 
   if (lnum >= wp->w_topline && lnum < wp->w_botline
       && foldedCount(wp, lnum, &win_foldinfo) == 0) {
+    update_prepare();
+
     row = 0;
     for (j = 0; j < wp->w_lines_valid; ++j) {
       if (lnum == wp->w_lines[j].wl_lnum) {
         init_search_hl(wp);
-        start_search_hl();
         prepare_search_hl(wp, lnum);
         update_window_hl(wp, false);
         // allocate window grid if not already
         win_grid_alloc(wp);
         win_line(wp, lnum, row, row + wp->w_lines[j].wl_size, false, false);
-        end_search_hl();
         break;
       }
       row += wp->w_lines[j].wl_size;
     }
+
+    update_finish();
   }
   need_cursor_line_redraw = false;
-  updating_screen = false;
-}
-
-
-/*
- * Prepare for updating one or more windows.
- * Caller must check for "updating_screen" already set to avoid recursiveness.
- */
-static void update_prepare(void)
-{
-    updating_screen = TRUE;
-    start_search_hl();
-}
-
-/*
- * Finish updating one or more windows.
- */
-static void update_finish(void)
-{
-    if (redraw_cmdline) {
-        showmode();
-    }
-
-    end_search_hl();
-    updating_screen = FALSE;
 }
 
 void update_debug_sign(const buf_T *const buf, const linenr_T lnum)
@@ -678,11 +674,10 @@ static void win_update(win_T *wp)
   static int recursive = FALSE;         /* being called recursively */
   int old_botline = wp->w_botline;
   long fold_count;
-  /* remember what happened to the previous line, to know if
-   * check_visual_highlight() can be used */
-#define DID_NONE 1      /* didn't update a line */
-#define DID_LINE 2      /* updated a normal line */
-#define DID_FOLD 3      /* updated a folded line */
+  // Remember what happened to the previous line.
+#define DID_NONE 1      // didn't update a line
+#define DID_LINE 2      // updated a normal line
+#define DID_FOLD 3      // updated a folded line
   int did_update = DID_NONE;
   linenr_T syntax_last_parsed = 0;              /* last parsed text line */
   linenr_T mod_top = 0;
@@ -2181,10 +2176,10 @@ win_line (
   int syntax_attr = 0;                  /* attributes desired by syntax */
   int has_syntax = FALSE;               /* this buffer has syntax highl. */
   int save_did_emsg;
-  int eol_hl_off = 0;                   /* 1 if highlighted char after EOL */
-  int draw_color_col = FALSE;           /* highlight colorcolumn */
-  int         *color_cols = NULL;       /* pointer to according columns array */
-  bool has_spell = false;               /* this buffer has spell checking */
+  int eol_hl_off = 0;                   // 1 if highlighted char after EOL
+  int draw_color_col = false;           // highlight colorcolumn
+  int *color_cols = NULL;               // pointer to according columns array
+  bool has_spell = false;               // this buffer has spell checking
 # define SPWORDLEN 150
   char_u nextline[SPWORDLEN * 2];       /* text with start of the next line */
   int nextlinecol = 0;                  /* column where nextline[] starts */
@@ -2390,8 +2385,9 @@ win_line (
         }
       }
 
-      // Check if the character under the cursor should not be inverted
-      if (!highlight_match && lnum == curwin->w_cursor.lnum && wp == curwin) {
+      // Check if the char under the cursor should be inverted (highlighted).
+      if (!highlight_match && lnum == curwin->w_cursor.lnum && wp == curwin
+          && cursor_is_block_during_visual(*p_sel == 'e')) {
         noinvcur = true;
       }
 
@@ -2940,8 +2936,8 @@ win_line (
       break;
     }
 
-    if (draw_state == WL_LINE && area_highlighting) {
-      /* handle Visual or match highlighting in this line */
+    if (draw_state == WL_LINE && (area_highlighting || has_spell)) {
+      // handle Visual or match highlighting in this line
       if (vcol == fromcol
           || (vcol + 1 == fromcol && n_extra == 0
               && utf_ptr2cells(ptr) > 1)
@@ -4006,23 +4002,23 @@ win_line (
             draw_color_col = advance_color_col(VCOL_HLC, &color_cols);
           }
 
-          int attr = base_attr;
+          int col_attr = base_attr;
 
           if (wp->w_p_cuc && VCOL_HLC == (long)wp->w_virtcol) {
-            attr = cuc_attr;
+            col_attr = cuc_attr;
           } else if (draw_color_col && VCOL_HLC == *color_cols) {
-            attr = mc_attr;
+            col_attr = mc_attr;
           }
 
           if (do_virttext) {
-            attr = hl_combine_attr(attr, virt_attr);
+            col_attr = hl_combine_attr(col_attr, virt_attr);
           }
 
-          attr = hl_combine_attr(attr, line_attr);
+          col_attr = hl_combine_attr(col_attr, line_attr);
 
-          linebuf_attr[off] = attr;
+          linebuf_attr[off] = col_attr;
           if (cells == 2) {
-            linebuf_attr[off+1] = attr;
+            linebuf_attr[off+1] = col_attr;
           }
           off += cells * col_stride;
 
@@ -5200,9 +5196,9 @@ win_redr_custom (
   curattr = attr;
   p = buf;
   for (n = 0; hltab[n].start != NULL; n++) {
-    int len = (int)(hltab[n].start - p);
-    grid_puts_len(&default_grid, p, len, row, col, curattr);
-    col += vim_strnsize(p, len);
+    int textlen = (int)(hltab[n].start - p);
+    grid_puts_len(&default_grid, p, textlen, row, col, curattr);
+    col += vim_strnsize(p, textlen);
     p = hltab[n].start;
 
     if (hltab[n].userhl == 0)
