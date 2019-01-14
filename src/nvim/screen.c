@@ -151,6 +151,8 @@ static bool send_grid_resize = false;
 /// Highlight ids are no longer valid. Force retransmission
 static bool highlights_invalid = false;
 
+static bool conceal_cursor_used = false;
+
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "screen.c.generated.h"
 #endif
@@ -185,6 +187,10 @@ void redraw_all_later(int type)
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     redraw_win_later(wp, type);
   }
+  // This may be needed when switching tabs.
+  if (must_redraw < type) {
+    must_redraw = type;
+  }
 }
 
 void screen_invalidate_highlights(void)
@@ -210,6 +216,15 @@ void redraw_buf_later(buf_T *buf, int type)
   }
 }
 
+void redraw_buf_line_later(buf_T *buf,  linenr_T line)
+{
+  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+    if (wp->w_buffer == buf) {
+      redrawWinline(wp, line);
+    }
+  }
+}
+
 /*
  * Changed something in the current window, at buffer line "lnum", that
  * requires that line and possibly other lines to be redrawn.
@@ -221,12 +236,11 @@ void redraw_buf_later(buf_T *buf, int type)
 void
 redrawWinline(
     win_T *wp,
-    linenr_T lnum,
-    int invalid             /* window line height is invalid now */
+    linenr_T lnum
 )
 {
-  int i;
-
+  if (lnum >= wp->w_topline
+      && lnum < wp->w_botline) {
     if (wp->w_redraw_top == 0 || wp->w_redraw_top > lnum) {
         wp->w_redraw_top = lnum;
     }
@@ -234,13 +248,6 @@ redrawWinline(
         wp->w_redraw_bot = lnum;
     }
     redraw_win_later(wp, VALID);
-
-  if (invalid) {
-    // A w_lines[] entry for this lnum has become invalid.
-    i = find_wl_entry(wp, lnum);
-    if (i >= 0) {
-      wp->w_lines[i].wl_valid = false;
-    }
   }
 }
 
@@ -477,25 +484,6 @@ void update_screen(int type)
 
 }
 
-// Prepare for updating one or more windows.
-// Caller must check for "updating_screen" already set to avoid recursiveness.
-static void update_prepare(void)
-{
-  updating_screen = true;
-  start_search_hl();
-}
-
-// Finish updating one or more windows.
-static void update_finish(void)
-{
-  if (redraw_cmdline) {
-    showmode();
-  }
-
-  end_search_hl();
-  updating_screen = false;
-}
-
 /*
  * Return TRUE if the cursor line in window "wp" may be concealed, according
  * to the 'concealcursor' option.
@@ -519,103 +507,27 @@ int conceal_cursor_line(win_T *wp)
   return vim_strchr(wp->w_p_cocu, c) != NULL;
 }
 
-/*
- * Check if the cursor line needs to be redrawn because of 'concealcursor'.
- */
+// Check if the cursor line needs to be redrawn because of 'concealcursor'.
+//
+// When cursor is moved at the same time, both lines will be redrawn regardless.
 void conceal_check_cursor_line(void)
 {
-  if (curwin->w_p_cole > 0 && conceal_cursor_line(curwin)) {
-    need_cursor_line_redraw = TRUE;
-    /* Need to recompute cursor column, e.g., when starting Visual mode
-     * without concealing. */
-    curs_columns(TRUE);
+  bool should_conceal = conceal_cursor_line(curwin);
+  if (curwin->w_p_cole > 0 && (conceal_cursor_used != should_conceal)) {
+    redrawWinline(curwin, curwin->w_cursor.lnum);
+    // Need to recompute cursor column, e.g., when starting Visual mode
+    // without concealing. */
+    curs_columns(true);
   }
 }
 
-void update_single_line(win_T *wp, linenr_T lnum)
+/// Whether cursorline is drawn in a special way
+///
+/// If true, both old and new cursorline will need
+/// need to be redrawn when moving cursor within windows.
+bool win_cursorline_standout(win_T *wp)
 {
-  int row;
-  int j;
-
-  // Don't do anything if the screen structures are (not yet) valid.
-  if (linebuf_char == NULL || updating_screen) {
-    return;
-  }
-
-  if (lnum >= wp->w_topline && lnum < wp->w_botline
-      && foldedCount(wp, lnum, &win_foldinfo) == 0) {
-    update_prepare();
-
-    row = 0;
-    for (j = 0; j < wp->w_lines_valid; ++j) {
-      if (lnum == wp->w_lines[j].wl_lnum) {
-        init_search_hl(wp);
-        prepare_search_hl(wp, lnum);
-        update_window_hl(wp, false);
-        // allocate window grid if not already
-        win_grid_alloc(wp);
-        win_line(wp, lnum, row, row + wp->w_lines[j].wl_size, false, false);
-        break;
-      }
-      row += wp->w_lines[j].wl_size;
-    }
-
-    update_finish();
-  }
-  need_cursor_line_redraw = false;
-}
-
-void update_debug_sign(const buf_T *const buf, const linenr_T lnum)
-{
-  bool doit = false;
-  win_foldinfo.fi_level = 0;
-
-  // update/delete a specific mark
-  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if (buf != NULL && lnum > 0) {
-      if (wp->w_buffer == buf && lnum >= wp->w_topline
-          && lnum < wp->w_botline) {
-        if (wp->w_redraw_top == 0 || wp->w_redraw_top > lnum) {
-          wp->w_redraw_top = lnum;
-        }
-        if (wp->w_redraw_bot == 0 || wp->w_redraw_bot < lnum) {
-          wp->w_redraw_bot = lnum;
-        }
-        redraw_win_later(wp, VALID);
-      }
-    } else {
-      redraw_win_later(wp, VALID);
-    }
-    if (wp->w_redr_type != 0) {
-      doit = true;
-    }
-  }
-
-  // Return when there is nothing to do, screen updating is already
-  // happening (recursive call), messages on the screen or still starting up.
-  if (!doit
-      || updating_screen
-      || State == ASKMORE
-      || State == HITRETURN
-      || msg_scrolled
-      || starting) {
-    return;
-  }
-
-  // update all windows that need updating
-  update_prepare();
-
-  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if (wp->w_redr_type != 0) {
-      update_window_hl(wp, wp->w_redr_type >= NOT_VALID);
-      win_update(wp);
-    }
-    if (wp->w_redr_status) {
-      win_redr_status(wp, false);
-    }
-  }
-
-  update_finish();
+  return wp->w_p_cul || (wp->w_p_cole > 0 && !conceal_cursor_line(wp));
 }
 
 /*
@@ -1456,7 +1368,12 @@ static void win_update(win_T *wp)
       if (wp->w_p_rnu) {
         // 'relativenumber' set: The text doesn't need to be drawn, but
         // the number column nearly always does.
-        (void)win_line(wp, lnum, srow, wp->w_grid.Rows, true, true);
+        fold_count = foldedCount(wp, lnum, &win_foldinfo);
+        if (fold_count != 0) {
+          fold_line(wp, fold_count, &win_foldinfo, lnum, row);
+        } else {
+          (void)win_line(wp, lnum, srow, wp->w_grid.Rows, true, true);
+        }
       }
 
       // This line does not need to be drawn, advance to the next one.
@@ -2036,6 +1953,7 @@ static void fold_line(win_T *wp, long fold_count, foldinfo_T *foldinfo, linenr_T
     curwin->w_cline_height = 1;
     curwin->w_cline_folded = true;
     curwin->w_valid |= (VALID_CHEIGHT|VALID_CROW);
+    conceal_cursor_used = conceal_cursor_line(curwin);
   }
 }
 
@@ -4054,6 +3972,7 @@ win_line (
         curwin->w_cline_height = row - startrow;
         curwin->w_cline_folded = false;
         curwin->w_valid |= (VALID_CHEIGHT|VALID_CROW);
+        conceal_cursor_used = conceal_cursor_line(curwin);
       }
 
       break;
@@ -4901,8 +4820,9 @@ static void win_redr_status(win_T *wp, int ignore_pum)
     if (wp->w_buffer->b_help
         || wp->w_p_pvw
         || bufIsChanged(wp->w_buffer)
-        || wp->w_buffer->b_p_ro)
+        || wp->w_buffer->b_p_ro) {
       *(p + len++) = ' ';
+    }
     if (wp->w_buffer->b_help) {
       STRCPY(p + len, _("[Help]"));
       len += (int)STRLEN(p + len);
@@ -4917,7 +4837,7 @@ static void win_redr_status(win_T *wp, int ignore_pum)
     }
     if (wp->w_buffer->b_p_ro) {
       STRCPY(p + len, _("[RO]"));
-      len += (int)STRLEN(p + len);
+      // len += (int)STRLEN(p + len);  // dead assignment
     }
 
     this_ru_col = ru_col - (Columns - wp->w_width);

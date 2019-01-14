@@ -184,6 +184,16 @@ static expand_T compl_xp;
 
 static int compl_opt_refresh_always = FALSE;
 
+static int pum_selected_item = -1;
+
+/// state for pum_ext_select_item.
+struct {
+  bool active;
+  int item;
+  bool insert;
+  bool finish;
+} pum_want;
+
 typedef struct insert_state {
   VimState state;
   cmdarg_T *ca;
@@ -295,10 +305,6 @@ static void insert_enter(InsertState *s)
       State = save_state;
     }
   }
-
-  // Check if the cursor line needs redrawing before changing State. If
-  // 'concealcursor' is "n" it needs to be redrawn without concealing.
-  conceal_check_cursor_line();
 
   // When doing a paste with the middle mouse button, Insstart is set to
   // where the paste started.
@@ -976,10 +982,25 @@ static int insert_handle_key(InsertState *s)
 
   case K_EVENT:       // some event
     multiqueue_process_events(main_loop.events);
-    break;
+    goto check_pum;
 
   case K_COMMAND:       // some command
     do_cmdline(NULL, getcmdkeycmd, NULL, 0);
+
+check_pum:
+    // TODO(bfredl): Not entirely sure this indirection is necessary
+    // but doing like this ensures using nvim_select_popupmenu_item is
+    // equivalent to selecting the item with a typed key.
+    if (pum_want.active) {
+      if (pum_visible()) {
+        insert_do_complete(s);
+        if (pum_want.finish) {
+          // accept the item and stop completion
+          ins_compl_prep(Ctrl_Y);
+        }
+      }
+      pum_want.active = false;
+    }
     break;
 
   case K_HOME:        // <Home>
@@ -1356,9 +1377,7 @@ ins_redraw (
     int ready                   /* not busy with something */
 )
 {
-  linenr_T conceal_old_cursor_line = 0;
-  linenr_T conceal_new_cursor_line = 0;
-  int conceal_update_lines = FALSE;
+  bool conceal_cursor_moved = false;
 
   if (char_avail())
     return;
@@ -1381,11 +1400,7 @@ ins_redraw (
       update_curswant();
       ins_apply_autocmds(EVENT_CURSORMOVEDI);
     }
-    if (curwin->w_p_cole > 0) {
-      conceal_old_cursor_line = last_cursormoved.lnum;
-      conceal_new_cursor_line = curwin->w_cursor.lnum;
-      conceal_update_lines = TRUE;
-    }
+    conceal_cursor_moved = true;
     last_cursormoved = curwin->w_cursor;
   }
 
@@ -1427,21 +1442,17 @@ ins_redraw (
     }
   }
 
-  if (must_redraw)
-    update_screen(0);
-  else if (clear_cmdline || redraw_cmdline)
-    showmode();                 /* clear cmdline and show mode */
-  if ((conceal_update_lines
-       && (conceal_old_cursor_line != conceal_new_cursor_line
-           || conceal_cursor_line(curwin)))
-      || need_cursor_line_redraw) {
-    if (conceal_old_cursor_line != conceal_new_cursor_line)
-      update_single_line(curwin, conceal_old_cursor_line);
-    update_single_line(curwin, conceal_new_cursor_line == 0
-        ? curwin->w_cursor.lnum : conceal_new_cursor_line);
-    curwin->w_valid &= ~VALID_CROW;
+  if (curwin->w_p_cole > 0 && conceal_cursor_line(curwin)
+      && conceal_cursor_moved) {
+    redrawWinline(curwin, curwin->w_cursor.lnum);
   }
-  showruler(FALSE);
+
+  if (must_redraw) {
+    update_screen(0);
+  } else if (clear_cmdline || redraw_cmdline) {
+    showmode();  // clear cmdline and show mode
+  }
+  showruler(false);
   setcursor();
   emsg_on_display = FALSE;      /* may remove error message now */
 }
@@ -1542,7 +1553,7 @@ void edit_unputchar(void)
       curwin->w_wcol++;
     }
     if (pc_status == PC_STATUS_RIGHT || pc_status == PC_STATUS_LEFT) {
-      redrawWinline(curwin, curwin->w_cursor.lnum, false);
+      redrawWinline(curwin, curwin->w_cursor.lnum);
     } else {
       grid_puts(&curwin->w_grid, pc_bytes, pc_row - msg_scrolled, pc_col,
                 pc_attr);
@@ -1583,7 +1594,7 @@ static void undisplay_dollar(void)
 {
   if (dollar_vcol >= 0) {
     dollar_vcol = -1;
-    redrawWinline(curwin, curwin->w_cursor.lnum, false);
+    redrawWinline(curwin, curwin->w_cursor.lnum);
   }
 }
 
@@ -2666,6 +2677,7 @@ void ins_compl_show_pum(void)
   // Use the cursor to get all wrapping and other settings right.
   col = curwin->w_cursor.col;
   curwin->w_cursor.col = compl_col;
+  pum_selected_item = cur;
   pum_display(compl_match_array, compl_match_arraysize, cur, array_changed);
   curwin->w_cursor.col = col;
 }
@@ -3520,6 +3532,7 @@ expand_by_function (
   win_T       *curwin_save;
   buf_T       *curbuf_save;
   typval_T rettv;
+  const int save_State = State;
 
   funcname = (type == CTRL_X_FUNCTION) ? curbuf->b_p_cfu : curbuf->b_p_ofu;
   if (*funcname == NUL)
@@ -3565,6 +3578,9 @@ expand_by_function (
     ins_compl_add_dict(matchdict);
 
 theend:
+  // Restore State, it might have been changed.
+  State = save_State;
+
   if (matchdict != NULL) {
     tv_dict_unref(matchdict);
   }
@@ -4342,6 +4358,17 @@ ins_compl_next (
   return num_matches;
 }
 
+void pum_ext_select_item(int item, bool insert, bool finish)
+{
+  if (!pum_visible() || item < -1 || item >= compl_match_arraysize) {
+    return;
+  }
+  pum_want.active = true;
+  pum_want.item = item;
+  pum_want.insert = insert;
+  pum_want.finish = finish;
+}
+
 // Call this while finding completions, to check whether the user has hit a key
 // that should change the currently displayed completion, or exit completion
 // mode.  Also, when compl_pending is not zero, show a completion as soon as
@@ -4402,6 +4429,9 @@ void ins_compl_check_keys(int frequency, int in_compl_func)
  */
 static int ins_compl_key2dir(int c)
 {
+  if (c == K_EVENT || c == K_COMMAND) {
+    return pum_want.item < pum_selected_item ? BACKWARD : FORWARD;
+  }
   if (c == Ctrl_P || c == Ctrl_L
       || c == K_PAGEUP || c == K_KPAGEUP
       || c == K_S_UP || c == K_UP) {
@@ -4429,6 +4459,11 @@ static int ins_compl_key2count(int c)
 {
   int h;
 
+  if (c == K_EVENT || c == K_COMMAND) {
+    int offset = pum_want.item - pum_selected_item;
+    return abs(offset);
+  }
+
   if (ins_compl_pum_key(c) && c != K_UP && c != K_DOWN) {
     h = pum_get_height();
     if (h > 3)
@@ -4455,6 +4490,9 @@ static bool ins_compl_use_match(int c)
   case K_KPAGEUP:
   case K_S_UP:
     return false;
+  case K_EVENT:
+  case K_COMMAND:
+    return pum_want.active && pum_want.insert;
   }
   return true;
 }
@@ -4676,6 +4714,7 @@ static int ins_complete(int c, bool enable_pum)
       pos_T pos;
       win_T       *curwin_save;
       buf_T       *curbuf_save;
+      const int save_State = State;
 
       /* Call 'completefunc' or 'omnifunc' and get pattern length as a
        * string */
@@ -4693,7 +4732,9 @@ static int ins_complete(int c, bool enable_pum)
       pos = curwin->w_cursor;
       curwin_save = curwin;
       curbuf_save = curbuf;
-      col = call_func_retnr(funcname, 2, args, FALSE);
+      col = call_func_retnr(funcname, 2, args, false);
+
+      State = save_State;
       if (curwin_save != curwin || curbuf_save != curbuf) {
         EMSG(_(e_complwin));
         return FAIL;
@@ -5925,7 +5966,7 @@ static void check_spell_redraw(void)
     linenr_T lnum = spell_redraw_lnum;
 
     spell_redraw_lnum = 0;
-    redrawWinline(curwin, lnum, false);
+    redrawWinline(curwin, lnum);
   }
 }
 
@@ -8667,6 +8708,7 @@ static colnr_T get_nolist_virtcol(void)
 static char_u *do_insert_char_pre(int c)
 {
   char buf[MB_MAXBYTES + 1];
+  const int save_State = State;
 
   // Return quickly when there is nothing to do.
   if (!has_event(EVENT_INSERTCHARPRE)) {
@@ -8690,6 +8732,9 @@ static char_u *do_insert_char_pre(int c)
 
   set_vim_var_string(VV_CHAR, NULL, -1);
   textlock--;
+
+  // Restore the State, it may have been changed.
+  State = save_State;
 
   return res;
 }

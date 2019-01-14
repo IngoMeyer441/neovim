@@ -661,11 +661,13 @@ EXTERN int* (*iconv_errno)(void);
 ///    Visual_mode:    When State is NORMAL or INSERT.
 ///    finish_op  :    When State is NORMAL, after typing the operator and
 ///                    before typing the motion command.
+///    motion_force:   Last motion_force from do_pending_operator()
 EXTERN int State INIT(= NORMAL);        // This is the current state of the
                                         // command interpreter.
 
 EXTERN bool finish_op INIT(= false);    // true while an operator is pending
 EXTERN long opcount INIT(= 0);          // count for pending operator
+EXTERN int motion_force INIT(=0);       // motion force for pending operator
 
 // Ex Mode (Q) state
 EXTERN int exmode_active INIT(= 0);     // Zero, EXMODE_NORMAL or EXMODE_VIM.
@@ -915,10 +917,6 @@ EXTERN disptick_T display_tick INIT(= 0);
 /* Line in which spell checking wasn't highlighted because it touched the
  * cursor position in Insert mode. */
 EXTERN linenr_T spell_redraw_lnum INIT(= 0);
-
-/* Set when the cursor line needs to be redrawn. */
-EXTERN int need_cursor_line_redraw INIT(= FALSE);
-
 
 #ifdef USE_MCH_ERRMSG
 // Grow array to collect error messages in until they can be displayed.

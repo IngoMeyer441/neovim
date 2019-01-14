@@ -3355,7 +3355,6 @@ static void enter_tabpage(tabpage_T *tp, buf_T *old_curbuf, int trigger_enter_au
   }
 
   redraw_all_later(NOT_VALID);
-  must_redraw = NOT_VALID;
 }
 
 /// called when changing current tabpage from old_curtab to curtab
@@ -3543,11 +3542,13 @@ void win_goto(win_T *wp)
 
   win_enter(wp, true);
 
-  /* Conceal cursor line in previous window, unconceal in current window. */
-  if (win_valid(owp) && owp->w_p_cole > 0 && !msg_scrolled)
-    update_single_line(owp, owp->w_cursor.lnum);
-  if (curwin->w_p_cole > 0 && !msg_scrolled)
-    need_cursor_line_redraw = TRUE;
+  // Conceal cursor line in previous window, unconceal in current window.
+  if (win_valid(owp) && owp->w_p_cole > 0 && !msg_scrolled) {
+    redrawWinline(owp, owp->w_cursor.lnum);
+  }
+  if (curwin->w_p_cole > 0 && !msg_scrolled) {
+    redrawWinline(curwin, curwin->w_cursor.lnum);
+  }
 }
 
 

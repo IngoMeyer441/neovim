@@ -64,12 +64,9 @@
 
 typedef struct normal_state {
   VimState state;
-  linenr_T conceal_old_cursor_line;
-  linenr_T conceal_new_cursor_line;
   bool command_finished;
   bool ctrl_w;
   bool need_flushbuf;
-  bool conceal_update_lines;
   bool set_prevcount;
   bool previous_got_int;             // `got_int` was true
   bool cmdwin;                       // command-line window normal mode
@@ -1201,12 +1198,6 @@ static void normal_check_cursor_moved(NormalState *s)
       apply_autocmds(EVENT_CURSORMOVED, NULL, NULL, false, curbuf);
     }
 
-    if (curwin->w_p_cole > 0) {
-      s->conceal_old_cursor_line = last_cursormoved.lnum;
-      s->conceal_new_cursor_line = curwin->w_cursor.lnum;
-      s->conceal_update_lines = true;
-    }
-
     last_cursormoved = curwin->w_cursor;
   }
 }
@@ -1246,6 +1237,13 @@ static void normal_redraw(NormalState *s)
   update_topline();
   validate_cursor();
 
+  // If the cursor moves horizontally when 'concealcursor' is active, then the
+  // current line needs to be redrawn in order to calculate the correct
+  // cursor position.
+  if (curwin->w_p_cole > 0 && conceal_cursor_line(curwin)) {
+    redrawWinline(curwin, curwin->w_cursor.lnum);
+  }
+
   if (VIsual_active) {
     update_curbuf(INVERTED);  // update inverted part
   } else if (must_redraw) {
@@ -1280,22 +1278,6 @@ static void normal_redraw(NormalState *s)
   msg_didany = false;  // reset lines_left in msg_start()
   may_clear_sb_text();  // clear scroll-back text on next msg
   showruler(false);
-
-  if (s->conceal_update_lines
-      && (s->conceal_old_cursor_line !=
-        s->conceal_new_cursor_line
-        || conceal_cursor_line(curwin)
-        || need_cursor_line_redraw)) {
-    if (s->conceal_old_cursor_line !=
-        s->conceal_new_cursor_line
-        && s->conceal_old_cursor_line <=
-        curbuf->b_ml.ml_line_count) {
-      update_single_line(curwin, s->conceal_old_cursor_line);
-    }
-
-    update_single_line(curwin, s->conceal_new_cursor_line);
-    curwin->w_valid &= ~VALID_CROW;
-  }
 
   setcursor();
 }
@@ -1445,8 +1427,10 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
       oap->motion_type = kMTCharWise;
     } else if (oap->motion_force == Ctrl_V) {
       // Change line- or characterwise motion into Visual block mode.
-      VIsual_active = true;
-      VIsual = oap->start;
+      if (!VIsual_active) {
+        VIsual_active = true;
+        VIsual = oap->start;
+      }
       VIsual_mode = Ctrl_V;
       VIsual_select = false;
       VIsual_reselect = false;
@@ -2039,6 +2023,7 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
       curwin->w_cursor = old_cursor;
     }
     clearop(oap);
+    motion_force = NUL;
   }
   curwin->w_p_lbr = lbr_saved;
 }
@@ -3785,6 +3770,7 @@ find_decl (
   clearpos(&found_pos);
   for (;; ) {
     valid = false;
+    (void)valid;  // Avoid "dead assignment" warning.
     t = searchit(curwin, curbuf, &curwin->w_cursor, FORWARD,
         pat, 1L, searchflags, RE_LAST, (linenr_T)0, NULL);
     if (curwin->w_cursor.lnum >= old_pos.lnum)
@@ -6389,8 +6375,8 @@ static void nv_visual(cmdarg_T *cap)
   /* 'v', 'V' and CTRL-V can be used while an operator is pending to make it
    * characterwise, linewise, or blockwise. */
   if (cap->oap->op_type != OP_NOP) {
-    cap->oap->motion_force = cap->cmdchar;
-    finish_op = false;          /* operator doesn't finish now but later */
+    motion_force = cap->oap->motion_force = cap->cmdchar;
+    finish_op = false;          // operator doesn't finish now but later
     return;
   }
 
@@ -6493,9 +6479,6 @@ void may_start_select(int c)
  */
 static void n_start_visual_mode(int c)
 {
-  // Check for redraw before changing the state.
-  conceal_check_cursor_line();
-
   VIsual_mode = c;
   VIsual_active = true;
   VIsual_reselect = true;
@@ -7065,8 +7048,6 @@ static void nv_g_cmd(cmdarg_T *cap)
  */
 static void n_opencmd(cmdarg_T *cap)
 {
-  linenr_T oldline = curwin->w_cursor.lnum;
-
   if (!checkclearopq(cap->oap)) {
     if (cap->cmdchar == 'O')
       /* Open above the first line of a folded sequence of lines */
@@ -7085,10 +7066,7 @@ static void n_opencmd(cmdarg_T *cap)
                      has_format_option(FO_OPEN_COMS)
                      ? OPENLINE_DO_COM : 0,
                      0)) {
-      if (curwin->w_p_cole > 0 && oldline != curwin->w_cursor.lnum) {
-        update_single_line(curwin, oldline);
-      }
-      if (curwin->w_p_cul) {
+      if (win_cursorline_standout(curwin)) {
         // force redraw of cursorline
         curwin->w_valid &= ~VALID_CROW;
       }
