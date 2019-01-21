@@ -473,8 +473,6 @@ main() {
     return 0
   fi
 
-  # set -x
-
   if test -n "$patch" ; then
     patch_sources "$tgt" "$only_build"
   elif test -n "$pvs_install" ; then

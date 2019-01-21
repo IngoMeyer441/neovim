@@ -394,9 +394,8 @@ EXTERN bufref_T au_new_curbuf INIT(= { NULL, 0, 0 });
 EXTERN buf_T *au_pending_free_buf INIT(= NULL);
 EXTERN win_T *au_pending_free_win INIT(= NULL);
 
-/*
- * Mouse coordinates, set by check_termcode()
- */
+// Mouse coordinates, set by handle_mouse_event()
+EXTERN int mouse_grid;
 EXTERN int mouse_row;
 EXTERN int mouse_col;
 EXTERN bool mouse_past_bottom INIT(= false);    /* mouse below last line */
@@ -1072,16 +1071,14 @@ EXTERN char_u e_cmdmap_key[] INIT(=N_(
 EXTERN char top_bot_msg[] INIT(= N_("search hit TOP, continuing at BOTTOM"));
 EXTERN char bot_top_msg[] INIT(= N_("search hit BOTTOM, continuing at TOP"));
 
-/* For undo we need to know the lowest time possible. */
+// For undo we need to know the lowest time possible.
 EXTERN time_t starttime;
 
 EXTERN FILE *time_fd INIT(= NULL);  /* where to write startup timing */
 
-/*
- * Some compilers warn for not using a return value, but in some situations we
- * can't do anything useful with the value.  Assign to this variable to avoid
- * the warning.
- */
+// Some compilers warn for not using a return value, but in some situations we
+// can't do anything useful with the value.  Assign to this variable to avoid
+// the warning.
 EXTERN int vim_ignored;
 
 // Start a msgpack-rpc channel over stdin/stdout.
