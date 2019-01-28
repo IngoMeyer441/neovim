@@ -1472,6 +1472,10 @@ void set_curbuf(buf_T *buf, int action)
     if (old_tw != curbuf->b_p_tw)
       check_colorcolumn(curwin);
   }
+
+  if (bufref_valid(&prevbufref) && prevbuf->terminal != NULL) {
+    terminal_check_size(prevbuf->terminal);
+  }
 }
 
 /*
@@ -3676,10 +3680,10 @@ int build_stl_str_hl(
     {
       // In list mode virtcol needs to be recomputed
       colnr_T virtcol = wp->w_virtcol;
-      if (wp->w_p_list && lcs_tab1 == NUL) {
-        wp->w_p_list = FALSE;
+      if (wp->w_p_list && wp->w_p_lcs_chars.tab1 == NUL) {
+        wp->w_p_list = false;
         getvcol(wp, &wp->w_cursor, NULL, &virtcol, NULL);
-        wp->w_p_list = TRUE;
+        wp->w_p_list = true;
       }
       ++virtcol;
       // Don't display %V if it's the same as %c.
