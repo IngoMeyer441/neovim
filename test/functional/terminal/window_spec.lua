@@ -1,15 +1,32 @@
 local helpers = require('test.functional.helpers')(after_each)
 local thelpers = require('test.functional.terminal.helpers')
+local feed_data = thelpers.feed_data
 local feed, clear = helpers.feed, helpers.clear
 local wait = helpers.wait
 local iswin = helpers.iswin
+local command = helpers.command
+local retry = helpers.retry
+local eq = helpers.eq
+local eval = helpers.eval
 
-describe('terminal window', function()
+describe(':terminal window', function()
   local screen
 
   before_each(function()
     clear()
     screen = thelpers.screen_setup()
+  end)
+
+  it('sets topline correctly #8556', function()
+    -- Test has hardcoded assumptions of dimensions.
+    eq(7, eval('&lines'))
+    feed_data('\n\n\n')  -- Add blank lines.
+    -- Terminal/shell contents must exceed the height of this window.
+    command('topleft 1split')
+    eq('terminal', eval('&buftype'))
+    feed([[i<cr>]])
+    -- Check topline _while_ in terminal-mode.
+    retry(nil, nil, function() eq(6, eval('winsaveview()["topline"]')) end)
   end)
 
   describe("with 'number'", function()
@@ -25,7 +42,7 @@ describe('terminal window', function()
         {7:6 }                                                |
         {3:-- TERMINAL --}                                    |
       ]])
-      thelpers.feed_data({'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'})
+      feed_data({'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'})
       screen:expect([[
         {7:1 }tty ready                                       |
         {7:2 }rows: 6, cols: 48                               |
@@ -52,7 +69,7 @@ describe('terminal window', function()
         {7:       6 }                                         |
         {3:-- TERMINAL --}                                    |
       ]])
-      thelpers.feed_data({' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'})
+      feed_data({' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'})
       screen:expect([[
         {7:       1 }tty ready                                |
         {7:       2 }rows: 6, cols: 48                        |
@@ -96,7 +113,7 @@ describe('terminal window', function()
   describe('with fold set', function()
     before_each(function()
       feed([[<C-\><C-N>:set foldenable foldmethod=manual<CR>i]])
-      thelpers.feed_data({'line1', 'line2', 'line3', 'line4', ''})
+      feed_data({'line1', 'line2', 'line3', 'line4', ''})
       screen:expect([[
         tty ready                                         |
         line1                                             |
@@ -124,7 +141,7 @@ describe('terminal window', function()
   end)
 end)
 
-describe('terminal window with multigrid', function()
+describe(':terminal with multigrid', function()
   local screen
 
   before_each(function()
