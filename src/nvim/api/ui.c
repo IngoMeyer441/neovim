@@ -132,6 +132,13 @@ void nvim_ui_attach(uint64_t channel_id, Integer width, Integer height,
     ui->ui_ext[kUILinegrid] = true;
   }
 
+  if (ui->ui_ext[kUIMessages]) {
+    // This uses attribute indicies, so ext_linegrid is needed.
+    ui->ui_ext[kUILinegrid] = true;
+    // Cmdline uses the messages area, so it should be externalized too.
+    ui->ui_ext[kUICmdline] = true;
+  }
+
   UIData *data = xmalloc(sizeof(UIData));
   data->channel_id = channel_id;
   data->buffer = (Array)ARRAY_DICT_INIT;
@@ -210,8 +217,9 @@ static void ui_set_option(UI *ui, bool init, String name, Object value,
       return;
     }
     ui->rgb = value.data.boolean;
-    // A little drastic, but only legacy uis need to use this option
-    if (!init) {
+    // A little drastic, but only takes effect for legacy uis. For linegrid UI
+    // only changes metadata for nvim_list_uis(), no refresh needed.
+    if (!init && !ui->ui_ext[kUILinegrid]) {
       ui_refresh();
     }
     return;
@@ -355,6 +363,9 @@ static void remote_ui_default_colors_set(UI *ui, Integer rgb_fg,
                                          Integer rgb_bg, Integer rgb_sp,
                                          Integer cterm_fg, Integer cterm_bg)
 {
+  if (!ui->ui_ext[kUITermColors]) {
+    HL_SET_DEFAULT_COLORS(rgb_fg, rgb_bg, rgb_sp);
+  }
   Array args = ARRAY_DICT_INIT;
   ADD(args, INTEGER_OBJ(rgb_fg));
   ADD(args, INTEGER_OBJ(rgb_bg));

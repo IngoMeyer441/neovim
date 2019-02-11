@@ -2351,7 +2351,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'fillchars'* *'fcs'*
 'fillchars' 'fcs'	string	(default "")
-			global
+			local to window
 	Characters to fill the statuslines and vertical separators.
 	It is a comma separated list of items:
 
@@ -4485,6 +4485,16 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Determines the maximum number of items to show in the popup menu for
 	Insert mode completion.  When zero as much space as available is used.
 	|ins-completion-menu|.
+
+						*'pumblend'* *'pb'*
+'pumblend' 'pb'		number	(default 0)
+			global
+	Enables semi-transparency for the completion popupmenu. Valid values
+	are in the range from 0 for fully opaque popupmenu (disabled) to 100
+	for fully transparent background. Lower values 0-30 are typically most
+	useful.
+
+	UI-dependent. Supported by TUI with 'termguicolors' enabled.
 
 						*'pyxversion'* *'pyx'*
 'pyxversion' 'pyx'	number	(default depends on the build)

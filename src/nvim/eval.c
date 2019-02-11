@@ -5958,7 +5958,9 @@ static int get_env_tv(char_u **arg, typval_T *rettv, int evaluate)
 #pragma function (floor)
 #endif
 
+PRAGMA_DIAG_PUSH_IGNORE_MISSING_PROTOTYPES
 # include "funcs.generated.h"
+PRAGMA_DIAG_POP
 #endif
 
 /*
@@ -19595,7 +19597,10 @@ void ex_echo(exarg_T *eap)
         msg_puts_attr(" ", echo_attr);
       }
       char *tofree = encode_tv2echo(&rettv, NULL);
-      msg_multiline_attr(tofree, echo_attr);
+      if (*tofree != NUL) {
+        msg_ext_set_kind("echo");
+        msg_multiline_attr(tofree, echo_attr);
+      }
       xfree(tofree);
     }
     tv_clear(&rettv);
@@ -19687,11 +19692,13 @@ void ex_execute(exarg_T *eap)
     }
 
     if (eap->cmdidx == CMD_echomsg) {
+      msg_ext_set_kind("echomsg");
       MSG_ATTR(ga.ga_data, echo_attr);
       ui_flush();
     } else if (eap->cmdidx == CMD_echoerr) {
       /* We don't want to abort following commands, restore did_emsg. */
       save_did_emsg = did_emsg;
+      msg_ext_set_kind("echoerr");
       EMSG((char_u *)ga.ga_data);
       if (!force_abort)
         did_emsg = save_did_emsg;
