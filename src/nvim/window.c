@@ -806,12 +806,12 @@ bool parse_float_config(Dictionary config, FloatConfig *out, bool reconf,
     api_set_error(err, kErrorTypeValidation,
                   "Only one of 'relative' and 'external' should be used");
     return false;
-  } else if (has_relative) {
-    out->external = false;
   } else if (!reconf && !has_relative && !has_external) {
     api_set_error(err, kErrorTypeValidation,
                   "One of 'relative' and 'external' must be used");
     return false;
+  } else if (has_relative) {
+    out->external = false;
   }
 
   if (out->external && !ui_has(kUIMultigrid)) {
@@ -5332,7 +5332,10 @@ void win_drag_vsep_line(win_T *dragwin, int offset)
 void set_fraction(win_T *wp)
 {
   if (wp->w_height_inner > 1) {
-    wp->w_fraction = ((long)wp->w_wrow * FRACTION_MULT + wp->w_height_inner / 2)
+    // When cursor is in the first line the percentage is computed as if
+    // it's halfway that line.  Thus with two lines it is 25%, with three
+    // lines 17%, etc.  Similarly for the last line: 75%, 83%, etc.
+    wp->w_fraction = ((long)wp->w_wrow * FRACTION_MULT + FRACTION_MULT / 2)
                    / (long)wp->w_height_inner;
   }
 }
@@ -5364,8 +5367,8 @@ void scroll_to_fraction(win_T *wp, int prev_height)
     int sline, line_size;
     int height = wp->w_height_inner;
 
-  /* Don't change w_topline when height is zero.  Don't set w_topline when
-   * 'scrollbind' is set and this isn't the current window. */
+    // Don't change w_topline when height is zero.  Don't set w_topline when
+    // 'scrollbind' is set and this isn't the current window.
   if (height > 0
       && (!wp->w_p_scb || wp == curwin)
       ) {
@@ -5376,8 +5379,7 @@ void scroll_to_fraction(win_T *wp, int prev_height)
     lnum = wp->w_cursor.lnum;
     if (lnum < 1)               /* can happen when starting up */
       lnum = 1;
-    wp->w_wrow = ((long)wp->w_fraction * (long)height - 1L + FRACTION_MULT / 2)
-                 / FRACTION_MULT;
+    wp->w_wrow = ((long)wp->w_fraction * (long)height - 1L) / FRACTION_MULT;
     line_size = plines_win_col(wp, lnum, (long)(wp->w_cursor.col)) - 1;
     sline = wp->w_wrow - line_size;
 
@@ -5408,7 +5410,6 @@ void scroll_to_fraction(win_T *wp, int prev_height)
           wp->w_wrow--;
         }
       }
-      set_topline(wp, lnum);
     } else if (sline > 0) {
       while (sline > 0 && lnum > 1) {
         (void)hasFoldingWin(wp, lnum, &lnum, NULL, true, NULL);
@@ -5437,12 +5438,12 @@ void scroll_to_fraction(win_T *wp, int prev_height)
         lnum++;
         wp->w_wrow -= line_size + sline;
       } else if (sline > 0) {
-        /* First line of file reached, use that as topline. */
+        // First line of file reached, use that as topline.
         lnum = 1;
         wp->w_wrow -= sline;
       }
-      set_topline(wp, lnum);
     }
+    set_topline(wp, lnum);
   }
 
   if (wp == curwin) {
@@ -5546,10 +5547,11 @@ void command_height(void)
    * p_ch was changed in another tab page. */
   curtab->tp_ch_used = p_ch;
 
-  /* Find bottom frame with width of screen. */
-  frp = lastwin->w_frame;
-  while (frp->fr_width != Columns && frp->fr_parent != NULL)
+  // Find bottom frame with width of screen.
+  frp = lastwin_nofloating()->w_frame;
+  while (frp->fr_width != Columns && frp->fr_parent != NULL) {
     frp = frp->fr_parent;
+  }
 
   /* Avoid changing the height of a window with 'winfixheight' set. */
   while (frp->fr_prev != NULL && frp->fr_layout == FR_LEAF
@@ -5708,9 +5710,9 @@ file_name_in_line (
   len = 0;
   while (vim_isfilec(ptr[len]) || (ptr[len] == '\\' && ptr[len + 1] == ' ')
          || ((options & FNAME_HYP) && path_is_url((char *)ptr + len))
-         || (is_url && vim_strchr((char_u *)"?&=", ptr[len]) != NULL)) {
-    // After type:// we also include ?, & and = as valid characters, so that
-    // http://google.com?q=this&that=ok works.
+         || (is_url && vim_strchr((char_u *)":?&=", ptr[len]) != NULL)) {
+    // After type:// we also include :, ?, & and = as valid characters, so that
+    // http://google.com:8080?q=this&that=ok works.
     if ((ptr[len] >= 'A' && ptr[len] <= 'Z')
         || (ptr[len] >= 'a' && ptr[len] <= 'z')) {
       if (in_type && path_is_url((char *)ptr + len + 1)) {

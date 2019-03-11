@@ -10086,10 +10086,23 @@ static void getpos_both(typval_T *argvars, typval_T *rettv, bool getcurpos)
   tv_list_append_number(
       l, (fp != NULL) ? (varnumber_T)fp->coladd : (varnumber_T)0);
   if (getcurpos) {
+    const int save_set_curswant = curwin->w_set_curswant;
+    const colnr_T save_curswant = curwin->w_curswant;
+    const colnr_T save_virtcol = curwin->w_virtcol;
+
     update_curswant();
     tv_list_append_number(l, (curwin->w_curswant == MAXCOL
                               ? (varnumber_T)MAXCOL
                               : (varnumber_T)curwin->w_curswant + 1));
+
+    // Do not change "curswant", as it is unexpected that a get
+    // function has a side effect.
+    if (save_set_curswant) {
+      curwin->w_set_curswant = save_set_curswant;
+      curwin->w_curswant = save_curswant;
+      curwin->w_virtcol = save_virtcol;
+      curwin->w_valid &= ~VALID_VIRTCOL;
+    }
   }
 }
 
@@ -10303,6 +10316,8 @@ static dict_T *get_win_info(win_T *wp, int16_t tpnr, int16_t winnr)
   tv_dict_add_nr(dict, S_LEN("winid"), wp->handle);
   tv_dict_add_nr(dict, S_LEN("height"), wp->w_height);
   tv_dict_add_nr(dict, S_LEN("winrow"), wp->w_winrow);
+  tv_dict_add_nr(dict, S_LEN("topline"), wp->w_topline);
+  tv_dict_add_nr(dict, S_LEN("botline"), wp->w_botline - 1);
   tv_dict_add_nr(dict, S_LEN("width"), wp->w_width);
   tv_dict_add_nr(dict, S_LEN("bufnr"), wp->w_buffer->b_fnum);
   tv_dict_add_nr(dict, S_LEN("wincol"), wp->w_wincol);
@@ -13793,7 +13808,7 @@ static int search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
 
   pos = save_cursor = curwin->w_cursor;
   subpatnum = searchit(curwin, curbuf, &pos, dir, (char_u *)pat, 1,
-                       options, RE_SEARCH, (linenr_T)lnum_stop, &tm);
+                       options, RE_SEARCH, (linenr_T)lnum_stop, &tm, NULL);
   if (subpatnum != FAIL) {
     if (flags & SP_SUBPAT)
       retval = subpatnum;
@@ -14295,10 +14310,11 @@ do_searchpair(
   pat = pat3;
   for (;; ) {
     n = searchit(curwin, curbuf, &pos, dir, pat, 1L,
-        options, RE_SEARCH, lnum_stop, &tm);
-    if (n == FAIL || (firstpos.lnum != 0 && equalpos(pos, firstpos)))
-      /* didn't find it or found the first match again: FAIL */
+                 options, RE_SEARCH, lnum_stop, &tm, NULL);
+    if (n == FAIL || (firstpos.lnum != 0 && equalpos(pos, firstpos))) {
+      // didn't find it or found the first match again: FAIL
       break;
+    }
 
     if (firstpos.lnum == 0)
       firstpos = pos;
@@ -20144,7 +20160,7 @@ void ex_function(exarg_T *eap)
         skip_until = vim_strsave((char_u *)".");
       }
 
-      // Check for ":python <<EOF", ":lua <<EOF", etc.
+      // heredoc: Check for ":python <<EOF", ":lua <<EOF", etc.
       arg = skipwhite(skiptowhite(p));
       if (arg[0] == '<' && arg[1] =='<'
           && ((p[0] == 'p' && p[1] == 'y'
