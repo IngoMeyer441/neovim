@@ -839,8 +839,7 @@ describe('TUI background color', function()
   it("triggers OptionSet event on terminal-response", function()
     feed_data('\027:autocmd OptionSet background echo "did OptionSet, yay!"\n')
 
-    -- The child Nvim is running asynchronously; wait for it to register the
-    -- OptionSet handler.
+    -- Wait for the child Nvim to register the OptionSet handler.
     feed_data('\027:autocmd OptionSet\n')
     screen:expect({any='--- Autocommands ---'})
 
@@ -860,16 +859,23 @@ describe('TUI background color', function()
 
   local function assert_bg(color, bg)
     it('handles '..color..' as '..bg, function()
-      feed_data('\027]11;rgb:'..color..'\007:echo &background\n')
-      screen:expect(string.format([[
-        {1: }                                                 |
-        {4:~                                                 }|
-        {4:~                                                 }|
-        {4:~                                                 }|
-        {5:[No Name]                       0,0-1          All}|
-        %-5s                                             |
-        {3:-- TERMINAL --}                                    |
-      ]], bg))
+      feed_data('\027]11;rgb:'..color..'\007')
+      -- Retry until the terminal response is handled.
+      retry(100, nil, function()
+        feed_data(':echo &background\n')
+        screen:expect({
+          timeout=40,
+          grid=string.format([[
+            {1: }                                                 |
+            {4:~                                                 }|
+            {4:~                                                 }|
+            {4:~                                                 }|
+            {5:[No Name]                       0,0-1          All}|
+            %-5s                                             |
+            {3:-- TERMINAL --}                                    |
+          ]], bg)
+        })
+      end)
     end)
   end
 

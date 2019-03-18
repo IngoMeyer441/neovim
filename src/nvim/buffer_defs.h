@@ -958,24 +958,32 @@ struct matchitem {
   int conceal_char;         ///< cchar for Conceal highlighting
 };
 
-typedef enum {
-    kFloatAnchorEast = 1,
-    kFloatAnchorSouth = 2,
+typedef int FloatAnchor;
+typedef int FloatRelative;
 
-    kFloatAnchorNW = 0,
-    kFloatAnchorNE = 1,
-    kFloatAnchorSW = 2,
-    kFloatAnchorSE = 3,
-} FloatAnchor;
+enum {
+  kFloatAnchorEast  = 1,
+  kFloatAnchorSouth = 2,
+};
 
-typedef enum {
-    kFloatRelativeEditor = 0,
-    kFloatRelativeWindow = 1,
-    kFloatRelativeCursor = 2,
-} FloatRelative;
+// NW -> 0
+// NE -> kFloatAnchorEast
+// SW -> kFloatAnchorSouth
+// SE -> kFloatAnchorSouth | kFloatAnchorEast
+EXTERN const char *const float_anchor_str[] INIT(= { "NW", "NE", "SW", "SE" });
+
+enum {
+  kFloatRelativeEditor = 0,
+  kFloatRelativeWindow = 1,
+  kFloatRelativeCursor = 2,
+};
+
+EXTERN const char *const float_relative_str[] INIT(= { "editor", "window",
+                                                       "cursor" });
 
 typedef struct {
   Window window;
+  int height, width;
   double row, col;
   FloatAnchor anchor;
   FloatRelative relative;
@@ -983,22 +991,21 @@ typedef struct {
   bool focusable;
 } FloatConfig;
 
-#define FLOAT_CONFIG_INIT ((FloatConfig){ .row = 0, .col = 0, .anchor = 0, \
+#define FLOAT_CONFIG_INIT ((FloatConfig){ .height = 0, .width = 0, \
+                                          .row = 0, .col = 0, .anchor = 0, \
                                           .relative = 0, .external = false, \
                                           .focusable = true })
 
-/*
- * Structure which contains all information that belongs to a window
- *
- * All row numbers are relative to the start of the window, except w_winrow.
- */
+/// Structure which contains all information that belongs to a window.
+///
+/// All row numbers are relative to the start of the window, except w_winrow.
 struct window_S {
   handle_T handle;                  ///< unique identifier for the window
 
   buf_T       *w_buffer;            ///< buffer we are a window into (used
                                     ///< often, keep it the first item!)
 
-  synblock_T  *w_s;                 /* for :ownsyntax */
+  synblock_T  *w_s;                 ///< for :ownsyntax
 
   int w_hl_id_normal;               ///< 'winhighlight' normal id
   int w_hl_attr_normal;             ///< 'winhighlight' normal final attrs
@@ -1008,18 +1015,18 @@ struct window_S {
 
   int w_hl_needs_update;            ///< attrs need to be recalculated
 
-  win_T       *w_prev;              /* link to previous window */
-  win_T       *w_next;              /* link to next window */
-  bool w_closing;                   /* window is being closed, don't let
-                                       autocommands close it too. */
+  win_T       *w_prev;              ///< link to previous window
+  win_T       *w_next;              ///< link to next window
+  bool w_closing;                   ///< window is being closed, don't let
+                                    ///  autocommands close it too.
 
-  frame_T     *w_frame;             /* frame containing this window */
+  frame_T     *w_frame;             ///< frame containing this window
 
-  pos_T w_cursor;                   /* cursor position in buffer */
+  pos_T w_cursor;                   ///< cursor position in buffer
 
-  colnr_T w_curswant;               /* The column we'd like to be at.  This is
-                                       used to try to stay in the same column
-                                       for up/down cursor motions. */
+  colnr_T w_curswant;               ///< Column we want to be at.  This is
+                                    ///  used to try to stay in the same column
+                                    ///  for up/down cursor motions.
 
   int w_set_curswant;               // If set, then update w_curswant the next
                                     // time through cursupdate() to the
