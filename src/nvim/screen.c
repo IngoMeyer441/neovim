@@ -2772,8 +2772,15 @@ win_line (
             if (wp->w_skipcol > 0)
               for (p_extra = extra; *p_extra == ' '; ++p_extra)
                 *p_extra = '-';
-            if (wp->w_p_rl)                         /* reverse line numbers */
-              rl_mirror(extra);
+            if (wp->w_p_rl) {                       // reverse line numbers
+              // like rl_mirror(), but keep the space at the end
+              char_u *p2 = skiptowhite(extra) - 1;
+              for (char_u *p1 = extra; p1 < p2; p1++, p2--) {
+                const int t = *p1;
+                *p1 = *p2;
+                *p2 = t;
+              }
+            }
             p_extra = extra;
             c_extra = NUL;
             c_final = NUL;
@@ -2956,8 +2963,11 @@ win_line (
                 shl->endcol = tmp_col;
               }
               shl->attr_cur = shl->attr;
-              if (cur != NULL && syn_name2id((char_u *)"Conceal")
-                  == cur->hlg_id) {
+              // Match with the "Conceal" group results in hiding
+              // the match.
+              if (cur != NULL
+                  && shl != &search_hl
+                  && syn_name2id((char_u *)"Conceal") == cur->hlg_id) {
                 has_match_conc = v == (long)shl->startcol ? 2 : 1;
                 match_conc = cur->conceal_char;
               } else {
@@ -6371,14 +6381,12 @@ void grid_del_lines(ScreenGrid *grid, int row, int line_count, int end, int col,
 }
 
 
-/*
- * show the current mode and ruler
- *
- * If clear_cmdline is TRUE, clear the rest of the cmdline.
- * If clear_cmdline is FALSE there may be a message there that needs to be
- * cleared only if a mode is shown.
- * Return the length of the message (0 if no message).
- */
+// Show the current mode and ruler.
+//
+// If clear_cmdline is TRUE, clear the rest of the cmdline.
+// If clear_cmdline is FALSE there may be a message there that needs to be
+// cleared only if a mode is shown.
+// Return the length of the message (0 if no message).
 int showmode(void)
 {
   int need_clear;

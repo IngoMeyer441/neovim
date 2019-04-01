@@ -2679,9 +2679,9 @@ winframe_remove (
       frp3 = frp_close->fr_next;
       while (frp != NULL || frp3 != NULL) {
         if (frp != NULL) {
-          if (frp->fr_win != NULL && !frp->fr_win->w_p_wfh) {
+          if (!frame_fixed_height(frp)) {
             frp2 = frp;
-            wp = frp->fr_win;
+            wp = frame2win(frp2);
             break;
           }
           frp = frp->fr_prev;
@@ -2708,9 +2708,9 @@ winframe_remove (
       frp3 = frp_close->fr_next;
       while (frp != NULL || frp3 != NULL) {
         if (frp != NULL) {
-          if (frp->fr_win != NULL && !frp->fr_win->w_p_wfw) {
+          if (!frame_fixed_width(frp)) {
             frp2 = frp;
-            wp = frp->fr_win;
+            wp = frame2win(frp2);
             break;
           }
           frp = frp->fr_prev;
@@ -4256,9 +4256,12 @@ static void win_enter_ext(win_T *wp, bool undo_sync, int curwin_invalid,
     apply_autocmds(EVENT_WINNEW, NULL, NULL, false, curbuf);
   }
   if (trigger_enter_autocmds) {
-    apply_autocmds(EVENT_WINENTER, NULL, NULL, FALSE, curbuf);
-    if (other_buffer)
-      apply_autocmds(EVENT_BUFENTER, NULL, NULL, FALSE, curbuf);
+    apply_autocmds(EVENT_WINENTER, NULL, NULL, false, curbuf);
+    if (other_buffer) {
+      apply_autocmds(EVENT_BUFENTER, NULL, NULL, false, curbuf);
+    }
+    apply_autocmds(EVENT_CURSORMOVED, NULL, NULL, false, curbuf);
+    curwin->w_last_cursormoved = curwin->w_cursor;
   }
 
   maketitle();
