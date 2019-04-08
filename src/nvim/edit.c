@@ -137,16 +137,18 @@ typedef struct compl_S compl_T;
 struct compl_S {
   compl_T     *cp_next;
   compl_T     *cp_prev;
-  char_u      *cp_str;          /* matched text */
-  char cp_icase;                /* TRUE or FALSE: ignore case */
-  char_u      *(cp_text[CPT_COUNT]);    /* text for the menu */
-  char_u      *cp_fname;        /* file containing the match, allocated when
-                                 * cp_flags has FREE_FNAME */
-  int cp_flags;                 /* ORIGINAL_TEXT, CONT_S_IPOS or FREE_FNAME */
-  int cp_number;                /* sequence number */
+  char_u      *cp_str;          // matched text
+  char cp_icase;                // TRUE or FALSE: ignore case
+  char  cp_equal;               // TRUE or FALSE: ins_compl_equal always ok
+  char_u      *(cp_text[CPT_COUNT]);    // text for the menu
+  char_u      *cp_fname;        // file containing the match, allocated when
+                                // cp_flags has FREE_FNAME
+  int cp_flags;                 // ORIGINAL_TEXT, CONT_S_IPOS or FREE_FNAME
+  int cp_number;                // sequence number
 };
 
-#define ORIGINAL_TEXT   (1)   /* the original text when the expansion begun */
+// flags for ins_compl_add()
+#define ORIGINAL_TEXT   (1)   // the original text when the expansion begun
 #define FREE_FNAME      (2)
 
 /*
@@ -667,8 +669,9 @@ static int insert_execute(VimState *state, int key)
       // there is nothing to add, CTRL-L works like CTRL-P then.
       if (s->c == Ctrl_L
           && (!CTRL_X_MODE_LINE_OR_EVAL(ctrl_x_mode)
-              || (int)STRLEN(compl_shown_match->cp_str)
-              > curwin->w_cursor.col - compl_col)) {
+              || (compl_shown_match->cp_str != NULL
+                  && (int)STRLEN(compl_shown_match->cp_str)
+                  > curwin->w_cursor.col - compl_col))) {
         ins_compl_addfrommatch();
         return 1;  // continue
       }
@@ -2034,14 +2037,14 @@ static bool ins_compl_accept_char(int c)
   return vim_iswordc(c);
 }
 
-/*
- * This is like ins_compl_add(), but if 'ic' and 'inf' are set, then the
- * case of the originally typed text is used, and the case of the completed
- * text is inferred, ie this tries to work out what case you probably wanted
- * the rest of the word to be in -- webb
- */
-int ins_compl_add_infercase(char_u *str, int len, int icase, char_u *fname, int dir, int flags)
+// This is like ins_compl_add(), but if 'ic' and 'inf' are set, then the
+// case of the originally typed text is used, and the case of the completed
+// text is inferred, ie this tries to work out what case you probably wanted
+// the rest of the word to be in -- webb
+int ins_compl_add_infercase(char_u *str_arg, int len, int icase, char_u *fname,
+                            int dir, int flags)
 {
+  char_u *str = str_arg;
   int i, c;
   int actual_len;                       /* Take multi-byte characters */
   int actual_compl_length;              /* into account. */
@@ -2170,10 +2173,10 @@ int ins_compl_add_infercase(char_u *str, int len, int icase, char_u *fname, int 
 
     xfree(wca);
 
-    return ins_compl_add(IObuff, len, icase, fname, NULL, false, dir, flags,
-                         false);
+    str = IObuff;
   }
-  return ins_compl_add(str, len, icase, fname, NULL, false, dir, flags, false);
+  return ins_compl_add(str, len, icase, fname, NULL, false, dir, flags,
+                       false, false);
 }
 
 /// Add a match to the list of matches
@@ -2190,6 +2193,7 @@ int ins_compl_add_infercase(char_u *str, int len, int icase, char_u *fname, int 
 ///                                     cptext itself will not be freed.
 /// @param[in]  cdir  Completion direction.
 /// @param[in]  adup  True if duplicate matches are to be accepted.
+/// @param[in]  equal  Match is always accepted by ins_compl_equal.
 ///
 /// @return NOTDONE if the given string is already in the list of completions,
 ///         otherwise it is added to the list and  OK is returned. FAIL will be
@@ -2198,7 +2202,8 @@ static int ins_compl_add(char_u *const str, int len,
                          const bool icase, char_u *const fname,
                          char_u *const *const cptext,
                          const bool cptext_allocated,
-                         const Direction cdir, int flags, const bool adup)
+                         const Direction cdir, int flags, const bool adup,
+                         int equal)
   FUNC_ATTR_NONNULL_ARG(1)
 {
   compl_T     *match;
@@ -2250,6 +2255,7 @@ static int ins_compl_add(char_u *const str, int len,
     match->cp_number = 0;
   match->cp_str = vim_strnsave(str, len);
   match->cp_icase = icase;
+  match->cp_equal = equal;
 
   /* match-fname is:
    * - compl_curr_match->cp_fname if it is a string equal to fname.
@@ -2323,6 +2329,9 @@ static int ins_compl_add(char_u *const str, int len,
 static bool ins_compl_equal(compl_T *match, char_u *str, size_t len)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL
 {
+  if (match->cp_equal) {
+    return true;
+  }
   if (match->cp_icase) {
     return STRNICMP(match->cp_str, str, len) == 0;
   }
@@ -2396,7 +2405,8 @@ static void ins_compl_add_matches(int num_matches, char_u **matches, int icase)
 
   for (i = 0; i < num_matches && add_r != FAIL; i++)
     if ((add_r = ins_compl_add(matches[i], -1, icase,
-                               NULL, NULL, false, dir, 0, false)) == OK) {
+                               NULL, NULL, false, dir, 0, false,
+                               false)) == OK) {
       // If dir was BACKWARD then honor it just once.
       dir = FORWARD;
     }
@@ -2465,7 +2475,7 @@ void set_completion(colnr_T startcol, list_T *list)
   compl_orig_text = vim_strnsave(get_cursor_line_ptr() + compl_col,
                                  compl_length);
   if (ins_compl_add(compl_orig_text, -1, p_ic, NULL, NULL, false, 0,
-                    ORIGINAL_TEXT, false) != OK) {
+                    ORIGINAL_TEXT, false, false) != OK) {
     return;
   }
 
@@ -3005,7 +3015,6 @@ bool ins_compl_active(void)
 // Get complete information
 void get_complete_info(list_T *what_list, dict_T *retdict)
 {
-  int ret = OK;
 #define CI_WHAT_MODE            0x01
 #define CI_WHAT_PUM_VISIBLE     0x02
 #define CI_WHAT_ITEMS           0x04
@@ -3037,7 +3046,8 @@ void get_complete_info(list_T *what_list, dict_T *retdict)
     }
   }
 
-  if (ret == OK && (what_flag & CI_WHAT_MODE)) {
+  int ret = OK;
+  if (what_flag & CI_WHAT_MODE) {
     ret = tv_dict_add_str(retdict, S_LEN("mode"),
                           (char *)ins_compl_mode());
   }
@@ -3758,6 +3768,7 @@ int ins_compl_add_tv(typval_T *const tv, const Direction dir)
   bool icase = false;
   bool adup = false;
   bool aempty = false;
+  bool aequal = false;
   char *(cptext[CPT_COUNT]);
 
   if (tv->v_type == VAR_DICT && tv->vval.v_dict != NULL) {
@@ -3772,6 +3783,9 @@ int ins_compl_add_tv(typval_T *const tv, const Direction dir)
     icase = (bool)tv_dict_get_number(tv->vval.v_dict, "icase");
     adup = (bool)tv_dict_get_number(tv->vval.v_dict, "dup");
     aempty = (bool)tv_dict_get_number(tv->vval.v_dict, "empty");
+    if (tv_dict_get_string(tv->vval.v_dict, "equal", false) != NULL) {
+      aequal = tv_dict_get_number(tv->vval.v_dict, "equal");
+    }
   } else {
     word = (const char *)tv_get_string_chk(tv);
     memset(cptext, 0, sizeof(cptext));
@@ -3783,7 +3797,7 @@ int ins_compl_add_tv(typval_T *const tv, const Direction dir)
     return FAIL;
   }
   return ins_compl_add((char_u *)word, -1, icase, NULL,
-                       (char_u **)cptext, true, dir, 0, adup);
+                       (char_u **)cptext, true, dir, 0, adup, aequal);
 }
 
 /*
@@ -4945,7 +4959,7 @@ static int ins_complete(int c, bool enable_pum)
     xfree(compl_orig_text);
     compl_orig_text = vim_strnsave(line + compl_col, compl_length);
     if (ins_compl_add(compl_orig_text, -1, p_ic, NULL, NULL, false, 0,
-                      ORIGINAL_TEXT, false) != OK) {
+                      ORIGINAL_TEXT, false, false) != OK) {
       xfree(compl_pattern);
       compl_pattern = NULL;
       xfree(compl_orig_text);
