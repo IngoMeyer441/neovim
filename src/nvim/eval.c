@@ -449,6 +449,7 @@ typedef struct {
   int timer_id;
   int repeat_count;
   int refcount;
+  int emsg_count;  ///< Errors in a repeating timer.
   long timeout;
   bool stopped;
   bool paused;
@@ -16754,6 +16755,7 @@ static int get_winnr(tabpage_T *tp, typval_T *argvar)
 
   twin = (tp == curtab) ? curwin : tp->tp_curwin;
   if (argvar->v_type != VAR_UNKNOWN) {
+    bool invalid_arg = false;
     const char *const arg = tv_get_string_chk(argvar);
     if (arg == NULL) {
       nr = 0;  // Type error; errmsg already given.
@@ -16765,6 +16767,31 @@ static int get_winnr(tabpage_T *tp, typval_T *argvar)
         nr = 0;
       }
     } else {
+      // Extract the window count (if specified). e.g. winnr('3j')
+      char_u *endp;
+      long count = strtol((char *)arg, (char **)&endp, 10);
+      if (count <= 0) {
+        // if count is not specified, default to 1
+        count = 1;
+      }
+      if (endp != NULL && *endp != '\0') {
+        if (strequal((char *)endp, "j")) {
+          twin = win_vert_neighbor(tp, twin, false, count);
+        } else if (strequal((char *)endp, "k")) {
+          twin = win_vert_neighbor(tp, twin, true, count);
+        } else if (strequal((char *)endp, "h")) {
+          twin = win_horz_neighbor(tp, twin, true, count);
+        } else if (strequal((char *)endp, "l")) {
+          twin = win_horz_neighbor(tp, twin, false, count);
+        } else {
+          invalid_arg = true;
+        }
+      } else {
+        invalid_arg = true;
+      }
+    }
+
+    if (invalid_arg) {
       EMSG2(_(e_invexpr2), arg);
       nr = 0;
     }
@@ -17160,6 +17187,7 @@ static void f_timer_start(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   timer->refcount = 1;
   timer->stopped = false;
   timer->paused = false;
+  timer->emsg_count = 0;
   timer->repeat_count = repeat;
   timer->timeout = timeout;
   timer->timer_id = last_timer_id++;
@@ -17202,6 +17230,9 @@ static void f_timer_stopall(typval_T *argvars, typval_T *unused, FunPtr fptr)
 static void timer_due_cb(TimeWatcher *tw, void *data)
 {
   timer_T *timer = (timer_T *)data;
+  int save_did_emsg = did_emsg;
+  int save_called_emsg = called_emsg;
+
   if (timer->stopped || timer->paused) {
     return;
   }
@@ -17216,8 +17247,24 @@ static void timer_due_cb(TimeWatcher *tw, void *data)
   argv[0].v_type = VAR_NUMBER;
   argv[0].vval.v_number = timer->timer_id;
   typval_T rettv = TV_INITIAL_VALUE;
+  called_emsg = false;
 
   callback_call(&timer->callback, 1, argv, &rettv);
+
+  // Handle error message
+  if (called_emsg && did_emsg) {
+    timer->emsg_count++;
+    if (current_exception != NULL) {
+      discard_current_exception();
+    }
+  }
+  did_emsg = save_did_emsg;
+  called_emsg = save_called_emsg;
+
+  if (timer->emsg_count >= 3) {
+    timer_stop(timer);
+  }
+
   tv_clear(&rettv);
 
   if (!timer->stopped && timer->timeout == 0) {

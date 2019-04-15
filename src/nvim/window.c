@@ -579,7 +579,7 @@ win_T *win_new_float(win_T *wp, FloatConfig fconfig, Error *err)
 
 void win_config_float(win_T *wp, FloatConfig fconfig)
 {
-  wp->w_width = MAX(fconfig.width, 2);
+  wp->w_width = MAX(fconfig.width, 1);
   wp->w_height = MAX(fconfig.height, 1);
 
   if (fconfig.relative == kFloatRelativeCursor) {
@@ -617,13 +617,16 @@ static void ui_ext_win_position(win_T *wp)
   FloatConfig c = wp->w_float_config;
   if (!c.external) {
     ScreenGrid *grid = &default_grid;
-    int row = c.row, col = c.col;
+    float row = c.row, col = c.col;
     if (c.relative == kFloatRelativeWindow) {
       Error dummy = ERROR_INIT;
       win_T *win = find_window_by_handle(c.window, &dummy);
       if (win) {
         grid = &win->w_grid;
-        screen_adjust_grid(&grid, &row, &col);
+        int row_off = 0, col_off = 0;
+        screen_adjust_grid(&grid, &row_off, &col_off);
+        row += row_off;
+        col += col_off;
       }
       api_clear_error(&dummy);
     }
@@ -637,16 +640,16 @@ static void ui_ext_win_position(win_T *wp)
       bool east = c.anchor & kFloatAnchorEast;
       bool south = c.anchor & kFloatAnchorSouth;
 
-      row -= (south ? wp->w_height : 0);
-      col -= (east ? wp->w_width : 0);
-      row = MAX(MIN(row, Rows-wp->w_height-1), 0);
-      col = MAX(MIN(col, Columns-wp->w_width), 0);
-      wp->w_winrow = row;
-      wp->w_wincol = col;
+      int comp_row = (int)row - (south ? wp->w_height : 0);
+      int comp_col = (int)col - (east ? wp->w_width : 0);
+      comp_row = MAX(MIN(comp_row, Rows-wp->w_height-1), 0);
+      comp_col = MAX(MIN(comp_col, Columns-wp->w_width), 0);
+      wp->w_winrow = comp_row;
+      wp->w_wincol = comp_col;
       bool valid = (wp->w_redr_type == 0);
       bool on_top = (curwin == wp) || !curwin->w_floating;
-      ui_comp_put_grid(&wp->w_grid, row, col, wp->w_height, wp->w_width,
-                       valid, on_top);
+      ui_comp_put_grid(&wp->w_grid, comp_row, comp_col, wp->w_height,
+                       wp->w_width, valid, on_top);
       if (!valid) {
         wp->w_grid.valid = false;
         redraw_win_later(wp, NOT_VALID);
@@ -681,9 +684,6 @@ static bool parse_float_anchor(String anchor, FloatAnchor *out)
 
 static bool parse_float_relative(String relative, FloatRelative *out)
 {
-  if (relative.size == 0) {
-    *out = (FloatRelative)0;
-  }
   char *str = relative.data;
   if (striequal(str, "editor")) {
     *out = kFloatRelativeEditor;
@@ -700,8 +700,11 @@ static bool parse_float_relative(String relative, FloatRelative *out)
 bool parse_float_config(Dictionary config, FloatConfig *fconfig, bool reconf,
                         Error *err)
 {
+  // TODO(bfredl): use a get/has_key interface instead and get rid of extra
+  // flags
   bool has_row = false, has_col = false, has_relative = false;
   bool has_external = false, has_window = false;
+  bool has_width = false, has_height = false;
 
   for (size_t i = 0; i < config.size; i++) {
     char *key = config.items[i].key.data;
@@ -729,7 +732,8 @@ bool parse_float_config(Dictionary config, FloatConfig *fconfig, bool reconf,
         return false;
       }
     } else if (strequal(key, "width")) {
-      if (val.type == kObjectTypeInteger && val.data.integer >= 0) {
+      has_width = true;
+      if (val.type == kObjectTypeInteger && val.data.integer > 0) {
         fconfig->width = val.data.integer;
       } else {
         api_set_error(err, kErrorTypeValidation,
@@ -737,7 +741,8 @@ bool parse_float_config(Dictionary config, FloatConfig *fconfig, bool reconf,
         return false;
       }
     } else if (strequal(key, "height")) {
-      if (val.type == kObjectTypeInteger && val.data.integer >= 0) {
+      has_height = true;
+      if (val.type == kObjectTypeInteger && val.data.integer > 0) {
         fconfig->height= val.data.integer;
       } else {
         api_set_error(err, kErrorTypeValidation,
@@ -756,16 +761,19 @@ bool parse_float_config(Dictionary config, FloatConfig *fconfig, bool reconf,
         return false;
       }
     } else if (!strcmp(key, "relative")) {
-      has_relative = true;
       if (val.type != kObjectTypeString) {
         api_set_error(err, kErrorTypeValidation,
                       "'relative' key must be String");
         return false;
       }
-      if (!parse_float_relative(val.data.string, &fconfig->relative)) {
-        api_set_error(err, kErrorTypeValidation,
-                      "Invalid value of 'relative' key");
-        return false;
+      // ignore empty string, to match nvim_win_get_config
+      if (val.data.string.size > 0) {
+        has_relative = true;
+        if (!parse_float_relative(val.data.string, &fconfig->relative)) {
+          api_set_error(err, kErrorTypeValidation,
+                        "Invalid value of 'relative' key");
+          return false;
+        }
       }
     } else if (!strcmp(key, "win")) {
       has_window = true;
@@ -826,6 +834,12 @@ bool parse_float_config(Dictionary config, FloatConfig *fconfig, bool reconf,
     return false;
   } else if (has_relative) {
     fconfig->external = false;
+  }
+
+  if (!reconf && !(has_height && has_width)) {
+    api_set_error(err, kErrorTypeValidation,
+                  "Must specify 'width' and 'height'");
+    return false;
   }
 
   if (fconfig->external && !ui_has(kUIMultigrid)) {
@@ -1135,6 +1149,8 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
   } else if (wp->w_floating) {
     new_frame(wp);
     wp->w_floating = false;
+    // non-floating window doesn't store float config.
+    wp->w_float_config = FLOAT_CONFIG_INIT;
   }
 
   /*
@@ -4019,24 +4035,25 @@ tabpage_T *win_find_tabpage(win_T *win)
   return NULL;
 }
 
-/*
- * Move to window above or below "count" times.
- */
-static void 
-win_goto_ver (
-    int up,                         /* TRUE to go to win above */
-    long count
-)
+/// Get the above or below neighbor window of the specified window.
+///
+/// Returns the specified window if the neighbor is not found.
+/// Returns the previous window if the specifiecied window is a floating window.
+///
+/// @param up     true for the above neighbor
+/// @param count  nth neighbor window
+///
+/// @return       found window
+win_T *win_vert_neighbor(tabpage_T *tp, win_T *wp, bool up, long count)
 {
   frame_T     *fr;
   frame_T     *nfr;
   frame_T     *foundfr;
 
-  foundfr = curwin->w_frame;
+  foundfr = wp->w_frame;
 
-  if (curwin->w_floating) {
-    win_goto(prevwin);
-    return;
+  if (wp->w_floating) {
+    return win_valid(prevwin) && !prevwin->w_floating ? prevwin : firstwin;
   }
 
   while (count--) {
@@ -4046,14 +4063,17 @@ win_goto_ver (
      */
     fr = foundfr;
     for (;; ) {
-      if (fr == topframe)
+      if (fr == tp->tp_topframe) {
         goto end;
-      if (up)
+      }
+      if (up) {
         nfr = fr->fr_prev;
-      else
+      } else {
         nfr = fr->fr_next;
-      if (fr->fr_parent->fr_layout == FR_COL && nfr != NULL)
+      }
+      if (fr->fr_parent->fr_layout == FR_COL && nfr != NULL) {
         break;
+      }
       fr = fr->fr_parent;
     }
 
@@ -4067,11 +4087,12 @@ win_goto_ver (
       }
       fr = nfr->fr_child;
       if (nfr->fr_layout == FR_ROW) {
-        /* Find the frame at the cursor row. */
+        // Find the frame at the cursor row.
         while (fr->fr_next != NULL
                && frame2win(fr)->w_wincol + fr->fr_width
-               <= curwin->w_wincol + curwin->w_wcol)
+               <= wp->w_wincol + wp->w_wcol) {
           fr = fr->fr_next;
+        }
       }
       if (nfr->fr_layout == FR_COL && up)
         while (fr->fr_next != NULL)
@@ -4080,28 +4101,40 @@ win_goto_ver (
     }
   }
 end:
-  if (foundfr != NULL)
-    win_goto(foundfr->fr_win);
+  return foundfr != NULL ? foundfr->fr_win : NULL;
 }
 
-/*
- * Move to left or right window.
- */
-static void 
-win_goto_hor (
-    int left,                       /* TRUE to go to left win */
-    long count
-)
+/// Move to window above or below "count" times.
+///
+/// @param up     true to go to win above
+/// @param count  go count times into direction
+static void win_goto_ver(bool up, long count)
+{
+  win_T *win = win_vert_neighbor(curtab, curwin, up, count);
+  if (win != NULL) {
+    win_goto(win);
+  }
+}
+
+/// Get the left or right neighbor window of the specified window.
+///
+/// Returns the specified window if the neighbor is not found.
+/// Returns the previous window if the specifiecied window is a floating window.
+///
+/// @param left  true for the left neighbor
+/// @param count nth neighbor window
+///
+/// @return      found window
+win_T *win_horz_neighbor(tabpage_T *tp, win_T *wp, bool left, long count)
 {
   frame_T     *fr;
   frame_T     *nfr;
   frame_T     *foundfr;
 
-  foundfr = curwin->w_frame;
+  foundfr = wp->w_frame;
 
-  if (curwin->w_floating) {
-    win_goto(prevwin);
-    return;
+  if (wp->w_floating) {
+    return win_valid(prevwin) && !prevwin->w_floating ? prevwin : firstwin;
   }
 
   while (count--) {
@@ -4111,14 +4144,17 @@ win_goto_hor (
      */
     fr = foundfr;
     for (;; ) {
-      if (fr == topframe)
+      if (fr == tp->tp_topframe) {
         goto end;
-      if (left)
+      }
+      if (left) {
         nfr = fr->fr_prev;
-      else
+      } else {
         nfr = fr->fr_next;
-      if (fr->fr_parent->fr_layout == FR_ROW && nfr != NULL)
+      }
+      if (fr->fr_parent->fr_layout == FR_ROW && nfr != NULL) {
         break;
+      }
       fr = fr->fr_parent;
     }
 
@@ -4135,7 +4171,7 @@ win_goto_hor (
         /* Find the frame at the cursor row. */
         while (fr->fr_next != NULL
                && frame2win(fr)->w_winrow + fr->fr_height
-               <= curwin->w_winrow + curwin->w_wrow)
+               <= wp->w_winrow + wp->w_wrow)
           fr = fr->fr_next;
       }
       if (nfr->fr_layout == FR_ROW && left)
@@ -4145,8 +4181,19 @@ win_goto_hor (
     }
   }
 end:
-  if (foundfr != NULL)
-    win_goto(foundfr->fr_win);
+  return foundfr != NULL ? foundfr->fr_win : NULL;
+}
+
+/// Move to left or right window.
+///
+/// @param left   true to go to left window
+/// @param count  go count times into direction
+static void win_goto_hor(bool left, long count)
+{
+  win_T *win = win_horz_neighbor(curtab, curwin, left, count);
+  if (win != NULL) {
+    win_goto(win);
+  }
 }
 
 /*
@@ -4390,6 +4437,7 @@ static win_T *win_alloc(win_T *after, int hidden)
   new_wp->w_cursor.lnum = 1;
   new_wp->w_scbind_pos = 1;
   new_wp->w_floating = 0;
+  new_wp->w_float_config = FLOAT_CONFIG_INIT;
 
   /* We won't calculate w_fraction until resizing the window */
   new_wp->w_fraction = 0;
@@ -4686,8 +4734,6 @@ int win_comp_pos(void)
   // Too often, but when we support anchoring floats to split windows,
   // this will be needed
   for (win_T *wp = lastwin; wp && wp->w_floating; wp = wp->w_prev) {
-    wp->w_float_config.width = wp->w_width;
-    wp->w_float_config.height = wp->w_height;
     win_config_float(wp, wp->w_float_config);
   }
 
