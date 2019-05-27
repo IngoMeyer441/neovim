@@ -983,9 +983,8 @@ do_execreg(
       EMSG(_(e_nolastcmd));
       return FAIL;
     }
-    xfree(new_last_cmdline);     /* don't keep the cmdline containing @: */
-    new_last_cmdline = NULL;
-    /* Escape all control characters with a CTRL-V */
+    XFREE_CLEAR(new_last_cmdline);      // don't keep the cmdline containing @:
+    // Escape all control characters with a CTRL-V
     p = vim_strsave_escaped_ext(
         last_cmdline,
         (char_u *)
@@ -2348,8 +2347,7 @@ void free_register(yankreg_T *reg)
     for (size_t i = reg->y_size; i-- > 0;) {  // from y_size - 1 to 0 included
       xfree(reg->y_array[i]);
     }
-    xfree(reg->y_array);
-    reg->y_array = NULL;
+    XFREE_CLEAR(reg->y_array);
   }
 }
 
@@ -3001,9 +2999,10 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
       /* add a new line */
       if (curwin->w_cursor.lnum > curbuf->b_ml.ml_line_count) {
         if (ml_append(curbuf->b_ml.ml_line_count, (char_u *)"",
-                (colnr_T)1, FALSE) == FAIL)
+                      (colnr_T)1, false) == FAIL) {
           break;
-        ++nr_lines;
+        }
+        nr_lines++;
       }
       /* get the old line and advance to the position to insert at */
       oldp = get_cursor_line_ptr();
@@ -3190,8 +3189,8 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
           newp = (char_u *) xmalloc((size_t)(STRLEN(ptr) + totlen + 1));
           STRCPY(newp, y_array[y_size - 1]);
           STRCAT(newp, ptr);
-          /* insert second line */
-          ml_append(lnum, newp, (colnr_T)0, FALSE);
+          // insert second line
+          ml_append(lnum, newp, (colnr_T)0, false);
           xfree(newp);
 
           oldp = ml_get(lnum);

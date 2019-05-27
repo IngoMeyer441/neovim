@@ -242,6 +242,7 @@ func Test_undojoin()
 endfunc
 
 func Test_undo_write()
+  call delete('Xtest')
   split Xtest
   call feedkeys("ione one one\<Esc>", 'xt')
   w!
@@ -387,6 +388,15 @@ funct Test_undofile()
 
   " Test undofile() with 'undodir' set to a non-existing directory.
   " call assert_equal('', undofile('Xundofoo'))
+
+  if isdirectory('/tmp')
+    set undodir=/tmp
+    if has('osx')
+      call assert_equal('/tmp/%private%tmp%file', undofile('///tmp/file'))
+    else
+      call assert_equal('/tmp/%tmp%file', undofile('///tmp/file'))
+    endif
+  endif
 
   set undodir&
 endfunc

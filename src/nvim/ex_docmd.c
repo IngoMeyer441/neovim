@@ -53,6 +53,7 @@
 #include "nvim/regexp.h"
 #include "nvim/screen.h"
 #include "nvim/search.h"
+#include "nvim/sign.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/strings.h"
@@ -431,8 +432,7 @@ int do_cmdline(char_u *cmdline, LineGetter fgetline,
     if (cstack.cs_looplevel > 0 && current_line < lines_ga.ga_len) {
       /* Each '|' separated command is stored separately in lines_ga, to
        * be able to jump to it.  Don't use next_cmdline now. */
-      xfree(cmdline_copy);
-      cmdline_copy = NULL;
+      XFREE_CLEAR(cmdline_copy);
 
       /* Check if a function has returned or, unless it has an unclosed
        * try conditional, aborted. */
@@ -606,12 +606,11 @@ int do_cmdline(char_u *cmdline, LineGetter fgetline,
       current_line = cmd_loop_cookie.current_line;
 
     if (next_cmdline == NULL) {
-      xfree(cmdline_copy);
-      cmdline_copy = NULL;
-      /*
-       * If the command was typed, remember it for the ':' register.
-       * Do this AFTER executing the command to make :@: work.
-       */
+      XFREE_CLEAR(cmdline_copy);
+      //
+      // If the command was typed, remember it for the ':' register.
+      // Do this AFTER executing the command to make :@: work.
+      //
       if (getline_equal(fgetline, cookie, getexline)
           && new_last_cmdline != NULL) {
         xfree(last_cmdline);
@@ -839,9 +838,10 @@ int do_cmdline(char_u *cmdline, LineGetter fgetline,
       sourcing_lnum = current_exception->throw_lnum;
       current_exception->throw_name = NULL;
 
-      discard_current_exception();              /* uses IObuff if 'verbose' */
-      suppress_errthrow = TRUE;
-      force_abort = TRUE;
+      discard_current_exception();              // uses IObuff if 'verbose'
+      suppress_errthrow = true;
+      force_abort = true;
+      msg_ext_set_kind("emsg");  // kind=emsg for :throw, exceptions. #9993
 
       if (messages != NULL) {
         do {
@@ -4505,8 +4505,8 @@ static int get_tabpage_arg(exarg_T *eap)
       tab_number = 0;
     } else {
       tab_number = eap->line2;
-      if (!unaccept_arg0 && **eap->cmdlinep == '-') {
-        --tab_number;
+      if (!unaccept_arg0 && *skipwhite(*eap->cmdlinep) == '-') {
+        tab_number--;
         if (tab_number < unaccept_arg0) {
           eap->errmsg = e_invarg;
         }
@@ -4841,10 +4841,8 @@ static int uc_add_command(char_u *name, size_t name_len, char_u *rep,
         goto fail;
       }
 
-      xfree(cmd->uc_rep);
-      cmd->uc_rep = NULL;
-      xfree(cmd->uc_compl_arg);
-      cmd->uc_compl_arg = NULL;
+      XFREE_CLEAR(cmd->uc_rep);
+      XFREE_CLEAR(cmd->uc_compl_arg);
       break;
     }
 
@@ -7213,10 +7211,11 @@ static void ex_read(exarg_T *eap)
         else
           lnum = 1;
         if (*ml_get(lnum) == NUL && u_savedel(lnum, 1L) == OK) {
-          ml_delete(lnum, FALSE);
+          ml_delete(lnum, false);
           if (curwin->w_cursor.lnum > 1
-              && curwin->w_cursor.lnum >= lnum)
-            --curwin->w_cursor.lnum;
+              && curwin->w_cursor.lnum >= lnum) {
+            curwin->w_cursor.lnum--;
+          }
           deleted_lines_mark(lnum, 1L);
         }
       }
@@ -7230,11 +7229,8 @@ static char_u   *prev_dir = NULL;
 #if defined(EXITFREE)
 void free_cd_dir(void)
 {
-  xfree(prev_dir);
-  prev_dir = NULL;
-
-  xfree(globaldir);
-  globaldir = NULL;
+  XFREE_CLEAR(prev_dir);
+  XFREE_CLEAR(globaldir);
 }
 
 #endif
@@ -7245,13 +7241,11 @@ void free_cd_dir(void)
 void post_chdir(CdScope scope, bool trigger_dirchanged)
 {
   // Always overwrite the window-local CWD.
-  xfree(curwin->w_localdir);
-  curwin->w_localdir = NULL;
+  XFREE_CLEAR(curwin->w_localdir);
 
   // Overwrite the tab-local CWD for :cd, :tcd.
   if (scope >= kCdScopeTab) {
-    xfree(curtab->tp_localdir);
-    curtab->tp_localdir = NULL;
+    XFREE_CLEAR(curtab->tp_localdir);
   }
 
   if (scope < kCdScopeGlobal) {
@@ -7268,8 +7262,7 @@ void post_chdir(CdScope scope, bool trigger_dirchanged)
   switch (scope) {
   case kCdScopeGlobal:
     // We are now in the global directory, no need to remember its name.
-    xfree(globaldir);
-    globaldir = NULL;
+    XFREE_CLEAR(globaldir);
     break;
   case kCdScopeTab:
     curtab->tp_localdir = (char_u *)xstrdup(cwd);
@@ -8560,6 +8553,7 @@ eval_vars (
   size_t resultlen;
   buf_T       *buf;
   int valid = VALID_HEAD | VALID_PATH;  // Assume valid result.
+  bool tilde_file = false;
   int skip_mod = false;
   char strbuf[30];
 
@@ -8616,9 +8610,11 @@ eval_vars (
     case SPEC_PERC:             /* '%': current file */
       if (curbuf->b_fname == NULL) {
         result = (char_u *)"";
-        valid = 0;                  /* Must have ":p:h" to be valid */
-      } else
+        valid = 0;                  // Must have ":p:h" to be valid
+      } else {
         result = curbuf->b_fname;
+        tilde_file = STRCMP(result, "~") == 0;
+      }
       break;
 
     case SPEC_HASH:             /* '#' or "#99": alternate file */
@@ -8667,9 +8663,11 @@ eval_vars (
           *lnump = ECMD_LAST;
         if (buf->b_fname == NULL) {
           result = (char_u *)"";
-          valid = 0;                        /* Must have ":p:h" to be valid */
-        } else
+          valid = 0;                        // Must have ":p:h" to be valid
+        } else {
           result = buf->b_fname;
+          tilde_file = STRCMP(result, "~") == 0;
+        }
       }
       break;
 
@@ -8754,7 +8752,8 @@ eval_vars (
         resultlen = (size_t)(s - result);
       }
     } else if (!skip_mod) {
-      valid |= modify_fname(src, usedlen, &result, &resultbuf, &resultlen);
+      valid |= modify_fname(src, tilde_file, usedlen, &result,
+                            &resultbuf, &resultlen);
       if (result == NULL) {
         *errormsg = (char_u *)"";
         return NULL;
