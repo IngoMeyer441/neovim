@@ -167,6 +167,87 @@ describe("'wildmenu'", function()
     -- system-dependent.
     expect_stay_unchanged{any='!  #  &  <  =  >  @  >   |\n:!^'}
   end)
+
+  it('wildmode=list,full and display+=msgsep interaction #10092', function()
+    -- Need more than 5 rows, else tabline is covered and will be redrawn.
+    screen:detach()
+    screen = Screen.new(25, 7)
+    screen:attach()
+
+    command('set display+=msgsep')
+    command('set wildmenu wildmode=list,full')
+    command('set showtabline=2')
+    feed(':set wildm<tab>')
+    screen:expect([[
+       [No Name]               |
+                               |
+      ~                        |
+                               |
+      :set wildm               |
+      wildmenu  wildmode       |
+      :set wildm^               |
+    ]])
+    feed('<tab>') -- trigger wildmode full
+    screen:expect([[
+       [No Name]               |
+                               |
+                               |
+      :set wildm               |
+      wildmenu  wildmode       |
+      wildmenu  wildmode       |
+      :set wildmenu^            |
+    ]])
+    feed('<Esc>')
+    screen:expect([[
+       [No Name]               |
+      ^                         |
+      ~                        |
+      ~                        |
+      ~                        |
+      ~                        |
+                               |
+    ]])
+  end)
+
+  it('wildmode=list,full and display-=msgsep interaction', function()
+    -- Need more than 5 rows, else tabline is covered and will be redrawn.
+    screen:detach()
+    screen = Screen.new(25, 7)
+    screen:attach()
+
+    command('set display-=msgsep')
+    command('set wildmenu wildmode=list,full')
+    feed(':set wildm<tab>')
+    screen:expect([[
+      ~                        |
+      ~                        |
+      ~                        |
+      ~                        |
+      :set wildm               |
+      wildmenu  wildmode       |
+      :set wildm^               |
+    ]])
+    feed('<tab>') -- trigger wildmode full
+    screen:expect([[
+      ~                        |
+      ~                        |
+      ~                        |
+      :set wildm               |
+      wildmenu  wildmode       |
+      wildmenu  wildmode       |
+      :set wildmenu^            |
+    ]])
+    feed('<Esc>')
+    screen:expect([[
+      ^                         |
+      ~                        |
+      ~                        |
+      ~                        |
+      ~                        |
+      ~                        |
+                               |
+    ]])
+  end)
 end)
 
 describe('command line completion', function()

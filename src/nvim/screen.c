@@ -369,7 +369,7 @@ void update_screen(int type)
     ui_comp_set_screen_valid(false);
   }
   win_ui_flush_positions();
-  msg_ext_check_prompt();
+  msg_ext_check_clear();
 
   /* reset cmdline_row now (may have been changed temporarily) */
   compute_cmdrow();
@@ -4765,12 +4765,12 @@ win_redr_status_matches (
 
   row = cmdline_row - 1;
   if (row >= 0) {
-    if (wild_menu_showing == 0) {
+    if (wild_menu_showing == 0 || wild_menu_showing == WM_LIST) {
       if (msg_scrolled > 0) {
         /* Put the wildmenu just above the command line.  If there is
          * no room, scroll the screen one line up. */
         if (cmdline_row == Rows - 1) {
-          grid_del_lines(&default_grid, 0, 1, (int)Rows, 0, (int)Columns);
+          msg_scroll_up();
           msg_scrolled++;
         } else {
           cmdline_row++;
@@ -6410,14 +6410,11 @@ int showmode(void)
              && ((State & TERM_FOCUS)
                  || (State & INSERT)
                  || restart_edit
-                 || VIsual_active
-                 ));
-  if (do_mode || Recording) {
-    /*
-     * Don't show mode right now, when not redrawing or inside a mapping.
-     * Call char_avail() only when we are going to show something, because
-     * it takes a bit of time.
-     */
+                 || VIsual_active));
+  if (do_mode || reg_recording != 0) {
+    // Don't show mode right now, when not redrawing or inside a mapping.
+    // Call char_avail() only when we are going to show something, because
+    // it takes a bit of time.
     if (!redrawing() || (char_avail() && !KeyTyped) || msg_silent != 0) {
       redraw_cmdline = TRUE;                    /* show mode later */
       return 0;
@@ -6533,8 +6530,8 @@ int showmode(void)
 
       need_clear = TRUE;
     }
-    if (Recording
-        && edit_submode == NULL             /* otherwise it gets too long */
+    if (reg_recording != 0
+        && edit_submode == NULL             // otherwise it gets too long
         ) {
       recording_mode(attr);
       need_clear = true;
@@ -6600,7 +6597,7 @@ void clearmode(void)
 {
   msg_ext_ui_flush();
   msg_pos_mode();
-  if (Recording) {
+  if (reg_recording != 0) {
     recording_mode(HL_ATTR(HLF_CM));
   }
   msg_clr_eos();
@@ -6612,7 +6609,7 @@ static void recording_mode(int attr)
   MSG_PUTS_ATTR(_("recording"), attr);
   if (!shortmess(SHM_RECORDING)) {
     char_u s[4];
-    vim_snprintf((char *)s, ARRAY_SIZE(s), " @%c", Recording);
+    snprintf((char *)s, ARRAY_SIZE(s), " @%c", reg_recording);
     MSG_PUTS_ATTR(s, attr);
   }
 }

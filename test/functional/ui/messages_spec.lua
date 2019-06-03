@@ -27,6 +27,30 @@ describe('ui/ext_messages', function()
     os.remove('Xtest')
   end)
 
+  it('msg_clear follows msg_show kind of confirm', function()
+    feed('iline 1<esc>')
+    feed(':call confirm("test")<cr>')
+    screen:expect{grid=[[
+      line ^1                   |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]], messages={ {
+      content = {{"\ntest\n[O]k: ", 4}},
+      kind = 'confirm',
+    }}}
+
+    feed('<cr>')
+    screen:expect{grid=[[
+      line ^1                   |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]]}
+  end)
+
   it('msg_show kind=confirm,confirm_sub,emsg,wmsg,quickfix', function()
     feed('iline 1\nline 2<esc>')
 
@@ -678,6 +702,34 @@ describe('ui/ext_messages', function()
         set_method_error("complete\nerror\n\nmessage")
       end
     end}
+  end)
+
+  it('wildmode=list', function()
+    local default_attr = screen:get_default_attr_ids()
+    screen:detach()
+    screen = Screen.new(25, 7)
+    screen:attach({rgb=true, ext_messages=true})
+    screen:set_default_attr_ids(default_attr)
+
+    command('set wildmenu wildmode=list')
+    feed(':set wildm<tab>')
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]], messages={{
+        content = {{'wildmenu  wildmode'}},
+        kind = '',
+     }},
+    cmdline={{
+      firstc = ':',
+      content = {{ 'set wildm' }},
+      pos = 9,
+    }}}
   end)
 end)
 

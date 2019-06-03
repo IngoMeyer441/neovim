@@ -926,8 +926,9 @@ void ex_messages(void *const eap_p)
  */
 void msg_end_prompt(void)
 {
-  need_wait_return = FALSE;
-  emsg_on_display = FALSE;
+  msg_ext_clear_later();
+  need_wait_return = false;
+  emsg_on_display = false;
   cmdline_row = msg_row;
   msg_col = 0;
   msg_clr_eos();
@@ -945,7 +946,6 @@ void wait_return(int redraw)
   int oldState;
   int tmpState;
   int had_got_int;
-  int save_Recording;
   FILE        *save_scriptout;
 
   if (redraw == true) {
@@ -1011,16 +1011,16 @@ void wait_return(int redraw)
       // Temporarily disable Recording. If Recording is active, the
       // character will be recorded later, since it will be added to the
       // typebuf after the loop
-      save_Recording = Recording;
+      const int save_reg_recording = reg_recording;
       save_scriptout = scriptout;
-      Recording = FALSE;
+      reg_recording = 0;
       scriptout = NULL;
       c = safe_vgetc();
       if (had_got_int && !global_busy) {
         got_int = false;
       }
       no_mapping--;
-      Recording = save_Recording;
+      reg_recording = save_reg_recording;
       scriptout = save_scriptout;
 
 
@@ -2054,7 +2054,7 @@ int msg_scrollsize(void)
 /*
  * Scroll the screen up one line for displaying the next message line.
  */
-static void msg_scroll_up(void)
+void msg_scroll_up(void)
 {
   if (!msg_did_scroll) {
     ui_call_win_scroll_over_start();
@@ -2792,12 +2792,22 @@ void msg_ext_clear(bool force)
   msg_ext_keep_after_cmdline = false;
 }
 
-void msg_ext_check_prompt(void)
+void msg_ext_clear_later(void)
 {
-  // Redraw after cmdline is expected to clear messages.
-  if (msg_ext_did_cmdline) {
+  if (msg_ext_is_visible()) {
+    msg_ext_need_clear = true;
+    if (must_redraw < VALID) {
+      must_redraw = VALID;
+    }
+  }
+}
+
+void msg_ext_check_clear(void)
+{
+  // Redraw after cmdline or prompt is expected to clear messages.
+  if (msg_ext_need_clear) {
     msg_ext_clear(true);
-    msg_ext_did_cmdline = false;
+    msg_ext_need_clear = false;
   }
 }
 
