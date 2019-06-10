@@ -4284,7 +4284,7 @@ static int eval7(
         // Stop the expression evaluation when immediately
         // aborting on error, or when an interrupt occurred or
         // an exception was thrown but not caught.
-        if (aborting()) {
+        if (evaluate && aborting()) {
           if (ret == OK) {
             tv_clear(rettv);
           }
@@ -5871,10 +5871,6 @@ static int get_lambda_tv(char_u **arg, typval_T *rettv, bool evaluate)
       fp->uf_scoped = NULL;
     }
 
-    fp->uf_tml_count = NULL;
-    fp->uf_tml_total = NULL;
-    fp->uf_tml_self = NULL;
-    fp->uf_profiling = false;
     if (prof_def_func()) {
       func_do_profile(fp);
     }
@@ -8331,6 +8327,8 @@ static void f_execute(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   const bool save_emsg_noredir = emsg_noredir;
   const bool save_redir_off = redir_off;
   garray_T *const save_capture_ga = capture_ga;
+  const int save_msg_col = msg_col;
+  bool echo_output = false;
 
   if (check_secure()) {
     return;
@@ -8342,6 +8340,9 @@ static void f_execute(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
     if (s == NULL) {
       return;
+    }
+    if (*s == NUL) {
+      echo_output = true;
     }
     if (strncmp(s, "silent", 6) == 0) {
       msg_silent++;
@@ -8358,6 +8359,9 @@ static void f_execute(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   ga_init(&capture_local, (int)sizeof(char), 80);
   capture_ga = &capture_local;
   redir_off = false;
+  if (!echo_output) {
+    msg_col = 0;  // prevent leading spaces
+  }
 
   if (argvars[0].v_type != VAR_LIST) {
     do_cmdline_cmd(tv_get_string(&argvars[0]));
@@ -8376,6 +8380,16 @@ static void f_execute(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   emsg_silent = save_emsg_silent;
   emsg_noredir = save_emsg_noredir;
   redir_off = save_redir_off;
+  // "silent reg" or "silent echo x" leaves msg_col somewhere in the line.
+  if (echo_output) {
+    // When not working silently: put it in column zero.  A following
+    // "echon" will overwrite the message, unavoidably.
+    msg_col = 0;
+  } else {
+    // When working silently: Put it back where it was, since nothing
+    // should have been written.
+    msg_col = save_msg_col;
+  }
 
   ga_append(capture_ga, NUL);
   rettv->v_type = VAR_STRING;
@@ -14121,7 +14135,7 @@ static int search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
   }
 
   pos = save_cursor = curwin->w_cursor;
-  subpatnum = searchit(curwin, curbuf, &pos, dir, (char_u *)pat, 1,
+  subpatnum = searchit(curwin, curbuf, &pos, NULL, dir, (char_u *)pat, 1,
                        options, RE_SEARCH, (linenr_T)lnum_stop, &tm, NULL);
   if (subpatnum != FAIL) {
     if (flags & SP_SUBPAT)
@@ -14639,7 +14653,7 @@ do_searchpair(
   clearpos(&foundpos);
   pat = pat3;
   for (;; ) {
-    n = searchit(curwin, curbuf, &pos, dir, pat, 1L,
+    n = searchit(curwin, curbuf, &pos, NULL, dir, pat, 1L,
                  options, RE_SEARCH, lnum_stop, &tm, NULL);
     if (n == FAIL || (firstpos.lnum != 0 && equalpos(pos, firstpos))) {
       // didn't find it or found the first match again: FAIL
@@ -20064,9 +20078,15 @@ static void set_var(const char *name, const size_t name_len, typval_T *const tv,
     // prevent changing the type.
     if (ht == &vimvarht) {
       if (v->di_tv.v_type == VAR_STRING) {
-        xfree(v->di_tv.vval.v_string);
+        XFREE_CLEAR(v->di_tv.vval.v_string);
         if (copy || tv->v_type != VAR_STRING) {
-          v->di_tv.vval.v_string = (char_u *)xstrdup(tv_get_string(tv));
+          const char *const val = tv_get_string(tv);
+
+          // Careful: when assigning to v:errmsg and tv_get_string()
+          // causes an error message the variable will alrady be set.
+          if (v->di_tv.vval.v_string == NULL) {
+            v->di_tv.vval.v_string = (char_u *)xstrdup(val);
+          }
         } else {
           // Take over the string to avoid an extra alloc/free.
           v->di_tv.vval.v_string = tv->vval.v_string;
@@ -21604,25 +21624,29 @@ static void func_do_profile(ufunc_T *fp)
 {
   int len = fp->uf_lines.ga_len;
 
-  if (len == 0)
-    len = 1;      /* avoid getting error for allocating zero bytes */
-  fp->uf_tm_count = 0;
-  fp->uf_tm_self = profile_zero();
-  fp->uf_tm_total = profile_zero();
+  if (!fp->uf_prof_initialized) {
+    if (len == 0) {
+      len = 1;  // avoid getting error for allocating zero bytes
+    }
+    fp->uf_tm_count = 0;
+    fp->uf_tm_self = profile_zero();
+    fp->uf_tm_total = profile_zero();
 
-  if (fp->uf_tml_count == NULL) {
-    fp->uf_tml_count = xcalloc(len, sizeof(int));
+    if (fp->uf_tml_count == NULL) {
+      fp->uf_tml_count = xcalloc(len, sizeof(int));
+    }
+
+    if (fp->uf_tml_total == NULL) {
+      fp->uf_tml_total = xcalloc(len, sizeof(proftime_T));
+    }
+
+    if (fp->uf_tml_self == NULL) {
+      fp->uf_tml_self = xcalloc(len, sizeof(proftime_T));
+    }
+
+    fp->uf_tml_idx = -1;
+    fp->uf_prof_initialized = true;
   }
-
-  if (fp->uf_tml_total == NULL) {
-    fp->uf_tml_total = xcalloc(len, sizeof(proftime_T));
-  }
-
-  if (fp->uf_tml_self == NULL) {
-    fp->uf_tml_self = xcalloc(len, sizeof(proftime_T));
-  }
-
-  fp->uf_tml_idx = -1;
 
   fp->uf_profiling = TRUE;
 }
@@ -21648,7 +21672,7 @@ void func_dump_profile(FILE *fd)
     if (!HASHITEM_EMPTY(hi)) {
       --todo;
       fp = HI2UF(hi);
-      if (fp->uf_profiling) {
+      if (fp->uf_prof_initialized) {
         sorttab[st_len++] = fp;
 
         if (fp->uf_name[0] == K_SPECIAL)
@@ -22150,6 +22174,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars,
   char_u      *name;
   proftime_T wait_start;
   proftime_T call_start;
+  int started_profiling = false;
   bool did_save_redo = false;
   save_redo_T save_redo;
 
@@ -22369,8 +22394,10 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars,
     do_profiling_yes
     && !fp->uf_profiling && has_profiling(false, fp->uf_name, NULL);
 
-  if (func_not_yet_profiling_but_should)
+  if (func_not_yet_profiling_but_should) {
+    started_profiling = true;
     func_do_profile(fp);
+  }
 
   bool func_or_func_caller_profiling =
     do_profiling_yes
@@ -22417,6 +22444,10 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars,
         profile_add(fc->caller->func->uf_tm_children, call_start);
       fc->caller->func->uf_tml_children =
         profile_add(fc->caller->func->uf_tml_children, call_start);
+    }
+    if (started_profiling) {
+      // make a ":profdel func" stop profiling the function
+      fp->uf_profiling = false;
     }
   }
 

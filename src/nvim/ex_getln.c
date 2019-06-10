@@ -656,10 +656,13 @@ static int command_line_execute(VimState *state, int key)
         redrawcmd();
         save_p_ls = -1;
         wild_menu_showing = 0;
-      } else {
+      // don't redraw statusline if WM_LIST is showing
+      } else if (wild_menu_showing != WM_LIST) {
         win_redraw_last_status(topframe);
         wild_menu_showing = 0;  // must be before redraw_statuslines #8385
         redraw_statuslines();
+      } else {
+        wild_menu_showing = 0;
       }
       KeyTyped = skt;
       if (ccline.input_fn) {
@@ -1066,7 +1069,7 @@ static void command_line_next_incsearch(CommandLineState *s, bool next_match)
     search_flags += SEARCH_KEEP;
   }
   emsg_off++;
-  s->i = searchit(curwin, curbuf, &t,
+  s->i = searchit(curwin, curbuf, &t, NULL,
                   next_match ? FORWARD : BACKWARD,
                   pat, s->count, search_flags,
                   RE_SEARCH, 0, NULL, NULL);

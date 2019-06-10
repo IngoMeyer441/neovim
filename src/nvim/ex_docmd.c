@@ -2217,11 +2217,19 @@ static char_u * do_one_cmd(char_u **cmdlinep,
     ea.arg = skipwhite(p);
   }
 
-  /*
-   * 7. Switch on command name.
-   *
-   * The "ea" structure holds the arguments that can be used.
-   */
+  // The :try command saves the emsg_silent flag, reset it here when
+  // ":silent! try" was used, it should only apply to :try itself.
+  if (ea.cmdidx == CMD_try && did_esilent > 0) {
+    emsg_silent -= did_esilent;
+    if (emsg_silent < 0) {
+      emsg_silent = 0;
+    }
+    did_esilent = 0;
+  }
+
+  // 7. Execute the command.
+  //
+  // The "ea" structure holds the arguments that can be used.
   ea.cmdlinep = cmdlinep;
   ea.getline = fgetline;
   ea.cookie = cookie;
@@ -3750,12 +3758,12 @@ static linenr_T get_address(exarg_T *eap,
         // Start the search just like for the above do_search().
         pos.col = (*cmd != '?') ? MAXCOL : 0;
         pos.coladd = 0;
-        if (searchit(curwin, curbuf, &pos,
+        if (searchit(curwin, curbuf, &pos, NULL,
                      *cmd == '?' ? BACKWARD : FORWARD,
                      (char_u *)"", 1L, SEARCH_MSG,
-                     i, (linenr_T)0, NULL, NULL) != FAIL)
+                     i, (linenr_T)0, NULL, NULL) != FAIL) {
           lnum = pos.lnum;
-        else {
+        } else {
           cmd = NULL;
           goto error;
         }
@@ -7406,6 +7414,12 @@ void do_sleep(long msec)
     int next = left > 1000l ? 1000 : (int)left;
     LOOP_PROCESS_EVENTS_UNTIL(&main_loop, main_loop.events, (int)next, got_int);
     os_breakcheck();
+  }
+
+  // If CTRL-C was typed to interrupt the sleep, drop the CTRL-C from the
+  // input buffer, otherwise a following call to input() fails.
+  if (got_int) {
+    (void)vpeekc();
   }
 }
 

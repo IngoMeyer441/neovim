@@ -3782,7 +3782,7 @@ find_decl (
   for (;; ) {
     valid = false;
     (void)valid;  // Avoid "dead assignment" warning.
-    t = searchit(curwin, curbuf, &curwin->w_cursor, FORWARD,
+    t = searchit(curwin, curbuf, &curwin->w_cursor, NULL, FORWARD,
                  pat, 1L, searchflags, RE_LAST, (linenr_T)0, NULL, NULL);
     if (curwin->w_cursor.lnum >= old_pos.lnum) {
       t = false;         // match after start is failure too
@@ -7983,8 +7983,14 @@ static void nv_event(cmdarg_T *cap)
   // not safe to perform garbage collection because there could be unreferenced
   // lists or dicts being used.
   may_garbage_collect = false;
+  bool may_restart = (restart_edit != 0);
   multiqueue_process_events(main_loop.events);
   finish_op = false;
+  if (may_restart) {
+    // Tricky: if restart_edit was set before the handler we are in ctrl-o mode
+    // but if not, the event should be allow to trigger :startinsert
+    cap->retval |= CA_COMMAND_BUSY;  // don't call edit() now
+  }
 }
 
 /*
