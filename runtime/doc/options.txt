@@ -874,7 +874,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 <	Use 'backupdir' to put the backup in a different directory.
 
 						*'backupskip'* *'bsk'*
-'backupskip' 'bsk'	string	(default: "/tmp/*,$TMPDIR/*,$TMP/*,$TEMP/*")
+'backupskip' 'bsk'	string	(default: "$TMPDIR/*,$TMP/*,$TEMP/*"
+				 Unix: "/tmp/*,$TMPDIR/*,$TMP/*,$TEMP/*"
+				 Mac: "/private/tmp/*,$TMPDIR/*,$TMP/*,$TEMP/*")
 			global
 	A list of file patterns.  When one of the patterns matches with the
 	name of the file which is written, no backup file is created.  Both
@@ -1825,8 +1827,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	contain a list of words.  This can be one word per line, or several
 	words per line, separated by non-keyword characters (white space is
 	preferred).  Maximum line length is 510 bytes.
-	When this option is empty, or an entry "spell" is present, spell
-	checking is enabled the currently active spelling is used. |spell|
+
+	When this option is empty or an entry "spell" is present, and spell
+	checking is enabled, words in the word lists for the currently active
+	'spelllang' are used. See |spell|.
+
 	To include a comma in a file name precede it with a backslash.  Spaces
 	after a comma are ignored, otherwise spaces are included in the file
 	name.  See |option-backslash| about using backslashes.
@@ -2948,7 +2953,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 		the right moment, try adding this flag.  This must be done
 		before starting the GUI.  Set it in your |gvimrc|.  Adding or
 		removing it after the GUI has started has no effect.
-
+								*'go-k'*
+	  'k'	Keep the GUI window size when adding/removing a scrollbar, or
+		toolbar, tabline, etc.  Instead, the behavior is similar to
+		when the window is maximized and will adjust 'lines' and
+		'columns' to fit to the window.  Without the 'k' flag Vim will
+		try to keep 'lines' and 'columns the same when adding and
+		removing GUI components.
 
 						*'guitablabel'* *'gtl'*
 'guitablabel' 'gtl'	string	(default empty)

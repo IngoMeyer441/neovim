@@ -938,6 +938,9 @@ EXTERN char_u e_interr[] INIT(= N_("Interrupted"));
 EXTERN char_u e_invaddr[] INIT(= N_("E14: Invalid address"));
 EXTERN char_u e_invarg[] INIT(= N_("E474: Invalid argument"));
 EXTERN char_u e_invarg2[] INIT(= N_("E475: Invalid argument: %s"));
+EXTERN char_u e_invargval[] INIT(= N_("E475: Invalid value for argument %s"));
+EXTERN char_u e_invargNval[] INIT(= N_(
+    "E475: Invalid value for argument %s: %s"));
 EXTERN char_u e_duparg2[] INIT(= N_("E983: Duplicate argument: %s"));
 EXTERN char_u e_invexpr2[] INIT(= N_("E15: Invalid expression: %s"));
 EXTERN char_u e_invrange[] INIT(= N_("E16: Invalid range"));
@@ -985,9 +988,6 @@ EXTERN char_u e_notmp[] INIT(= N_("E483: Can't get temp file name"));
 EXTERN char_u e_notopen[] INIT(= N_("E484: Can't open file %s"));
 EXTERN char_u e_notopen_2[] INIT(= N_("E484: Can't open file %s: %s"));
 EXTERN char_u e_notread[] INIT(= N_("E485: Can't read file %s"));
-EXTERN char_u e_nowrtmsg[] INIT(= N_(
-        "E37: No write since last change (add ! to override)"));
-EXTERN char_u e_nowrtmsg_nobang[] INIT(= N_("E37: No write since last change"));
 EXTERN char_u e_null[] INIT(= N_("E38: Null argument"));
 EXTERN char_u e_number_exp[] INIT(= N_("E39: Number expected"));
 EXTERN char_u e_openerrf[] INIT(= N_("E40: Can't open errorfile %s"));

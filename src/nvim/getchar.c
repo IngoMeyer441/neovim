@@ -2342,6 +2342,17 @@ static int vgetorpeek(int advance)
     }
   }
 
+  if (timedout && c == ESC) {
+    char_u nop_buf[3];
+
+    // When recording there will be no timeout.  Add a <Nop> after the ESC
+    // to avoid that it forms a key code with following characters.
+    nop_buf[0] = K_SPECIAL;
+    nop_buf[1] = KS_EXTRA;
+    nop_buf[2] = KE_NOP;
+    gotchars(nop_buf, 3);
+  }
+
   --vgetc_busy;
 
   return c;
@@ -3642,7 +3653,9 @@ int ExpandMappings(regmatch_T *regmatch, int *num_file, char_u ***file)
 
 /*
  * Check for an abbreviation.
- * Cursor is at ptr[col]. When inserting, mincol is where insert started.
+ * Cursor is at ptr[col].
+ * When inserting, mincol is where insert started.
+ * For the command line, mincol is what is to be skipped over.
  * "c" is the character typed before check_abbr was called.  It may have
  * ABBR_OFF added to avoid prepending a CTRL-V to it.
  *

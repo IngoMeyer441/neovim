@@ -134,6 +134,8 @@ func s:kill_server(cmd)
 endfunc
 
 " Wait for up to a second for "expr" to become true.
+" A second argument can be used to specify a different timeout in msec.
+"
 " Return time slept in milliseconds.  With the +reltime feature this can be
 " more than the actual waiting time.  Without +reltime it can also be less.
 func WaitFor(expr, ...)
@@ -156,7 +158,7 @@ func WaitFor(expr, ...)
     endif
     sleep 10m
   endfor
-  return timeout
+  throw 'WaitFor() timed out after ' . timeout . ' msec'
 endfunc
 
 " Wait for up to a given milliseconds.
@@ -245,4 +247,8 @@ func! Screenline(lnum)
   endfor
   let line = join(chars, '')
   return matchstr(line, '^.\{-}\ze\s*$')
+endfunc
+
+func CanRunGui()
+  return has('gui') && ($DISPLAY != "" || has('gui_running'))
 endfunc

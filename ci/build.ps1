@@ -105,7 +105,10 @@ mkdir build
 cd build
 cmake -G $cmakeGenerator $(convertToCmakeArgs($nvimCmakeVars)) .. ; exitIfFailed
 cmake --build . --config $cmakeBuildType -- $cmakeGeneratorArgs ; exitIfFailed
-bin\nvim --version ; exitIfFailed
+.\bin\nvim --version ; exitIfFailed
+
+# Ensure that the "win32" feature is set.
+.\bin\nvim -u NONE --headless -c 'exe !has(\"win32\").\"cq\"' ; exitIfFailed
 
 # Functional tests
 # The $LastExitCode from MSBuild can't be trusted
@@ -122,7 +125,7 @@ Set-PSDebug -Strict -Trace 1
 
 
 if ($uploadToCodecov) {
-  C:\msys64\usr\bin\bash -lc "cd /c/projects/neovim; bash <(curl -s https://codecov.io/bash) -c -F functionaltest || echo 'codecov upload failed.'"
+  C:\msys64\usr\bin\bash -lc "cd /c/projects/neovim; bash <(curl -s https://codecov.io/bash) -c || echo 'codecov upload failed.'"
 }
 
 # Old tests
@@ -130,7 +133,7 @@ $env:PATH = "C:\msys64\usr\bin;$env:PATH"
 & "C:\msys64\mingw$bits\bin\mingw32-make.exe" -C $(Convert-Path ..\src\nvim\testdir) VERBOSE=1
 
 if ($uploadToCodecov) {
-  C:\msys64\usr\bin\bash -lc "cd /c/projects/neovim; bash <(curl -s https://codecov.io/bash) -c -F oldtest || echo 'codecov upload failed.'"
+  C:\msys64\usr\bin\bash -lc "cd /c/projects/neovim; bash <(curl -s https://codecov.io/bash) -c || echo 'codecov upload failed.'"
 }
 
 # Build artifacts

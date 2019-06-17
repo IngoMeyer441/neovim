@@ -2204,7 +2204,7 @@ static int qf_jump_edit_buffer(qf_info_T *qi, qfline_T *qf_ptr, int forceit,
     // Open help file (do_ecmd() will set b_help flag, readfile() will
     // set b_p_ro flag).
     if (!can_abandon(curbuf, forceit)) {
-      EMSG(_(e_nowrtmsg));
+      no_write_message();
       retval = false;
     } else {
       retval = do_ecmd(qf_ptr->qf_fnum, NULL, NULL, NULL, (linenr_T)1,
@@ -2843,6 +2843,39 @@ static char_u *qf_types(int c, int nr)
 
   sprintf((char *)buf, "%s %3d", (char *)p, nr);
   return buf;
+}
+
+// When "split" is false: Open the entry/result under the cursor.
+// When "split" is true: Open the entry/result under the cursor in a new window.
+void qf_view_result(bool split)
+{
+  qf_info_T   *qi = &ql_info;
+
+  if (!bt_quickfix(curbuf)) {
+    return;
+  }
+  if (IS_LL_WINDOW(curwin)) {
+    qi = GET_LOC_LIST(curwin);
+  }
+  if (qi == NULL
+      || qi->qf_lists[qi->qf_curlist].qf_count == 0) {
+    EMSG(_(e_quickfix));
+    return;
+  }
+
+  if (split) {
+    char cmd[32];
+
+    snprintf(cmd, sizeof(cmd), "split +%" PRId64 "%s",
+             (int64_t)curwin->w_cursor.lnum,
+             IS_LL_WINDOW(curwin) ? "ll" : "cc");
+    if (do_cmdline_cmd(cmd) == OK) {
+      do_cmdline_cmd("clearjumps");
+    }
+    return;
+  }
+
+  do_cmdline_cmd((IS_LL_WINDOW(curwin) ? ".ll" : ".cc"));
 }
 
 /*

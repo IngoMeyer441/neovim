@@ -3386,8 +3386,8 @@ bool add_to_showcmd(int c)
 
 void add_to_showcmd_c(int c)
 {
-  if (!add_to_showcmd(c))
-    setcursor();
+  add_to_showcmd(c);
+  setcursor();
 }
 
 /*
@@ -3448,18 +3448,18 @@ static void display_showcmd(void)
     return;
   }
 
+  int showcmd_row = (int)Rows - 1;
+  grid_puts_line_start(&default_grid, showcmd_row);
+
   if (!showcmd_is_clear) {
-    grid_puts(&default_grid, showcmd_buf, (int)Rows - 1, sc_col, 0);
+    grid_puts(&default_grid, showcmd_buf, showcmd_row, sc_col, 0);
   }
 
-  /*
-   * clear the rest of an old message by outputting up to SHOWCMD_COLS
-   * spaces
-   */
-  grid_puts(&default_grid, (char_u *)"          " + len, (int)Rows - 1,
+  // clear the rest of an old message by outputting up to SHOWCMD_COLS spaces
+  grid_puts(&default_grid, (char_u *)"          " + len, showcmd_row,
             sc_col + len, 0);
 
-  setcursor();              /* put cursor back where it belongs */
+  grid_puts_line_flush(false);
 }
 
 /*
@@ -5227,12 +5227,8 @@ static void nv_down(cmdarg_T *cap)
     cap->arg = FORWARD;
     nv_page(cap);
   } else if (bt_quickfix(curbuf) && cap->cmdchar == CAR) {
-    // In a quickfix window a <CR> jumps to the error under the cursor.
-    if (curwin->w_llist_ref == NULL) {
-      do_cmdline_cmd(".cc");  // quickfix window
-    } else {
-      do_cmdline_cmd(".ll");  // location list window
-    }
+    // Quickfix window only: view the result under the cursor.
+    qf_view_result(false);
   } else {
     // In the cmdline window a <CR> executes the command.
     if (cmdwin_type != 0 && cap->cmdchar == CAR) {
@@ -7987,8 +7983,8 @@ static void nv_event(cmdarg_T *cap)
   multiqueue_process_events(main_loop.events);
   finish_op = false;
   if (may_restart) {
-    // Tricky: if restart_edit was set before the handler we are in ctrl-o mode
-    // but if not, the event should be allow to trigger :startinsert
+    // Tricky: if restart_edit was set before the handler we are in ctrl-o mode,
+    // but if not, the event should be allowed to trigger :startinsert.
     cap->retval |= CA_COMMAND_BUSY;  // don't call edit() now
   }
 }
