@@ -135,8 +135,9 @@ endif()
 set(MSGPACK_URL https://github.com/msgpack/msgpack-c/releases/download/cpp-3.0.0/msgpack-3.0.0.tar.gz)
 set(MSGPACK_SHA256 bfbb71b7c02f806393bc3cbc491b40523b89e64f83860c58e3e54af47de176e4)
 
-set(LUAJIT_URL https://github.com/LuaJIT/LuaJIT/archive/7dbf0b05f1228c1c719866db5e5f3d58f87f74c8.tar.gz)
-set(LUAJIT_SHA256 cbae019b5e396164eb5f0d07777b55cc03931bb944f83c61a010c053c9f5fd5b)
+# https://github.com/LuaJIT/LuaJIT/tree/v2.0
+set(LUAJIT_URL https://github.com/LuaJIT/LuaJIT/archive/61464b0a5b685489bee7b6680c0e9663f2143a84.tar.gz)
+set(LUAJIT_SHA256 033fa4ef19f559ef18a9b9fb017d0cb8be58befe05ab604e92814234910f1c68)
 
 set(LUA_URL https://www.lua.org/ftp/lua-5.1.5.tar.gz)
 set(LUA_SHA256 2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333)
@@ -154,7 +155,8 @@ set(LIBTERMKEY_SHA256 cecbf737f35d18f433c8d7864f63c0f878af41f8bd0255a3ebb16010dc
 set(LIBVTERM_URL https://github.com/neovim/libvterm/archive/b45b648cab73f9667bde7c0c6045b285e22b3ecd.tar.gz)
 set(LIBVTERM_SHA256 37cc123deff29327efa654358c2ebaaf8589da03754ca5adb8ec47be386a0433)
 
-set(LUV_URL https://github.com/luvit/luv/archive/1.29.1-2.tar.gz)
+set(LUV_VERSION 1.29.1-2)
+set(LUV_URL https://github.com/luvit/luv/archive/${LUV_VERSION}.tar.gz)
 set(LUV_SHA256 e75d8fd2a14433bb798900a71e45318b3c0b8c2ef2c1c43593482ce95b4999e2)
 
 set(LUA_COMPAT53_URL https://github.com/keplerproject/lua-compat-5.3/archive/v0.7.tar.gz)

@@ -182,21 +182,29 @@ if(USE_BUNDLED_BUSTED)
   add_custom_target(luacheck
     DEPENDS ${LUACHECK_EXE})
 
-  set(LUV_DEPS luacheck luv-static lua-compat-5.3)
-  if(MINGW AND CMAKE_CROSSCOMPILING)
-    set(LUV_DEPS ${LUV_DEPS} libuv_host)
-  endif()
-  set(LUV_ARGS "CFLAGS=-O0 -g3 -fPIC")
-  if(USE_BUNDLED_LIBUV)
-    list(APPEND LUV_ARGS LIBUV_DIR=${HOSTDEPS_INSTALL_DIR})
-  endif()
   # DEPENDS on the previous module, because Luarocks breaks if parallel.
-  SET(LUV_PRIVATE_ARGS LUA_COMPAT53_INCDIR=${DEPS_BUILD_DIR}/src/lua-compat-5.3)
-  add_custom_command(OUTPUT ${HOSTDEPS_LIB_DIR}/luarocks/rocks/luv
-    COMMAND ${LUAROCKS_BINARY}
-    ARGS make ${LUAROCKS_BUILDARGS} ${LUV_ARGS} ${LUV_PRIVATE_ARGS}
-    WORKING_DIRECTORY ${DEPS_BUILD_DIR}/src/luv
-    DEPENDS ${LUV_DEPS})
+  set(LUV_DEPS luacheck)
+  if(USE_BUNDLED_LUV)
+    list(APPEND LUV_DEPS luv-static lua-compat-5.3)
+    if(MINGW AND CMAKE_CROSSCOMPILING)
+      list(APPEND LUV_DEPS libuv_host)
+    endif()
+    set(LUV_ARGS "CFLAGS=-O0 -g3 -fPIC")
+    if(USE_BUNDLED_LIBUV)
+      list(APPEND LUV_ARGS LIBUV_DIR=${HOSTDEPS_INSTALL_DIR})
+    endif()
+    SET(LUV_PRIVATE_ARGS LUA_COMPAT53_INCDIR=${DEPS_BUILD_DIR}/src/lua-compat-5.3)
+    add_custom_command(OUTPUT ${HOSTDEPS_LIB_DIR}/luarocks/rocks/luv
+      COMMAND ${LUAROCKS_BINARY}
+      ARGS make ${LUAROCKS_BUILDARGS} ${LUV_ARGS} ${LUV_PRIVATE_ARGS}
+      WORKING_DIRECTORY ${DEPS_BUILD_DIR}/src/luv
+      DEPENDS ${LUV_DEPS})
+  else()
+    add_custom_command(OUTPUT ${HOSTDEPS_LIB_DIR}/luarocks/rocks/luv
+      COMMAND ${LUAROCKS_BINARY}
+      ARGS build luv ${LUV_VERSION} ${LUAROCKS_BUILDARGS}
+      DEPENDS ${LUV_DEPS})
+  endif()
   add_custom_target(luv
     DEPENDS ${HOSTDEPS_LIB_DIR}/luarocks/rocks/luv)
 
