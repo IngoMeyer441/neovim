@@ -29,6 +29,7 @@
 #include "nvim/api/vim.h"
 #include "nvim/ascii.h"
 #include "nvim/assert.h"
+#include "nvim/channel.h"
 #include "nvim/vim.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
@@ -2605,14 +2606,23 @@ void buflist_list(exarg_T *eap)
       continue;
     }
 
+    const int changed_char = (buf->b_flags & BF_READERR)
+      ? 'x'
+      : (bufIsChanged(buf) ? '+' : ' ');
+    int ro_char = !MODIFIABLE(buf) ? '-' : (buf->b_p_ro ? '=' : ' ');
+    if (buf->terminal) {
+      ro_char = channel_job_running((uint64_t)buf->b_p_channel) ? 'R' : 'F';
+    }
+
     msg_putchar('\n');
-    len = vim_snprintf((char *)IObuff, IOSIZE - 20, "%3d%c%c%c%c%c \"%s\"",
+    len = vim_snprintf(
+        (char *)IObuff, IOSIZE - 20, "%3d%c%c%c%c%c \"%s\"",
         buf->b_fnum,
         buf->b_p_bl ? ' ' : 'u',
         buf == curbuf ? '%' : (curwin->w_alt_fnum == buf->b_fnum ? '#' : ' '),
         buf->b_ml.ml_mfp == NULL ? ' ' : (buf->b_nwindows == 0 ? 'h' : 'a'),
-        !MODIFIABLE(buf) ? '-' : (buf->b_p_ro ? '=' : ' '),
-        (buf->b_flags & BF_READERR) ? 'x' : (bufIsChanged(buf) ? '+' : ' '),
+        ro_char,
+        changed_char,
         NameBuff);
 
     if (len > IOSIZE - 20) {
@@ -5233,8 +5243,8 @@ char_u *buf_spname(buf_T *buf)
   // There is no _file_ when 'buftype' is "nofile", b_sfname
   // contains the name as specified by the user.
   if (bt_nofile(buf)) {
-    if (buf->b_sfname != NULL) {
-      return buf->b_sfname;
+    if (buf->b_fname != NULL) {
+      return buf->b_fname;
     }
     return (char_u *)_("[Scratch]");
   }

@@ -30,21 +30,21 @@ set(BUSTED_ARGS $ENV{BUSTED_ARGS})
 separate_arguments(BUSTED_ARGS)
 
 if(DEFINED ENV{TEST_TAG} AND NOT "$ENV{TEST_TAG}" STREQUAL "")
-  list(APPEND BUSTED_ARGS --tags="$ENV{TEST_TAG}")
+  list(APPEND BUSTED_ARGS --tags $ENV{TEST_TAG})
 endif()
 
 if(DEFINED ENV{TEST_FILTER} AND NOT "$ENV{TEST_FILTER}" STREQUAL "")
-  list(APPEND BUSTED_ARGS --filter="$ENV{TEST_FILTER}")
+  list(APPEND BUSTED_ARGS --filter $ENV{TEST_FILTER})
 endif()
 
 # TMPDIR: use relative test path (for parallel test runs / isolation).
 set(ENV{TMPDIR} "${BUILD_DIR}/Xtest_tmpdir/${rel_test_path}")
 execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory $ENV{TMPDIR})
 
-set(ENV{SYSTEM_NAME} ${SYSTEM_NAME})
+set(ENV{SYSTEM_NAME} ${CMAKE_HOST_SYSTEM_NAME})  # used by test/helpers.lua.
 execute_process(
   COMMAND ${BUSTED_PRG} -v -o ${BUSTED_OUTPUT_TYPE}
-    --lua=${LUA_PRG} --lazy --helper=${TEST_DIR}/${TEST_TYPE}/preload.lua
+    --lazy --helper=${TEST_DIR}/${TEST_TYPE}/preload.lua
     --lpath=${BUILD_DIR}/?.lua
     --lpath=${WORKING_DIR}/runtime/lua/?.lua
     --lpath=?.lua

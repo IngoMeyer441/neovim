@@ -41,9 +41,6 @@ endfunction()
 # The luarocks binary location
 set(LUAROCKS_BINARY ${HOSTDEPS_BIN_DIR}/luarocks)
 
-# NOTE: Version must match version of LuaRocks in third-party/CMakeLists.txt
-set(LUAROCKS_VERSION 2.4)
-
 # Arguments for calls to 'luarocks build'
 if(NOT MSVC)
   # In MSVC don't pass the compiler/linker to luarocks, the bundled
@@ -61,6 +58,14 @@ if(UNIX OR (MINGW AND CMAKE_CROSSCOMPILING))
   elseif(USE_BUNDLED_LUA)
     list(APPEND LUAROCKS_OPTS
       --with-lua=${HOSTDEPS_INSTALL_DIR})
+  else()
+    find_package(LuaJit)
+    if(LUAJIT_FOUND)
+      list(APPEND LUAROCKS_OPTS
+        --lua-version=5.1
+        --with-lua-include=${LUAJIT_INCLUDE_DIRS}
+        --lua-suffix=jit)
+    endif()
   endif()
 
   BuildLuarocks(
@@ -80,14 +85,14 @@ elseif(MSVC OR MINGW)
     /LUA ${DEPS_INSTALL_DIR}
     /LIB ${DEPS_LIB_DIR}
     /BIN ${DEPS_BIN_DIR}
-    /INC ${DEPS_INSTALL_DIR}/include/luajit-2.0/
-    /P ${DEPS_INSTALL_DIR}/${LUAROCKS_VERSION} /TREE ${DEPS_INSTALL_DIR}
+    /INC ${DEPS_INSTALL_DIR}/include/luajit-2.0
+    /P ${DEPS_INSTALL_DIR}/luarocks /TREE ${DEPS_INSTALL_DIR}
     /SCRIPTS ${DEPS_BIN_DIR}
     /CMOD ${DEPS_BIN_DIR}
     ${COMPILER_FLAG}
     /LUAMOD ${DEPS_BIN_DIR}/lua)
 
-  set(LUAROCKS_BINARY ${DEPS_INSTALL_DIR}/${LUAROCKS_VERSION}/luarocks.bat)
+  set(LUAROCKS_BINARY ${DEPS_INSTALL_DIR}/luarocks/luarocks.bat)
 else()
   message(FATAL_ERROR "Trying to build luarocks in an unsupported system ${CMAKE_SYSTEM_NAME}/${CMAKE_C_COMPILER_ID}")
 endif()
@@ -106,7 +111,7 @@ endif()
 # DEPENDS on the previous module, because Luarocks breaks if parallel.
 add_custom_command(OUTPUT ${HOSTDEPS_LIB_DIR}/luarocks/rocks/mpack
   COMMAND ${LUAROCKS_BINARY}
-  ARGS build mpack 1.0.7-0 ${LUAROCKS_BUILDARGS}
+  ARGS build mpack 1.0.8-0 ${LUAROCKS_BUILDARGS}
   DEPENDS luarocks)
 add_custom_target(mpack
   DEPENDS ${HOSTDEPS_LIB_DIR}/luarocks/rocks/mpack)
@@ -115,7 +120,7 @@ list(APPEND THIRD_PARTY_DEPS mpack)
 # DEPENDS on the previous module, because Luarocks breaks if parallel.
 add_custom_command(OUTPUT ${HOSTDEPS_LIB_DIR}/luarocks/rocks/lpeg
   COMMAND ${LUAROCKS_BINARY}
-  ARGS build lpeg 1.0.1-1 ${LUAROCKS_BUILDARGS}
+  ARGS build lpeg 1.0.2-1 ${LUAROCKS_BUILDARGS}
   DEPENDS mpack)
 add_custom_target(lpeg
   DEPENDS ${HOSTDEPS_LIB_DIR}/luarocks/rocks/lpeg)
@@ -169,7 +174,7 @@ if(USE_BUNDLED_BUSTED)
   # DEPENDS on the previous module, because Luarocks breaks if parallel.
   add_custom_command(OUTPUT ${BUSTED_EXE}
     COMMAND ${LUAROCKS_BINARY}
-    ARGS build busted 2.0.rc12-1 ${LUAROCKS_BUILDARGS}
+    ARGS build busted 2.0.rc13-0 ${LUAROCKS_BUILDARGS}
     DEPENDS penlight)
   add_custom_target(busted
     DEPENDS ${BUSTED_EXE})
@@ -177,7 +182,7 @@ if(USE_BUNDLED_BUSTED)
   # DEPENDS on the previous module, because Luarocks breaks if parallel.
   add_custom_command(OUTPUT ${LUACHECK_EXE}
     COMMAND ${LUAROCKS_BINARY}
-    ARGS build luacheck 0.21.2-1 ${LUAROCKS_BUILDARGS}
+    ARGS build luacheck 0.23.0-1 ${LUAROCKS_BUILDARGS}
     DEPENDS busted)
   add_custom_target(luacheck
     DEPENDS ${LUACHECK_EXE})

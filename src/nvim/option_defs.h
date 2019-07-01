@@ -496,6 +496,7 @@ EXTERN long p_mmd;              // 'maxmapdepth'
 EXTERN long p_mmp;              // 'maxmempattern'
 EXTERN long p_mis;              // 'menuitems'
 EXTERN char_u   *p_msm;         // 'mkspellmem'
+EXTERN long p_mle;              // 'modelineexpr'
 EXTERN long p_mls;              // 'modelines'
 EXTERN char_u   *p_mouse;       // 'mouse'
 EXTERN char_u   *p_mousem;      // 'mousemodel'
@@ -815,6 +816,7 @@ enum {
   , WV_WINHL
   , WV_FCS
   , WV_LCS
+  , WV_WINBL
   , WV_COUNT        // must be the last one
 };
 

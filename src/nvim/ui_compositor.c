@@ -329,11 +329,11 @@ static void compose_line(Integer row, Integer startcol, Integer endcol,
     memcpy(linebuf+(col-startcol), grid->chars+off, n * sizeof(*linebuf));
     memcpy(attrbuf+(col-startcol), grid->attrs+off, n * sizeof(*attrbuf));
 
-    // 'pumblend'
-    if (grid == &pum_grid && p_pb) {
+    // 'pumblend' and 'winblend'
+    if (grid->blending) {
       for (int i = col-(int)startcol; i < until-startcol; i++) {
         bool thru = strequal((char *)linebuf[i], " ");  // negative space
-        attrbuf[i] = (sattr_T)hl_blend_attrs(bg_attrs[i], attrbuf[i], thru);
+        attrbuf[i] = (sattr_T)hl_blend_attrs(bg_attrs[i], attrbuf[i], &thru);
         if (thru) {
           memcpy(linebuf[i], bg_line[i], sizeof(linebuf[i]));
         }
@@ -419,7 +419,7 @@ static void ui_comp_raw_line(UI *ui, Integer grid, Integer row,
   assert(clearcol <= default_grid.Columns);
   if (flags & kLineFlagInvalid
       || kv_size(layers) > curgrid->comp_index+1
-      || (p_pb && curgrid == &pum_grid)) {
+      || curgrid->blending) {
     compose_line(row, startcol, clearcol, flags);
   } else {
     ui_composed_call_raw_line(1, row, startcol, endcol, clearcol, clearattr,
@@ -467,7 +467,8 @@ static void ui_comp_grid_scroll(UI *ui, Integer grid, Integer top,
   bot += curgrid->comp_row;
   left += curgrid->comp_col;
   right += curgrid->comp_col;
-  if (!msg_scroll_mode && kv_size(layers) > curgrid->comp_index+1) {
+  bool covered = kv_size(layers) > curgrid->comp_index+1 || curgrid->blending;
+  if (!msg_scroll_mode && covered) {
     // TODO(bfredl):
     // 1. check if rectangles actually overlap
     // 2. calulate subareas that can scroll.

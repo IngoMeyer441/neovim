@@ -75,6 +75,8 @@ struct hl_group {
   uint8_t *sg_rgb_fg_name;      ///< RGB foreground color name
   uint8_t *sg_rgb_bg_name;      ///< RGB background color name
   uint8_t *sg_rgb_sp_name;      ///< RGB special color name
+
+  int sg_blend;                 ///< blend level (0-100 inclusive), -1 if unset
 };
 
 /// \addtogroup SG_SET
@@ -997,6 +999,7 @@ static void syn_stack_free_block(synblock_T *block)
       clear_syn_state(p);
     }
     XFREE_CLEAR(block->b_sst_array);
+    block->b_sst_first = NULL;
     block->b_sst_len = 0;
   }
 }
@@ -1108,9 +1111,6 @@ static void syn_stack_apply_changes_block(synblock_T *block, buf_T *buf)
   synstate_T  *p, *prev, *np;
   linenr_T n;
 
-  if (block->b_sst_array == NULL)       /* nothing to do */
-    return;
-
   prev = NULL;
   for (p = block->b_sst_first; p != NULL; ) {
     if (p->sst_lnum + block->b_syn_sync_linebreaks > buf->b_mod_top) {
@@ -1158,8 +1158,9 @@ static int syn_stack_cleanup(void)
   int dist;
   int retval = FALSE;
 
-  if (syn_block->b_sst_array == NULL || syn_block->b_sst_first == NULL)
+  if (syn_block->b_sst_first == NULL) {
     return retval;
+  }
 
   /* Compute normal distance between non-displayed entries. */
   if (syn_block->b_sst_len <= Rows)
@@ -2923,8 +2924,9 @@ static int syn_regexec(regmmatch_T *rmp, linenr_T lnum, colnr_T col, syn_time_T 
     if (r > 0)
       ++st->match;
   }
-  if (timed_out) {
+  if (timed_out && !syn_win->w_s->b_syn_slow) {
     syn_win->w_s->b_syn_slow = true;
+    MSG(_("'redrawtime' exceeded, syntax highlighting disabled"));
   }
 
   if (r > 0) {
@@ -3124,11 +3126,11 @@ static void syn_cmd_iskeyword(exarg_T *eap, int syncing)
   arg = skipwhite(arg);
   if (*arg == NUL) {
     MSG_PUTS("\n");
-    MSG_PUTS(_("syntax iskeyword "));
     if (curwin->w_s->b_syn_isk != empty_option) {
+      MSG_PUTS(_("syntax iskeyword "));
       msg_outtrans(curwin->w_s->b_syn_isk);
     } else {
-      msg_outtrans((char_u *)"not set");
+      msg_outtrans((char_u *)_("syntax iskeyword not set"));
     }
   } else {
     if (STRNICMP(arg, "clear", 5) == 0) {
@@ -6879,6 +6881,12 @@ void do_highlight(const char *line, const bool forceit, const bool init)
         }
       } else if (strcmp(key, "START") == 0 || strcmp(key, "STOP") == 0)   {
         // Ignored for now
+      } else if (strcmp(key, "BLEND") == 0)   {
+        if (strcmp(arg, "NONE") != 0) {
+          HL_TABLE()[idx].sg_blend = strtol(arg, NULL, 10);
+        } else {
+          HL_TABLE()[idx].sg_blend = -1;
+        }
       } else {
         emsgf(_("E423: Illegal argument: %s"), key_start);
         error = true;
@@ -6993,6 +7001,7 @@ static void highlight_clear(int idx)
   XFREE_CLEAR(HL_TABLE()[idx].sg_rgb_fg_name);
   XFREE_CLEAR(HL_TABLE()[idx].sg_rgb_bg_name);
   XFREE_CLEAR(HL_TABLE()[idx].sg_rgb_sp_name);
+  HL_TABLE()[idx].sg_blend = -1;
   // Clear the script ID only when there is no link, since that is not
   // cleared.
   if (HL_TABLE()[idx].sg_link == 0) {
@@ -7028,6 +7037,9 @@ static void highlight_list_one(const int id)
       0, sgp->sg_rgb_bg_name, "guibg");
   didh = highlight_list_arg(id, didh, LIST_STRING,
                             0, sgp->sg_rgb_sp_name, "guisp");
+
+  didh = highlight_list_arg(id, didh, LIST_INT,
+                            sgp->sg_blend+1, NULL, "blend");
 
   if (sgp->sg_link && !got_int) {
     (void)syn_list_header(didh, 9999, id);
@@ -7252,6 +7264,7 @@ static void set_hl_attr(int idx)
   at_en.rgb_fg_color = sgp->sg_rgb_fg_name ? sgp->sg_rgb_fg : -1;
   at_en.rgb_bg_color = sgp->sg_rgb_bg_name ? sgp->sg_rgb_bg : -1;
   at_en.rgb_sp_color = sgp->sg_rgb_sp_name ? sgp->sg_rgb_sp : -1;
+  at_en.hl_blend = sgp->sg_blend;
 
   sgp->sg_attr = hl_get_syn_attr(idx+1, at_en);
 
@@ -7377,6 +7390,7 @@ static int syn_add_group(char_u *name)
   hlgp->sg_rgb_bg = -1;
   hlgp->sg_rgb_fg = -1;
   hlgp->sg_rgb_sp = -1;
+  hlgp->sg_blend = -1;
   hlgp->sg_name_u = vim_strsave_up(name);
 
   return highlight_ga.ga_len;               /* ID is index plus one */

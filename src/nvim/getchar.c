@@ -1253,9 +1253,17 @@ openscript (
     EMSG(_(e_nesting));
     return;
   }
-  if (ignore_script)
-    /* Not reading from script, also don't open one.  Warning message? */
+
+  // Disallow sourcing a file in the sandbox, the commands would be executed
+  // later, possibly outside of the sandbox.
+  if (check_secure()) {
     return;
+  }
+
+  if (ignore_script) {
+    // Not reading from script, also don't open one.  Warning message?
+    return;
+  }
 
   if (scriptin[curscript] != NULL)      /* already reading script */
     ++curscript;
@@ -1770,7 +1778,7 @@ static int vgetorpeek(int advance)
               && !(State == HITRETURN && (c1 == CAR || c1 == ' '))
               && State != ASKMORE
               && State != CONFIRM
-              && !((ctrl_x_mode != 0 && vim_is_ctrl_x_key(c1))
+              && !((ctrl_x_mode_not_default() && vim_is_ctrl_x_key(c1))
                    || ((compl_cont_status & CONT_LOCAL)
                        && (c1 == Ctrl_N || c1 == Ctrl_P)))
               ) {

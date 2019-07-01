@@ -269,14 +269,14 @@ void update_curbuf(int type)
 /// and redraw_all_later() to mark parts of the screen as needing a redraw.
 ///
 /// @param type set to a NOT_VALID to force redraw of entire screen
-void update_screen(int type)
+int update_screen(int type)
 {
   static int did_intro = FALSE;
   int did_one;
 
   // Don't do anything if the screen structures are (not yet) valid.
   if (!default_grid.chars) {
-    return;
+    return FAIL;
   }
 
   if (must_redraw) {
@@ -299,9 +299,10 @@ void update_screen(int type)
   if (!redrawing() || updating_screen) {
     redraw_later(type);                 /* remember type for next time */
     must_redraw = type;
-    if (type > INVERTED_ALL)
-      curwin->w_lines_valid = 0;        /* don't use w_lines[].wl_size now */
-    return;
+    if (type > INVERTED_ALL) {
+      curwin->w_lines_valid = 0;  // don't use w_lines[].wl_size now
+    }
+    return FAIL;
   }
 
   updating_screen = TRUE;
@@ -482,13 +483,13 @@ void update_screen(int type)
   }
 
   end_search_hl();
+
   // May need to redraw the popup menu.
-  if (pum_drawn() && redraw_popupmenu) {
+  if (pum_drawn() && must_redraw_pum) {
     pum_redraw();
   }
 
   send_grid_resize = false;
-  redraw_popupmenu = false;
 
   /* Reset b_mod_set flags.  Going through all windows is probably faster
    * than going through all buffers (there could be many buffers). */
@@ -511,6 +512,7 @@ void update_screen(int type)
 
   // either cmdline is cleared, not drawn or mode is last drawn
   cmdline_was_last_drawn = false;
+  return OK;
 }
 
 /*
@@ -1709,7 +1711,6 @@ static void fold_line(win_T *wp, long fold_count, foldinfo_T *foldinfo, linenr_T
   int col;
   int txtcol;
   int off;
-  int ri;
 
   /* Build the fold line:
    * 1. Add the cmdwin_type for the command-line window
@@ -1753,15 +1754,18 @@ static void fold_line(win_T *wp, long fold_count, foldinfo_T *foldinfo, linenr_T
     col += fdc;
   }
 
-# define RL_MEMSET(p, v, l)  if (wp->w_p_rl) { \
-    for (ri = 0; ri < l; ri++) { \
-      linebuf_attr[off + (wp->w_grid.Columns - (p) - (l)) + ri] = v; \
+# define RL_MEMSET(p, v, l) \
+  do { \
+    if (wp->w_p_rl) { \
+      for (int ri = 0; ri < l; ri++) { \
+        linebuf_attr[off + (wp->w_grid.Columns - (p) - (l)) + ri] = v; \
+      } \
+    } else { \
+      for (int ri = 0; ri < l; ri++) { \
+        linebuf_attr[off + (p) + ri] = v; \
+      } \
     } \
-  } else { \
-    for (ri = 0; ri < l; ri++) { \
-      linebuf_attr[off + (p) + ri] = v; \
-    } \
-  }
+  } while (0)
 
   /* Set all attributes of the 'number' or 'relativenumber' column and the
    * text */

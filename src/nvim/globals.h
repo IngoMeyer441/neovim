@@ -700,11 +700,10 @@ EXTERN int arrow_used;                  /* Normally FALSE, set to TRUE after
                                          * to call u_sync() */
 EXTERN int ins_at_eol INIT(= FALSE);      /* put cursor after eol when
                                              restarting edit after CTRL-O */
-EXTERN char_u   *edit_submode INIT(= NULL); /* msg for CTRL-X submode */
-EXTERN char_u   *edit_submode_pre INIT(= NULL); /* prepended to edit_submode */
-EXTERN char_u   *edit_submode_extra INIT(= NULL); /* appended to edit_submode */
-EXTERN hlf_T edit_submode_highl;        /* highl. method for extra info */
-EXTERN int ctrl_x_mode INIT(= 0);       /* Which Ctrl-X mode are we in? */
+EXTERN char_u *edit_submode INIT(= NULL);  // msg for CTRL-X submode
+EXTERN char_u *edit_submode_pre INIT(= NULL);  // prepended to edit_submode
+EXTERN char_u *edit_submode_extra INIT(= NULL);  // appended to edit_submode
+EXTERN hlf_T edit_submode_highl;        // highl. method for extra info
 
 EXTERN int no_abbr INIT(= TRUE);        /* TRUE when no abbreviations loaded */
 
@@ -757,9 +756,11 @@ EXTERN bool KeyTyped;                    // true if user typed current char
 EXTERN int KeyStuffed;                   // TRUE if current char from stuffbuf
 EXTERN int maptick INIT(= 0);            // tick for each non-mapped char
 
-EXTERN int must_redraw INIT(= 0);           /* type of redraw necessary */
-EXTERN int skip_redraw INIT(= FALSE);       /* skip redraw once */
-EXTERN int do_redraw INIT(= FALSE);         /* extra redraw once */
+EXTERN int must_redraw INIT(= 0);           // type of redraw necessary
+EXTERN bool skip_redraw INIT(= false);      // skip redraw once
+EXTERN bool do_redraw INIT(= false);        // extra redraw once
+EXTERN bool must_redraw_pum INIT(= false);  // redraw pum. NB: must_redraw
+                                            // should also be set.
 
 EXTERN int need_highlight_changed INIT(= true);
 
@@ -1059,6 +1060,9 @@ EXTERN char_u e_cmdmap_key[] INIT(=N_(
 
 EXTERN char_u e_api_error[] INIT(=N_(
     "E5555: API call: %s"));
+
+EXTERN char e_luv_api_disabled[] INIT(=N_(
+    "E5560: %s must not be called in a lua loop callback"));
 
 EXTERN char_u e_floatonly[] INIT(=N_(
     "E5601: Cannot close window, only floating window would remain"));

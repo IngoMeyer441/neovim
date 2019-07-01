@@ -30,6 +30,7 @@
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
+#include "nvim/popupmnu.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
@@ -208,7 +209,7 @@ void nvim_feedkeys(String keys, String mode, Boolean escape_csi)
 /// @return Number of bytes actually written (can be fewer than
 ///         requested if the buffer becomes full).
 Integer nvim_input(String keys)
-  FUNC_API_SINCE(1) FUNC_API_ASYNC
+  FUNC_API_SINCE(1) FUNC_API_FAST
 {
   return (Integer)input_enqueue(keys);
 }
@@ -237,7 +238,7 @@ Integer nvim_input(String keys)
 /// @param[out] err Error details, if any
 void nvim_input_mouse(String button, String action, String modifier,
                       Integer grid, Integer row, Integer col, Error *err)
-  FUNC_API_SINCE(6) FUNC_API_ASYNC
+  FUNC_API_SINCE(6) FUNC_API_FAST
 {
   if (button.data == NULL || action.data == NULL) {
     goto error;
@@ -1255,7 +1256,7 @@ Dictionary nvim_get_color_map(void)
 ///
 /// @returns Dictionary { "mode": String, "blocking": Boolean }
 Dictionary nvim_get_mode(void)
-  FUNC_API_SINCE(2) FUNC_API_ASYNC
+  FUNC_API_SINCE(2) FUNC_API_FAST
 {
   Dictionary rv = ARRAY_DICT_INIT;
   char *modestr = get_mode();
@@ -1341,7 +1342,7 @@ Dictionary nvim_get_commands(Dictionary opts, Error *err)
 ///
 /// @returns 2-tuple [{channel-id}, {api-metadata}]
 Array nvim_get_api_info(uint64_t channel_id)
-  FUNC_API_SINCE(1) FUNC_API_ASYNC FUNC_API_REMOTE_ONLY
+  FUNC_API_SINCE(1) FUNC_API_FAST FUNC_API_REMOTE_ONLY
 {
   Array rv = ARRAY_DICT_INIT;
 
@@ -1651,7 +1652,7 @@ typedef kvec_withinit_t(ExprASTConvStackItem, 16) ExprASTConvStack;
 /// @param[out] err Error details, if any
 Dictionary nvim_parse_expression(String expr, String flags, Boolean highlight,
                                  Error *err)
-  FUNC_API_SINCE(4) FUNC_API_ASYNC
+  FUNC_API_SINCE(4) FUNC_API_FAST
 {
   int pflags = 0;
   for (size_t i = 0 ; i < flags.size ; i++) {
@@ -2239,16 +2240,33 @@ void nvim_select_popupmenu_item(Integer item, Boolean insert, Boolean finish,
 }
 
 /// NB: if your UI doesn't use hlstate, this will not return hlstate first time
-Array nvim__inspect_cell(Integer row, Integer col, Error *err)
+Array nvim__inspect_cell(Integer grid, Integer row, Integer col, Error *err)
 {
   Array ret = ARRAY_DICT_INIT;
-  if (row < 0 || row >= default_grid.Rows
-      || col < 0 || col >= default_grid.Columns) {
+
+  // TODO(bfredl): if grid == 0 we should read from the compositor's buffer.
+  // The only problem is that it does not yet exist.
+  ScreenGrid *g = &default_grid;
+  if (grid == pum_grid.handle) {
+    g = &pum_grid;
+  } else if (grid > 1) {
+    win_T *wp = get_win_by_grid_handle((handle_T)grid);
+    if (wp != NULL && wp->w_grid.chars != NULL) {
+      g = &wp->w_grid;
+    } else {
+      api_set_error(err, kErrorTypeValidation,
+                    "No grid with the given handle");
+      return ret;
+    }
+  }
+
+  if (row < 0 || row >= g->Rows
+      || col < 0 || col >= g->Columns) {
     return ret;
   }
-  size_t off = default_grid.line_offset[(size_t)row] + (size_t)col;
-  ADD(ret, STRING_OBJ(cstr_to_string((char *)default_grid.chars[off])));
-  int attr = default_grid.attrs[off];
+  size_t off = g->line_offset[(size_t)row] + (size_t)col;
+  ADD(ret, STRING_OBJ(cstr_to_string((char *)g->chars[off])));
+  int attr = g->attrs[off];
   ADD(ret, DICTIONARY_OBJ(hl_get_attr_by_id(attr, true, err)));
   // will not work first time
   if (!highlight_use_hlstate()) {
