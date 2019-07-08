@@ -2,6 +2,7 @@
 #   intro: https://codingnest.com/basic-cmake/
 #   best practices (3.0+): https://gist.github.com/mbinna/c61dbb39bca0e4fb7d1f73b0d66a4fd1
 
+# Version should match the tested CMAKE_URL in .travis.yml.
 cmake_minimum_required(VERSION 2.8.12)
 project(nvim C)
 
@@ -315,7 +316,11 @@ endif()
 
 check_c_compiler_flag(-fdiagnostics-color=auto HAS_DIAG_COLOR_FLAG)
 if(HAS_DIAG_COLOR_FLAG)
-  add_compile_options(-fdiagnostics-color=auto)
+  if(CMAKE_GENERATOR MATCHES "Ninja")
+    add_compile_options(-fdiagnostics-color=always)
+  else()
+    add_compile_options(-fdiagnostics-color=auto)
+  endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -407,7 +412,7 @@ main(void)
   return MSGPACK_OBJECT_FLOAT32;
 }
 " MSGPACK_HAS_FLOAT32)
-unset(CMAKE_REQUIRED_LIBRARIES)
+list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES "${MSGPACK_INCLUDE_DIRS}")
 if(MSGPACK_HAS_FLOAT32)
   add_definitions(-DNVIM_MSGPACK_HAS_FLOAT32)
 endif()
@@ -429,8 +434,8 @@ if(FEAT_TUI)
     return unibi_num_from_var(unibi_var_from_num(0));
   }
   " UNIBI_HAS_VAR_FROM)
-  unset(CMAKE_REQUIRED_INCLUDES)
-  unset(CMAKE_REQUIRED_LIBRARIES)
+  list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
+  list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
   if(UNIBI_HAS_VAR_FROM)
     add_definitions(-DNVIM_UNIBI_HAS_VAR_FROM)
   endif()
@@ -666,37 +671,12 @@ if(BUSTED_LUA_PRG)
 endif()
 
 if(LUACHECK_PRG)
-  add_custom_target(testlint
-    COMMAND ${CMAKE_COMMAND}
-      -DLUACHECK_PRG=${LUACHECK_PRG}
-      -DLUAFILES_DIR=${CMAKE_CURRENT_SOURCE_DIR}/test
-      -DIGNORE_PATTERN="*/preload.lua"
-      -P ${PROJECT_SOURCE_DIR}/cmake/RunLuacheck.cmake)
-
-  add_custom_target(
-    lintbuiltinlua
-    COMMAND
-      ${CMAKE_COMMAND}
-        -DLUACHECK_PRG=${LUACHECK_PRG}
-        -DLUAFILES_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src/nvim/lua
-        -DREAD_GLOBALS=vim
-        -P ${PROJECT_SOURCE_DIR}/cmake/RunLuacheck.cmake
-  )
-  add_custom_target(
-    lintruntimelua
-    COMMAND
-      ${CMAKE_COMMAND}
-        -DLUACHECK_PRG=${LUACHECK_PRG}
-        -DLUAFILES_DIR=${CMAKE_CURRENT_SOURCE_DIR}/runtime/lua
-        -DREAD_GLOBALS=vim
-        -P ${PROJECT_SOURCE_DIR}/cmake/RunLuacheck.cmake
-  )
-  # TODO(ZyX-I): Run linter for all lua code in src
-  add_custom_target(
-    lualint
-    DEPENDS lintruntimelua
-    DEPENDS lintbuiltinlua
-  )
+  add_custom_target(lualint
+    COMMAND ${LUACHECK_PRG} -q runtime/ src/ test/
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+else()
+  add_custom_target(lualint false
+    COMMENT "lualint: LUACHECK_PRG not defined")
 endif()
 
 set(CPACK_PACKAGE_NAME "Neovim")

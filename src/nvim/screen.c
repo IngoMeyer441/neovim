@@ -153,6 +153,8 @@ static bool conceal_cursor_used = false;
 
 static bool redraw_popupmenu = false;
 
+static bool resizing = false;
+
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "screen.c.generated.h"
 #endif
@@ -275,7 +277,9 @@ int update_screen(int type)
   int did_one;
 
   // Don't do anything if the screen structures are (not yet) valid.
-  if (!default_grid.chars) {
+  // A VimResized autocmd can invoke redrawing in the middle of a resize,
+  // which would bypass the checks in screen_resize for popupmenu etc.
+  if (!default_grid.chars || resizing) {
     return FAIL;
   }
 
@@ -1608,7 +1612,8 @@ static void win_draw_end(win_T *wp, int c1, int c2, bool draw_margin, int row,
     }
   }
 
-  int attr = hl_combine_attr(wp->w_hl_attr_normal, win_hl_attr(wp, hl));
+  int attr = hl_combine_attr(wp->w_hl_attr_normal,
+                             hl ? win_hl_attr(wp, hl) : 0);
 
   if (wp->w_p_rl) {
     grid_fill(&wp->w_grid, row, endrow, wp->w_wincol, W_ENDCOL(wp) - 1 - n,
@@ -2081,7 +2086,7 @@ win_line (
   int lcs_eol_one = wp->w_p_lcs_chars.eol;     // 'eol'  until it's been used
   int lcs_prec_todo = wp->w_p_lcs_chars.prec;  // 'prec' until it's been used
 
-  /* saved "extra" items for when draw_state becomes WL_LINE (again) */
+  // saved "extra" items for when draw_state becomes WL_LINE (again)
   int saved_n_extra = 0;
   char_u      *saved_p_extra = NULL;
   int saved_c_extra = 0;
@@ -4657,7 +4662,7 @@ win_redr_status_matches (
     int showtail
 )
 {
-#define L_MATCH(m) (showtail ? sm_gettail(matches[m]) : matches[m])
+#define L_MATCH(m) (showtail ? sm_gettail(matches[m], false) : matches[m])
   int row;
   char_u      *buf;
   int len;
@@ -5989,7 +5994,14 @@ void grid_assign_handle(ScreenGrid *grid)
 /// needed.
 void screenalloc(void)
 {
-  static bool entered = false;  // avoid recursiveness
+  // It's possible that we produce an out-of-memory message below, which
+  // will cause this function to be called again.  To break the loop, just
+  // return here.
+  if (resizing) {
+    return;
+  }
+  resizing = true;
+
   int retry_count = 0;
 
 retry:
@@ -6003,17 +6015,9 @@ retry:
       || Rows == 0
       || Columns == 0
       || (!full_screen && default_grid.chars == NULL)) {
+    resizing = false;
     return;
   }
-
-  /*
-   * It's possible that we produce an out-of-memory message below, which
-   * will cause this function to be called again.  To break the loop, just
-   * return here.
-   */
-  if (entered)
-    return;
-  entered = TRUE;
 
   /*
    * Note that the window sizes are updated before reallocating the arrays,
@@ -6055,8 +6059,7 @@ retry:
 
   must_redraw = CLEAR;  // need to clear the screen later
 
-  entered = FALSE;
-  --RedrawingDisabled;
+  RedrawingDisabled--;
 
   /*
    * Do not apply autocommands more than 3 times to avoid an endless loop
@@ -6068,6 +6071,8 @@ retry:
     * jump back to check if we need to allocate the screen again. */
     goto retry;
   }
+
+  resizing = false;
 }
 
 void grid_alloc(ScreenGrid *grid, int rows, int columns, bool copy, bool valid)

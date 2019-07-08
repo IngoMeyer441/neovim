@@ -6,6 +6,7 @@ local insert = helpers.insert
 local meths = helpers.meths
 local command = helpers.command
 local funcs = helpers.funcs
+local get_pathsep = helpers.get_pathsep
 
 describe('ui/ext_popupmenu', function()
   local screen
@@ -1151,6 +1152,50 @@ describe('builtin popupmenu', function()
     ]])
   end)
 
+  it('behaves correcty with VimResized autocmd', function()
+    feed('isome long prefix before the ')
+    command("set completeopt+=noinsert,noselect")
+    command("autocmd VimResized * redraw!")
+    command("set linebreak")
+    funcs.complete(29, {'word', 'choice', 'text', 'thing'})
+    screen:expect([[
+      some long prefix before the ^    |
+      {1:~                        }{n: word  }|
+      {1:~                        }{n: choice}|
+      {1:~                        }{n: text  }|
+      {1:~                        }{n: thing }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {2:-- INSERT --}                    |
+    ]])
+
+    screen:try_resize(16,10)
+    screen:expect([[
+      some long       |
+      prefix before   |
+      the ^            |
+      {1:~  }{n: word        }|
+      {1:~  }{n: choice      }|
+      {1:~  }{n: text        }|
+      {1:~  }{n: thing       }|
+      {1:~               }|
+      {1:~               }|
+      {2:-- INSERT --}    |
+    ]])
+  end)
+
   it('works with rightleft window', function()
     command("set rl")
     feed('isome rightleft ')
@@ -1502,6 +1547,53 @@ describe('builtin popupmenu', function()
       {1:~ }{s: långfile1      }{1:                                }|
       {3:lå}{n: långfile2      }{3:                                }|
       :b långfile1^                                      |
+    ]])
+
+    -- position is calculated correctly with "longest"
+    feed('<esc>')
+    command('set wildmode=longest:full,full')
+    feed(':b lå<tab>')
+    screen:expect([[
+                                                        |
+      {1:~                                                 }|
+      {4:långfile2                                         }|
+                                                        |
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~ }{n: långfile1      }{1:                                }|
+      {3:lå}{n: långfile2      }{3:                                }|
+      :b långfile^                                       |
+    ]])
+
+    -- special case: when patterns ends with "/", show menu items aligned
+    -- after the "/"
+    feed('<esc>')
+    command("close")
+    command('set wildmode=full')
+    command("cd test/functional/fixtures/")
+    feed(':e compdir/<tab>')
+    screen:expect([[
+                                                        |
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~         }{s: file1          }{1:                        }|
+      {1:~         }{n: file2          }{1:                        }|
+      :e compdir]]..get_pathsep()..[[file1^                                  |
     ]])
   end)
 

@@ -40,7 +40,7 @@ local imacros=function(s)
     return '(intptr_t)' .. s
   end
 end
-local N_=function(s)
+local N_=function(s) -- luacheck: ignore 211 (currently unused)
   return function()
     return 'N_(' .. cstr(s) .. ')'
   end
@@ -189,7 +189,6 @@ return {
     },
     {
       full_name='belloff', abbreviation='bo',
-      deny_duplicates=true,
       type='string', list='comma', scope={'global'},
       deny_duplicates=true,
       vi_def=true,
@@ -2750,9 +2749,9 @@ return {
       full_name='wildoptions', abbreviation='wop',
       type='string', list='onecomma', scope={'global'},
       deny_duplicates=true,
-      vi_def=true,
+      vim=true,
       varname='p_wop',
-      defaults={if_true={vi=""}}
+      defaults={if_true={vi='', vim='pum,tagfile'}}
     },
     {
       full_name='winaltkeys', abbreviation='wak',
