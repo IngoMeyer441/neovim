@@ -329,8 +329,8 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
   # 2. But _Pragma("...ignored") is broken (unresolved) in GCC 5+:
   #    https://gcc.gnu.org/bugzilla/show_bug.cgi?id=66099
   # So we must disable -Warray-bounds globally for GCC (for kbtree.h, #7083).
-  check_c_compiler_flag(-Wno-array-bounds HAS_NO_ARRAY_BOUNDS_FLAG)
-  if(HAS_NO_ARRAY_BOUNDS_FLAG)
+  check_c_compiler_flag(-Warray-bounds HAS_WARRAY_BOUNDS)
+  if(HAS_WARRAY_BOUNDS)
     add_compile_options(-Wno-array-bounds)
   endif()
 endif()
@@ -378,7 +378,7 @@ endif()
 include_directories("${PROJECT_BINARY_DIR}/config")
 include_directories("${PROJECT_SOURCE_DIR}/src")
 
-find_package(LibUV REQUIRED)  # minimum version: v1.12
+find_package(LibUV 1.28.0 REQUIRED)
 include_directories(SYSTEM ${LIBUV_INCLUDE_DIRS})
 
 find_package(Msgpack 1.0.0 REQUIRED)

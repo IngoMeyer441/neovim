@@ -7097,10 +7097,14 @@ static void f_assert_fails(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   const char *const cmd = tv_get_string_chk(&argvars[0]);
   garray_T    ga;
+  int         save_trylevel = trylevel;
 
+  // trylevel must be zero for a ":throw" command to be considered failed
+  trylevel = 0;
   called_emsg = false;
   suppress_errthrow = true;
   emsg_silent = true;
+
   do_cmdline_cmd(cmd);
   if (!called_emsg) {
     prepare_assert_error(&ga);
@@ -7122,6 +7126,7 @@ static void f_assert_fails(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     }
   }
 
+  trylevel = save_trylevel;
   called_emsg = false;
   suppress_errthrow = false;
   emsg_silent = false;
@@ -7289,6 +7294,14 @@ static buf_T *find_buffer(typval_T *avar)
   return buf;
 }
 
+// "bufadd(expr)" function
+static void f_bufadd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  char_u *name = (char_u *)tv_get_string(&argvars[0]);
+
+  rettv->vval.v_number = buflist_add(*name == NUL ? NULL : name, 0);
+}
+
 /*
  * "bufexists(expr)" function
  */
@@ -7306,6 +7319,21 @@ static void f_buflisted(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   buf = find_buffer(&argvars[0]);
   rettv->vval.v_number = (buf != NULL && buf->b_p_bl);
+}
+
+// "bufload(expr)" function
+static void f_bufload(typval_T *argvars, typval_T *unused, FunPtr fptr)
+{
+  buf_T *buf = get_buf_arg(&argvars[0]);
+
+  if (buf != NULL && buf->b_ml.ml_mfp == NULL) {
+    aco_save_T aco;
+
+    aucmd_prepbuf(&aco, buf);
+    swap_exists_action = SEA_NONE;
+    open_buffer(false, NULL, 0);
+    aucmd_restbuf(&aco);
+  }
 }
 
 /*
@@ -15850,11 +15878,10 @@ static void f_sign_getplaced(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       }
       if ((di = tv_dict_find(dict, "lnum", -1)) != NULL) {
         // get signs placed at this line
-        lnum = (linenr_T)tv_get_number_chk(&di->di_tv, &notanum);
-        if (notanum) {
+        lnum = tv_get_lnum(&di->di_tv);
+        if (lnum <= 0) {
           return;
         }
-        lnum = tv_get_lnum(&di->di_tv);
       }
       if ((di = tv_dict_find(dict, "id", -1)) != NULL) {
         // get sign placed with this identifier
@@ -16536,7 +16563,7 @@ static void f_reltimefloat(typval_T *argvars , typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_FLOAT;
   rettv->vval.v_float = 0;
   if (list2proftime(&argvars[0], &tm) == OK) {
-    rettv->vval.v_float = ((float_T)tm) / 1000000;
+    rettv->vval.v_float = ((float_T)tm) / 1000000000;
   }
 }
 
@@ -20682,11 +20709,11 @@ void ex_echohl(exarg_T *eap)
  */
 void ex_execute(exarg_T *eap)
 {
-  char_u      *arg = eap->arg;
+  char_u *arg = eap->arg;
   typval_T rettv;
   int ret = OK;
   garray_T ga;
-  int save_did_emsg = did_emsg;
+  int save_did_emsg;
 
   ga_init(&ga, 1, 80);
 
