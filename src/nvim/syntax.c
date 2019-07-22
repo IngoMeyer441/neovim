@@ -14,6 +14,7 @@
 
 #include "nvim/vim.h"
 #include "nvim/ascii.h"
+#include "nvim/api/private/helpers.h"
 #include "nvim/syntax.h"
 #include "nvim/charset.h"
 #include "nvim/cursor_shape.h"
@@ -350,7 +351,7 @@ static reg_extmatch_T *next_match_extmatch = NULL;
 
 /*
  * A state stack is an array of integers or stateitem_T, stored in a
- * garray_T.  A state stack is invalid if it's itemsize entry is zero.
+ * garray_T.  A state stack is invalid if its itemsize entry is zero.
  */
 #define INVALID_STATE(ssp)  ((ssp)->ga_itemsize == 0)
 #define VALID_STATE(ssp)    ((ssp)->ga_itemsize != 0)
@@ -6473,6 +6474,7 @@ void do_highlight(const char *line, const bool forceit, const bool init)
   int id;
   int idx;
   struct hl_group item_before;
+  bool did_change = false;
   bool dodefault = false;
   bool doclear = false;
   bool dolink = false;
@@ -6829,18 +6831,23 @@ void do_highlight(const char *line, const bool forceit, const bool init)
           }
         }
       } else if (strcmp(key, "GUIFG") == 0)   {
+        char_u **const namep = &HL_TABLE()[idx].sg_rgb_fg_name;
+
         if (!init || !(HL_TABLE()[idx].sg_set & SG_GUI)) {
           if (!init) {
             HL_TABLE()[idx].sg_set |= SG_GUI;
           }
 
-          xfree(HL_TABLE()[idx].sg_rgb_fg_name);
-          if (strcmp(arg, "NONE")) {
-            HL_TABLE()[idx].sg_rgb_fg_name = (char_u *)xstrdup((char *)arg);
-            HL_TABLE()[idx].sg_rgb_fg = name_to_color((const char_u *)arg);
-          } else {
-            HL_TABLE()[idx].sg_rgb_fg_name = NULL;
-            HL_TABLE()[idx].sg_rgb_fg = -1;
+          if (*namep == NULL || STRCMP(*namep, arg) != 0) {
+            xfree(*namep);
+            if (strcmp(arg, "NONE") != 0) {
+              *namep = (char_u *)xstrdup(arg);
+              HL_TABLE()[idx].sg_rgb_fg = name_to_color((char_u *)arg);
+            } else {
+              *namep = NULL;
+              HL_TABLE()[idx].sg_rgb_fg = -1;
+            }
+            did_change = true;
           }
         }
 
@@ -6848,18 +6855,23 @@ void do_highlight(const char *line, const bool forceit, const bool init)
           normal_fg = HL_TABLE()[idx].sg_rgb_fg;
         }
       } else if (STRCMP(key, "GUIBG") == 0)   {
+        char_u **const namep = &HL_TABLE()[idx].sg_rgb_bg_name;
+
         if (!init || !(HL_TABLE()[idx].sg_set & SG_GUI)) {
           if (!init) {
             HL_TABLE()[idx].sg_set |= SG_GUI;
           }
 
-          xfree(HL_TABLE()[idx].sg_rgb_bg_name);
-          if (STRCMP(arg, "NONE") != 0) {
-            HL_TABLE()[idx].sg_rgb_bg_name = (char_u *)xstrdup((char *)arg);
-            HL_TABLE()[idx].sg_rgb_bg = name_to_color((const char_u *)arg);
-          } else {
-            HL_TABLE()[idx].sg_rgb_bg_name = NULL;
-            HL_TABLE()[idx].sg_rgb_bg = -1;
+          if (*namep == NULL || STRCMP(*namep, arg) != 0) {
+            xfree(*namep);
+            if (STRCMP(arg, "NONE") != 0) {
+              *namep = (char_u *)xstrdup(arg);
+              HL_TABLE()[idx].sg_rgb_bg = name_to_color((char_u *)arg);
+            } else {
+              *namep = NULL;
+              HL_TABLE()[idx].sg_rgb_bg = -1;
+            }
+            did_change = true;
           }
         }
 
@@ -6867,18 +6879,23 @@ void do_highlight(const char *line, const bool forceit, const bool init)
           normal_bg = HL_TABLE()[idx].sg_rgb_bg;
         }
       } else if (strcmp(key, "GUISP") == 0)   {
+        char_u **const namep = &HL_TABLE()[idx].sg_rgb_sp_name;
+
         if (!init || !(HL_TABLE()[idx].sg_set & SG_GUI)) {
           if (!init) {
             HL_TABLE()[idx].sg_set |= SG_GUI;
           }
 
-          xfree(HL_TABLE()[idx].sg_rgb_sp_name);
-          if (strcmp(arg, "NONE") != 0) {
-            HL_TABLE()[idx].sg_rgb_sp_name = (char_u *)xstrdup((char *)arg);
-            HL_TABLE()[idx].sg_rgb_sp = name_to_color((const char_u *)arg);
-          } else {
-            HL_TABLE()[idx].sg_rgb_sp_name = NULL;
-            HL_TABLE()[idx].sg_rgb_sp = -1;
+          if (*namep == NULL || STRCMP(*namep, arg) != 0) {
+            xfree(*namep);
+            if (strcmp(arg, "NONE") != 0) {
+              *namep = (char_u *)xstrdup(arg);
+              HL_TABLE()[idx].sg_rgb_sp = name_to_color((char_u *)arg);
+            } else {
+              *namep = NULL;
+              HL_TABLE()[idx].sg_rgb_sp = -1;
+            }
+            did_change = true;
           }
         }
 
@@ -6940,9 +6957,15 @@ void do_highlight(const char *line, const bool forceit, const bool init)
 
   // Only call highlight_changed() once, after a sequence of highlight
   // commands, and only if an attribute actually changed
-  if (memcmp(&HL_TABLE()[idx], &item_before, sizeof(item_before)) != 0
+  if ((did_change
+       || memcmp(&HL_TABLE()[idx], &item_before, sizeof(item_before)) != 0)
       && !did_highlight_changed) {
-    redraw_all_later(NOT_VALID);
+    // Do not trigger a redraw when highlighting is changed while
+    // redrawing.  This may happen when evaluating 'statusline' changes the
+    // StatusLine group.
+    if (!updating_screen) {
+      redraw_all_later(NOT_VALID);
+    }
     need_highlight_changed = true;
   }
 }
@@ -7027,6 +7050,10 @@ static void highlight_list_one(const int id)
 {
   struct hl_group *const sgp = &HL_TABLE()[id - 1];  // index is ID minus one
   bool didh = false;
+
+  if (message_filtered(sgp->sg_name)) {
+    return;
+  }
 
   didh = highlight_list_arg(id, didh, LIST_ATTR,
       sgp->sg_cterm, NULL, "cterm");
@@ -7504,6 +7531,12 @@ void highlight_changed(void)
 
     highlight_attr[hlf] = hl_get_ui_attr(hlf, final_id,
                                          hlf == (int)HLF_INACTIVE);
+
+    if (highlight_attr[hlf] != highlight_attr_last[hlf]) {
+      ui_call_hl_group_set(cstr_as_string((char *)hlf_names[hlf]),
+                           highlight_attr[hlf]);
+      highlight_attr_last[hlf] = highlight_attr[hlf];
+    }
   }
 
   /* Setup the user highlights

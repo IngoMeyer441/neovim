@@ -961,6 +961,7 @@ eval_to_bool(
 static int eval1_emsg(char_u **arg, typval_T *rettv, bool evaluate)
   FUNC_ATTR_NONNULL_ARG(1, 2)
 {
+  const char_u *const start = *arg;
   const int did_emsg_before = did_emsg;
   const int called_emsg_before = called_emsg;
 
@@ -973,7 +974,7 @@ static int eval1_emsg(char_u **arg, typval_T *rettv, bool evaluate)
     if (!aborting()
         && did_emsg == did_emsg_before
         && called_emsg == called_emsg_before) {
-      emsgf(_(e_invexpr2), arg);
+      emsgf(_(e_invexpr2), start);
     }
   }
   return ret;
@@ -1782,6 +1783,15 @@ static void list_hashtable_vars(hashtab_T *ht, const char *prefix, int empty,
     if (!HASHITEM_EMPTY(hi)) {
       todo--;
       di = TV_DICT_HI2DI(hi);
+      char buf[IOSIZE];
+
+      // apply :filter /pat/ to variable name
+      xstrlcpy(buf, prefix, IOSIZE - 1);
+      xstrlcat(buf, (char *)di->di_key, IOSIZE);
+      if (message_filtered((char_u *)buf)) {
+        continue;
+      }
+
       if (empty || di->di_tv.v_type != VAR_STRING
           || di->di_tv.vval.v_string != NULL) {
         list_one_var(di, prefix, first);
@@ -2360,6 +2370,7 @@ static char_u *get_lval(char_u *const name, typval_T *const rettv,
         /* Can't add "v:" variable. */
         if (lp->ll_dict == &vimvardict) {
           EMSG2(_(e_illvar), name);
+          tv_clear(&var1);
           return NULL;
         }
 
@@ -4326,7 +4337,7 @@ static int eval7(
   // Dictionary: {key: val, key: val}
   case '{':   ret = get_lambda_tv(arg, rettv, evaluate);
               if (ret == NOTDONE) {
-                ret = get_dict_tv(arg, rettv, evaluate);
+                ret = dict_get_tv(arg, rettv, evaluate);
               }
     break;
 
@@ -5710,7 +5721,7 @@ static bool set_ref_in_funccal(funccall_T *fc, int copyID)
  * Allocate a variable for a Dictionary and fill it from "*arg".
  * Return OK or FAIL.  Returns NOTDONE for {expr}.
  */
-static int get_dict_tv(char_u **arg, typval_T *rettv, int evaluate)
+static int dict_get_tv(char_u **arg, typval_T *rettv, int evaluate)
 {
   dict_T      *d = NULL;
   typval_T tvkey;
@@ -8455,9 +8466,9 @@ static void f_executable(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   // Check in $PATH and also check directly if there is a directory name
   rettv->vval.v_number = (
-      os_can_exe((const char_u *)name, NULL, true)
+      os_can_exe(name, NULL, true)
       || (gettail_dir(name) != name
-          && os_can_exe((const char_u *)name, NULL, false)));
+          && os_can_exe(name, NULL, false)));
 }
 
 typedef struct {
@@ -8562,12 +8573,12 @@ static void f_execute(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 static void f_exepath(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   const char *arg = tv_get_string(&argvars[0]);
-  char_u *path = NULL;
+  char *path = NULL;
 
-  (void)os_can_exe((const char_u *)arg, &path, true);
+  (void)os_can_exe(arg, &path, true);
 
   rettv->v_type = VAR_STRING;
-  rettv->vval.v_string = path;
+  rettv->vval.v_string = (char_u *)path;
 }
 
 /// Find a window: When using a Window ID in any tab page, when using a number
@@ -10016,13 +10027,13 @@ static void f_getcompletion(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   if (strcmp(tv_get_string(&argvars[1]), "cmdline") == 0) {
     set_one_cmd_context(&xpc, tv_get_string(&argvars[0]));
-    xpc.xp_pattern_len = (int)STRLEN(xpc.xp_pattern);
+    xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
     goto theend;
   }
 
   ExpandInit(&xpc);
   xpc.xp_pattern = (char_u *)tv_get_string(&argvars[0]);
-  xpc.xp_pattern_len = (int)STRLEN(xpc.xp_pattern);
+  xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
   xpc.xp_context = cmdcomplete_str_to_type(
       (char_u *)tv_get_string(&argvars[1]));
   if (xpc.xp_context == EXPAND_NOTHING) {
@@ -10032,17 +10043,17 @@ static void f_getcompletion(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   if (xpc.xp_context == EXPAND_MENUS) {
     set_context_in_menu_cmd(&xpc, (char_u *)"menu", xpc.xp_pattern, false);
-    xpc.xp_pattern_len = (int)STRLEN(xpc.xp_pattern);
+    xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
   }
 
   if (xpc.xp_context == EXPAND_CSCOPE) {
     set_context_in_cscope_cmd(&xpc, (const char *)xpc.xp_pattern, CMD_cscope);
-    xpc.xp_pattern_len = (int)STRLEN(xpc.xp_pattern);
+    xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
   }
 
   if (xpc.xp_context == EXPAND_SIGN) {
     set_context_in_sign_cmd(&xpc, xpc.xp_pattern);
-    xpc.xp_pattern_len = (int)STRLEN(xpc.xp_pattern);
+    xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
   }
 
 theend:
@@ -12066,9 +12077,18 @@ static void f_jobresize(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->vval.v_number = 1;
 }
 
+/// Builds a process argument vector from a VimL object (typval_T).
+///
+/// @param[in]  cmd_tv      VimL object
+/// @param[out] cmd         Returns the command or executable name.
+/// @param[out] executable  Returns `false` if argv[0] is not executable.
+///
+/// @returns Result of `shell_build_argv()` if `cmd_tv` is a String.
+///          Else, string values of `cmd_tv` copied to a (char **) list with
+///          argv[0] resolved to full path ($PATHEXT-resolved on Windows).
 static char **tv_to_argv(typval_T *cmd_tv, const char **cmd, bool *executable)
 {
-  if (cmd_tv->v_type == VAR_STRING) {
+  if (cmd_tv->v_type == VAR_STRING) {  // String => "shell semantics".
     const char *cmd_str = tv_get_string(cmd_tv);
     if (cmd) {
       *cmd = cmd_str;
@@ -12088,16 +12108,17 @@ static char **tv_to_argv(typval_T *cmd_tv, const char **cmd, bool *executable)
     return NULL;
   }
 
-  const char *exe = tv_get_string_chk(TV_LIST_ITEM_TV(tv_list_first(argl)));
-  if (!exe || !os_can_exe((const char_u *)exe, NULL, true)) {
-    if (exe && executable) {
+  const char *arg0 = tv_get_string_chk(TV_LIST_ITEM_TV(tv_list_first(argl)));
+  char *exe_resolved = NULL;
+  if (!arg0 || !os_can_exe(arg0, &exe_resolved, true)) {
+    if (arg0 && executable) {
       *executable = false;
     }
     return NULL;
   }
 
   if (cmd) {
-    *cmd = exe;
+    *cmd = exe_resolved;
   }
 
   // Build the argument vector
@@ -12108,10 +12129,15 @@ static char **tv_to_argv(typval_T *cmd_tv, const char **cmd, bool *executable)
     if (!a) {
       // Did emsg in tv_get_string_chk; just deallocate argv.
       shell_free_argv(argv);
+      xfree(exe_resolved);
       return NULL;
     }
     argv[i++] = xstrdup(a);
   });
+  // Replace argv[0] with absolute path. The only reason for this is to make
+  // $PATHEXT work on Windows with jobstart([…]). #9569
+  xfree(argv[0]);
+  argv[0] = exe_resolved;
 
   return argv;
 }
@@ -12217,8 +12243,16 @@ static void f_jobstop(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     return;
   }
 
+  const char *error = NULL;
+  if (data->is_rpc) {
+    // Ignore return code, but show error later.
+    (void)channel_close(data->id, kChannelPartRpc, &error);
+  }
   process_stop((Process *)&data->stream.proc);
   rettv->vval.v_number = 1;
+  if (error) {
+    EMSG(error);
+  }
 }
 
 // "jobwait(ids[, timeout])" function
@@ -13817,11 +13851,7 @@ static void f_reltime(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   tv_list_append_number(rettv->vval.v_list, u.split.low);
 }
 
-/// f_reltimestr - return a string that represents the value of {time}
-///
-/// @return The string representation of the argument, the format is the
-///         number of seconds followed by a dot, followed by the number
-///         of microseconds.
+/// "reltimestr()" function
 static void f_reltimestr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   FUNC_ATTR_NONNULL_ALL
 {
@@ -13830,7 +13860,7 @@ static void f_reltimestr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;
   if (list2proftime(&argvars[0], &tm) == OK) {
-    rettv->vval.v_string = (char_u *) xstrdup(profile_msg(tm));
+    rettv->vval.v_string = (char_u *)xstrdup(profile_msg(tm));
   }
 }
 
@@ -16552,9 +16582,7 @@ static void f_uniq(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   do_sort_uniq(argvars, rettv, false);
 }
 
-//
 // "reltimefloat()" function
-//
 static void f_reltimefloat(typval_T *argvars , typval_T *rettv, FunPtr fptr)
   FUNC_ATTR_NONNULL_ALL
 {
@@ -16563,7 +16591,7 @@ static void f_reltimefloat(typval_T *argvars , typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_FLOAT;
   rettv->vval.v_float = 0;
   if (list2proftime(&argvars[0], &tm) == OK) {
-    rettv->vval.v_float = ((float_T)tm) / 1000000000;
+    rettv->vval.v_float = (float_T)profile_signed(tm) / 1000000000.0;
   }
 }
 
@@ -19232,8 +19260,11 @@ static int get_name_len(const char **const arg,
   }
 
   len += get_id_len(arg);
-  if (len == 0 && verbose)
+  // Only give an error when there is something, otherwise it will be
+  // reported at a higher level.
+  if (len == 0 && verbose && **arg != NUL) {
     EMSG2(_(e_invexpr2), *arg);
+  }
 
   return len;
 }
@@ -20851,6 +20882,9 @@ void ex_function(exarg_T *eap)
         if (!HASHITEM_EMPTY(hi)) {
           --todo;
           fp = HI2UF(hi);
+          if (message_filtered(fp->uf_name)) {
+            continue;
+          }
           if (!func_name_refcount(fp->uf_name)) {
             list_func_head(fp, false);
           }
@@ -21114,7 +21148,8 @@ void ex_function(exarg_T *eap)
       goto erret;
     }
     if (show_block) {
-      ui_ext_cmdline_block_append(indent, (const char *)theline);
+      assert(indent >= 0);
+      ui_ext_cmdline_block_append((size_t)indent, (const char *)theline);
     }
 
     /* Detect line continuation: sourcing_lnum increased more than one. */

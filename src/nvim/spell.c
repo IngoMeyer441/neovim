@@ -2616,7 +2616,7 @@ static bool spell_mb_isword_class(int cl, win_T *wp)
   if (wp->w_s->b_cjk)
     // East Asian characters are not considered word characters.
     return cl == 2 || cl == 0x2800;
-  return cl >= 2 && cl != 0x2070 && cl != 0x2080;
+  return cl >= 2 && cl != 0x2070 && cl != 0x2080 && cl != 3;
 }
 
 // Returns true if "p" points to a word character.
@@ -5283,7 +5283,7 @@ add_sound_suggest (
   }
 
   // Go over the list of good words that produce this soundfold word
-  nrline = ml_get_buf(slang->sl_sugbuf, (linenr_T)(sfwordnr + 1), FALSE);
+  nrline = ml_get_buf(slang->sl_sugbuf, (linenr_T)sfwordnr + 1, false);
   orgnr = 0;
   while (*nrline != NUL) {
     // The wordnr was stored in a minimal nr of bytes as an offset to the

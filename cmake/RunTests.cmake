@@ -16,10 +16,13 @@ endif()
 
 if(DEFINED ENV{TEST_FILE})
   set(TEST_PATH "$ENV{TEST_FILE}")
-  set(rel_test_path "${TEST_PATH}")
 else()
   set(TEST_PATH "${TEST_DIR}/${TEST_TYPE}")
-  file(RELATIVE_PATH rel_test_path "${TEST_DIR}" "${TEST_PATH}")
+endif()
+
+# Force $TEST_PATH to workdir-relative path ("test/…").
+if(IS_ABSOLUTE ${TEST_PATH})
+  file(RELATIVE_PATH TEST_PATH "${WORKING_DIR}" "${TEST_PATH}")
 endif()
 
 if(BUSTED_OUTPUT_TYPE STREQUAL junit)
@@ -38,12 +41,12 @@ if(DEFINED ENV{TEST_FILTER} AND NOT "$ENV{TEST_FILTER}" STREQUAL "")
 endif()
 
 # TMPDIR: use relative test path (for parallel test runs / isolation).
-set(ENV{TMPDIR} "${BUILD_DIR}/Xtest_tmpdir/${rel_test_path}")
+set(ENV{TMPDIR} "${BUILD_DIR}/Xtest_tmpdir/${TEST_PATH}")
 execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory $ENV{TMPDIR})
 
 set(ENV{SYSTEM_NAME} ${CMAKE_HOST_SYSTEM_NAME})  # used by test/helpers.lua.
 execute_process(
-  COMMAND ${BUSTED_PRG} -v -o ${BUSTED_OUTPUT_TYPE}
+  COMMAND ${BUSTED_PRG} -v -o test.busted.outputHandlers.${BUSTED_OUTPUT_TYPE}
     --lazy --helper=${TEST_DIR}/${TEST_TYPE}/preload.lua
     --lpath=${BUILD_DIR}/?.lua
     --lpath=${WORKING_DIR}/runtime/lua/?.lua

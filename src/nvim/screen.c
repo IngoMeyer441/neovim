@@ -171,6 +171,7 @@ void redraw_later(int type)
 }
 
 void redraw_win_later(win_T *wp, int type)
+  FUNC_ATTR_NONNULL_ALL
 {
   if (!exiting && wp->w_redr_type < type) {
     wp->w_redr_type = type;
@@ -243,6 +244,7 @@ redrawWinline(
     win_T *wp,
     linenr_T lnum
 )
+  FUNC_ATTR_NONNULL_ALL
 {
   if (lnum >= wp->w_topline
       && lnum < wp->w_botline) {
@@ -341,8 +343,7 @@ int update_screen(int type)
       type = CLEAR;
     } else if (type != CLEAR) {
       check_for_delay(false);
-      grid_ins_lines(&default_grid, 0, msg_scrolled, (int)Rows,
-                     0, (int)Columns);
+      grid_ins_lines(&default_grid, 0, msg_scrolled, Rows, 0, Columns);
       FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
         if (wp->w_floating) {
           continue;
@@ -519,26 +520,27 @@ int update_screen(int type)
   return OK;
 }
 
-/*
- * Return TRUE if the cursor line in window "wp" may be concealed, according
- * to the 'concealcursor' option.
- */
-int conceal_cursor_line(win_T *wp)
+// Return true if the cursor line in window "wp" may be concealed, according
+// to the 'concealcursor' option.
+bool conceal_cursor_line(const win_T *wp)
+  FUNC_ATTR_NONNULL_ALL
 {
   int c;
 
-  if (*wp->w_p_cocu == NUL)
-    return FALSE;
-  if (get_real_state() & VISUAL)
+  if (*wp->w_p_cocu == NUL) {
+    return false;
+  }
+  if (get_real_state() & VISUAL) {
     c = 'v';
-  else if (State & INSERT)
+  } else if (State & INSERT) {
     c = 'i';
-  else if (State & NORMAL)
+  } else if (State & NORMAL) {
     c = 'n';
-  else if (State & CMDLINE)
+  } else if (State & CMDLINE) {
     c = 'c';
-  else
-    return FALSE;
+  } else {
+    return false;
+  }
   return vim_strchr(wp->w_p_cocu, c) != NULL;
 }
 
@@ -560,7 +562,8 @@ void conceal_check_cursor_line(void)
 ///
 /// If true, both old and new cursorline will need
 /// need to be redrawn when moving cursor within windows.
-bool win_cursorline_standout(win_T *wp)
+bool win_cursorline_standout(const win_T *wp)
+  FUNC_ATTR_NONNULL_ALL
 {
   return wp->w_p_cul || (wp->w_p_cole > 0 && !conceal_cursor_line(wp));
 }
@@ -1463,7 +1466,7 @@ static void win_update(win_T *wp)
       // Last line isn't finished: Display "@@@" in the last screen line.
       grid_puts_len(&wp->w_grid, (char_u *)"@@", 2, scr_row, 0, at_attr);
 
-      grid_fill(&wp->w_grid, scr_row, scr_row + 1, 2, (int)wp->w_grid.Columns,
+      grid_fill(&wp->w_grid, scr_row, scr_row + 1, 2, wp->w_grid.Columns,
                 '@', ' ', at_attr);
       set_empty_rows(wp, srow);
       wp->w_botline = lnum;
@@ -3774,15 +3777,14 @@ win_line (
       n_attr3 = 1;
     }
 
-    /*
-     * At end of the text line or just after the last character.
-     */
+    // At end of the text line or just after the last character.
     if (c == NUL) {
-      long prevcol = (long)(ptr - line) - (c == NUL);
+      long prevcol = (long)(ptr - line) - 1;
 
-      /* we're not really at that column when skipping some text */
-      if ((long)(wp->w_p_wrap ? wp->w_skipcol : wp->w_leftcol) > prevcol)
-        ++prevcol;
+      // we're not really at that column when skipping some text
+      if ((long)(wp->w_p_wrap ? wp->w_skipcol : wp->w_leftcol) > prevcol) {
+        prevcol++;
+      }
 
       // Invert at least one char, used for Visual and empty line or
       // highlight match at end of line. If it's beyond the last
@@ -3805,8 +3807,7 @@ win_line (
           && ((area_attr != 0 && vcol == fromcol
                && (VIsual_mode != Ctrl_V
                    || lnum == VIsual.lnum
-                   || lnum == curwin->w_cursor.lnum)
-               && c == NUL)
+                   || lnum == curwin->w_cursor.lnum))
               // highlight 'hlsearch' match at end of line
               || prevcol_hl_flag)) {
         int n = 0;
@@ -4033,7 +4034,7 @@ win_line (
         && filler_todo <= 0
         && (wp->w_p_rl ? col == 0 : col == grid->Columns - 1)
         && (*ptr != NUL
-            || (wp->w_p_list && lcs_eol_one > 0)
+            || lcs_eol_one > 0
             || (n_extra && (c_extra != NUL || *p_extra != NUL)))) {
       c = wp->w_p_lcs_chars.ext;
       char_attr = win_hl_attr(wp, HLF_AT);
@@ -4047,14 +4048,15 @@ win_line (
       }
     }
 
-    /* advance to the next 'colorcolumn' */
-    if (draw_color_col)
+    // advance to the next 'colorcolumn'
+    if (draw_color_col) {
       draw_color_col = advance_color_col(VCOL_HLC, &color_cols);
+    }
 
-    /* Highlight the cursor column if 'cursorcolumn' is set.  But don't
-     * highlight the cursor position itself.
-     * Also highlight the 'colorcolumn' if it is different than
-     * 'cursorcolumn' */
+    // Highlight the cursor column if 'cursorcolumn' is set.  But don't
+    // highlight the cursor position itself.
+    // Also highlight the 'colorcolumn' if it is different than
+    // 'cursorcolumn'
     vcol_save_attr = -1;
     if (draw_state == WL_LINE && !lnum_in_visual_area
         && search_attr == 0 && area_attr == 0) {
@@ -4073,10 +4075,8 @@ win_line (
       char_attr = hl_combine_attr(line_attr_lowprio, char_attr);
     }
 
-    /*
-     * Store character to be displayed.
-     * Skip characters that are left of the screen for 'nowrap'.
-     */
+    // Store character to be displayed.
+    // Skip characters that are left of the screen for 'nowrap'.
     vcol_prev = vcol;
     if (draw_state < WL_LINE || n_skip <= 0) {
       //
@@ -4571,17 +4571,21 @@ void redraw_statuslines(void)
 /*
  * Redraw all status lines at the bottom of frame "frp".
  */
-void win_redraw_last_status(frame_T *frp)
+void win_redraw_last_status(const frame_T *frp)
+  FUNC_ATTR_NONNULL_ARG(1)
 {
-  if (frp->fr_layout == FR_LEAF)
-    frp->fr_win->w_redr_status = TRUE;
-  else if (frp->fr_layout == FR_ROW) {
-    for (frp = frp->fr_child; frp != NULL; frp = frp->fr_next)
+  if (frp->fr_layout == FR_LEAF) {
+    frp->fr_win->w_redr_status = true;
+  } else if (frp->fr_layout == FR_ROW) {
+    FOR_ALL_FRAMES(frp, frp->fr_child) {
       win_redraw_last_status(frp);
-  } else { /* frp->fr_layout == FR_COL */
+    }
+  } else {
+    assert(frp->fr_layout == FR_COL);
     frp = frp->fr_child;
-    while (frp->fr_next != NULL)
+    while (frp->fr_next != NULL) {
       frp = frp->fr_next;
+    }
     win_redraw_last_status(frp);
   }
 }
@@ -4819,7 +4823,7 @@ win_redr_status_matches (
       grid_puts(&default_grid, selstart, row, selstart_col, HL_ATTR(HLF_WM));
     }
 
-    grid_fill(&default_grid, row, row + 1, clen, (int)Columns,
+    grid_fill(&default_grid, row, row + 1, clen, Columns,
               fillchar, fillchar, attr);
   }
 
@@ -6079,8 +6083,8 @@ void grid_alloc(ScreenGrid *grid, int rows, int columns, bool copy, bool valid)
 {
   int new_row;
   ScreenGrid new = *grid;
-
-  size_t ncells = (size_t)((rows+1) * columns);
+  assert(rows >= 0 && columns >= 0);
+  size_t ncells = (size_t)rows * columns;
   new.chars = xmalloc(ncells * sizeof(schar_T));
   new.attrs = xmalloc(ncells * sizeof(sattr_T));
   new.line_offset = xmalloc((size_t)(rows * sizeof(unsigned)));
@@ -6804,13 +6808,11 @@ static void draw_tabline(void)
       c = '_';
     else
       c = ' ';
-    grid_fill(&default_grid, 0, 1, col, (int)Columns, c, c,
-              attr_fill);
+    grid_fill(&default_grid, 0, 1, col, Columns, c, c, attr_fill);
 
     /* Put an "X" for closing the current tab if there are several. */
     if (first_tabpage->tp_next != NULL) {
-      grid_putchar(&default_grid, 'X', 0, (int)Columns - 1,
-                   attr_nosel);
+      grid_putchar(&default_grid, 'X', 0, Columns - 1, attr_nosel);
       tab_page_click_defs[Columns - 1] = (StlClickDefinition) {
         .type = kStlClickTabClose,
         .tabnr = 999,
@@ -7173,6 +7175,8 @@ void screen_resize(int width, int height)
   check_shellsize();
   height = Rows;
   width = Columns;
+  p_lines = Rows;
+  p_columns = Columns;
   ui_call_grid_resize(1, width, height);
 
   send_grid_resize = true;

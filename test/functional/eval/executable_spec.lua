@@ -2,6 +2,7 @@ local helpers = require('test.functional.helpers')(after_each)
 local eq, clear, call, iswin, write_file, command =
   helpers.eq, helpers.clear, helpers.call, helpers.iswin, helpers.write_file,
   helpers.command
+local eval = helpers.eval
 
 describe('executable()', function()
   before_each(clear)
@@ -24,12 +25,7 @@ describe('executable()', function()
       eq('arg1=lemon;arg2=sky;arg3=tree;',
          call('system', sibling_exe..' lemon sky tree'))
     end
-    local is_executable = call('executable', sibling_exe)
-    if iswin() and is_executable ~= expected then
-      pending('XXX: sometimes fails on AppVeyor')
-    else
-      eq(expected, is_executable)
-    end
+    eq(expected, call('executable', sibling_exe))
   end)
 
   describe('exec-bit', function()
@@ -100,10 +96,16 @@ describe('executable() (Windows)', function()
     eq(0, call('executable', '.\\test_executable_zzz'))
   end)
 
+  it('system([…]), jobstart([…]) use $PATHEXT #9569', function()
+    -- Invoking `cmdscript` should find/execute `cmdscript.cmd`.
+    eq('much success\n', call('system', {'test/functional/fixtures/cmdscript'}))
+    assert(0 < call('jobstart', {'test/functional/fixtures/cmdscript'}))
+  end)
+
   it('full path with extension', function()
     -- Some executable we can expect in the test env.
     local exe = 'printargs-test'
-    local exedir = helpers.eval("fnamemodify(v:progpath, ':h')")
+    local exedir = eval("fnamemodify(v:progpath, ':h')")
     local exepath = exedir..'/'..exe..'.exe'
     eq(1, call('executable', exepath))
     eq('arg1=lemon;arg2=sky;arg3=tree;',
@@ -113,7 +115,7 @@ describe('executable() (Windows)', function()
   it('full path without extension', function()
     -- Some executable we can expect in the test env.
     local exe = 'printargs-test'
-    local exedir = helpers.eval("fnamemodify(v:progpath, ':h')")
+    local exedir = eval("fnamemodify(v:progpath, ':h')")
     local exepath = exedir..'/'..exe
     eq('arg1=lemon;arg2=sky;arg3=tree;',
        call('system', exepath..' lemon sky tree'))

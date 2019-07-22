@@ -15,6 +15,7 @@
 #include <string.h>
 #include <inttypes.h>
 
+#include "nvim/assert.h"
 #include "nvim/vim.h"
 #include "nvim/ascii.h"
 #include "nvim/getchar.h"
@@ -905,18 +906,19 @@ int ins_typebuf(char_u *str, int noremap, int offset, int nottyped, bool silent)
     s2 = xmalloc((size_t)newlen);
     typebuf.tb_buflen = newlen;
 
-    /* copy the old chars, before the insertion point */
-    memmove(s1 + newoff, typebuf.tb_buf + typebuf.tb_off,
-        (size_t)offset);
-    /* copy the new chars */
+    // copy the old chars, before the insertion point
+    memmove(s1 + newoff, typebuf.tb_buf + typebuf.tb_off, (size_t)offset);
+    // copy the new chars
     memmove(s1 + newoff + offset, str, (size_t)addlen);
-    /* copy the old chars, after the insertion point, including the	NUL at
-     * the end */
+    // copy the old chars, after the insertion point, including the NUL at
+    // the end
+    int bytes = typebuf.tb_len - offset + 1;
+    assert(bytes > 0);
     memmove(s1 + newoff + offset + addlen,
-        typebuf.tb_buf + typebuf.tb_off + offset,
-        (size_t)(typebuf.tb_len - offset + 1));
-    if (typebuf.tb_buf != typebuf_init)
+            typebuf.tb_buf + typebuf.tb_off + offset, (size_t)bytes);
+    if (typebuf.tb_buf != typebuf_init) {
       xfree(typebuf.tb_buf);
+    }
     typebuf.tb_buf = s1;
 
     memmove(s2 + newoff, typebuf.tb_noremap + typebuf.tb_off,
@@ -1062,11 +1064,12 @@ void del_typebuf(int len, int offset)
           typebuf.tb_noremap + typebuf.tb_off, (size_t)offset);
       typebuf.tb_off = MAXMAPLEN;
     }
-    /* adjust typebuf.tb_buf (include the NUL at the end) */
+    // adjust typebuf.tb_buf (include the NUL at the end)
+    int bytes = typebuf.tb_len - offset + 1;
+    assert(bytes > 0);
     memmove(typebuf.tb_buf + typebuf.tb_off + offset,
-        typebuf.tb_buf + i + len,
-        (size_t)(typebuf.tb_len - offset + 1));
-    /* adjust typebuf.tb_noremap[] */
+            typebuf.tb_buf + i + len, (size_t)bytes);
+    // adjust typebuf.tb_noremap[]
     memmove(typebuf.tb_noremap + typebuf.tb_off + offset,
         typebuf.tb_noremap + i + len,
         (size_t)(typebuf.tb_len - offset));
@@ -1925,7 +1928,7 @@ static int vgetorpeek(int advance)
               set_option_value("paste", !p_paste, NULL, 0);
               if (!(State & INSERT)) {
                 msg_col = 0;
-                msg_row = (int)Rows - 1;
+                msg_row = Rows - 1;
                 msg_clr_eos();                          // clear ruler
               }
               status_redraw_all();
@@ -2270,14 +2273,13 @@ static int vgetorpeek(int advance)
             curwin->w_wrow = old_wrow;
           }
 
-          /* this looks nice when typing a dead character map */
-          if ((State & CMDLINE)
-              && cmdline_star == 0
-              && ptr2cells(typebuf.tb_buf + typebuf.tb_off
-                  + typebuf.tb_len - 1) == 1) {
-            putcmdline(typebuf.tb_buf[typebuf.tb_off
-                                      + typebuf.tb_len - 1], FALSE);
-            c1 = 1;
+          // this looks nice when typing a dead character map
+          if ((State & CMDLINE) && cmdline_star == 0) {
+            char_u *p = typebuf.tb_buf + typebuf.tb_off + typebuf.tb_len - 1;
+            if (ptr2cells(p) == 1 && *p < 128) {
+              putcmdline((char)(*p), false);
+              c1 = 1;
+            }
           }
         }
 
