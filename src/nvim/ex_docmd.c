@@ -2451,7 +2451,7 @@ static char_u *find_command(exarg_T *eap, int *full)
 
     if (ASCII_ISLOWER(eap->cmd[0])) {
       const int c1 = eap->cmd[0];
-      const int c2 = eap->cmd[1];
+      const int c2 = len == 1 ? NUL : eap->cmd[1];
 
       if (command_count != (int)CMD_SIZE) {
         iemsg((char *)_("E943: Command table needs to be updated, run 'make'"));
@@ -7520,7 +7520,7 @@ static void ex_operators(exarg_T *eap)
 
   case CMD_yank:
     oa.op_type = OP_YANK;
-    (void)op_yank(&oa, true);
+    (void)op_yank(&oa, true, false);
     break;
 
   default:          /* CMD_rshift or CMD_lshift */
@@ -7874,6 +7874,22 @@ static void ex_redrawstatus(exarg_T *eap)
   ui_flush();
 }
 
+// ":redrawtabline": force redraw of the tabline
+static void ex_redrawtabline(exarg_T *eap FUNC_ATTR_UNUSED)
+{
+  const int r = RedrawingDisabled;
+  const int p = p_lz;
+
+  RedrawingDisabled = 0;
+  p_lz = false;
+
+  draw_tabline();
+
+  RedrawingDisabled = r;
+  p_lz = p;
+  ui_flush();
+}
+
 static void close_redir(void)
 {
   if (redir_fd != NULL) {
@@ -8090,8 +8106,9 @@ open_exfile (
     return NULL;
   }
 
-  if ((fd = mch_fopen((char *)fname, mode)) == NULL)
+  if ((fd = os_fopen((char *)fname, mode)) == NULL) {
     EMSG2(_("E190: Cannot open \"%s\" for writing"), fname);
+  }
 
   return fd;
 }
@@ -10156,7 +10173,7 @@ Dictionary commands_array(buf_T *buf)
   Dictionary rv = ARRAY_DICT_INIT;
   Object obj = NIL;
   (void)obj;  // Avoid "dead assignment" warning.
-  char str[10];
+  char str[20];
   garray_T *gap = (buf == NULL) ? &ucmds : &buf->b_ucmds;
 
   for (int i = 0; i < gap->ga_len; i++) {

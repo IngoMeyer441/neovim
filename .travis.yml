@@ -125,18 +125,12 @@ jobs:
       osx_image: xcode10.2  # macOS 10.14
       env:
         - *common-job-env
-    - name: "macOS: gcc"
-      os: osx
-      compiler: gcc
-      osx_image: xcode10.2  # macOS 10.14
-      env:
-        - *common-job-env
 
     - name: gcc-coverage (gcc 9)
       os: linux
       compiler: gcc-9
       env:
-        - GCOV=gcov
+        - GCOV=gcov-9
         - CMAKE_FLAGS="$CMAKE_FLAGS -DUSE_GCOV=ON"
         - GCOV_ERROR_FILE="/tmp/libgcov-errors.log"
         - *common-job-env
@@ -154,8 +148,6 @@ jobs:
       env:
         - CLANG_SANITIZER=TSAN
         - *common-job-env
-  allow_failures:
-    - name: clang-tsan
   fast_finish: true
 
 before_install: ci/before_install.sh

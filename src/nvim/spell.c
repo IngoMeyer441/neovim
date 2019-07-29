@@ -1626,7 +1626,7 @@ static void spell_load_lang(char_u *lang)
     if (starting) {
       // Prompt the user at VimEnter if spell files are missing. #3027
       // Plugins aren't loaded yet, so spellfile.vim cannot handle this case.
-      char autocmd_buf[128] = { 0 };
+      char autocmd_buf[512] = { 0 };
       snprintf(autocmd_buf, sizeof(autocmd_buf),
                "autocmd VimEnter * call spellfile#LoadFile('%s')|set spell",
                lang);
@@ -3262,7 +3262,7 @@ static void spell_suggest_file(suginfo_T *su, char_u *fname)
   char_u cword[MAXWLEN];
 
   // Open the file.
-  fd = mch_fopen((char *)fname, "r");
+  fd = os_fopen((char *)fname, "r");
   if (fd == NULL) {
     EMSG2(_(e_notopen), fname);
     return;
@@ -4500,7 +4500,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
         sp->ts_state = STATE_SWAP3;
         break;
       }
-      if (c2 != NUL && TRY_DEEPER(su, stack, depth, SCORE_SWAP)) {
+      if (TRY_DEEPER(su, stack, depth, SCORE_SWAP)) {
         go_deeper(stack, depth, SCORE_SWAP);
 #ifdef DEBUG_TRIEWALK
         snprintf(changename[depth], sizeof(changename[0]),
