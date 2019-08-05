@@ -1296,53 +1296,21 @@ int get_spellword(list_T *const list, const char **ret_word)
 
 
 // Call some vim script function and return the result in "*rettv".
-// Uses argv[argc] for the function arguments.  Only Number and String
-// arguments are currently supported.
+// Uses argv[0] to argv[argc-1] for the function arguments. argv[argc]
+// should have type VAR_UNKNOWN.
 //
 // Return OK or FAIL.
 int call_vim_function(
     const char_u *func,
     int argc,
-    const char_u *const *const argv,
-    bool safe,                       // use the sandbox
-    int str_arg_only,               // all arguments are strings
-    typval_T *rettv
+    typval_T *argv,
+    typval_T *rettv,
+    bool safe                       // use the sandbox
 )
 {
-  varnumber_T n;
-  int len;
   int doesrange;
   void        *save_funccalp = NULL;
   int ret;
-
-  typval_T *argvars = xmalloc((argc + 1) * sizeof(typval_T));
-
-  for (int i = 0; i < argc; i++) {
-    // Pass a NULL or empty argument as an empty string
-    if (argv[i] == NULL || *argv[i] == NUL) {
-      argvars[i].v_type = VAR_STRING;
-      argvars[i].vval.v_string = (char_u *)"";
-      continue;
-    }
-
-    if (str_arg_only) {
-      len = 0;
-    } else {
-      // Recognize a number argument, the others must be strings. A dash
-      // is a string too.
-      vim_str2nr(argv[i], NULL, &len, STR2NR_ALL, &n, NULL, 0);
-      if (len == 1 && *argv[i] == '-') {
-        len = 0;
-      }
-    }
-    if (len != 0 && len == (int)STRLEN(argv[i])) {
-      argvars[i].v_type = VAR_NUMBER;
-      argvars[i].vval.v_number = n;
-    } else {
-      argvars[i].v_type = VAR_STRING;
-      argvars[i].vval.v_string = (char_u *)argv[i];
-    }
-  }
 
   if (safe) {
     save_funccalp = save_funccal();
@@ -1350,14 +1318,13 @@ int call_vim_function(
   }
 
   rettv->v_type = VAR_UNKNOWN;  // tv_clear() uses this.
-  ret = call_func(func, (int)STRLEN(func), rettv, argc, argvars, NULL,
+  ret = call_func(func, (int)STRLEN(func), rettv, argc, argv, NULL,
                   curwin->w_cursor.lnum, curwin->w_cursor.lnum,
                   &doesrange, true, NULL, NULL);
   if (safe) {
     --sandbox;
     restore_funccal(save_funccalp);
   }
-  xfree(argvars);
 
   if (ret == FAIL) {
     tv_clear(rettv);
@@ -1365,47 +1332,44 @@ int call_vim_function(
 
   return ret;
 }
-
 /// Call Vim script function and return the result as a number
 ///
 /// @param[in]  func  Function name.
 /// @param[in]  argc  Number of arguments.
-/// @param[in]  argv  Array with string arguments.
+/// @param[in]  argv  Array with typval_T arguments.
 /// @param[in]  safe  Use with sandbox.
 ///
 /// @return -1 when calling function fails, result of function otherwise.
 varnumber_T call_func_retnr(char_u *func, int argc,
-                            const char_u *const *const argv, int safe)
+                            typval_T *argv, int safe)
 {
   typval_T rettv;
   varnumber_T retval;
 
-  /* All arguments are passed as strings, no conversion to number. */
-  if (call_vim_function(func, argc, argv, safe, TRUE, &rettv) == FAIL)
+  if (call_vim_function(func, argc, argv, &rettv, safe) == FAIL) {
     return -1;
-
+  }
   retval = tv_get_number_chk(&rettv, NULL);
   tv_clear(&rettv);
   return retval;
 }
-
 /// Call Vim script function and return the result as a string
 ///
 /// @param[in]  func  Function name.
 /// @param[in]  argc  Number of arguments.
-/// @param[in]  argv  Array with string arguments.
+/// @param[in]  argv  Array with typval_T arguments.
 /// @param[in]  safe  Use the sandbox.
 ///
 /// @return [allocated] NULL when calling function fails, allocated string
 ///                     otherwise.
 char *call_func_retstr(const char *const func, int argc,
-                       const char_u *const *argv,
+                       typval_T *argv,
                        bool safe)
   FUNC_ATTR_NONNULL_ARG(1) FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_MALLOC
 {
   typval_T rettv;
   // All arguments are passed as strings, no conversion to number.
-  if (call_vim_function((const char_u *)func, argc, argv, safe, true, &rettv)
+  if (call_vim_function((const char_u *)func, argc, argv, &rettv, safe)
       == FAIL) {
     return NULL;
   }
@@ -1414,24 +1378,24 @@ char *call_func_retstr(const char *const func, int argc,
   tv_clear(&rettv);
   return retval;
 }
-
 /// Call Vim script function and return the result as a List
 ///
 /// @param[in]  func  Function name.
 /// @param[in]  argc  Number of arguments.
-/// @param[in]  argv  Array with string arguments.
+/// @param[in]  argv  Array with typval_T arguments.
 /// @param[in]  safe  Use the sandbox.
 ///
 /// @return [allocated] NULL when calling function fails or return tv is not a
 ///                     List, allocated List otherwise.
-void *call_func_retlist(char_u *func, int argc, const char_u *const *argv,
+void *call_func_retlist(char_u *func, int argc, typval_T *argv,
                         bool safe)
 {
   typval_T rettv;
 
-  /* All arguments are passed as strings, no conversion to number. */
-  if (call_vim_function(func, argc, argv, safe, TRUE, &rettv) == FAIL)
+  // All arguments are passed as strings, no conversion to number.
+  if (call_vim_function(func, argc, argv, &rettv, safe) == FAIL) {
     return NULL;
+  }
 
   if (rettv.v_type != VAR_LIST) {
     tv_clear(&rettv);
@@ -24004,50 +23968,57 @@ typval_T eval_call_provider(char *provider, char *method, list_T *arguments)
   return rettv;
 }
 
+/// Checks if a named provider is enabled.
 bool eval_has_provider(const char *name)
 {
-#define CHECK_PROVIDER(name) \
-  if (has_##name == -1) { \
-    has_##name = !!find_func((char_u *)"provider#" #name "#Call"); \
-    if (!has_##name) { \
-      script_autoload("provider#" #name "#Call", \
-                      sizeof("provider#" #name "#Call") - 1, \
-                      false); \
-      has_##name = !!find_func((char_u *)"provider#" #name "#Call"); \
-    } \
+  if (!strequal(name, "clipboard")
+      && !strequal(name, "python")
+      && !strequal(name, "python3")
+      && !strequal(name, "ruby")
+      && !strequal(name, "node")) {
+    // Avoid autoload for non-provider has() features.
+    return false;
   }
 
-  static int has_clipboard = -1;
-  static int has_python = -1;
-  static int has_python3 = -1;
-  static int has_ruby = -1;
+  char buf[256];
+  int len;
+  typval_T tv;
 
-  if (strequal(name, "clipboard")) {
-    CHECK_PROVIDER(clipboard);
-    return has_clipboard;
-  } else if (strequal(name, "python3")) {
-    CHECK_PROVIDER(python3);
-    return has_python3;
-  } else if (strequal(name, "python")) {
-    CHECK_PROVIDER(python);
-    return has_python;
-  } else if (strequal(name, "ruby")) {
-    bool need_check_ruby = (has_ruby == -1);
-    CHECK_PROVIDER(ruby);
-    if (need_check_ruby && has_ruby == 1) {
-      char *rubyhost = call_func_retstr("provider#ruby#Detect", 0, NULL, true);
-      if (rubyhost) {
-        if (*rubyhost == NUL) {
-          // Invalid rubyhost executable. Gem is probably not installed.
-          has_ruby = 0;
-        }
-        xfree(rubyhost);
+  // Get the g:loaded_xx_provider variable.
+  len = snprintf(buf, sizeof(buf), "g:loaded_%s_provider", name);
+  if (get_var_tv(buf, len, &tv, NULL, false, true) == FAIL) {
+    // Trigger autoload once.
+    len = snprintf(buf, sizeof(buf), "provider#%s#bogus", name);
+    script_autoload(buf, len, false);
+
+    // Retry the (non-autoload-style) variable.
+    len = snprintf(buf, sizeof(buf), "g:loaded_%s_provider", name);
+    if (get_var_tv(buf, len, &tv, NULL, false, true) == FAIL) {
+      // Show a hint if Call() is defined but g:loaded_xx_provider is missing.
+      snprintf(buf, sizeof(buf), "provider#%s#Call", name);
+      if (!!find_func((char_u *)buf) && p_lpl) {
+        emsgf("provider: %s: missing required variable g:loaded_%s_provider",
+              name, name);
       }
+      return false;
     }
-    return has_ruby;
   }
 
-  return false;
+  bool ok = (tv.v_type == VAR_NUMBER)
+    ? 2 == tv.vval.v_number  // Value of 2 means "loaded and working".
+    : false;
+
+  if (ok) {
+    // Call() must be defined if provider claims to be working.
+    snprintf(buf, sizeof(buf), "provider#%s#Call", name);
+    if (!find_func((char_u *)buf)) {
+      emsgf("provider: %s: g:loaded_%s_provider=2 but %s is not defined",
+            name, name, buf);
+      ok = false;
+    }
+  }
+
+  return ok;
 }
 
 /// Writes "<sourcing_name>:<sourcing_lnum>" to `buf[bufsize]`.

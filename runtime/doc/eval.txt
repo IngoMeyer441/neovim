@@ -69,7 +69,7 @@ To force conversion from String to Number, add zero to it: >
 To avoid a leading zero to cause octal conversion, or for using a different
 base, use |str2nr()|.
 
-							*TRUE* *FALSE*
+						*TRUE* *FALSE* *Boolean*
 For boolean operators Numbers are used.  Zero is FALSE, non-zero is TRUE.
 You can also use |v:false| and |v:true|.  When TRUE is returned from a
 function it is the Number one, FALSE is the number zero.
@@ -92,7 +92,8 @@ Note that " " and "0" are also non-empty strings, thus considered to be TRUE.
 A List, Dictionary or Float is not a Number or String, thus evaluate to FALSE.
 
 				*E745* *E728* *E703* *E729* *E730* *E731*
-List, Dictionary and Funcref types are not automatically converted.
+|List|, |Dictionary|, |Funcref|, and |Blob| types are not automatically
+converted.
 
 							*E805* *E806* *E808*
 When mixing Number and Float the Number is converted to Float.  Otherwise
@@ -147,10 +148,10 @@ function() or funcref().  When calling the function the Dictionary and/or
 arguments will be passed to the function.  Example: >
 
 	let Cb = function('Callback', ['foo'], myDict)
-	call Cb()
+	call Cb('bar')
 
 This will invoke the function as if using: >
-	call myDict.Callback('foo')
+	call myDict.Callback('foo', 'bar')
 
 Note that binding a function to a Dictionary also happens when the function is
 a member of the Dictionary: >
@@ -482,7 +483,7 @@ To loop over the values use the |values()| function:  >
 	:endfor
 
 If you want both the key and the value use the |items()| function.  It returns
-a List in which each item is a	List with two items, the key and the value: >
+a List in which each item is a List with two items, the key and the value: >
 	:for [key, value] in items(mydict)
 	:   echo key . ': ' . value
 	:endfor
@@ -1009,8 +1010,9 @@ There must not be white space before or after the dot.
 
 Examples: >
 	:let dict = {"one": 1, 2: "two"}
-	:echo dict.one
-	:echo dict .2
+	:echo dict.one		" shows "1"
+	:echo dict.2		" shows "two"
+	:echo dict .2		" error because of space before the dot
 
 Note that the dot is also used for String concatenation.  To avoid confusion
 always put spaces around the dot for String concatenation.
@@ -1408,7 +1410,9 @@ Note that this means that filetype plugins don't get a different set of script
 variables for each buffer.  Use local buffer variables instead |b:var|.
 
 
-Predefined Vim variables:			*vim-variable* *v:var* *v:*
+PREDEFINED VIM VARIABLES			*vim-variable* *v:var* *v:*
+								*E963*
+Some variables can be set by the user, but the type cannot be changed.
 
 					*v:beval_col* *beval_col-variable*
 v:beval_col	The number of the column, over which the mouse pointer is.
@@ -1585,7 +1589,7 @@ v:exception	The value of the exception most recently caught and not
 	:try
 	:  throw "oops"
 	:catch /.*/
-	:  echo "caught" v:exception
+	:  echo "caught " .. v:exception
 	:endtry
 <		Output: "caught oops".
 
@@ -2242,6 +2246,7 @@ py3eval({expr})			any	evaluate |python3| expression
 pyxeval({expr})			any	evaluate |python_x| expression
 range({expr} [, {max} [, {stride}]])
 				List	items from {expr} to {max}
+readdir({dir} [, {expr}])	List	file names in {dir} selected by {expr}
 readfile({fname} [, {binary} [, {max}]])
 				List	get list of lines from file {fname}
 reg_executing()			Number	get the executing register name
@@ -2573,9 +2578,9 @@ assert_false({actual} [, {msg}])				*assert_false()*
 		"Expected False but got {actual}" is produced.
 
 assert_inrange({lower}, {upper}, {actual} [, {msg}])	 *assert_inrange()*
-		This asserts number values.  When {actual}  is lower than
-		{lower} or higher than {upper} an error message is added to
-		|v:errors|.
+		This asserts number and |Float| values.  When {actual}  is lower
+		than {lower} or higher than {upper} an error message is added
+		to |v:errors|.  Also see |assert-return|.
 		When {msg} is omitted an error in the form
 		"Expected range {lower} - {upper}, but got {actual}" is
 		produced.
@@ -3006,7 +3011,7 @@ complete_info([{what}])
 		completion.  See |ins-completion|.
 		The items are:
 		   mode		Current completion mode name string.
-				See |completion_info_mode| for the values.
+				See |complete_info_mode| for the values.
 		   pum_visible	|TRUE| if popup menu is visible.
 				See |pumvisible()|.
 		   items	List of completion matches.  Each item is a
@@ -3978,7 +3983,10 @@ get({list}, {idx} [, {default}])			*get()*
 get({dict}, {key} [, {default}])
 		Get item with key {key} from |Dictionary| {dict}.  When this
 		item is not available return {default}.  Return zero when
-		{default} is omitted.
+		{default} is omitted.  Useful example: >
+			let val = get(g:, 'var_name', 'default')
+<		This gets the value of g:var_name if it exists, and uses
+		'default' when it does not exist.
 get({func}, {what})
 		Get item {what} from Funcref {func}.  Possible values for
 		{what} are:
@@ -4628,7 +4636,7 @@ gettabinfo([{arg}])					*gettabinfo()*
 			tabnr		tab page number.
 			variables	a reference to the dictionary with
 					tabpage-local variables
-			windows		List of |window-ID|s in the tag page.
+			windows		List of |window-ID|s in the tab page.
 
 gettabvar({tabnr}, {varname} [, {def}])				*gettabvar()*
 		Get the value of a tab-local variable {varname} in tab page
@@ -4696,7 +4704,7 @@ gettagstack([{nr}])					*gettagstack()*
 
 getwinpos([{timeout}])					*getwinpos()*
 		The result is a list with two numbers, the result of
-		getwinposx() and getwinposy() combined: 
+		getwinposx() and getwinposy() combined:
 			[x-pos, y-pos]
 		{timeout} can be used to specify how long to wait in msec for
 		a response from the terminal.  When omitted 100 msec is used.
@@ -4765,6 +4773,9 @@ glob({expr} [, {nosuf} [, {list} [, {alllinks}]]])		*glob()*
 		matches, they are separated by <NL> characters.
 
 		If the expansion fails, the result is an empty String or List.
+
+		You can also use |readdir()| if you need to do complicated
+		things, such as limiting the number of matches.
 
 		A name for a non-existing file is not included.  A symbolic
 		link is only included if it points to an existing file.
@@ -5031,7 +5042,6 @@ iconv({expr}, {from}, {to})				*iconv()*
 		Note that Vim uses UTF-8 for all Unicode encodings, conversion
 		from/to UCS-2 is automatically changed to use UTF-8.  You
 		cannot use UCS-2 in a string anyway, because of the NUL bytes.
-		{only available when compiled with the |+multi_byte| feature}
 
 							*indent()*
 indent({lnum})	The result is a Number, which is indent of line {lnum} in the
@@ -5417,6 +5427,7 @@ len({expr})	The result is a Number, which is the length of the argument.
 		used, as with |strlen()|.
 		When {expr} is a |List| the number of items in the |List| is
 		returned.
+		When {expr} is a |Blob| the number of bytes is returned.
 		When {expr} is a |Dictionary| the number of entries in the
 		|Dictionary| is returned.
 		Otherwise an error is given.
@@ -5462,8 +5473,6 @@ libcall({libname}, {funcname}, {argument})
 		the DLL is not in the usual places.
 		For Unix: When compiling your own plugins, remember that the
 		object code must be compiled as position-independent ('PIC').
-		{only in Win32 and some Unix versions, when the |+libcall|
-		feature is present}
 		Examples: >
 			:echo libcall("libc.so", "getenv", "HOME")
 <
@@ -5471,8 +5480,6 @@ libcall({libname}, {funcname}, {argument})
 libcallnr({libname}, {funcname}, {argument})
 		Just like |libcall()|, but used for a function that returns an
 		int instead of a string.
-		{only in Win32 on some Unix versions, when the |+libcall|
-		feature is present}
 		Examples: >
 			:echo libcallnr("/usr/lib/libc.so", "getpid", "")
 			:call libcallnr("libc.so", "printf", "Hello World!\n")
@@ -5501,13 +5508,6 @@ line({expr})	The result is a Number, which is the line number of the file
 			line(".")		line number of the cursor
 			line("'t")		line number of mark t
 			line("'" . marker)	line number of mark marker
-<							*last-position-jump*
-		This autocommand jumps to the last known position in a file
-		just after opening it, if the '" mark is set: >
-     :au BufReadPost *
-	\ if line("'\"") > 1 && line("'\"") <= line("$") && &ft !~# 'commit'
-	\ |   exe "normal! g`\""
-	\ | endif
 
 line2byte({lnum})					*line2byte()*
 		Return the byte count from the start of the buffer for line
@@ -6344,8 +6344,7 @@ printf({fmt}, {expr1} ...)				*printf()*
 							*printf-S*
 		S	The text of the String argument is used.  If a
 			precision is specified, no more display cells than the
-			number specified are used.  Without the |+multi_byte|
-			feature works just like 's'.
+			number specified are used.
 
 							*printf-f* *E807*
 		f F	The Float argument is converted into a string of the
@@ -6408,7 +6407,6 @@ py3eval({expr})						*py3eval()*
 		Lists are represented as Vim |List| type.
 		Dictionaries are represented as Vim |Dictionary| type with
 		keys converted to strings.
-		{only available when compiled with the |+python3| feature}
 
 							*E858* *E859*
 pyeval({expr})						*pyeval()*
@@ -6419,7 +6417,6 @@ pyeval({expr})						*pyeval()*
 		Lists are represented as Vim |List| type.
 		Dictionaries are represented as Vim |Dictionary| type,
 		non-string keys result in error.
-		{only available when compiled with the |+python| feature}
 
 pyxeval({expr})						*pyxeval()*
 		Evaluate Python expression {expr} and return its result
@@ -6476,6 +6473,17 @@ readfile({fname} [, {binary} [, {max}]])
 		When the file can't be opened an error message is given and
 		the result is an empty list.
 		Also see |writefile()|.
+
+							*readdir()*
+readdir({directory} [, {expr}])
+		Return a list with file and directory names in {directory}.
+		You can also use |glob()| if you don't need to do complicated
+		things, such as limiting the number of matches.
+
+		When {expr} is omitted all entries are included.
+		When {expr} is given, it is evaluated to check what to do:
+			If {expr} results in -1 then no further entries will
+			be handled.
 
 reg_executing()						*reg_executing()*
 		Returns the single letter name of the register being executed.
@@ -6542,7 +6550,6 @@ remote_expr({server}, {string} [, {idvar} [, {timeout}]])
 		seconds.  Otherwise a timeout of 600 seconds is used.
 		See also |clientserver| |RemoteReply|.
 		This function is not available in the |sandbox|.
-		{only available when compiled with the |+clientserver| feature}
 		Note: Any errors will cause a local error message to be issued
 		and the result will be the empty string.
 
@@ -6578,7 +6585,6 @@ remote_peek({serverid} [, {retvar}])		*remote_peek()*
 		Returns -1 if something is wrong.
 		See also |clientserver|.
 		This function is not available in the |sandbox|.
-		{only available when compiled with the |+clientserver| feature}
 		Examples: >
 			:let repl = ""
 			:echo "PEEK: ".remote_peek(id, "repl").": ".repl
@@ -6589,7 +6595,6 @@ remote_read({serverid}, [{timeout}])			*remote_read()*
 		reply is available.
 		See also |clientserver|.
 		This function is not available in the |sandbox|.
-		{only available when compiled with the |+clientserver| feature}
 		Example: >
 			:echo remote_read(id)
 <
@@ -6603,7 +6608,6 @@ remote_send({server}, {string} [, {idvar}])
 		there.
 		See also |clientserver| |RemoteReply|.
 		This function is not available in the |sandbox|.
-		{only available when compiled with the |+clientserver| feature}
 
 		Note: Any errors will be reported in the server and may mess
 		up the display.
@@ -6620,7 +6624,6 @@ remote_send({server}, {string} [, {idvar}])
 remote_startserver({name})
 		Become the server {name}.  This fails if already running as a
 		server, when |v:servername| is not empty.
-		{only available when compiled with the |+clientserver| feature}
 
 remove({list}, {idx} [, {end}])				*remove()*
 		Without {end}: Remove the item at {idx} from |List| {list} and
@@ -6634,7 +6637,8 @@ remove({list}, {idx} [, {end}])				*remove()*
 			:echo "last item: " . remove(mylist, -1)
 			:call remove(mylist, 0, 9)
 remove({dict}, {key})
-		Remove the entry from {dict} with key {key}.  Example: >
+		Remove the entry from {dict} with key {key} and return it.
+		Example: >
 			:echo "removed " . remove(dict, "one")
 <		If there is no {key} in {dict} this is an error.
 
@@ -6791,7 +6795,6 @@ search({pattern} [, {flags} [, {stopline} [, {timeout}]]])	*search()*
 		{timeout} is 500 the search stops after half a second.
 		The value must not be negative.  A zero value is like not
 		giving the argument.
-		{only available when compiled with the |+reltime| feature}
 
 							*search()-sub-match*
 		With the 'p' flag the returned value is one more than the
@@ -6967,7 +6970,6 @@ searchpos({pattern} [, {flags} [, {stopline} [, {timeout}]]])	*searchpos()*
 server2client({clientid}, {string})			*server2client()*
 		Send a reply string to {clientid}.  The most recent {clientid}
 		that sent a string can be retrieved with expand("<client>").
-		{only available when compiled with the |+clientserver| feature}
 		Note:
 		This id has to be stored before the next command can be
 		received.  I.e. before returning from the received command and
@@ -7514,9 +7516,9 @@ sign_getplaced([{expr} [, {dict}]])			*sign_getplaced()*
 		list of signs placed in that buffer is returned.  For the use
 		of {expr}, see |bufname()|. The optional {dict} can contain
 		the following entries:
-			group	select only signs in this group
-			id	select sign with this identifier
-			lnum	select signs placed in this line. For the use
+		   group	select only signs in this group
+		   id		select sign with this identifier
+		   lnum		select signs placed in this line. For the use
 				of {lnum}, see |line()|.
 		If {group} is '*', then signs in all the groups including the
 		global group are returned. If {group} is not supplied or is an
@@ -7557,11 +7559,11 @@ sign_getplaced([{expr} [, {dict}]])			*sign_getplaced()*
 			echo sign_getplaced("eval.c", {'lnum' : 10})
 
 			" Get sign with identifier 10 placed in a.py
-			echo sign_getplaced("a.py", {'id' : 10'})
+			echo sign_getplaced("a.py", {'id' : 10})
 
 			" Get sign with id 20 in group 'g1' placed in a.py
 			echo sign_getplaced("a.py", {'group' : 'g1',
-							\  'id' : 20'})
+							\  'id' : 20})
 
 			" Get a List of all the placed signs
 			echo sign_getplaced()
@@ -7646,7 +7648,7 @@ sign_undefine([{name}])					*sign_undefine()*
 <
 sign_unplace({group} [, {dict}])			*sign_unplace()*
 		Remove a previously placed sign in one or more buffers.  This
-		is similar to the |:sign-unplace()| command.
+		is similar to the |:sign-unplace| command.
 
 		{group} is the sign group name. To use the global sign group,
 		use an empty string.  If {group} is set to '*', then all the
@@ -7936,7 +7938,8 @@ str2float({expr})					*str2float()*
 		as when using a floating point number in an expression, see
 		|floating-point-format|.  But it's a bit more permissive.
 		E.g., "1e40" is accepted, while in an expression you need to
-		write "1.0e40".
+		write "1.0e40".  The hexadecimal form "0x123" is also
+		accepted, but not others, like binary or octal.
 		Text after the number is silently ignored.
 		The decimal point is always '.', no matter what the locale is
 		set to.  A comma ends the number: "12,345.67" is converted to
@@ -7992,10 +7995,10 @@ strcharpart({src}, {start} [, {len}])			*strcharpart()*
 
 strdisplaywidth({expr} [, {col}])			*strdisplaywidth()*
 		The result is a Number, which is the number of display cells
-		String {expr} occupies on the screen when it starts at {col}.
-		When {col} is omitted zero is used.  Otherwise it is the
-		screen column where to start.  This matters for Tab
-		characters.
+		String {expr} occupies on the screen when it starts at {col}
+		(first column is zero).  When {col} is omitted zero is used.
+		Otherwise it is the screen column where to start.  This
+		matters for Tab characters.
 		The option settings of the current window are used.  This
 		matters for anything that's displayed differently, such as
 		'tabstop' and 'display'.
@@ -8819,7 +8822,7 @@ win_getid([{win} [, {tab}]])				*win_getid()*
 		Get the |window-ID| for the specified window.
 		When {win} is missing use the current window.
 		With {win} this is the window number.  The top window has
-		number 1.  Use `win_getid(winnr())` for the current window.
+		number 1.
 		Without {tab} use the current tab, otherwise the tab with
 		number {tab}.  The first tab has number one.
 		Return zero if the window cannot be found.
@@ -9316,7 +9319,7 @@ This function can then be called with: >
 						*:cal* *:call* *E107* *E117*
 :[range]cal[l] {name}([arguments])
 		Call a function.  The name of the function and its arguments
-		are as specified with |:function|.  Up to 20 arguments can be
+		are as specified with `:function`.  Up to 20 arguments can be
 		used.  The returned value is discarded.
 		Without a range and for functions that accept a range, the
 		function is called once.  When a range is given the cursor is
@@ -9370,9 +9373,9 @@ Using an autocommand ~
 This is introduced in the user manual, section |41.14|.
 
 The autocommand is useful if you have a plugin that is a long Vim script file.
-You can define the autocommand and quickly quit the script with |:finish|.
+You can define the autocommand and quickly quit the script with `:finish`.
 That makes Vim startup faster.  The autocommand should then load the same file
-again, setting a variable to skip the |:finish| command.
+again, setting a variable to skip the `:finish` command.
 
 Use the FuncUndefined autocommand event with a pattern that matches the
 function(s) to be defined.  Example: >
@@ -9687,6 +9690,11 @@ This does NOT work: >
 			register values cannot be used here, since they cannot
 			be locked.
 
+:cons[t]
+:cons[t] {var-name}
+			If no argument is given or only {var-name} is given,
+			the behavior is the same as |:let|.
+
 :lockv[ar][!] [depth] {name} ...			*:lockvar* *:lockv*
 			Lock the internal variable {name}.  Locking means that
 			it can no longer be changed (until it is unlocked).
@@ -9738,7 +9746,7 @@ This does NOT work: >
 			opposite of |:lockvar|.
 
 
-:if {expr1}			*:if* *:endif* *:en* *E171* *E579* *E580*
+:if {expr1}			*:if* *:end* *:endif* *:en* *E171* *E579* *E580*
 :en[dif]		Execute the commands until the next matching ":else"
 			or ":endif" if {expr1} evaluates to non-zero.
 

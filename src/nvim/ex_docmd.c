@@ -2502,10 +2502,10 @@ static char_u *find_command(exarg_T *eap, int *full)
 static char_u *
 find_ucmd (
     exarg_T *eap,
-    char_u *p,         /* end of the command (possibly including count) */
-    int *full,      /* set to TRUE for a full match */
-    expand_T *xp,        /* used for completion, NULL otherwise */
-    int *compl     /* completion flags or NULL */
+    char_u *p,      // end of the command (possibly including count)
+    int *full,      // set to TRUE for a full match
+    expand_T *xp,   // used for completion, NULL otherwise
+    int *complp     // completion flags or NULL
 )
 {
   int len = (int)(p - eap->cmd);
@@ -2558,8 +2558,9 @@ find_ucmd (
           eap->useridx = j;
           eap->addr_type = uc->uc_addr_type;
 
-          if (compl != NULL)
-            *compl = uc->uc_compl;
+          if (complp != NULL) {
+            *complp = uc->uc_compl;
+          }
           if (xp != NULL) {
             xp->xp_arg = uc->uc_compl_arg;
             xp->xp_scriptID = uc->uc_scriptID;
@@ -4613,7 +4614,7 @@ static void ex_doautocmd(exarg_T *eap)
   int call_do_modelines = check_nomodeline(&arg);
   bool did_aucmd;
 
-  (void)do_doautocmd(arg, true, &did_aucmd);
+  (void)do_doautocmd(arg, false, &did_aucmd);
   // Only when there is no <nomodeline>.
   if (call_do_modelines && did_aucmd) {
     do_modelines(0);
@@ -5087,7 +5088,7 @@ static void uc_list(char_u *name, size_t name_len)
 }
 
 static int uc_scan_attr(char_u *attr, size_t len, uint32_t *argt, long *def,
-                        int *flags, int * compl, char_u **compl_arg,
+                        int *flags, int *complp, char_u **compl_arg,
                         int *addr_type_arg)
 {
   char_u      *p;
@@ -5184,9 +5185,10 @@ invalid_count:
         return FAIL;
       }
 
-      if (parse_compl_arg(val, (int)vallen, compl, argt, compl_arg)
-          == FAIL)
+      if (parse_compl_arg(val, (int)vallen, complp, argt, compl_arg)
+          == FAIL) {
         return FAIL;
+      }
     } else if (STRNICMP(attr, "addr", attrlen) == 0) {
       *argt |= RANGE;
       if (val == NULL) {
@@ -6761,8 +6763,9 @@ void ex_splitview(exarg_T *eap)
     if (*eap->arg != NUL
         ) {
       RESET_BINDING(curwin);
-    } else
-      do_check_scrollbind(FALSE);
+    } else {
+      do_check_scrollbind(false);
+    }
     do_exedit(eap, old_curwin);
   }
 

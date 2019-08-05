@@ -138,6 +138,9 @@ functionaltest-lua: | nvim
 lualint: | build/.ran-cmake deps
 	$(BUILD_CMD) -C build lualint
 
+pylint: | build/.ran-cmake deps
+	$(BUILD_CMD) -C build pylint
+
 unittest: | nvim
 	+$(BUILD_CMD) -C build unittest
 
@@ -179,6 +182,16 @@ appimage:
 appimage-%:
 	bash scripts/genappimage.sh $*
 
-lint: check-single-includes clint lualint
+lint: check-single-includes clint lualint pylint
 
-.PHONY: test lualint functionaltest unittest lint clint clean distclean nvim libnvim cmake deps install appimage checkprefix
+# Generic pattern rules, allowing for `make build/bin/nvim` etc.
+# Does not work with "Unix Makefiles".
+ifeq ($(BUILD_TYPE),Ninja)
+build/%:
+	$(BUILD_CMD) -C build $(patsubst build/%,%,$@)
+
+$(DEPS_BUILD_DIR)/%:
+	$(BUILD_CMD) -C $(DEPS_BUILD_DIR) $(patsubst $(DEPS_BUILD_DIR)/%,%,$@)
+endif
+
+.PHONY: test lualint pylint functionaltest unittest lint clint clean distclean nvim libnvim cmake deps install appimage checkprefix
