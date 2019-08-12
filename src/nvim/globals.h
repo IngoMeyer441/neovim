@@ -627,6 +627,8 @@ EXTERN pos_T Insstart_orig;
 EXTERN int orig_line_count INIT(= 0);       /* Line count when "gR" started */
 EXTERN int vr_lines_changed INIT(= 0);      /* #Lines changed by "gR" so far */
 
+// increase around internal delete/replace
+EXTERN int inhibit_delete_count INIT(= 0);
 
 /*
  * These flags are set based upon 'fileencoding'.
@@ -652,16 +654,6 @@ EXTERN int vr_lines_changed INIT(= 0);      /* #Lines changed by "gR" so far */
 
 /// Encoding used when 'fencs' is set to "default"
 EXTERN char_u *fenc_default INIT(= NULL);
-
-# if defined(USE_ICONV) && defined(DYNAMIC_ICONV)
-/* Pointers to functions and variables to be loaded at runtime */
-EXTERN size_t (*iconv)(iconv_t cd, const char **inbuf, size_t *inbytesleft,
-                       char **outbuf, size_t *outbytesleft);
-EXTERN iconv_t (*iconv_open)(const char *tocode, const char *fromcode);
-EXTERN int (*iconv_close)(iconv_t cd);
-EXTERN int (*iconvctl)(iconv_t cd, int request, void *argument);
-EXTERN int* (*iconv_errno)(void);
-# endif
 
 /// "State" is the main state of Vim.
 /// There are other variables that modify the state:
@@ -902,11 +894,6 @@ EXTERN disptick_T display_tick INIT(= 0);
 /* Line in which spell checking wasn't highlighted because it touched the
  * cursor position in Insert mode. */
 EXTERN linenr_T spell_redraw_lnum INIT(= 0);
-
-#ifdef USE_MCH_ERRMSG
-// Grow array to collect error messages in until they can be displayed.
-EXTERN garray_T error_ga INIT(= GA_EMPTY_INIT_VALUE);
-#endif
 
 
 /*

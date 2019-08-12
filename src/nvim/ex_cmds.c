@@ -20,6 +20,7 @@
 #include "nvim/ascii.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/buffer.h"
+#include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
@@ -1390,9 +1391,6 @@ do_shell(
   // to overwrite the text that the external command showed
   msg_row = Rows - 1;
   msg_col = 0;
-
-  // display any error messages now
-  display_errors();
 
   apply_autocmds(EVENT_SHELLCMDPOST, NULL, NULL, FALSE, curbuf);
 }

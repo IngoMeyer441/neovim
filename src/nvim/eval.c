@@ -24,6 +24,7 @@
 #endif
 #include "nvim/eval.h"
 #include "nvim/buffer.h"
+#include "nvim/change.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
 #include "nvim/context.h"
@@ -1988,7 +1989,7 @@ static char_u *ex_let_one(char_u *arg, typval_T *const tv,
           }
         }
         if (p != NULL) {
-          vim_setenv(name, p);
+          os_setenv(name, p, 1);
           if (STRICMP(name, "HOME") == 0) {
             init_homedir();
           } else if (didset_vim && STRICMP(name, "VIM") == 0) {
@@ -8495,6 +8496,25 @@ static void f_empty(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->vval.v_number = n;
 }
 
+/// "environ()" function
+static void f_environ(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  tv_dict_alloc_ret(rettv);
+
+  for (int i = 0; ; i++) {
+    // TODO(justinmk): use os_copyfullenv from #7202 ?
+    char *envname = os_getenvname_at_index((size_t)i);
+    if (envname == NULL) {
+      break;
+    }
+    const char *value = os_getenv(envname);
+    tv_dict_add_str(rettv->vval.v_dict,
+                    (char *)envname, STRLEN((char *)envname),
+                    value == NULL ? "" : value);
+    xfree(envname);
+  }
+}
+
 /*
  * "escape({string}, {chars})" function
  */
@@ -8505,6 +8525,20 @@ static void f_escape(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->vval.v_string = vim_strsave_escaped(
       (const char_u *)tv_get_string(&argvars[0]),
       (const char_u *)tv_get_string_buf(&argvars[1], buf));
+  rettv->v_type = VAR_STRING;
+}
+
+/// "getenv()" function
+static void f_getenv(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  char_u *p = (char_u *)vim_getenv(tv_get_string(&argvars[0]));
+
+  if (p == NULL) {
+    rettv->v_type = VAR_SPECIAL;
+    rettv->vval.v_number = kSpecialVarNull;
+    return;
+  }
+  rettv->vval.v_string = p;
   rettv->v_type = VAR_STRING;
 }
 
@@ -8684,7 +8718,7 @@ static void f_exists(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   const char *p = tv_get_string(&argvars[0]);
   if (*p == '$') {  // Environment variable.
     // First try "normal" environment variables (fast).
-    if (os_getenv(p + 1) != NULL) {
+    if (os_env_exists(p + 1)) {
       n = true;
     } else {
       // Try expanding things like $VIM and ${HOME}.
@@ -11226,7 +11260,7 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     "fork",
 #endif
     "gettext",
-#if defined(HAVE_ICONV_H) && defined(USE_ICONV)
+#if defined(HAVE_ICONV)
     "iconv",
 #endif
     "insert_expand",
@@ -11339,10 +11373,6 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       n = stdout_isatty;
     } else if (STRICMP(name, "multi_byte_encoding") == 0) {
       n = has_mbyte != 0;
-#if defined(USE_ICONV) && defined(DYNAMIC_ICONV)
-    } else if (STRICMP(name, "iconv") == 0) {
-      n = iconv_enabled(false);
-#endif
     } else if (STRICMP(name, "syntax_items") == 0) {
       n = syntax_present(curwin);
 #ifdef UNIX
@@ -12324,7 +12354,6 @@ static void f_jobstop(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     EMSG(_(e_invarg));
     return;
   }
-
 
   Channel *data = find_job(argvars[0].vval.v_number, true);
   if (!data) {
@@ -15319,6 +15348,20 @@ static void f_setcmdpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
 }
 
+/// "setenv()" function
+static void f_setenv(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  char namebuf[NUMBUFLEN];
+  char valbuf[NUMBUFLEN];
+  const char *name = tv_get_string_buf(&argvars[0], namebuf);
+
+  if (argvars[1].v_type == VAR_SPECIAL
+      && argvars[1].vval.v_number == kSpecialVarNull) {
+    os_unsetenv(name);
+  } else {
+    os_setenv(name, tv_get_string_buf(&argvars[1], valbuf), 1);
+  }
+}
 
 /// "setfperm({fname}, {mode})" function
 static void f_setfperm(typval_T *argvars, typval_T *rettv, FunPtr fptr)
@@ -16716,6 +16759,8 @@ static void f_spellbadword(typval_T *argvars, typval_T *rettv, FunPtr fptr)
           break;
         }
         str += len;
+        capcol -= len;
+        len = 0;
       }
     }
   }
