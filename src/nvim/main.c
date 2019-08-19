@@ -237,7 +237,7 @@ int main(int argc, char **argv)
   char **argv = xmalloc((size_t)argc * sizeof(char *));
   for (int i = 0; i < argc; i++) {
     char *buf = NULL;
-    utf16_to_utf8(argv_w[i], &buf);
+    utf16_to_utf8(argv_w[i], -1, &buf);
     assert(buf);
     argv[i] = buf;
   }
@@ -396,8 +396,7 @@ int main(int argc, char **argv)
     mch_exit(0);
   }
 
-  // Set a few option defaults after reading vimrc files: 'title', 'icon',
-  // 'shellpipe', 'shellredir'.
+  // Set some option defaults after reading vimrc files.
   set_init_3();
   TIME_MSG("inits 3");
 

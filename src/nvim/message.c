@@ -582,7 +582,23 @@ static bool emsg_multiline(const char *s, bool multiline)
         }
         redir_write(s, strlen(s));
       }
+
+      // Log (silent) errors as debug messages.
+      if (sourcing_name != NULL && sourcing_lnum != 0) {
+        DLOG("(:silent) %s (%s (line %ld))",
+             s, sourcing_name, (long)sourcing_lnum);
+      } else {
+        DLOG("(:silent) %s", s);
+      }
+
       return true;
+    }
+
+    // Log editor errors as INFO.
+    if (sourcing_name != NULL && sourcing_lnum != 0) {
+      ILOG("%s (%s (line %ld))", s, sourcing_name, (long)sourcing_lnum);
+    } else {
+      ILOG("%s", s);
     }
 
     ex_exitval = 1;
@@ -2559,10 +2575,11 @@ static int do_more_prompt(int typed_char)
 #if defined(WIN32)
 void mch_errmsg(char *str)
 {
+  assert(str != NULL);
   wchar_t *utf16str;
-  int conversion_result = utf8_to_utf16((str), &utf16str);
-  if (conversion_result != 0) {
-    EMSG2("utf8_to_utf16 failed: %d", conversion_result);
+  int r = utf8_to_utf16(str, -1, &utf16str);
+  if (r != 0) {
+    fprintf(stderr, "utf8_to_utf16 failed: %d", r);
   } else {
     fwprintf(stderr, L"%ls", utf16str);
     xfree(utf16str);
@@ -2572,10 +2589,11 @@ void mch_errmsg(char *str)
 // Give a message.  To be used when the UI is not initialized yet.
 void mch_msg(char *str)
 {
+  assert(str != NULL);
   wchar_t *utf16str;
-  int conversion_result = utf8_to_utf16((str), &utf16str);
-  if (conversion_result != 0) {
-    EMSG2("utf8_to_utf16 failed: %d", conversion_result);
+  int r = utf8_to_utf16(str, -1, &utf16str);
+  if (r != 0) {
+    fprintf(stderr, "utf8_to_utf16 failed: %d", r);
   } else {
     wprintf(L"%ls", utf16str);
     xfree(utf16str);

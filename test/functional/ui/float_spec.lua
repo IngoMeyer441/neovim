@@ -383,6 +383,7 @@ describe('floating windows', function()
       command('set number')
       command('set signcolumn=yes')
       command('set cursorline')
+      command('set foldcolumn=1')
       command('hi NormalFloat guibg=#333333')
       feed('ix<cr>y<cr><esc>gg')
       local win = meths.open_win(0, false, {relative='editor', width=20, height=4, row=4, col=10, style='minimal'})
@@ -397,9 +398,9 @@ describe('floating windows', function()
           [2:----------------------------------------]|
                                                   |
         ## grid 2
-          {19:  }{20:  1 }{21:^x                                 }|
-          {19:  }{14:  2 }y                                 |
-          {19:  }{14:  3 }                                  |
+          {19:   }{20:  1 }{21:^x                                }|
+          {19:   }{14:  2 }y                                |
+          {19:   }{14:  3 }                                 |
           {0:~                                       }|
           {0:~                                       }|
           {0:~                                       }|
@@ -410,15 +411,15 @@ describe('floating windows', function()
           {15:                    }|
         ]], float_pos={[3] = {{id = 1001}, "NW", 1, 4, 10, true}}}
       else
-        screen:expect([[
-          {19:  }{20:  1 }{21:^x                                 }|
-          {19:  }{14:  2 }y                                 |
-          {19:  }{14:  3 }    {15:x                   }          |
+        screen:expect{grid=[[
+          {19:   }{20:  1 }{21:^x                                }|
+          {19:   }{14:  2 }y                                |
+          {19:   }{14:  3 }   {15:x                   }          |
           {0:~         }{15:y                   }{0:          }|
           {0:~         }{15:                    }{0:          }|
           {0:~         }{15:                    }{0:          }|
                                                   |
-        ]])
+        ]]}
       end
 
       --  signcolumn=yes still works if there actually are signs
@@ -435,9 +436,9 @@ describe('floating windows', function()
           [2:----------------------------------------]|
                                                   |
         ## grid 2
-          {17:𐌢̀́̂̃̅̄𐌢̀́̂̃̅̄}{20:  1 }{21:^x                                 }|
-          {19:  }{14:  2 }y                                 |
-          {19:  }{14:  3 }                                  |
+          {19: }{17:𐌢̀́̂̃̅̄𐌢̀́̂̃̅̄}{20:  1 }{21:^x                                }|
+          {19:   }{14:  2 }y                                |
+          {19:   }{14:  3 }                                 |
           {0:~                                       }|
           {0:~                                       }|
           {0:~                                       }|
@@ -450,9 +451,9 @@ describe('floating windows', function()
 
       else
         screen:expect([[
-          {17:𐌢̀́̂̃̅̄𐌢̀́̂̃̅̄}{20:  1 }{21:^x                                 }|
-          {19:  }{14:  2 }y                                 |
-          {19:  }{14:  3 }    {17:𐌢̀́̂̃̅̄𐌢̀́̂̃̅̄}{15:x                 }          |
+          {19: }{17:𐌢̀́̂̃̅̄𐌢̀́̂̃̅̄}{20:  1 }{21:^x                                }|
+          {19:   }{14:  2 }y                                |
+          {19:   }{14:  3 }   {17:𐌢̀́̂̃̅̄𐌢̀́̂̃̅̄}{15:x                 }          |
           {0:~         }{19:  }{15:y                 }{0:          }|
           {0:~         }{19:  }{15:                  }{0:          }|
           {0:~         }{15:                    }{0:          }|
@@ -474,9 +475,9 @@ describe('floating windows', function()
           [2:----------------------------------------]|
                                                   |
         ## grid 2
-          {19:  }{20:  1 }{21:^x                                 }|
-          {19:  }{14:  2 }y                                 |
-          {19:  }{14:  3 }                                  |
+          {19:   }{20:  1 }{21:^x                                }|
+          {19:   }{14:  2 }y                                |
+          {19:   }{14:  3 }                                 |
           {0:~                                       }|
           {0:~                                       }|
           {0:~                                       }|
@@ -488,9 +489,9 @@ describe('floating windows', function()
         ]], float_pos={[3] = {{id = 1001}, "NW", 1, 4, 10, true}}}
       else
         screen:expect([[
-          {19:  }{20:  1 }{21:^x                                 }|
-          {19:  }{14:  2 }y                                 |
-          {19:  }{14:  3 }    {15:                    }          |
+          {19:   }{20:  1 }{21:^x                                }|
+          {19:   }{14:  2 }y                                |
+          {19:   }{14:  3 }   {15:                    }          |
           {0:~         }{15:                    }{0:          }|
           {0:~         }{15:                    }{0:          }|
           {0:~         }{15:                    }{0:          }|
@@ -4143,14 +4144,14 @@ describe('floating windows', function()
             [4:----------------------------------------]|
             [4:----------------------------------------]|
             :tabnew                                 |
-          ## grid 2
+          ## grid 2 (hidden)
             x                                       |
             {0:~                                       }|
             {0:~                                       }|
             {0:~                                       }|
             {0:~                                       }|
             {0:~                                       }|
-          ## grid 3
+          ## grid 3 (hidden)
             {1:y                   }|
             {2:~                   }|
           ## grid 4
@@ -4192,7 +4193,7 @@ describe('floating windows', function()
           ## grid 3
             {1:y                   }|
             {2:~                   }|
-          ## grid 4
+          ## grid 4 (hidden)
                                                     |
             {0:~                                       }|
             {0:~                                       }|
@@ -4222,13 +4223,13 @@ describe('floating windows', function()
             [4:----------------------------------------]|
             [4:----------------------------------------]|
             :tabnext                                |
-          ## grid 2
+          ## grid 2 (hidden)
             x                                       |
             {0:~                                       }|
             {0:~                                       }|
             {0:~                                       }|
             {0:~                                       }|
-          ## grid 3
+          ## grid 3 (hidden)
             {1:y                   }|
             {2:~                   }|
           ## grid 4
@@ -4266,7 +4267,7 @@ describe('floating windows', function()
             [4:----------------------------------------]|
             [4:----------------------------------------]|
             :tabnew                                 |
-          ## grid 2
+          ## grid 2 (hidden)
             x                                       |
             {0:~                                       }|
             {0:~                                       }|
@@ -4312,7 +4313,7 @@ describe('floating windows', function()
             {0:~                                                                }|
             {0:~                                                                }|
             {0:~                                                                }|
-          ## grid 4
+          ## grid 4 (hidden)
                                                     |
             {0:~                                       }|
             {0:~                                       }|
@@ -4332,7 +4333,7 @@ describe('floating windows', function()
             [4:----------------------------------------]|
             [4:----------------------------------------]|
             :tabnext                                |
-          ## grid 2
+          ## grid 2 (hidden)
             x                                       |
             {0:~                                       }|
             {0:~                                       }|
@@ -4364,7 +4365,11 @@ describe('floating windows', function()
         [5] = {foreground = tonumber('0x990000'), background = tonumber('0xfff1ff')},
         [6] = {foreground = tonumber('0x332533'), background = tonumber('0xfff1ff')},
         [7] = {background = tonumber('0xffcfff'), bold = true, foreground = tonumber('0x0000d8')},
-        [8] = {background = Screen.colors.LightMagenta, bold = true, foreground = Screen.colors.Blue1}
+        [8] = {background = Screen.colors.LightMagenta, bold = true, foreground = Screen.colors.Blue1},
+        [9] = {background = Screen.colors.LightMagenta, blend=30},
+        [10] = {foreground = Screen.colors.Red, background = Screen.colors.LightMagenta, blend=0},
+        [11] = {foreground = Screen.colors.Red, background = Screen.colors.LightMagenta, blend=80},
+        [12] = {background = Screen.colors.LightMagenta, bold = true, foreground = Screen.colors.Blue1, blend=30},
       })
       insert([[
         Lorem ipsum dolor sit amet, consectetur
@@ -4444,9 +4449,9 @@ describe('floating windows', function()
           qui officia deserunt mollit anim id est           |
           laborum^.                                          |
         ## grid 4
-          {1:test           }|
-          {1:               }|
-          {1:popup    text  }|
+          {9:test           }|
+          {9:               }|
+          {9:popup    text  }|
         ]], float_pos={[4] = {{id = 1002}, "NW", 1, 2, 5, true}}, unchanged=true}
       else
         screen:expect([[
@@ -4486,9 +4491,9 @@ describe('floating windows', function()
           qui officia deserunt mollit anim id est           |
           laborum^.                                          |
         ## grid 4
-          {1:test           }|
-          {1:               }|
-          {4:popup    text}{1:  }|
+          {9:test           }|
+          {9:               }|
+          {10:popup    text}{9:  }|
         ]], float_pos={[4] = {{id = 1002}, "NW", 1, 2, 5, true}}}
       else
         screen:expect([[
@@ -4496,7 +4501,7 @@ describe('floating windows', function()
           exercitation ullamco laboris nisi ut aliquip ex   |
           ea co{2:test}{3:o consequat}. Duis aute irure dolor in    |
           repre{3:henderit in vol}uptate velit esse cillum      |
-          dolor{4:popup    text}{3:ul}la pariatur. Excepteur sint   |
+          dolor{10:popup    text}{3:ul}la pariatur. Excepteur sint   |
           occaecat cupidatat non proident, sunt in culpa    |
           qui officia deserunt mollit anim id est           |
           laborum^.                                          |
@@ -4527,9 +4532,9 @@ describe('floating windows', function()
           qui officia deserunt mollit anim id est           |
           laborum^.                                          |
         ## grid 4
-          {1:test           }|
-          {1:               }|
-          {4:popup    text}{1:  }|
+          {9:test           }|
+          {9:               }|
+          {11:popup    text}{9:  }|
         ]], float_pos={[4] = {{id = 1002}, "NW", 1, 2, 5, true}}, unchanged=true}
       else
         screen:expect([[
@@ -4569,9 +4574,9 @@ describe('floating windows', function()
           qui officia deserunt mollit anim id est           |
           laborum^.                                          |
         ## grid 4
-          {4:popup    text}{1:  }|
-          {8:~              }|
-          {8:~              }|
+          {11:popup    text}{9:  }|
+          {12:~              }|
+          {12:~              }|
         ]], float_pos={[4] = {{id = 1002}, "NW", 1, 2, 5, true}}}
       else
         meths.input_mouse('wheel', 'down', '', 0, 4, 7)
@@ -4671,7 +4676,7 @@ describe('floating windows', function()
         [2] = {foreground = Screen.colors.Grey0, background = tonumber('0xffcfff')},
         [3] = {bold = true, foreground = Screen.colors.Blue1},
         [4] = {background = tonumber('0xffcfff'), bold = true, foreground = tonumber('0xb282ff')},
-        [5] = {background = Screen.colors.LightMagenta},
+        [5] = {background = Screen.colors.LightMagenta, blend=30},
       })
       if multigrid then
         screen:expect{grid=[[
