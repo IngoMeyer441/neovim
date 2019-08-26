@@ -47,6 +47,7 @@
 #include "nvim/indent_c.h"
 #include "nvim/indent.h"
 #include "nvim/mark.h"
+#include "nvim/math.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -419,6 +420,7 @@ static struct vimvar {
   VV(VV_TYPE_DICT,      "t_dict",           VAR_NUMBER, VV_RO),
   VV(VV_TYPE_FLOAT,     "t_float",          VAR_NUMBER, VV_RO),
   VV(VV_TYPE_BOOL,      "t_bool",           VAR_NUMBER, VV_RO),
+  VV(VV_ECHOSPACE,      "echospace",        VAR_NUMBER, VV_RO),
   VV(VV_EXITING,        "exiting",          VAR_NUMBER, VV_RO),
 };
 #undef VV
@@ -634,6 +636,8 @@ void eval_init(void)
   set_vim_var_special(VV_TRUE, kSpecialVarTrue);
   set_vim_var_special(VV_NULL, kSpecialVarNull);
   set_vim_var_special(VV_EXITING, kSpecialVarNull);
+
+  set_vim_var_nr(VV_ECHOSPACE,    sc_col - 1);
 
   set_reg_var(0);  // default for v:register is not 0 but '"'
 }
@@ -1224,9 +1228,7 @@ static void restore_vimvar(int idx, typval_T *save_tv)
 /// If there is a window for "curbuf", make it the current window.
 static void find_win_for_curbuf(void)
 {
-  wininfo_T *wip;
-
-  for (wip = curbuf->b_wininfo; wip != NULL; wip = wip->wi_next) {
+  for (wininfo_T *wip = curbuf->b_wininfo; wip != NULL; wip = wip->wi_next) {
     if (wip->wi_win != NULL) {
       curwin = wip->wi_win;
       break;
@@ -2353,14 +2355,15 @@ static char_u *get_lval(char_u *const name, typval_T *const rettv,
       }
 
       if (lp->ll_di == NULL) {
-        /* Can't add "v:" variable. */
-        if (lp->ll_dict == &vimvardict) {
+        // Can't add "v:" or "a:" variable.
+        if (lp->ll_dict == &vimvardict
+            || &lp->ll_dict->dv_hashtab == get_funccal_args_ht()) {
           EMSG2(_(e_illvar), name);
           tv_clear(&var1);
           return NULL;
         }
 
-        /* Key does not exist in dict: may need to add it. */
+        // Key does not exist in dict: may need to add it.
         if (*p == '[' || *p == '.' || unlet) {
           if (!quiet) {
             emsgf(_(e_dictkey), key);
@@ -6740,61 +6743,24 @@ static void f_api_info(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   api_free_dictionary(metadata);
 }
 
-/*
- * "append(lnum, string/list)" function
- */
+// "append(lnum, string/list)" function
 static void f_append(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  long lnum;
-  list_T      *l = NULL;
-  listitem_T  *li = NULL;
-  typval_T    *tv;
-  long added = 0;
+  const linenr_T lnum = tv_get_lnum(&argvars[0]);
 
-  /* When coming here from Insert mode, sync undo, so that this can be
-   * undone separately from what was previously inserted. */
-  if (u_sync_once == 2) {
-    u_sync_once = 1;     /* notify that u_sync() was called */
-    u_sync(TRUE);
+  set_buffer_lines(curbuf, lnum, true, &argvars[1], rettv);
+}
+
+// "appendbufline(buf, lnum, string/list)" function
+static void f_appendbufline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  buf_T *const buf = tv_get_buf(&argvars[0], false);
+  if (buf == NULL) {
+    rettv->vval.v_number = 1;  // FAIL
+  } else {
+    const linenr_T lnum = tv_get_lnum_buf(&argvars[1], buf);
+    set_buffer_lines(buf, lnum, true, &argvars[2], rettv);
   }
-
-  lnum = tv_get_lnum(argvars);
-  if (lnum >= 0
-      && lnum <= curbuf->b_ml.ml_line_count
-      && u_save(lnum, lnum + 1) == OK) {
-    if (argvars[1].v_type == VAR_LIST) {
-      l = argvars[1].vval.v_list;
-      if (l == NULL) {
-        return;
-      }
-      li = tv_list_first(l);
-    }
-    for (;; ) {
-      if (l == NULL) {
-        tv = &argvars[1];  // Append a string.
-      } else if (li == NULL) {
-        break;  // End of list.
-      } else {
-        tv = TV_LIST_ITEM_TV(li);  // Append item from list.
-      }
-      const char *const line = tv_get_string_chk(tv);
-      if (line == NULL) {  // Type error.
-        rettv->vval.v_number = 1;  // Failed.
-        break;
-      }
-      ml_append(lnum + added, (char_u *)line, (colnr_T)0, false);
-      added++;
-      if (l == NULL) {
-        break;
-      }
-      li = TV_LIST_ITEM_NEXT(l, li);
-    }
-
-    appended_lines_mark(lnum, added);
-    if (curwin->w_cursor.lnum > lnum)
-      curwin->w_cursor.lnum += added;
-  } else
-    rettv->vval.v_number = 1;           /* Failed */
 }
 
 static void f_argc(typval_T *argvars, typval_T *rettv, FunPtr fptr)
@@ -7391,14 +7357,19 @@ static buf_T * get_buf_arg(typval_T *arg)
  */
 static void f_bufname(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
+  const buf_T *buf;
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;
-  if (!tv_check_str_or_nr(&argvars[0])) {
-    return;
+  if (argvars[0].v_type == VAR_UNKNOWN) {
+    buf = curbuf;
+  } else {
+    if (!tv_check_str_or_nr(&argvars[0])) {
+      return;
+    }
+    emsg_off++;
+    buf = tv_get_buf(&argvars[0], false);
+    emsg_off--;
   }
-  emsg_off++;
-  const buf_T *const buf = tv_get_buf(&argvars[0], false);
-  emsg_off--;
   if (buf != NULL && buf->b_fname != NULL) {
     rettv->vval.v_string = (char_u *)xstrdup((char *)buf->b_fname);
   }
@@ -7409,15 +7380,21 @@ static void f_bufname(typval_T *argvars, typval_T *rettv, FunPtr fptr)
  */
 static void f_bufnr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
+  const buf_T *buf;
   bool error = false;
 
   rettv->vval.v_number = -1;
-  if (!tv_check_str_or_nr(&argvars[0])) {
-    return;
+
+  if (argvars[0].v_type == VAR_UNKNOWN) {
+    buf = curbuf;
+  } else {
+    if (!tv_check_str_or_nr(&argvars[0])) {
+      return;
+    }
+    emsg_off++;
+    buf = tv_get_buf(&argvars[0], false);
+    emsg_off--;
   }
-  emsg_off++;
-  const buf_T *buf = tv_get_buf(&argvars[0], false);
-  emsg_off--;
 
   // If the buffer isn't found and the second argument is not zero create a
   // new buffer.
@@ -8296,22 +8273,18 @@ static void f_dictwatcherdel(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 /// "deletebufline()" function
 static void f_deletebufline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  buf_T *buf;
-  linenr_T first, last;
-  linenr_T lnum;
-  long count;
-  int is_curbuf;
+  linenr_T last;
   buf_T *curbuf_save = NULL;
   win_T *curwin_save = NULL;
 
-  buf = tv_get_buf(&argvars[0], false);
+  buf_T *const buf = tv_get_buf(&argvars[0], false);
   if (buf == NULL) {
     rettv->vval.v_number = 1;  // FAIL
     return;
   }
-  is_curbuf = buf == curbuf;
+  const bool is_curbuf = buf == curbuf;
 
-  first = tv_get_lnum_buf(&argvars[1], buf);
+  const linenr_T first = tv_get_lnum_buf(&argvars[1], buf);
   if (argvars[2].v_type != VAR_UNKNOWN) {
     last = tv_get_lnum_buf(&argvars[2], buf);
   } else {
@@ -8333,7 +8306,7 @@ static void f_deletebufline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   if (last > curbuf->b_ml.ml_line_count) {
     last = curbuf->b_ml.ml_line_count;
   }
-  count = last - first + 1;
+  const long count = last - first + 1;
 
   // When coming here from Insert mode, sync undo, so that this can be
   // undone separately from what was previously inserted.
@@ -8347,7 +8320,7 @@ static void f_deletebufline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     return;
   }
 
-  for (lnum = first; lnum <= last; lnum++) {
+  for (linenr_T lnum = first; lnum <= last; lnum++) {
     ml_delete(first, true);
   }
 
@@ -9734,6 +9707,7 @@ static void f_getbufinfo(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   bool filtered = false;
   bool sel_buflisted = false;
   bool sel_bufloaded = false;
+  bool sel_bufmodified = false;
 
   tv_list_alloc_ret(rettv, kListLenMayKnow);
 
@@ -9755,6 +9729,10 @@ static void f_getbufinfo(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       if (di != NULL && tv_get_number(&di->di_tv)) {
         sel_bufloaded = true;
       }
+      di = tv_dict_find(sel_d, S_LEN("bufmodified"));
+      if (di != NULL && tv_get_number(&di->di_tv)) {
+        sel_bufmodified = true;
+      }
     }
   } else if (argvars[0].v_type != VAR_UNKNOWN) {
     // Information about one buffer.  Argument specifies the buffer
@@ -9774,7 +9752,8 @@ static void f_getbufinfo(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       continue;
     }
     if (filtered && ((sel_bufloaded && buf->b_ml.ml_mfp == NULL)
-                     || (sel_buflisted && !buf->b_p_bl))) {
+                     || (sel_buflisted && !buf->b_p_bl)
+                     || (sel_bufmodified && !buf->b_changed))) {
       continue;
     }
 
@@ -10875,12 +10854,12 @@ static dict_T *get_win_info(win_T *wp, int16_t tpnr, int16_t winnr)
   tv_dict_add_nr(dict, S_LEN("winnr"), winnr);
   tv_dict_add_nr(dict, S_LEN("winid"), wp->handle);
   tv_dict_add_nr(dict, S_LEN("height"), wp->w_height);
-  tv_dict_add_nr(dict, S_LEN("winrow"), wp->w_winrow);
+  tv_dict_add_nr(dict, S_LEN("winrow"), wp->w_winrow + 1);
   tv_dict_add_nr(dict, S_LEN("topline"), wp->w_topline);
   tv_dict_add_nr(dict, S_LEN("botline"), wp->w_botline - 1);
   tv_dict_add_nr(dict, S_LEN("width"), wp->w_width);
   tv_dict_add_nr(dict, S_LEN("bufnr"), wp->w_buffer->b_fnum);
-  tv_dict_add_nr(dict, S_LEN("wincol"), wp->w_wincol);
+  tv_dict_add_nr(dict, S_LEN("wincol"), wp->w_wincol + 1);
 
   tv_dict_add_nr(dict, S_LEN("terminal"), bt_terminal(wp->w_buffer));
   tv_dict_add_nr(dict, S_LEN("quickfix"), bt_quickfix(wp->w_buffer));
@@ -11277,6 +11256,7 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     "mac",
     "macunix",
     "osx",
+    "osxdarwin",
 #endif
     "menu",
     "mksession",
@@ -11310,7 +11290,6 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 #endif
     "tablineat",
     "tag_binary",
-    "tag_old_static",
     "termguicolors",
     "termresponse",
     "textobjects",
@@ -12063,6 +12042,21 @@ static void f_islocked(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   clear_lval(&lv);
 }
 
+// "isinf()" function
+static void f_isinf(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  if (argvars[0].v_type == VAR_FLOAT
+      && xisinf(argvars[0].vval.v_float)) {
+    rettv->vval.v_number = argvars[0].vval.v_float > 0.0 ? 1 : -1;
+  }
+}
+
+// "isnan()" function
+static void f_isnan(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  rettv->vval.v_number = argvars[0].v_type == VAR_FLOAT
+    && xisnan(argvars[0].vval.v_float);
+}
 
 /// Turn a dictionary into a list
 ///
@@ -15129,16 +15123,19 @@ static void f_serverstop(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// Set line or list of lines in buffer "buf".
-static void set_buffer_lines(buf_T *buf, linenr_T lnum, typval_T *lines,
-                             typval_T *rettv)
+static void set_buffer_lines(buf_T *buf, linenr_T lnum_arg, bool append,
+                             const typval_T *lines, typval_T *rettv)
+  FUNC_ATTR_NONNULL_ARG(4, 5)
 {
+  linenr_T lnum = lnum_arg + (append ? 1 : 0);
+  const char *line = NULL;
   list_T      *l = NULL;
   listitem_T  *li = NULL;
   long        added = 0;
-  linenr_T    lcount;
+  linenr_T append_lnum;
   buf_T       *curbuf_save = NULL;
   win_T       *curwin_save = NULL;
-  int         is_curbuf = buf == curbuf;
+  const bool is_curbuf = buf == curbuf;
 
   // When using the current buffer ml_mfp will be set if needed.  Useful when
   // setline() is used on startup.  For other buffers the buffer must be
@@ -15149,22 +15146,20 @@ static void set_buffer_lines(buf_T *buf, linenr_T lnum, typval_T *lines,
   }
 
   if (!is_curbuf) {
-    wininfo_T *wip;
-
     curbuf_save = curbuf;
     curwin_save = curwin;
     curbuf = buf;
-    for (wip = buf->b_wininfo; wip != NULL; wip = wip->wi_next) {
-      if (wip->wi_win != NULL) {
-        curwin = wip->wi_win;
-        break;
-      }
-    }
+    find_win_for_curbuf();
   }
 
-  lcount = curbuf->b_ml.ml_line_count;
-
-  const char *line = NULL;
+  if (append) {
+    // appendbufline() uses the line number below which we insert
+    append_lnum = lnum - 1;
+  } else {
+    // setbufline() uses the line number above which we insert, we only
+    // append if it's below the last line
+    append_lnum = curbuf->b_ml.ml_line_count;
+  }
 
   if (lines->v_type == VAR_LIST) {
     l = lines->vval.v_list;
@@ -15196,7 +15191,7 @@ static void set_buffer_lines(buf_T *buf, linenr_T lnum, typval_T *lines,
       u_sync(true);
     }
 
-    if (lnum <= curbuf->b_ml.ml_line_count) {
+    if (!append && lnum <= curbuf->b_ml.ml_line_count) {
       // Existing line, replace it.
       if (u_savesub(lnum) == OK
           && ml_replace(lnum, (char_u *)line, true) == OK) {
@@ -15207,20 +15202,28 @@ static void set_buffer_lines(buf_T *buf, linenr_T lnum, typval_T *lines,
         rettv->vval.v_number = 0;  // OK
       }
     } else if (added > 0 || u_save(lnum - 1, lnum) == OK) {
-      // lnum is one past the last line, append the line.
+      // append the line.
       added++;
       if (ml_append(lnum - 1, (char_u *)line, 0, false) == OK) {
         rettv->vval.v_number = 0;  // OK
       }
     }
 
-    if (l == NULL)                      /* only one string argument */
+    if (l == NULL) {  // only one string argument
       break;
-    ++lnum;
+    }
+    lnum++;
   }
 
   if (added > 0) {
-    appended_lines_mark(lcount, added);
+    appended_lines_mark(append_lnum, added);
+    FOR_ALL_TAB_WINDOWS(tp, wp) {
+      if (wp->w_buffer == buf && wp->w_cursor.lnum > append_lnum) {
+        wp->w_cursor.lnum += added;
+      }
+    }
+    check_cursor_col();
+    update_topline();
   }
 
   if (!is_curbuf) {
@@ -15240,8 +15243,7 @@ static void f_setbufline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       rettv->vval.v_number = 1;  // FAIL
     } else {
       lnum = tv_get_lnum_buf(&argvars[1], buf);
-
-      set_buffer_lines(buf, lnum, &argvars[2], rettv);
+      set_buffer_lines(buf, lnum, false, &argvars[2], rettv);
     }
 }
 
@@ -15392,7 +15394,7 @@ static void f_setfperm(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 static void f_setline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   linenr_T lnum = tv_get_lnum(&argvars[0]);
-  set_buffer_lines(curbuf, lnum, &argvars[1], rettv);
+  set_buffer_lines(curbuf, lnum, false, &argvars[1], rettv);
 }
 
 /// Create quickfix/location list from VimL values
@@ -20489,8 +20491,8 @@ static void set_var_const(const char *name, const size_t name_len,
     }
     tv_clear(&v->di_tv);
   } else {  // Add a new variable.
-    // Can't add "v:" variable.
-    if (ht == &vimvarht) {
+    // Can't add "v:" or "a:" variable.
+    if (ht == &vimvarht || ht == get_funccal_args_ht()) {
       emsgf(_(e_illvar), name);
       return;
     }
@@ -22622,7 +22624,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars,
     name = v->di_key;
     STRCPY(name, "self");
 #endif
-    v->di_flags = DI_FLAGS_RO + DI_FLAGS_FIX;
+    v->di_flags = DI_FLAGS_RO | DI_FLAGS_FIX;
     tv_dict_add(&fc->l_vars, v);
     v->di_tv.v_type = VAR_DICT;
     v->di_tv.v_lock = 0;
@@ -22638,6 +22640,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars,
   init_var_dict(&fc->l_avars, &fc->l_avars_var, VAR_SCOPE);
   add_nr_var(&fc->l_avars, (dictitem_T *)&fc->fixvar[fixvar_idx++], "0",
              (varnumber_T)(argcount - fp->uf_args.ga_len));
+  fc->l_avars.dv_lock = VAR_FIXED;
   // Use "name" to avoid a warning from some compiler that checks the
   // destination size.
   v = (dictitem_T *)&fc->fixvar[fixvar_idx++];

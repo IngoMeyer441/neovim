@@ -1529,6 +1529,13 @@ v:dying		Normally zero.  When a deadly signal is caught it's set to
 					*v:exiting* *exiting-variable*
 v:exiting	Exit code, or |v:null| if not exiting. |VimLeave|
 
+					*v:echospace* *echospace-variable*
+v:echospace	Number of screen cells that can be used for an `:echo` message
+		in the last screen line before causing the |hit-enter-prompt|.
+		Depends on 'showcmd', 'ruler' and 'columns'.  You need to
+		check 'cmdheight' for whether there are full-width lines
+		available above the last line.
+
 					*v:errmsg* *errmsg-variable*
 v:errmsg	Last given error message.
 		Modifiable (can be set).
@@ -2023,8 +2030,8 @@ bufexists({expr})		Number	|TRUE| if buffer {expr} exists
 buflisted({expr})		Number	|TRUE| if buffer {expr} is listed
 bufload({expr})			Number	load buffer {expr} if not loaded yet
 bufloaded({expr})		Number	|TRUE| if buffer {expr} is loaded
-bufname({expr})		String	Name of the buffer {expr}
-bufnr({expr} [, {create}])	Number	Number of the buffer {expr}
+bufname([{expr}])		String	Name of the buffer {expr}
+bufnr([{expr} [, {create}]])	Number	Number of the buffer {expr}
 bufwinid({expr})		Number	|window-ID| of buffer {expr}
 bufwinnr({expr})		Number	window number of buffer {expr}
 byte2line({byte})		Number	line number at byte count {byte}
@@ -2189,7 +2196,10 @@ insert({list}, {item} [, {idx}])
 				List	insert {item} in {list} [before {idx}]
 invert({expr})			Number  bitwise invert
 isdirectory({directory})	Number	|TRUE| if {directory} is a directory
+isinf({expr})			Number	determine if {expr} is infinity value
+					(positive or negative)
 islocked({expr})		Number	|TRUE| if {expr} is locked
+isnan({expr})			Number	|TRUE| if {expr} is NaN
 id({expr})			String	identifier of the container
 items({dict})			List	key-value pairs in {dict}
 jobpid({id})			Number	Returns pid of a job.
@@ -2495,6 +2505,21 @@ append({lnum}, {text})					*append()*
 		0 for success.  Example: >
 			:let failed = append(line('$'), "# THE END")
 			:let failed = append(0, ["Chapter 1", "the beginning"])
+
+appendbufline({expr}, {lnum}, {text})			*appendbufline()*
+		Like |append()| but append the text in buffer {expr}.
+
+		For the use of {expr}, see |bufname()|.
+
+		{lnum} is used like with |append()|.  Note that using |line()|
+		would use the current buffer, not the one appending to.
+		Use "$" to append at the end of the buffer.
+
+		On success 0 is returned, on failure 1 is returned.
+
+		If {expr} is not a valid buffer or {lnum} is not valid, an
+		error message is given. Example: >
+			:let failed = appendbufline(13, 0, "# THE START")
 <
 							*argc()*
 argc([{winid}])
@@ -2744,9 +2769,10 @@ bufloaded({expr})					*bufloaded()*
 		{expr} exists and is loaded (shown in a window or hidden).
 		The {expr} argument is used like with |bufexists()|.
 
-bufname({expr})						*bufname()*
+bufname([{expr}])						*bufname()*
 		The result is the name of a buffer, as it is displayed by the
 		":ls" command.
++		If {expr} is omitted the current buffer is used.
 		If {expr} is a Number, that buffer number's name is given.
 		Number zero is the alternate buffer for the current window.
 		If {expr} is a String, it is used as a |file-pattern| to match
@@ -2773,7 +2799,7 @@ bufname({expr})						*bufname()*
 	bufname("file2")	name of buffer where "file2" matches.
 
 							*bufnr()*
-bufnr({expr} [, {create}])
+bufnr([{expr} [, {create}]])
 		The result is the number of a buffer, as it is displayed by
 		the ":ls" command.  For the use of {expr}, see |bufname()|
 		above.
@@ -2781,7 +2807,7 @@ bufnr({expr} [, {create}])
 		{create} argument is present and not zero, a new, unlisted,
 		buffer is created and its number is returned.
 		bufnr("$") is the last buffer: >
-	:let last_buffer = bufnr("$")
+			:let last_buffer = bufnr("$")
 <		The result is a Number, which is the highest buffer number
 		of existing buffers.  Note that not all buffers with a smaller
 		number necessarily exist, because ":bwipeout" may have removed
@@ -4026,6 +4052,7 @@ getbufinfo([{dict}])
 		be specified in {dict}:
 			buflisted	include only listed buffers.
 			bufloaded	include only loaded buffers.
+			bufmodified	include only modified buffers.
 
 		Otherwise, {expr} specifies a particular buffer to return
 		information for.  For the use of {expr}, see |bufname()|
@@ -4725,25 +4752,6 @@ gettagstack([{nr}])					*gettagstack()*
 
 		See |tagstack| for more information about the tag stack.
 
-getwinpos([{timeout}])					*getwinpos()*
-		The result is a list with two numbers, the result of
-		getwinposx() and getwinposy() combined:
-			[x-pos, y-pos]
-		{timeout} can be used to specify how long to wait in msec for
-		a response from the terminal.  When omitted 100 msec is used.
-
-							*getwinposx()*
-getwinposx()	The result is a Number, which is the X coordinate in pixels of
-		the left hand side of the GUI Vim window.  The result will be
-		-1 if the information is not available.
-		The value can be used with `:winpos`.
-
-							*getwinposy()*
-getwinposy()	The result is a Number, which is the Y coordinate in pixels of
-		the top of the GUI Vim window.  The result will be -1 if the
-		information is not available.
-		The value can be used with `:winpos`.
-
 getwininfo([{winid}])					*getwininfo()*
 		Returns information about windows as a List with Dictionaries.
 
@@ -4772,6 +4780,25 @@ getwininfo([{winid}])					*getwininfo()*
 			winid		|window-ID|
 			winnr		window number
 			winrow		topmost screen column of the window
+
+getwinpos([{timeout}])					*getwinpos()*
+		The result is a list with two numbers, the result of
+		getwinposx() and getwinposy() combined:
+			[x-pos, y-pos]
+		{timeout} can be used to specify how long to wait in msec for
+		a response from the terminal.  When omitted 100 msec is used.
+
+							*getwinposx()*
+getwinposx()	The result is a Number, which is the X coordinate in pixels of
+		the left hand side of the GUI Vim window.  The result will be
+		-1 if the information is not available.
+		The value can be used with `:winpos`.
+
+							*getwinposy()*
+getwinposy()	The result is a Number, which is the Y coordinate in pixels of
+		the top of the GUI Vim window.  The result will be -1 if the
+		information is not available.
+		The value can be used with `:winpos`.
 
 getwinvar({winnr}, {varname} [, {def}])				*getwinvar()*
 		Like |gettabwinvar()| for the current tabpage.
@@ -5268,6 +5295,14 @@ isdirectory({directory})				*isdirectory()*
 		exist, or isn't a directory, the result is |FALSE|.  {directory}
 		is any expression, which is used as a String.
 
+isinf({expr})						*isinf()*
+		Return 1 if {expr} is a positive infinity, or -1 a negative
+		infinity, otherwise 0. >
+			:echo isinf(1.0 / 0.0)
+<			1 >
+			:echo isinf(-1.0 / 0.0)
+<			-1
+
 islocked({expr})					*islocked()* *E786*
 		The result is a Number, which is |TRUE| when {expr} is the
 		name of a locked variable.
@@ -5303,6 +5338,10 @@ items({dict})						*items()*
 		entry and the value of this entry.  The |List| is in arbitrary
 		order.
 
+isnan({expr})						*isnan()*
+		Return |TRUE| if {expr} is a float with value NaN. >
+			echo isnan(0.0 / 0.0)
+<			1
 
 jobpid({job})						*jobpid()*
 		Return the PID (process id) of |job-id| {job}.
@@ -8872,7 +8911,7 @@ win_id2win({expr})					*win_id2win()*
 win_screenpos({nr})					*win_screenpos()*
 		Return the screen position of window {nr} as a list with two
 		numbers: [row, col].  The first window always has position
-		[1, 1].
+		[1, 1], unless there is a tabline, then it is [2, 1].
 		{nr} can be the window number or the |window-ID|.
 		Return [0, 0] if the window cannot be found in the current
 		tabpage.

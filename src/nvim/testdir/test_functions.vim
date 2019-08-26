@@ -106,11 +106,9 @@ func Test_strwidth()
     call assert_equal(4, strwidth(1234))
     call assert_equal(5, strwidth(-1234))
 
-    if has('multi_byte')
-      call assert_equal(2, strwidth('😉'))
-      call assert_equal(17, strwidth('Eĥoŝanĝo ĉiuĵaŭde'))
-      call assert_equal((aw == 'single') ? 6 : 7, strwidth('Straße'))
-    endif
+    call assert_equal(2, strwidth('😉'))
+    call assert_equal(17, strwidth('Eĥoŝanĝo ĉiuĵaŭde'))
+    call assert_equal((aw == 'single') ? 6 : 7, strwidth('Straße'))
 
     call assert_fails('call strwidth({->0})', 'E729:')
     call assert_fails('call strwidth([])', 'E730:')
@@ -308,10 +306,8 @@ func Test_strpart()
   call assert_equal('fg', strpart('abcdefg', 5, 4))
   call assert_equal('defg', strpart('abcdefg', 3))
 
-  if has('multi_byte')
-    call assert_equal('lép', strpart('éléphant', 2, 4))
-    call assert_equal('léphant', strpart('éléphant', 2))
-  endif
+  call assert_equal('lép', strpart('éléphant', 2, 4))
+  call assert_equal('léphant', strpart('éléphant', 2))
 endfunc
 
 func Test_tolower()
@@ -320,10 +316,6 @@ func Test_tolower()
   " Test with all printable ASCII characters.
   call assert_equal(' !"#$%&''()*+,-./0123456789:;<=>?@abcdefghijklmnopqrstuvwxyz[\]^_`abcdefghijklmnopqrstuvwxyz{|}~',
           \ tolower(' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'))
-
-  if !has('multi_byte')
-    return
-  endif
 
   " Test with a few uppercase diacritics.
   call assert_equal("aàáâãäåāăąǎǟǡả", tolower("AÀÁÂÃÄÅĀĂĄǍǞǠẢ"))
@@ -398,10 +390,6 @@ func Test_toupper()
   " Test with all printable ASCII characters.
   call assert_equal(' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}~',
           \ toupper(' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~'))
-
-  if !has('multi_byte')
-    return
-  endif
 
   " Test with a few lowercase diacritics.
   call assert_equal("AÀÁÂÃÄÅĀĂĄǍǞǠẢ", toupper("aàáâãäåāăąǎǟǡả"))
@@ -976,8 +964,8 @@ func Test_balloon_show()
 endfunc
 
 func Test_shellescape()
-  let [save_shell, save_shellslash] = [&shell, &shellslash]
-  set shell=bash shellslash
+  let save_shell = &shell
+  set shell=bash
   call assert_equal("'text'", shellescape('text'))
   call assert_equal("'te\"xt'", shellescape('te"xt'))
   call assert_equal("'te'\\''xt'", shellescape("te'xt"))
@@ -991,13 +979,13 @@ func Test_shellescape()
 
   call assert_equal("'te\nxt'", shellescape("te\nxt"))
   call assert_equal("'te\\\nxt'", shellescape("te\nxt", 1))
-  set shell=tcsh shellslash
+  set shell=tcsh
   call assert_equal("'te\\!xt'", shellescape("te!xt"))
   call assert_equal("'te\\\\!xt'", shellescape("te!xt", 1))
   call assert_equal("'te\\\nxt'", shellescape("te\nxt"))
   call assert_equal("'te\\\\\nxt'", shellescape("te\nxt", 1))
 
-  let [&shell, &shellslash] = [save_shell, save_shellslash]
+  let &shell = save_shell
 endfunc
 
 func Test_redo_in_nested_functions()
