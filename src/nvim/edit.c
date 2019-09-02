@@ -674,7 +674,8 @@ static int insert_execute(VimState *state, int key)
       // there is nothing to add, CTRL-L works like CTRL-P then.
       if (s->c == Ctrl_L
           && (!CTRL_X_MODE_LINE_OR_EVAL(ctrl_x_mode)
-              || (compl_shown_match->cp_str != NULL
+              || (compl_shown_match != NULL
+                  && compl_shown_match->cp_str != NULL
                   && (int)STRLEN(compl_shown_match->cp_str)
                   > curwin->w_cursor.col - compl_col))) {
         ins_compl_addfrommatch();
@@ -3331,7 +3332,7 @@ static void ins_compl_addfrommatch(void)
   int len = (int)curwin->w_cursor.col - (int)compl_col;
   int c;
   compl_T     *cp;
-
+  assert(compl_shown_match != NULL);
   p = compl_shown_match->cp_str;
   if ((int)STRLEN(p) <= len) {   /* the match is too short */
     /* When still at the original match use the first entry that matches
@@ -3721,7 +3722,7 @@ expand_by_function(
   curbuf_save = curbuf;
 
   // Call a function, which returns a list or dict.
-  if (call_vim_function(funcname, 2, args, &rettv, false) == OK) {
+  if (call_vim_function(funcname, 2, args, &rettv) == OK) {
     switch (rettv.v_type) {
     case VAR_LIST:
       matchlist = rettv.vval.v_list;
@@ -4912,7 +4913,6 @@ static int ins_complete(int c, bool enable_pum)
        * Call user defined function 'completefunc' with "a:findstart"
        * set to 1 to obtain the length of text to use for completion.
        */
-      int col;
       char_u      *funcname;
       pos_T pos;
       win_T       *curwin_save;
@@ -4941,7 +4941,7 @@ static int ins_complete(int c, bool enable_pum)
       pos = curwin->w_cursor;
       curwin_save = curwin;
       curbuf_save = curbuf;
-      col = call_func_retnr(funcname, 2, args, false);
+      int col = call_func_retnr(funcname, 2, args);
 
       State = save_State;
       if (curwin_save != curwin || curbuf_save != curbuf) {

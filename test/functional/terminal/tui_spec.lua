@@ -1,5 +1,9 @@
 -- TUI acceptance tests.
 -- Uses :terminal as a way to send keys and assert screen state.
+--
+-- "bracketed paste" terminal feature:
+-- http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Bracketed-Paste-Mode
+
 local helpers = require('test.functional.helpers')(after_each)
 local uname = helpers.uname
 local thelpers = require('test.functional.terminal.helpers')
@@ -21,11 +25,14 @@ if helpers.pending_win32(pending) then return end
 
 describe('TUI', function()
   local screen
+  local child_session
 
   before_each(function()
     clear()
-    screen = thelpers.screen_setup(0, '["'..nvim_prog
-      ..'", "-u", "NONE", "-i", "NONE", "--cmd", "set noswapfile noshowcmd noruler undodir=. directory=. viewdir=. backupdir=."]')
+    local child_server = helpers.new_pipename()
+    screen = thelpers.screen_setup(0,
+      string.format([=[["%s", "--listen", "%s", "-u", "NONE", "-i", "NONE", "--cmd", "%s laststatus=2 background=dark"]]=],
+        nvim_prog, child_server, nvim_set))
     screen:expect([[
       {1: }                                                 |
       {4:~                                                 }|
@@ -35,11 +42,30 @@ describe('TUI', function()
                                                         |
       {3:-- TERMINAL --}                                    |
     ]])
+    child_session = helpers.connect(child_server)
   end)
 
   after_each(function()
     screen:detach()
   end)
+
+  -- Wait for mode in the child Nvim (avoid "typeahead race" #10826).
+  local function wait_for_mode(mode)
+    retry(nil, nil, function()
+      local _, m = child_session:request('nvim_get_mode')
+      eq(mode, m.mode)
+    end)
+  end
+
+  -- Assert buffer contents in the child Nvim.
+  local function expect_child_buf_lines(expected)
+    assert(type({}) == type(expected))
+    retry(nil, nil, function()
+      local _, buflines = child_session:request(
+        'nvim_buf_get_lines', 0, 0, -1, false)
+      eq(expected, buflines)
+    end)
+  end
 
   it('rapid resize #7572 #7628', function()
     -- Need buffer rows to provoke the behavior.
@@ -61,6 +87,85 @@ describe('TUI', function()
     screen:try_resize(57, 17)
     command('call jobresize(b:terminal_job_id, 57, 17)')
     eq(2, eval("1+1"))  -- Still alive?
+  end)
+
+  it('accepts resize while pager is active', function()
+    child_session:request("nvim_command", [[
+    set more
+    func! ManyErr()
+      for i in range(10)
+        echoerr "FAIL ".i
+      endfor
+    endfunc
+    ]])
+    feed_data(':call ManyErr()\r')
+    screen:expect{grid=[[
+      {8:Error detected while processing function ManyErr:} |
+      {11:line    2:}                                        |
+      {8:FAIL 0}                                            |
+      {8:FAIL 1}                                            |
+      {8:FAIL 2}                                            |
+      {10:-- More --}{1: }                                       |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+
+    feed_data('d')
+    screen:expect{grid=[[
+      {8:FAIL 1}                                            |
+      {8:FAIL 2}                                            |
+      {8:FAIL 3}                                            |
+      {8:FAIL 4}                                            |
+      {8:FAIL 5}                                            |
+      {10:-- More --}{1: }                                       |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+
+    screen:try_resize(50,5)
+    screen:expect{grid=[[
+      {8:FAIL 1}                                            |
+      {8:FAIL 2}                                            |
+      {8:FAIL 3}                                            |
+      {10:-- More -- SPACE/d/j: screen/page/line down, b/u/}{12:k}|
+      {3:-- TERMINAL --}                                    |
+    ]]}
+
+    -- TODO(bfredl): messes up the output (just like vim does).
+    feed_data('g')
+    screen:expect{grid=[[
+      {8:FAIL 1}        )                                   |
+      {8:Error detected while processing function ManyErr:} |
+      {11:line    2:}                                        |
+      {10:-- More --}{1: }                                       |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+
+    screen:try_resize(50,10)
+    screen:expect{grid=[[
+      {8:FAIL 1}        )                                   |
+      {8:Error detected while processing function ManyErr:} |
+      {11:line    2:}                                        |
+      {10:-- More --}                                        |
+      {10:                                                  }|
+      {10:                                                  }|
+      {10:                                                  }|
+      {10:                                                  }|
+      {10:-- More -- SPACE/d/j: screen/page/line down, b/u/}{12:k}|
+      {3:-- TERMINAL --}                                    |
+    ]]}
+
+    feed_data('\003')
+    screen:expect{grid=[[
+      {1: }                                                 |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name]                                         }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]}
   end)
 
   it('accepts basic utf-8 input', function()
@@ -128,7 +233,7 @@ describe('TUI', function()
     ]])
   end)
 
-  it('accepts ascii control sequences', function()
+  it('accepts ASCII control sequences', function()
     feed_data('i')
     feed_data('\022\007') -- ctrl+g
     feed_data('\022\022') -- ctrl+v
@@ -146,72 +251,379 @@ describe('TUI', function()
     ]], attrs)
   end)
 
-  it('automatically sends <Paste> for bracketed paste sequences', function()
-    -- Pasting can be really slow in the TUI, specially in ASAN.
-    -- This will be fixed later but for now we require a high timeout.
-    screen.timeout = 60000
+  it('paste: Insert mode', function()
+    -- "bracketed paste"
+    feed_data('i""\027i\027[200~')
+    screen:expect([[
+      "{1:"}                                                |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+      {3:-- INSERT --}                                      |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    feed_data('pasted from terminal')
+    expect_child_buf_lines({'"pasted from terminal"'})
+    screen:expect([[
+      "pasted from terminal{1:"}                            |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+      {3:-- INSERT --}                                      |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    feed_data('\027[201~')  -- End paste.
+    feed_data('\027\000')   -- ESC: go to Normal mode.
+    wait_for_mode('n')
+    screen:expect([[
+      "pasted from termina{1:l}"                            |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- Dot-repeat/redo.
+    feed_data('2.')
+    expect_child_buf_lines(
+      {'"pasted from terminapasted from terminalpasted from terminall"'})
+    screen:expect([[
+      "pasted from terminapasted from terminalpasted fro|
+      m termina{1:l}l"                                      |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- Undo.
+    feed_data('u')
+    expect_child_buf_lines({'"pasted from terminal"'})
+    feed_data('u')
+    expect_child_buf_lines({''})
+  end)
+
+  it('paste: normal-mode (+CRLF #10872)', function()
+    feed_data(':set ruler')
+    wait_for_mode('c')
+    feed_data('\n')
+    wait_for_mode('n')
+    local expected_lf   = {'line 1', 'ESC:\027 / CR: \rx'}
+    local expected_crlf = {'line 1', 'ESC:\027 / CR: ', 'x'}
+    local expected_grid1 = [[
+      line 1                                            |
+      ESC:{11:^[} / CR:                                      |
+      {1:x}                                                 |
+      {4:~                                                 }|
+      {5:[No Name] [+]                   3,1            All}|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]
+    local expected_attr = {
+      [1] = {reverse = true},
+      [3] = {bold = true},
+      [4] = {foreground = tonumber('0x00000c')},
+      [5] = {bold = true, reverse = true},
+      [11] = {foreground = tonumber('0x000051')},
+      [12] = {reverse = true, foreground = tonumber('0x000051')},
+    }
+    -- "bracketed paste"
+    feed_data('\027[200~'..table.concat(expected_lf,'\n')..'\027[201~')
+    screen:expect{grid=expected_grid1, attr_ids=expected_attr}
+    -- Dot-repeat/redo.
+    feed_data('.')
+    screen:expect{
+      grid=[[
+        ESC:{11:^[} / CR:                                      |
+        xline 1                                           |
+        ESC:{11:^[} / CR:                                      |
+        {1:x}                                                 |
+        {5:[No Name] [+]                   5,1            Bot}|
+                                                          |
+        {3:-- TERMINAL --}                                    |
+      ]],
+      attr_ids=expected_attr}
+    -- Undo.
+    feed_data('u')
+    expect_child_buf_lines(expected_crlf)
+    feed_data('u')
+    expect_child_buf_lines({''})
+    -- CRLF input
+    feed_data('\027[200~'..table.concat(expected_lf,'\r\n')..'\027[201~')
+    screen:expect{grid=expected_grid1, attr_ids=expected_attr}
+    expect_child_buf_lines(expected_crlf)
+  end)
+
+  it('paste: cmdline-mode inserts 1 line', function()
+    feed_data('ifoo\n')   -- Insert some text (for dot-repeat later).
+    feed_data('\027:""')  -- Enter Cmdline-mode.
+    feed_data('\027[D')   -- <Left> to place cursor between quotes.
+    wait_for_mode('c')
+    -- "bracketed paste"
+    feed_data('\027[200~line 1\nline 2\n\027[201~')
+    screen:expect{grid=[[
+      foo                                               |
+                                                        |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+      :"line 1{1:"}                                         |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+    -- Dot-repeat/redo.
+    feed_data('\027\000')
+    wait_for_mode('n')
+    feed_data('.')
+    screen:expect{grid=[[
+      foo                                               |
+      foo                                               |
+      {1: }                                                 |
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+  end)
+
+  it('paste: cmdline-mode collects chunks of unfinished line', function()
+    local function expect_cmdline(expected)
+      retry(nil, nil, function()
+        local _, cmdline = child_session:request(
+          'nvim_call_function', 'getcmdline', {})
+        eq(expected, cmdline)
+      end)
+    end
+    feed_data('\027:""')  -- Enter Cmdline-mode.
+    feed_data('\027[D')   -- <Left> to place cursor between quotes.
+    wait_for_mode('c')
+    feed_data('\027[200~stuff 1 ')
+    expect_cmdline('"stuff 1 "')
+    -- Discards everything after the first line.
+    feed_data('more\nstuff 2\nstuff 3\n')
+    expect_cmdline('"stuff 1 more"')
+    feed_data('stuff 3')
+    expect_cmdline('"stuff 1 more"')
+    -- End the paste sequence.
+    feed_data('\027[201~')
+    feed_data(' typed')
+    expect_cmdline('"stuff 1 more typed"')
+  end)
+
+  it('paste: recovers from vim.paste() failure', function()
+    child_session:request('nvim_execute_lua', [[
+      _G.save_paste_fn = vim.paste
+      vim.paste = function(lines, phase) error("fake fail") end
+    ]], {})
+    -- Prepare something for dot-repeat/redo.
+    feed_data('ifoo\n\027\000')
+    wait_for_mode('n')
+    screen:expect{grid=[[
+      foo                                               |
+      {1: }                                                 |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+    -- Start pasting...
+    feed_data('\027[200~line 1\nline 2\n')
+    screen:expect{grid=[[
+      foo                                               |
+                                                        |
+      {5:                                                  }|
+      {8:paste: Error executing lua: [string "<nvim>"]:2: f}|
+      {8:ake fail}                                          |
+      {10:Press ENTER or type command to continue}{1: }          |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+    -- Remaining chunks are discarded after vim.paste() failure.
+    feed_data('line 3\nline 4\n')
+    feed_data('line 5\nline 6\n')
+    feed_data('line 7\nline 8\n')
+    -- Stop paste.
+    feed_data('\027[201~')
+    feed_data('\n')  -- <CR>
+    expect_child_buf_lines({'foo',''})
+    --Dot-repeat/redo is not modified by failed paste.
+    feed_data('.')
+    screen:expect{grid=[[
+      foo                                               |
+      foo                                               |
+      {1: }                                                 |
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+    -- Editor should still work after failed/drained paste.
+    feed_data('ityped input...\027\000')
+    screen:expect{grid=[[
+      foo                                               |
+      foo                                               |
+      typed input..{1:.}                                    |
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+    -- Paste works if vim.paste() succeeds.
+    child_session:request('nvim_execute_lua', [[
+      vim.paste = _G.save_paste_fn
+    ]], {})
+    feed_data('\027[200~line A\nline B\n\027[201~')
+    feed_data('\n')  -- <CR>
+    screen:expect{grid=[[
+      foo                                               |
+      typed input...line A                              |
+      line B                                            |
+      {1: }                                                 |
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+  end)
+
+  it('paste: vim.paste() cancel (retval=false) #10865', function()
+    -- This test only exercises the "cancel" case.  Use-case would be "dangling
+    -- paste", but that is not implemented yet. #10865
+    child_session:request('nvim_execute_lua', [[
+      vim.paste = function(lines, phase) return false end
+    ]], {})
+    feed_data('\027[200~line A\nline B\n\027[201~')
+    feed_data('ifoo\n\027\000')
+    expect_child_buf_lines({'foo',''})
+  end)
+
+  it("paste: 'nomodifiable' buffer", function()
+    child_session:request('nvim_command', 'set nomodifiable')
+    feed_data('\027[200~fail 1\nfail 2\n\027[201~')
+    screen:expect{grid=[[
+                                                        |
+      {4:~                                                 }|
+      {5:                                                  }|
+      {8:paste: Error executing lua: vim.lua:196: Vim:E21: }|
+      {8:Cannot make changes, 'modifiable' is off}          |
+      {10:Press ENTER or type command to continue}{1: }          |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+    feed_data('\n')  -- <Enter>
+    child_session:request('nvim_command', 'set modifiable')
+    feed_data('\027[200~success 1\nsuccess 2\n\027[201~')
+    screen:expect{grid=[[
+      success 1                                         |
+      success 2                                         |
+      {1: }                                                 |
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+  end)
+
+  it('paste: exactly 64 bytes #10311', function()
+    local expected = string.rep('z', 64)
+    feed_data('i')
+    wait_for_mode('i')
+    -- "bracketed paste"
+    feed_data('\027[200~'..expected..'\027[201~')
+    feed_data(' end')
+    expected = expected..' end'
+    expect_child_buf_lines({expected})
+    screen:expect([[
+      zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz|
+      zzzzzzzzzzzzzz end{1: }                               |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+      {3:-- INSERT --}                                      |
+      {3:-- TERMINAL --}                                    |
+    ]])
+  end)
+
+  it('paste: big burst of input', function()
+    feed_data(':set ruler\n')
+    local t = {}
+    for i = 1, 3000 do
+      t[i] = 'item ' .. tostring(i)
+    end
+    feed_data('i')
+    wait_for_mode('i')
+    -- "bracketed paste"
+    feed_data('\027[200~'..table.concat(t, '\n')..'\027[201~')
+    expect_child_buf_lines(t)
+    feed_data(' end')
+    screen:expect([[
+      item 2997                                         |
+      item 2998                                         |
+      item 2999                                         |
+      item 3000 end{1: }                                    |
+      {5:[No Name] [+]                   3000,14        Bot}|
+      {3:-- INSERT --}                                      |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    feed_data('\027\000')  -- ESC: go to Normal mode.
+    wait_for_mode('n')
+    -- Dot-repeat/redo.
+    feed_data('.')
+    screen:expect([[
+      item 2997                                         |
+      item 2998                                         |
+      item 2999                                         |
+      item 3000 en{1:d}d                                    |
+      {5:[No Name] [+]                   5999,13        Bot}|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+  end)
+
+  it('paste: forwards spurious "start paste" code', function()
+    -- If multiple "start paste" sequences are sent without a corresponding
+    -- "stop paste" sequence, only the first occurrence should be consumed.
+
+    -- Send the "start paste" sequence.
     feed_data('i\027[200~')
+    feed_data('\npasted from terminal (1)\n')
+    -- Send spurious "start paste" sequence.
+    feed_data('\027[200~')
+    feed_data('\n')
+    -- Send the "stop paste" sequence.
+    feed_data('\027[201~')
+
+    screen:expect{grid=[[
+                                                        |
+      pasted from terminal (1)                          |
+      {6:^[}[200~                                           |
+      {1: }                                                 |
+      {5:[No Name] [+]                                     }|
+      {3:-- INSERT --}                                      |
+      {3:-- TERMINAL --}                                    |
+    ]],
+    attr_ids={
+      [1] = {reverse = true},
+      [2] = {background = tonumber('0x00000b')},
+      [3] = {bold = true},
+      [4] = {foreground = tonumber('0x00000c')},
+      [5] = {bold = true, reverse = true},
+      [6] = {foreground = tonumber('0x000051')},
+    }}
+  end)
+
+  it('paste: ignores spurious "stop paste" code', function()
+    -- If "stop paste" sequence is received without a preceding "start paste"
+    -- sequence, it should be ignored.
+    feed_data('i')
+    -- Send "stop paste" sequence.
+    feed_data('\027[201~')
     screen:expect([[
       {1: }                                                 |
       {4:~                                                 }|
       {4:~                                                 }|
       {4:~                                                 }|
       {5:[No Name]                                         }|
-      {3:-- INSERT (paste) --}                              |
-      {3:-- TERMINAL --}                                    |
-    ]])
-    feed_data('pasted from terminal')
-    screen:expect([[
-      pasted from terminal{1: }                             |
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {5:[No Name] [+]                                     }|
-      {3:-- INSERT (paste) --}                              |
-      {3:-- TERMINAL --}                                    |
-    ]])
-    feed_data('\027[201~')
-    screen:expect([[
-      pasted from terminal{1: }                             |
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {5:[No Name] [+]                                     }|
-      {3:-- INSERT --}                                      |
-      {3:-- TERMINAL --}                                    |
-    ]])
-  end)
-
-  it('handles pasting a specific amount of text', function()
-    -- Need extra time for this test, specially in ASAN.
-    screen.timeout = 60000
-    feed_data('i\027[200~'..string.rep('z', 64)..'\027[201~')
-    screen:expect([[
-      zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz|
-      zzzzzzzzzzzzzz{1: }                                   |
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {5:[No Name] [+]                                     }|
-      {3:-- INSERT --}                                      |
-      {3:-- TERMINAL --}                                    |
-    ]])
-  end)
-
-  it('can handle arbitrarily long bursts of input', function()
-    -- Need extra time for this test, specially in ASAN.
-    screen.timeout = 60000
-    feed_command('set ruler')
-    local t = {}
-    for i = 1, 3000 do
-      t[i] = 'item ' .. tostring(i)
-    end
-    feed_data('i\027[200~'..table.concat(t, '\n')..'\027[201~')
-    screen:expect([[
-      item 2997                                         |
-      item 2998                                         |
-      item 2999                                         |
-      item 3000{1: }                                        |
-      {5:[No Name] [+]                   3000,10        Bot}|
       {3:-- INSERT --}                                      |
       {3:-- TERMINAL --}                                    |
     ]])
@@ -270,7 +682,7 @@ describe('TUI', function()
   end)
 
   it('is included in nvim_list_uis()', function()
-    feed_data(':echo map(nvim_list_uis(), {k,v -> sort(items(filter(v, {k,v -> k[:3] !=# "ext_" })))})\013')
+    feed_data(':echo map(nvim_list_uis(), {k,v -> sort(items(filter(v, {k,v -> k[:3] !=# "ext_" })))})\r')
     screen:expect([=[
                                                         |
       {4:~                                                 }|

@@ -97,11 +97,19 @@ else()
   set(DEPS_C_COMPILER "${CMAKE_C_COMPILER}")
 endif()
 
-set(DEPS_CXX_COMPILER "${CMAKE_CXX_COMPILER}")
+if(USE_BUNDLED_GPERF)
+  enable_language(CXX)
+endif()
+
+if(CMAKE_CXX_COMPILER)
+  set(DEPS_CXX_COMPILER "${CMAKE_CXX_COMPILER}")
+endif()
 
 if(CMAKE_OSX_SYSROOT)
   set(DEPS_C_COMPILER "${DEPS_C_COMPILER} -isysroot${CMAKE_OSX_SYSROOT}")
-  set(DEPS_CXX_COMPILER "${DEPS_CXX_COMPILER} -isysroot${CMAKE_OSX_SYSROOT}")
+  if(DEPS_CXX_COMPILER)
+    set(DEPS_CXX_COMPILER "${DEPS_CXX_COMPILER} -isysroot${CMAKE_OSX_SYSROOT}")
+  endif()
 endif()
 
 # Cross compiling: use these for dependencies built for the
@@ -146,8 +154,8 @@ set(LUA_SHA256 2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333)
 set(LUAROCKS_URL https://github.com/luarocks/luarocks/archive/v2.4.4.tar.gz)
 set(LUAROCKS_SHA256 9eb3d0738fd02ad8bf39bcedccac4e83e9b5fff2bcca247c3584b925b2075d9c)
 
-set(UNIBILIUM_URL https://github.com/mauke/unibilium/archive/v2.0.0.tar.gz)
-set(UNIBILIUM_SHA256 78997d38d4c8177c60d3d0c1aa8c53fd0806eb21825b7b335b1768d7116bc1c1)
+set(UNIBILIUM_URL https://github.com/neovim/unibilium/archive/92d929f.tar.gz)
+set(UNIBILIUM_SHA256 29815283c654277ef77a3adcc8840db79ddbb20a0f0b0c8f648bd8cd49a02e4b)
 
 set(LIBTERMKEY_URL http://www.leonerd.org.uk/code/libtermkey/libtermkey-0.21.1.tar.gz)
 set(LIBTERMKEY_SHA256 cecbf737f35d18f433c8d7864f63c0f878af41f8bd0255a3ebb16010dc044d5f)

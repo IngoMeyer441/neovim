@@ -430,7 +430,7 @@ static void tui_main(UIBridgeData *bridge, UI *ui)
     tui_terminal_after_startup(ui);
     // Tickle `main_loop` with a dummy event, else the initial "focus-gained"
     // terminal response may not get processed until user hits a key.
-    loop_schedule_deferred(&main_loop, event_create(tui_dummy_event, 0));
+    loop_schedule_deferred(&main_loop, event_create(loop_dummy_event, 0));
   }
   // "Passive" (I/O-driven) loop: TUI thread "main loop".
   while (!tui_is_stopped(ui)) {
@@ -449,16 +449,12 @@ static void tui_main(UIBridgeData *bridge, UI *ui)
   xfree(data);
 }
 
-static void tui_dummy_event(void **argv)
-{
-}
-
 /// Handoff point between the main (ui_bridge) thread and the TUI thread.
 static void tui_scheduler(Event event, void *d)
 {
   UI *ui = d;
   TUIData *data = ui->data;
-  loop_schedule(data->loop, event);  // `tui_loop` local to tui_main().
+  loop_schedule_fast(data->loop, event);  // `tui_loop` local to tui_main().
 }
 
 #ifdef UNIX

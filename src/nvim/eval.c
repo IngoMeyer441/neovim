@@ -1307,27 +1307,17 @@ int call_vim_function(
     const char_u *func,
     int argc,
     typval_T *argv,
-    typval_T *rettv,
-    bool safe                       // use the sandbox
+    typval_T *rettv
 )
+  FUNC_ATTR_NONNULL_ALL
 {
   int doesrange;
-  void        *save_funccalp = NULL;
   int ret;
-
-  if (safe) {
-    save_funccalp = save_funccal();
-    ++sandbox;
-  }
 
   rettv->v_type = VAR_UNKNOWN;  // tv_clear() uses this.
   ret = call_func(func, (int)STRLEN(func), rettv, argc, argv, NULL,
                   curwin->w_cursor.lnum, curwin->w_cursor.lnum,
                   &doesrange, true, NULL, NULL);
-  if (safe) {
-    --sandbox;
-    restore_funccal(save_funccalp);
-  }
 
   if (ret == FAIL) {
     tv_clear(rettv);
@@ -1340,16 +1330,16 @@ int call_vim_function(
 /// @param[in]  func  Function name.
 /// @param[in]  argc  Number of arguments.
 /// @param[in]  argv  Array with typval_T arguments.
-/// @param[in]  safe  Use with sandbox.
 ///
 /// @return -1 when calling function fails, result of function otherwise.
-varnumber_T call_func_retnr(char_u *func, int argc,
-                            typval_T *argv, int safe)
+varnumber_T call_func_retnr(const char_u *func, int argc,
+                            typval_T *argv)
+  FUNC_ATTR_NONNULL_ALL
 {
   typval_T rettv;
   varnumber_T retval;
 
-  if (call_vim_function(func, argc, argv, &rettv, safe) == FAIL) {
+  if (call_vim_function(func, argc, argv, &rettv) == FAIL) {
     return -1;
   }
   retval = tv_get_number_chk(&rettv, NULL);
@@ -1361,18 +1351,16 @@ varnumber_T call_func_retnr(char_u *func, int argc,
 /// @param[in]  func  Function name.
 /// @param[in]  argc  Number of arguments.
 /// @param[in]  argv  Array with typval_T arguments.
-/// @param[in]  safe  Use the sandbox.
 ///
 /// @return [allocated] NULL when calling function fails, allocated string
 ///                     otherwise.
 char *call_func_retstr(const char *const func, int argc,
-                       typval_T *argv,
-                       bool safe)
-  FUNC_ATTR_NONNULL_ARG(1) FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_MALLOC
+                       typval_T *argv)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_MALLOC
 {
   typval_T rettv;
   // All arguments are passed as strings, no conversion to number.
-  if (call_vim_function((const char_u *)func, argc, argv, &rettv, safe)
+  if (call_vim_function((const char_u *)func, argc, argv, &rettv)
       == FAIL) {
     return NULL;
   }
@@ -1386,17 +1374,16 @@ char *call_func_retstr(const char *const func, int argc,
 /// @param[in]  func  Function name.
 /// @param[in]  argc  Number of arguments.
 /// @param[in]  argv  Array with typval_T arguments.
-/// @param[in]  safe  Use the sandbox.
 ///
 /// @return [allocated] NULL when calling function fails or return tv is not a
 ///                     List, allocated List otherwise.
-void *call_func_retlist(char_u *func, int argc, typval_T *argv,
-                        bool safe)
+void *call_func_retlist(const char_u *func, int argc, typval_T *argv)
+  FUNC_ATTR_NONNULL_ALL
 {
   typval_T rettv;
 
   // All arguments are passed as strings, no conversion to number.
-  if (call_vim_function(func, argc, argv, &rettv, safe) == FAIL) {
+  if (call_vim_function(func, argc, argv, &rettv) == FAIL) {
     return NULL;
   }
 
@@ -6437,6 +6424,10 @@ call_func(
   typval_T argv[MAX_FUNC_ARGS + 1];  // used when "partial" is not NULL
   int argv_clear = 0;
 
+  // Initialize rettv so that it is safe for caller to invoke clear_tv(rettv)
+  // even when call_func() returns FAIL.
+  rettv->v_type = VAR_UNKNOWN;
+
   // Make a copy of the name, if it comes from a funcref variable it could
   // be changed or deleted in the called function.
   name = vim_strnsave(funcname, len);
@@ -6465,13 +6456,7 @@ call_func(
     }
   }
 
-
-  // Execute the function if executing and no errors were detected.
-  if (!evaluate) {
-    // Not evaluating, which means the return value is unknown.  This
-    // matters for giving error messages.
-    rettv->v_type = VAR_UNKNOWN;
-  } else if (error == ERROR_NONE) {
+  if (error == ERROR_NONE && evaluate) {
     char_u *rfname = fname;
 
     /* Ignore "g:" before a function name. */
@@ -10907,6 +10892,83 @@ static void f_getwininfo(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
 }
 
+// Dummy timer callback. Used by f_wait().
+static void dummy_timer_due_cb(TimeWatcher *tw, void *data)
+{
+}
+
+// Dummy timer close callback. Used by f_wait().
+static void dummy_timer_close_cb(TimeWatcher *tw, void *data)
+{
+  xfree(tw);
+}
+
+/// "wait(timeout, condition[, interval])" function
+static void f_wait(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  rettv->v_type = VAR_NUMBER;
+  rettv->vval.v_number = -1;
+
+  if (argvars[0].v_type != VAR_NUMBER) {
+    EMSG2(_(e_invargval), "1");
+    return;
+  }
+
+  int timeout = argvars[0].vval.v_number;
+  typval_T expr = argvars[1];
+
+  int interval = -1;
+  typval_T *tv_interval = &argvars[2];
+
+  TimeWatcher *tw = NULL;
+
+  if (tv_interval->v_type == VAR_NUMBER) {
+    interval = tv_interval->vval.v_number;
+    if (interval <= 0) {
+      EMSG2(_(e_invargval), "3");
+      return;
+    }
+    // Start dummy timer
+    tw = xmalloc(sizeof(TimeWatcher));
+    time_watcher_init(&main_loop, tw, NULL);
+    tw->events = main_loop.events;
+    tw->blockable = true;
+    time_watcher_start(tw, dummy_timer_due_cb, interval, interval);
+  } else if (tv_interval->v_type != VAR_UNKNOWN) {
+    EMSG2(_(e_invargval), "3");
+    return;
+  }
+
+  typval_T argv = TV_INITIAL_VALUE;
+  typval_T exprval = TV_INITIAL_VALUE;
+  bool error = false;
+  int save_called_emsg = called_emsg;
+  called_emsg = false;
+
+  LOOP_PROCESS_EVENTS_UNTIL(&main_loop, main_loop.events, timeout,
+                            eval_expr_typval(&expr, &argv, 0, &exprval) != OK
+                            || tv_get_number_chk(&exprval, &error)
+                            || called_emsg || error || got_int);
+
+  if (called_emsg || error) {
+    rettv->vval.v_number = -3;
+  } else if (got_int) {
+    got_int = false;
+    vgetc();
+    rettv->vval.v_number = -2;
+  } else if (tv_get_number_chk(&exprval, &error)) {
+    rettv->vval.v_number = 0;
+  }
+
+  called_emsg = save_called_emsg;
+
+  // Stop dummy timer
+  if (tw) {
+    time_watcher_stop(tw);
+    time_watcher_close(tw, dummy_timer_close_cb);
+  }
+}
+
 // "win_screenpos()" function
 static void f_win_screenpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
@@ -14663,6 +14725,21 @@ static void f_rpcstop(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
 }
 
+static void screenchar_adjust_grid(ScreenGrid **grid, int *row, int *col)
+{
+  // TODO(bfredl): this is a hack for legacy tests which use screenchar()
+  // to check printed messages on the screen (but not floats etc
+  // as these are not legacy features). If the compositor is refactored to
+  // have its own buffer, this should just read from it instead.
+  msg_scroll_flush();
+  if (msg_grid.chars && msg_grid.comp_index > 0 && *row >= msg_grid.comp_row
+      && *row < (msg_grid.Rows + msg_grid.comp_row)
+      && *col < msg_grid.Columns) {
+    *grid = &msg_grid;
+    *row -= msg_grid.comp_row;
+  }
+}
+
 /*
  * "screenattr()" function
  */
@@ -14670,13 +14747,15 @@ static void f_screenattr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   int c;
 
-  const int row = (int)tv_get_number_chk(&argvars[0], NULL) - 1;
-  const int col = (int)tv_get_number_chk(&argvars[1], NULL) - 1;
+  int row = (int)tv_get_number_chk(&argvars[0], NULL) - 1;
+  int col = (int)tv_get_number_chk(&argvars[1], NULL) - 1;
   if (row < 0 || row >= default_grid.Rows
       || col < 0 || col >= default_grid.Columns) {
     c = -1;
   } else {
-    c = default_grid.attrs[default_grid.line_offset[row] + col];
+    ScreenGrid *grid = &default_grid;
+    screenchar_adjust_grid(&grid, &row, &col);
+    c = grid->attrs[grid->line_offset[row] + col];
   }
   rettv->vval.v_number = c;
 }
@@ -14686,17 +14765,17 @@ static void f_screenattr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
  */
 static void f_screenchar(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  int off;
   int c;
 
-  const int row = tv_get_number_chk(&argvars[0], NULL) - 1;
-  const int col = tv_get_number_chk(&argvars[1], NULL) - 1;
+  int row = tv_get_number_chk(&argvars[0], NULL) - 1;
+  int col = tv_get_number_chk(&argvars[1], NULL) - 1;
   if (row < 0 || row >= default_grid.Rows
       || col < 0 || col >= default_grid.Columns) {
     c = -1;
   } else {
-    off = default_grid.line_offset[row] + col;
-    c = utf_ptr2char(default_grid.chars[off]);
+    ScreenGrid *grid = &default_grid;
+    screenchar_adjust_grid(&grid, &row, &col);
+    c = utf_ptr2char(grid->chars[grid->line_offset[row] + col]);
   }
   rettv->vval.v_number = c;
 }
@@ -15217,8 +15296,14 @@ static void set_buffer_lines(buf_T *buf, linenr_T lnum_arg, bool append,
 
   if (added > 0) {
     appended_lines_mark(append_lnum, added);
+
+    // Only adjust the cursor for buffers other than the current, unless it
+    // is the current window. For curbuf and other windows it has been done
+    // in mark_adjust_internal().
     FOR_ALL_TAB_WINDOWS(tp, wp) {
-      if (wp->w_buffer == buf && wp->w_cursor.lnum > append_lnum) {
+      if (wp->w_buffer == buf
+          && (wp->w_buffer != curbuf || wp == curwin)
+          && wp->w_cursor.lnum > append_lnum) {
         wp->w_cursor.lnum += added;
       }
     }

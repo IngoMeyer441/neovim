@@ -2989,6 +2989,7 @@ ambw_end:
       errmsg = e_invarg;
     } else {
       (void)init_chartab();
+      msg_grid_validate();
     }
   } else if (varp == &p_ead) {  // 'eadirection'
     if (check_opt_strings(p_ead, p_ead_values, false) != OK) {
@@ -4643,6 +4644,15 @@ int findoption_len(const char *const arg, const size_t len)
   }
   if (s == NULL) {
     opt_idx = -1;
+  } else {
+    // Nvim: handle option aliases.
+    if (STRNCMP(options[opt_idx].fullname, "viminfo", 7) == 0) {
+      if (STRLEN(options[opt_idx].fullname) == 7) {
+        return findoption_len("shada", 5);
+      }
+      assert(STRCMP(options[opt_idx].fullname, "viminfofile") == 0);
+      return findoption_len("shadafile", 9);
+    }
   }
   return opt_idx;
 }
