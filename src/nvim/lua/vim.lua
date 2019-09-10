@@ -188,12 +188,17 @@ paste = (function()
     if mode == 'c' and not got_line1 then  -- cmdline-mode: paste only 1 line.
       got_line1 = (#lines > 1)
       vim.api.nvim_set_option('paste', true)  -- For nvim_input().
-      local line1, _ = string.gsub(lines[1], '[\r\n\012\027]', ' ')
-      vim.api.nvim_input(line1)  -- Scrub "\r".
-    elseif mode == 'i' or mode == 'R' then
-      vim.api.nvim_put(lines, 'c', false, true)
-    else
-      vim.api.nvim_put(lines, 'c', true, true)
+      local line1, _ = string.gsub(lines[1], '[\r\n\012\027]', ' ')  -- Scrub.
+      vim.api.nvim_input(line1)
+      vim.api.nvim_set_option('paste', false)
+    elseif mode ~= 'c' then  -- Else: discard remaining cmdline-mode chunks.
+      if phase < 2 and mode ~= 'i' and mode ~= 'R' then
+        vim.api.nvim_put(lines, 'c', true, true)
+        -- XXX: Normal-mode: workaround bad cursor-placement after first chunk.
+        vim.api.nvim_command('normal! a')
+      else
+        vim.api.nvim_put(lines, 'c', false, true)
+      end
     end
     if phase ~= -1 and (now - tdots >= 100) then
       local dots = ('.'):rep(tick % 4)
@@ -204,17 +209,17 @@ paste = (function()
       vim.api.nvim_command(('echo "%s"'):format(dots))
     end
     if phase == -1 or phase == 3 then
-      vim.api.nvim_command('redraw')
-      vim.api.nvim_command('echo ""')
-      vim.api.nvim_set_option('paste', false)
+      vim.api.nvim_command('redraw'..(tick > 1 and '|echo ""' or ''))
     end
     return true  -- Paste will not continue if not returning `true`.
   end
 end)()
 
---- Defers the wrapped callback until the Nvim API is safe to call.
+--- Defers callback `cb` until the Nvim API is safe to call.
 ---
---@see |vim-loop-callbacks|
+---@see |lua-loop-callbacks|
+---@see |vim.schedule()|
+---@see |vim.in_fast_event()|
 local function schedule_wrap(cb)
   return (function (...)
     local args = {...}

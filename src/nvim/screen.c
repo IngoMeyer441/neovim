@@ -404,7 +404,9 @@ int update_screen(int type)
     default_grid.valid = true;
   }
 
-  if (type == NOT_VALID && msg_dothrottle()) {
+  // After disabling msgsep the grid might not have been deallocated yet,
+  // hence we also need to check msg_grid.chars
+  if (type == NOT_VALID && (msg_use_grid() || msg_grid.chars)) {
     grid_fill(&default_grid, Rows-p_ch, Rows, 0, Columns, ' ', ' ', 0);
   }
 
@@ -5762,7 +5764,7 @@ next_search_hl (
         if (shl == &search_hl) {
           // don't free regprog in the match list, it's a copy
           vim_regfree(shl->rm.regprog);
-          SET_NO_HLSEARCH(TRUE);
+          set_no_hlsearch(true);
         }
         shl->rm.regprog = NULL;
         shl->lnum = 0;
@@ -6250,7 +6252,7 @@ void screenclear(void)
   msg_scrolled = 0;  // can't scroll back
   msg_didany = false;
   msg_didout = false;
-  if (HL_ATTR(HLF_MSG) > 0 && msg_dothrottle() && msg_grid.chars) {
+  if (HL_ATTR(HLF_MSG) > 0 && msg_use_grid() && msg_grid.chars) {
     grid_invalidate(&msg_grid);
     msg_grid_validate();
     msg_grid_invalid = false;
@@ -7288,9 +7290,9 @@ void screen_resize(int width, int height)
         }
       }
     }
+    ui_flush();
   }
-  ui_flush();
-  --busy;
+  busy--;
 }
 
 /// Check if the new Nvim application "shell" dimensions are valid.

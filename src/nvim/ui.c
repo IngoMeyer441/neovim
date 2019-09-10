@@ -174,7 +174,7 @@ void ui_refresh(void)
   }
 
   if (updating_screen) {
-    ui_schedule_refresh();
+    deferred_refresh_event(NULL);
     return;
   }
 
@@ -221,6 +221,19 @@ void ui_refresh(void)
   ui_cursor_shape();
 }
 
+int ui_pum_get_height(void)
+{
+  int pum_height = 0;
+  for (size_t i = 1; i < ui_count; i++) {
+    int ui_pum_height = uis[i]->pum_height;
+    if (ui_pum_height) {
+      pum_height =
+        pum_height != 0 ? MIN(pum_height, ui_pum_height) : ui_pum_height;
+    }
+  }
+  return pum_height;
+}
+
 static void ui_refresh_event(void **argv)
 {
   ui_refresh();
@@ -228,11 +241,11 @@ static void ui_refresh_event(void **argv)
 
 void ui_schedule_refresh(void)
 {
-  // TODO(bfredl): "fast" is not optimal. UI should be refreshed only at
-  // deferred processing plus a few more blocked-on-input situtions like
-  // wait_return(), but not any os_breakcheck(). Alternatively make this
-  // defered and make wait_return() process deferred events already.
-  loop_schedule_fast(&main_loop, event_create(ui_refresh_event, 0));
+  loop_schedule_fast(&main_loop, event_create(deferred_refresh_event, 0));
+}
+static void deferred_refresh_event(void **argv)
+{
+  multiqueue_put(resize_events, ui_refresh_event, 0);
 }
 
 void ui_default_colors_set(void)

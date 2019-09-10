@@ -1815,13 +1815,11 @@ static void list_vim_vars(int *first)
   list_hashtable_vars(&vimvarht, "v:", false, first);
 }
 
-/*
- * List script-local variables, if there is a script.
- */
+// List script-local variables, if there is a script.
 static void list_script_vars(int *first)
 {
-  if (current_SID > 0 && current_SID <= ga_scripts.ga_len) {
-    list_hashtable_vars(&SCRIPT_VARS(current_SID), "s:", false, first);
+  if (current_sctx.sc_sid > 0 && current_sctx.sc_sid <= ga_scripts.ga_len) {
+    list_hashtable_vars(&SCRIPT_VARS(current_sctx.sc_sid), "s:", false, first);
   }
 }
 
@@ -3366,15 +3364,15 @@ static int pattern_match(char_u *pat, char_u *text, int ic)
  * types for expressions.
  */
 typedef enum {
-  TYPE_UNKNOWN = 0
-  , TYPE_EQUAL          /* == */
-  , TYPE_NEQUAL         /* != */
-  , TYPE_GREATER        /* >  */
-  , TYPE_GEQUAL         /* >= */
-  , TYPE_SMALLER        /* <  */
-  , TYPE_SEQUAL         /* <= */
-  , TYPE_MATCH          /* =~ */
-  , TYPE_NOMATCH        /* !~ */
+  TYPE_UNKNOWN = 0,
+  TYPE_EQUAL,         // ==
+  TYPE_NEQUAL,        // !=
+  TYPE_GREATER,       // >
+  TYPE_GEQUAL,        // >=
+  TYPE_SMALLER,       // <
+  TYPE_SEQUAL,        // <=
+  TYPE_MATCH,         // =~
+  TYPE_NOMATCH,       // !~
 } exptype_T;
 
 // TODO(ZyX-I): move to eval/expressions
@@ -5981,7 +5979,8 @@ static int get_lambda_tv(char_u **arg, typval_T *rettv, bool evaluate)
     fp->uf_varargs = true;
     fp->uf_flags = flags;
     fp->uf_calls = 0;
-    fp->uf_script_ID = current_SID;
+    fp->uf_script_ctx = current_sctx;
+    fp->uf_script_ctx.sc_lnum += sourcing_lnum - newlines.ga_len;
 
     pt->pt_func = fp;
     pt->pt_refcount = 1;
@@ -6329,11 +6328,11 @@ static char_u *fname_trans_sid(const char_u *const name,
     fname_buf[2] = (int)KE_SNR;
     int i = 3;
     if (eval_fname_sid((const char *)name)) {  // "<SID>" or "s:"
-      if (current_SID <= 0) {
+      if (current_sctx.sc_sid <= 0) {
         *error = ERROR_SCRIPT;
       } else {
         snprintf((char *)fname_buf + 3, FLEN_FIXED + 1, "%" PRId64 "_",
-                 (int64_t)current_SID);
+                 (int64_t)current_sctx.sc_sid);
         i = (int)STRLEN(fname_buf);
       }
     }
@@ -9433,7 +9432,7 @@ static void common_function(typval_T *argvars, typval_T *rettv,
       // would also work, but some plugins depend on the name being
       // printable text.
       snprintf(sid_buf, sizeof(sid_buf), "<SNR>%" PRId64 "_",
-               (int64_t)current_SID);
+               (int64_t)current_sctx.sc_sid);
       name = xmalloc(STRLEN(sid_buf) + STRLEN(s + off) + 1);
       STRCPY(name, sid_buf);
       STRCAT(name, s + off);
@@ -9942,9 +9941,7 @@ static void f_getchar(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     if (argvars[0].v_type == VAR_UNKNOWN) {
       // getchar(): blocking wait.
       if (!(char_avail() || using_script() || input_available())) {
-        input_enable_events();
-        (void)os_inchar(NULL, 0, -1, 0);
-        input_disable_events();
+        (void)os_inchar(NULL, 0, -1, 0, main_loop.events);
         if (!multiqueue_empty(main_loop.events)) {
           multiqueue_process_events(main_loop.events);
           continue;
@@ -12437,35 +12434,30 @@ static void f_jobwait(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   if (check_restricted() || check_secure()) {
     return;
   }
-
   if (argvars[0].v_type != VAR_LIST || (argvars[1].v_type != VAR_NUMBER
         && argvars[1].v_type != VAR_UNKNOWN)) {
     EMSG(_(e_invarg));
     return;
   }
 
-
+  ui_busy_start();
   list_T *args = argvars[0].vval.v_list;
   Channel **jobs = xcalloc(tv_list_len(args), sizeof(*jobs));
-
-  ui_busy_start();
   MultiQueue *waiting_jobs = multiqueue_new_parent(loop_on_put, &main_loop);
-  // For each item in the input list append an integer to the output list. -3
-  // is used to represent an invalid job id, -2 is for a interrupted job and
-  // -1 for jobs that were skipped or timed out.
 
+  // Validate, prepare jobs for waiting.
   int i = 0;
   TV_LIST_ITER_CONST(args, arg, {
     Channel *chan = NULL;
     if (TV_LIST_ITEM_TV(arg)->v_type != VAR_NUMBER
         || !(chan = find_job(TV_LIST_ITEM_TV(arg)->vval.v_number, false))) {
-      jobs[i] = NULL;
+      jobs[i] = NULL;  // Invalid job.
     } else {
       jobs[i] = chan;
       channel_incref(chan);
       if (chan->stream.proc.status < 0) {
-        // Process any pending events for the job because we'll temporarily
-        // replace the parent queue
+        // Process any pending events on the job's queue before temporarily
+        // replacing it.
         multiqueue_process_events(chan->events);
         multiqueue_replace_parent(chan->events, waiting_jobs);
       }
@@ -12482,40 +12474,36 @@ static void f_jobwait(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   for (i = 0; i < tv_list_len(args); i++) {
     if (remaining == 0) {
-      // timed out
-      break;
+      break;  // Timeout.
     }
-
-    // if the job already exited, but wasn't freed yet
-    if (jobs[i] == NULL || jobs[i]->stream.proc.status >= 0) {
-      continue;
+    if (jobs[i] == NULL) {
+      continue;  // Invalid job, will assign status=-3 below.
     }
-
     int status = process_wait(&jobs[i]->stream.proc, remaining,
                               waiting_jobs);
     if (status < 0) {
-      // interrupted or timed out, skip remaining jobs.
-      break;
+      break;  // Interrupted (CTRL-C) or timeout, skip remaining jobs.
     }
     if (remaining > 0) {
       uint64_t now = os_hrtime();
-      remaining -= (int) ((now - before) / 1000000);
+      remaining = MIN(0, remaining - (int)((now - before) / 1000000));
       before = now;
-      if (remaining <= 0) {
-        break;
-      }
     }
   }
 
   list_T *const rv = tv_list_alloc(tv_list_len(args));
 
-  // restore the parent queue for any jobs still alive
+  // For each job:
+  //  * Restore its parent queue if the job is still alive.
+  //  * Append its status to the output list, or:
+  //       -3 for "invalid job id"
+  //       -2 for "interrupted" (user hit CTRL-C)
+  //       -1 for jobs that were skipped or timed out
   for (i = 0; i < tv_list_len(args); i++) {
     if (jobs[i] == NULL) {
       tv_list_append_number(rv, -3);
       continue;
     }
-    // restore the parent queue for the job
     multiqueue_process_events(jobs[i]->events);
     multiqueue_replace_parent(jobs[i]->events, main_loop.events);
 
@@ -12883,7 +12871,8 @@ void mapblock_fill_dict(dict_T *const dict,
   tv_dict_add_nr(dict, S_LEN("noremap"), noremap_value);
   tv_dict_add_nr(dict, S_LEN("expr"),  mp->m_expr ? 1 : 0);
   tv_dict_add_nr(dict, S_LEN("silent"), mp->m_silent ? 1 : 0);
-  tv_dict_add_nr(dict, S_LEN("sid"), (varnumber_T)mp->m_script_ID);
+  tv_dict_add_nr(dict, S_LEN("sid"), (varnumber_T)mp->m_script_ctx.sc_sid);
+  tv_dict_add_nr(dict, S_LEN("lnum"), (varnumber_T)mp->m_script_ctx.sc_lnum);
   tv_dict_add_nr(dict, S_LEN("buffer"), (varnumber_T)buffer_value);
   tv_dict_add_nr(dict, S_LEN("nowait"), mp->m_nowait ? 1 : 0);
   tv_dict_add_allocated_str(dict, S_LEN("mode"), mapmode);
@@ -14558,7 +14547,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     ADD(args, vim_to_object(tv));
   }
 
-  scid_T save_current_SID;
+  sctx_T save_current_sctx;
   uint8_t *save_sourcing_name, *save_autocmd_fname, *save_autocmd_match;
   linenr_T save_sourcing_lnum;
   int save_autocmd_bufnr;
@@ -14567,7 +14556,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   if (l_provider_call_nesting) {
     // If this is called from a provider function, restore the scope
     // information of the caller.
-    save_current_SID = current_SID;
+    save_current_sctx = current_sctx;
     save_sourcing_name = sourcing_name;
     save_sourcing_lnum = sourcing_lnum;
     save_autocmd_fname = autocmd_fname;
@@ -14575,7 +14564,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     save_autocmd_bufnr = autocmd_bufnr;
     save_funccalp = save_funccal();
 
-    current_SID = provider_caller_scope.SID;
+    current_sctx = provider_caller_scope.script_ctx;
     sourcing_name = provider_caller_scope.sourcing_name;
     sourcing_lnum = provider_caller_scope.sourcing_lnum;
     autocmd_fname = provider_caller_scope.autocmd_fname;
@@ -14593,7 +14582,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   Object result = rpc_send_call(chan_id, method, args, &err);
 
   if (l_provider_call_nesting) {
-    current_SID = save_current_SID;
+    current_sctx = save_current_sctx;
     sourcing_name = save_sourcing_name;
     sourcing_lnum = save_sourcing_lnum;
     autocmd_fname = save_autocmd_fname;
@@ -14788,6 +14777,32 @@ static void f_screenchar(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 static void f_screencol(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   rettv->vval.v_number = ui_current_col() + 1;
+}
+
+/// "screenpos({winid}, {lnum}, {col})" function
+static void f_screenpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  pos_T pos;
+  int row = 0;
+  int scol = 0, ccol = 0, ecol = 0;
+
+  tv_dict_alloc_ret(rettv);
+  dict_T *dict = rettv->vval.v_dict;
+
+  win_T *wp = find_win_by_nr_or_id(&argvars[0]);
+  if (wp == NULL) {
+    return;
+  }
+
+  pos.lnum = tv_get_number(&argvars[1]);
+  pos.col = tv_get_number(&argvars[2]) - 1;
+  pos.coladd = 0;
+  textpos2screenpos(wp, &pos, &row, &scol, &ccol, &ecol, false);
+
+  tv_dict_add_nr(dict, S_LEN("row"), row);
+  tv_dict_add_nr(dict, S_LEN("col"), scol);
+  tv_dict_add_nr(dict, S_LEN("curscol"), ccol);
+  tv_dict_add_nr(dict, S_LEN("endcol"), ecol);
 }
 
 /*
@@ -20128,7 +20143,7 @@ static dictitem_T *find_var_in_ht(hashtab_T *const ht,
   if (varname_len == 0) {
     // Must be something like "s:", otherwise "ht" would be NULL.
     switch (htname) {
-      case 's': return (dictitem_T *)&SCRIPT_SV(current_SID)->sv_var;
+      case 's': return (dictitem_T *)&SCRIPT_SV(current_sctx.sc_sid)->sv_var;
       case 'g': return (dictitem_T *)&globvars_var;
       case 'v': return (dictitem_T *)&vimvars_var;
       case 'b': return (dictitem_T *)&curbuf->b_bufvar;
@@ -20265,8 +20280,9 @@ static hashtab_T *find_var_ht_dict(const char *name, const size_t name_len,
   } else if (*name == 'l' && current_funccal != NULL) {  // local variable
     *d = &get_funccal()->l_vars;
   } else if (*name == 's'  // script variable
-             && current_SID > 0 && current_SID <= ga_scripts.ga_len) {
-    *d = &SCRIPT_SV(current_SID)->sv_dict;
+             && current_sctx.sc_sid > 0
+             && current_sctx.sc_sid <= ga_scripts.ga_len) {
+    *d = &SCRIPT_SV(current_sctx.sc_sid)->sv_dict;
   }
 
 end:
@@ -20903,7 +20919,7 @@ void ex_echo(exarg_T *eap)
       char *tofree = encode_tv2echo(&rettv, NULL);
       if (*tofree != NUL) {
         msg_ext_set_kind("echo");
-        msg_multiline_attr(tofree, echo_attr);
+        msg_multiline_attr(tofree, echo_attr, true);
       }
       xfree(tofree);
     }
@@ -21512,7 +21528,11 @@ void ex_function(exarg_T *eap)
 
     fp = find_func(name);
     if (fp != NULL) {
-      if (!eap->forceit) {
+      // Function can be replaced with "function!" and when sourcing the
+      // same script again, but only once.
+      if (!eap->forceit
+          && (fp->uf_script_ctx.sc_sid != current_sctx.sc_sid
+              || fp->uf_script_ctx.sc_seq == current_sctx.sc_seq)) {
         emsg_funcname(e_funcexts, name);
         goto erret;
       }
@@ -21637,7 +21657,8 @@ void ex_function(exarg_T *eap)
   }
   fp->uf_flags = flags;
   fp->uf_calls = 0;
-  fp->uf_script_ID = current_SID;
+  fp->uf_script_ctx = current_sctx;
+  fp->uf_script_ctx.sc_lnum += sourcing_lnum - newlines.ga_len - 1;
   goto ret_free;
 
 erret:
@@ -21824,12 +21845,12 @@ trans_function_name(
     if ((lv.ll_exp_name != NULL && eval_fname_sid(lv.ll_exp_name))
         || eval_fname_sid((const char *)(*pp))) {
       // It's "s:" or "<SID>".
-      if (current_SID <= 0) {
+      if (current_sctx.sc_sid <= 0) {
         EMSG(_(e_usingsid));
         goto theend;
       }
       sid_buf_len = snprintf(sid_buf, sizeof(sid_buf),
-                             "%" PRIdSCID "_", current_SID);
+                             "%" PRIdSCID "_", current_sctx.sc_sid);
       lead += sid_buf_len;
     }
   } else if (!(flags & TFN_INT)
@@ -21946,8 +21967,9 @@ static void list_func_head(ufunc_T *fp, int indent, bool force)
     msg_puts(" closure");
   }
   msg_clr_eos();
-  if (p_verbose > 0)
-    last_set_msg(fp->uf_script_ID);
+  if (p_verbose > 0) {
+    last_set_msg(fp->uf_script_ctx);
+  }
 }
 
 /// Find a function by name, return pointer to it in ufuncs.
@@ -22144,14 +22166,29 @@ void func_dump_profile(FILE *fd)
       if (fp->uf_prof_initialized) {
         sorttab[st_len++] = fp;
 
-        if (fp->uf_name[0] == K_SPECIAL)
+        if (fp->uf_name[0] == K_SPECIAL) {
           fprintf(fd, "FUNCTION  <SNR>%s()\n", fp->uf_name + 3);
-        else
+        } else {
           fprintf(fd, "FUNCTION  %s()\n", fp->uf_name);
-        if (fp->uf_tm_count == 1)
+        }
+        if (fp->uf_script_ctx.sc_sid != 0) {
+          bool should_free;
+          const LastSet last_set = (LastSet){
+            .script_ctx = fp->uf_script_ctx,
+              .channel_id = 0,
+          };
+          char_u *p = get_scriptname(last_set, &should_free);
+          fprintf(fd, "    Defined: %s line %" PRIdLINENR "\n",
+                  p, fp->uf_script_ctx.sc_lnum);
+          if (should_free) {
+            xfree(p);
+          }
+        }
+        if (fp->uf_tm_count == 1) {
           fprintf(fd, "Called 1 time\n");
-        else
+        } else {
           fprintf(fd, "Called %d times\n", fp->uf_tm_count);
+        }
         fprintf(fd, "Total time: %s\n", profile_msg(fp->uf_tm_total));
         fprintf(fd, " Self time: %s\n", profile_msg(fp->uf_tm_self));
         fprintf(fd, "\n");
@@ -22637,7 +22674,6 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars,
 {
   char_u      *save_sourcing_name;
   linenr_T save_sourcing_lnum;
-  scid_T save_current_SID;
   bool using_sandbox = false;
   funccall_T  *fc;
   int save_did_emsg;
@@ -22891,8 +22927,8 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars,
     script_prof_save(&wait_start);
   }
 
-  save_current_SID = current_SID;
-  current_SID = fp->uf_script_ID;
+  const sctx_T save_current_sctx = current_sctx;
+  current_sctx = fp->uf_script_ctx;
   save_did_emsg = did_emsg;
   did_emsg = FALSE;
 
@@ -22966,7 +23002,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars,
   xfree(sourcing_name);
   sourcing_name = save_sourcing_name;
   sourcing_lnum = save_sourcing_lnum;
-  current_SID = save_current_SID;
+  current_sctx = save_current_sctx;
   if (do_profiling_yes) {
     script_prof_restore(&wait_start);
   }
@@ -23586,10 +23622,10 @@ int store_session_globals(FILE *fd)
  * Display script name where an item was last set.
  * Should only be invoked when 'verbose' is non-zero.
  */
-void last_set_msg(scid_T scriptID)
+void last_set_msg(sctx_T script_ctx)
 {
   const LastSet last_set = (LastSet){
-    .script_id = scriptID,
+    .script_ctx = script_ctx,
     .channel_id = 0,
   };
   option_last_set_msg(last_set);
@@ -23600,12 +23636,16 @@ void last_set_msg(scid_T scriptID)
 /// Should only be invoked when 'verbose' is non-zero.
 void option_last_set_msg(LastSet last_set)
 {
-  if (last_set.script_id != 0) {
+  if (last_set.script_ctx.sc_sid != 0) {
     bool should_free;
     char_u *p = get_scriptname(last_set, &should_free);
     verbose_enter();
     MSG_PUTS(_("\n\tLast set from "));
     MSG_PUTS(p);
+    if (last_set.script_ctx.sc_lnum > 0) {
+      MSG_PUTS(_(" line "));
+      msg_outnum((long)last_set.script_ctx.sc_lnum);
+    }
     if (should_free) {
       xfree(p);
     }
@@ -24051,7 +24091,7 @@ typval_T eval_call_provider(char *provider, char *method, list_T *arguments)
   // Save caller scope information
   struct caller_scope saved_provider_caller_scope = provider_caller_scope;
   provider_caller_scope = (struct caller_scope) {
-    .SID = current_SID,
+    .script_ctx = current_sctx,
     .sourcing_name = sourcing_name,
     .sourcing_lnum = sourcing_lnum,
     .autocmd_fname = autocmd_fname,
@@ -24093,24 +24133,30 @@ typval_T eval_call_provider(char *provider, char *method, list_T *arguments)
   return rettv;
 }
 
-/// Checks if a named provider is enabled.
-bool eval_has_provider(const char *name)
+/// Checks if provider for feature `feat` is enabled.
+bool eval_has_provider(const char *feat)
 {
-  if (!strequal(name, "clipboard")
-      && !strequal(name, "python")
-      && !strequal(name, "python3")
-      && !strequal(name, "ruby")
-      && !strequal(name, "node")) {
+  if (!strequal(feat, "clipboard")
+      && !strequal(feat, "python")
+      && !strequal(feat, "python3")
+      && !strequal(feat, "python_compiled")
+      && !strequal(feat, "python_dynamic")
+      && !strequal(feat, "python3_compiled")
+      && !strequal(feat, "python3_dynamic")
+      && !strequal(feat, "ruby")
+      && !strequal(feat, "node")) {
     // Avoid autoload for non-provider has() features.
     return false;
   }
 
-  char buf[256];
-  int len;
-  typval_T tv;
+  char name[32];  // Normalized: "python_compiled" => "python".
+  snprintf(name, sizeof(name), "%s", feat);
+  strchrsub(name, '_', '\0');  // Chop any "_xx" suffix.
 
+  char buf[256];
+  typval_T tv;
   // Get the g:loaded_xx_provider variable.
-  len = snprintf(buf, sizeof(buf), "g:loaded_%s_provider", name);
+  int len = snprintf(buf, sizeof(buf), "g:loaded_%s_provider", name);
   if (get_var_tv(buf, len, &tv, NULL, false, true) == FAIL) {
     // Trigger autoload once.
     len = snprintf(buf, sizeof(buf), "provider#%s#bogus", name);

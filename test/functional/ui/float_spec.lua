@@ -10,7 +10,7 @@ local meths = helpers.meths
 local curbufmeths = helpers.curbufmeths
 local funcs = helpers.funcs
 local run = helpers.run
-local meth_pcall = helpers.meth_pcall
+local pcall_err = helpers.pcall_err
 
 describe('floating windows', function()
   before_each(function()
@@ -636,26 +636,26 @@ describe('floating windows', function()
 
     it('API has proper error messages', function()
       local buf = meths.create_buf(false,false)
-      eq({false, "Invalid key 'bork'"},
-         meth_pcall(meths.open_win,buf, false, {width=20,height=2,bork=true}))
-      eq({false, "'win' key is only valid with relative='win'"},
-         meth_pcall(meths.open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,win=0}))
-      eq({false, "Only one of 'relative' and 'external' must be used"},
-         meth_pcall(meths.open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,external=true}))
-      eq({false, "Invalid value of 'relative' key"},
-         meth_pcall(meths.open_win,buf, false, {width=20,height=2,relative='shell',row=0,col=0}))
-      eq({false, "Invalid value of 'anchor' key"},
-         meth_pcall(meths.open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,anchor='bottom'}))
-      eq({false, "All of 'relative', 'row', and 'col' has to be specified at once"},
-         meth_pcall(meths.open_win,buf, false, {width=20,height=2,relative='editor'}))
-      eq({false, "'width' key must be a positive Integer"},
-         meth_pcall(meths.open_win,buf, false, {width=-1,height=2,relative='editor'}))
-      eq({false, "'height' key must be a positive Integer"},
-         meth_pcall(meths.open_win,buf, false, {width=20,height=-1,relative='editor'}))
-      eq({false, "'height' key must be a positive Integer"},
-         meth_pcall(meths.open_win,buf, false, {width=20,height=0,relative='editor'}))
-      eq({false, "Must specify 'width' and 'height'"},
-         meth_pcall(meths.open_win,buf, false, {relative='editor'}))
+      eq("Invalid key 'bork'",
+         pcall_err(meths.open_win,buf, false, {width=20,height=2,bork=true}))
+      eq("'win' key is only valid with relative='win'",
+         pcall_err(meths.open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,win=0}))
+      eq("Only one of 'relative' and 'external' must be used",
+         pcall_err(meths.open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,external=true}))
+      eq("Invalid value of 'relative' key",
+         pcall_err(meths.open_win,buf, false, {width=20,height=2,relative='shell',row=0,col=0}))
+      eq("Invalid value of 'anchor' key",
+         pcall_err(meths.open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,anchor='bottom'}))
+      eq("All of 'relative', 'row', and 'col' has to be specified at once",
+         pcall_err(meths.open_win,buf, false, {width=20,height=2,relative='editor'}))
+      eq("'width' key must be a positive Integer",
+         pcall_err(meths.open_win,buf, false, {width=-1,height=2,relative='editor'}))
+      eq("'height' key must be a positive Integer",
+         pcall_err(meths.open_win,buf, false, {width=20,height=-1,relative='editor'}))
+      eq("'height' key must be a positive Integer",
+         pcall_err(meths.open_win,buf, false, {width=20,height=0,relative='editor'}))
+      eq("Must specify 'width' and 'height'",
+         pcall_err(meths.open_win,buf, false, {relative='editor'}))
     end)
 
     it('can be placed relative window or cursor', function()
@@ -960,6 +960,335 @@ describe('floating windows', function()
           {4:[No Name] [+]                           }|
                                                   |
         ]])
+      end
+    end)
+
+    it('can be placed relative text in a window', function()
+      screen:try_resize(30,5)
+      local firstwin = meths.get_current_win().id
+      meths.buf_set_lines(0, 0, -1, true, {'just some', 'example text that is wider than the window', '', '', 'more text'})
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [3:------------------------------]|
+        ## grid 2
+          ^just some                     |
+          example text that is wider tha|
+          n the window                  |
+                                        |
+        ## grid 3
+                                        |
+        ]]}
+      else
+        screen:expect{grid=[[
+          ^just some                     |
+          example text that is wider tha|
+          n the window                  |
+                                        |
+                                        |
+        ]]}
+      end
+
+      local buf = meths.create_buf(false,false)
+      meths.buf_set_lines(buf, 0, -1, true, {'some info!'})
+
+      local win = meths.open_win(buf, false, {relative='win', width=12, height=1, bufpos={1,32}})
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [3:------------------------------]|
+        ## grid 2
+          ^just some                     |
+          example text that is wider tha|
+          n the window                  |
+                                        |
+        ## grid 3
+                                        |
+        ## grid 5
+          {1:some info!  }|
+        ]], float_pos={
+          [5] = { {
+              id = 1002
+            }, "NW", 2, 3, 2, true }
+        }}
+      else
+        screen:expect{grid=[[
+          ^just some                     |
+          example text that is wider tha|
+          n the window                  |
+            {1:some info!  }                |
+                                        |
+        ]]}
+      end
+      eq({relative='win', width=12, height=1, bufpos={1,32}, anchor='NW',
+          external=false, col=0, row=1, win=firstwin, focusable=true}, meths.win_get_config(win))
+
+      feed('<c-e>')
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [2:------------------------------]|
+          [3:------------------------------]|
+        ## grid 2
+          ^example text that is wider tha|
+          n the window                  |
+                                        |
+                                        |
+        ## grid 3
+                                        |
+        ## grid 5
+          {1:some info!  }|
+        ]], float_pos={
+          [5] = { {
+              id = 1002
+            }, "NW", 2, 2, 2, true }
+        }}
+      else
+        screen:expect{grid=[[
+          ^example text that is wider tha|
+          n the window                  |
+            {1:some info!  }                |
+                                        |
+                                        |
+        ]]}
+      end
+
+
+      screen:try_resize(45,5)
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [3:---------------------------------------------]|
+        ## grid 2
+          ^example text that is wider than the window   |
+                                                       |
+                                                       |
+          more text                                    |
+        ## grid 3
+                                                       |
+        ## grid 5
+          {1:some info!  }|
+        ]], float_pos={
+          [5] = { {
+              id = 1002
+            }, "NW", 2, 1, 32, true }
+        }}
+      else
+        -- note: appears misalinged due to cursor
+        screen:expect{grid=[[
+          ^example text that is wider than the window   |
+                                          {1:some info!  } |
+                                                       |
+          more text                                    |
+                                                       |
+        ]]}
+      end
+
+      screen:try_resize(25,10)
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [3:-------------------------]|
+        ## grid 2
+          ^example text that is wide|
+          r than the window        |
+                                   |
+                                   |
+          more text                |
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+        ## grid 3
+                                   |
+        ## grid 5
+          {1:some info!  }|
+        ]], float_pos={
+          [5] = { {
+              id = 1002
+            }, "NW", 2, 2, 7, true }
+        }}
+      else
+        screen:expect{grid=[[
+          ^example text that is wide|
+          r than the window        |
+                 {1:some info!  }      |
+                                   |
+          more text                |
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+                                   |
+        ]]}
+      end
+
+      meths.win_set_config(win, {relative='win', bufpos={1,32}, anchor='SW'})
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [3:-------------------------]|
+        ## grid 2
+          ^example text that is wide|
+          r than the window        |
+                                   |
+                                   |
+          more text                |
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+        ## grid 3
+                                   |
+        ## grid 5
+          {1:some info!  }|
+        ]], float_pos={
+          [5] = { {
+              id = 1002
+            }, "SW", 2, 1, 7, true }
+        }}
+      else
+        screen:expect{grid=[[
+          ^example{1:some info!  }s wide|
+          r than the window        |
+                                   |
+                                   |
+          more text                |
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+                                   |
+        ]]}
+      end
+
+      meths.win_set_config(win, {relative='win', bufpos={1,32}, anchor='NW', col=-2})
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [3:-------------------------]|
+        ## grid 2
+          ^example text that is wide|
+          r than the window        |
+                                   |
+                                   |
+          more text                |
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+        ## grid 3
+                                   |
+        ## grid 5
+          {1:some info!  }|
+        ]], float_pos={
+          [5] = { {
+              id = 1002
+            }, "NW", 2, 2, 5, true }
+        }}
+      else
+        screen:expect{grid=[[
+          ^example text that is wide|
+          r than the window        |
+               {1:some info!  }        |
+                                   |
+          more text                |
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+                                   |
+        ]]}
+      end
+
+      meths.win_set_config(win, {relative='win', bufpos={1,32}, row=2})
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [2:-------------------------]|
+          [3:-------------------------]|
+        ## grid 2
+          ^example text that is wide|
+          r than the window        |
+                                   |
+                                   |
+          more text                |
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+        ## grid 3
+                                   |
+        ## grid 5
+          {1:some info!  }|
+        ]], float_pos={
+          [5] = { {
+              id = 1002
+            }, "NW", 2, 3, 7, true }
+        }}
+      else
+        screen:expect{grid=[[
+          ^example text that is wide|
+          r than the window        |
+                                   |
+                 {1:some info!  }      |
+          more text                |
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+          {0:~                        }|
+                                   |
+        ]]}
       end
     end)
 
@@ -4199,8 +4528,8 @@ describe('floating windows', function()
             {0:~                             }|
         ]], float_pos=expected_pos}
         else
-          eq({false, "UI doesn't support external windows"},
-             meth_pcall(meths.win_set_config, 0, {external=true, width=30, height=2}))
+          eq("UI doesn't support external windows",
+             pcall_err(meths.win_set_config, 0, {external=true, width=30, height=2}))
           return
         end
 
@@ -4515,8 +4844,8 @@ describe('floating windows', function()
             {0:~                                       }|
         ]], float_pos=expected_pos}
         else
-          eq({false, "UI doesn't support external windows"},
-             meth_pcall(meths.win_set_config, 0, {external=true, width=65, height=4}))
+          eq("UI doesn't support external windows",
+             pcall_err(meths.win_set_config, 0, {external=true, width=65, height=4}))
         end
 
         feed(":tabnext<cr>")

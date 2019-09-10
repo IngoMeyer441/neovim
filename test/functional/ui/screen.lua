@@ -615,7 +615,12 @@ function Screen:_redraw(updates)
       local handler_name = '_handle_'..method
       local handler = self[handler_name]
       if handler ~= nil then
-        handler(self, unpack(update[i]))
+        local status, res = pcall(handler, self, unpack(update[i]))
+        if not status then
+          error(handler_name..' failed'
+            ..'\n  payload: '..inspect(update)
+            ..'\n  error:   '..tostring(res))
+        end
       else
         assert(self._on_event,
           "Add Screen:"..handler_name.." or call Screen:set_on_event_handler")
@@ -854,7 +859,7 @@ function Screen:_handle_grid_scroll(g, top, bot, left, right, rows, cols)
 
   -- clear invalid rows
   for i = stop + step, stop + rows, step do
-    self:_clear_row_section(grid, i, left, right)
+    self:_clear_row_section(grid, i, left, right, true)
   end
 end
 
@@ -1060,10 +1065,10 @@ function Screen:_clear_block(grid, top, bot, left, right)
   end
 end
 
-function Screen:_clear_row_section(grid, rownum, startcol, stopcol)
+function Screen:_clear_row_section(grid, rownum, startcol, stopcol, invalid)
   local row = grid.rows[rownum]
   for i = startcol, stopcol do
-    row[i].text = ' '
+    row[i].text = (invalid and '�' or ' ')
     row[i].attrs = self._clear_attrs
   end
 end

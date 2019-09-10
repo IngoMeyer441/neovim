@@ -122,17 +122,17 @@ describe('TUI', function()
 
     screen:try_resize(50,5)
     screen:expect{grid=[[
-      {8:FAIL 1}                                            |
-      {8:FAIL 2}                                            |
       {8:FAIL 3}                                            |
-      {10:-- More -- SPACE/d/j: screen/page/line down, b/u/}{12:k}|
+      {8:FAIL 4}                                            |
+      {8:FAIL 5}                                            |
+      {10:-- More --}{1: }                                       |
       {3:-- TERMINAL --}                                    |
     ]]}
 
     -- TODO(bfredl): messes up the output (just like vim does).
     feed_data('g')
     screen:expect{grid=[[
-      {8:FAIL 1}        )                                   |
+                    )                                   |
       {8:Error detected while processing function ManyErr:} |
       {11:line    2:}                                        |
       {10:-- More --}{1: }                                       |
@@ -141,15 +141,15 @@ describe('TUI', function()
 
     screen:try_resize(50,10)
     screen:expect{grid=[[
-      {8:FAIL 1}        )                                   |
+                    )                                   |
       {8:Error detected while processing function ManyErr:} |
       {11:line    2:}                                        |
-      {10:-- More --}                                        |
-      {10:                                                  }|
-      {10:                                                  }|
-      {10:                                                  }|
-      {10:                                                  }|
-      {10:-- More -- SPACE/d/j: screen/page/line down, b/u/}{12:k}|
+      {8:FAIL 0}                                            |
+      {8:FAIL 1}                                            |
+      {8:FAIL 2}                                            |
+      {8:FAIL 3}                                            |
+      {8:FAIL 4}                                            |
+      {10:-- More --}{1: }                                       |
       {3:-- TERMINAL --}                                    |
     ]]}
 
@@ -353,7 +353,11 @@ describe('TUI', function()
     expect_child_buf_lines({''})
     -- CRLF input
     feed_data('\027[200~'..table.concat(expected_lf,'\r\n')..'\027[201~')
-    screen:expect{grid=expected_grid1, attr_ids=expected_attr}
+    screen:expect{
+      grid=expected_grid1:gsub(
+        ':set ruler *',
+        '3 fewer lines; before #1  0 seconds ago           '),
+      attr_ids=expected_attr}
     expect_child_buf_lines(expected_crlf)
   end)
 
@@ -363,7 +367,10 @@ describe('TUI', function()
     feed_data('\027[D')   -- <Left> to place cursor between quotes.
     wait_for_mode('c')
     -- "bracketed paste"
-    feed_data('\027[200~line 1\nline 2\n\027[201~')
+    feed_data('\027[200~line 1\nline 2\n')
+    wait_for_mode('c')
+    feed_data('line 3\nline 4\n\027[201~')
+    wait_for_mode('c')
     screen:expect{grid=[[
       foo                                               |
                                                         |
@@ -850,34 +857,31 @@ describe('TUI FocusGained/FocusLost', function()
     feed_data(':set shell='..nvim_dir..'/shell-test\n')
     feed_data(':set noshowmode laststatus=0\n')
 
-    retry(2, 3 * screen.timeout, function()
-      feed_data(':terminal\n')
-      screen:sleep(1)
-      feed_data('\027[I')
-      screen:expect([[
-        {1:r}eady $                                           |
-        [Process exited 0]                                |
-                                                          |
-                                                          |
-                                                          |
-        gained                                            |
-        {3:-- TERMINAL --}                                    |
-      ]])
-      feed_data('\027[O')
-      screen:expect([[
-        {1:r}eady $                                           |
-        [Process exited 0]                                |
-                                                          |
-                                                          |
-                                                          |
-        lost                                              |
-        {3:-- TERMINAL --}                                    |
-      ]])
+    feed_data(':terminal\n')
+    -- Wait for terminal to be ready.
+    screen:expect{any='-- TERMINAL --'}
 
-      -- If retry is needed...
-      feed_data("\034\016")  -- CTRL-\ CTRL-N
-      feed_data(':bwipeout!\n')
-    end)
+    feed_data('\027[I')
+    screen:expect{grid=[[
+      {1:r}eady $                                           |
+      [Process exited 0]                                |
+                                                        |
+                                                        |
+                                                        |
+      gained                                            |
+      {3:-- TERMINAL --}                                    |
+    ]], timeout=(3 * screen.timeout)}
+
+    feed_data('\027[O')
+    screen:expect([[
+      {1:r}eady $                                           |
+      [Process exited 0]                                |
+                                                        |
+                                                        |
+                                                        |
+      lost                                              |
+      {3:-- TERMINAL --}                                    |
+    ]])
   end)
 
   it('in press-enter prompt', function()
@@ -902,7 +906,7 @@ end)
 -- does not initialize the TUI.
 describe("TUI 't_Co' (terminal colors)", function()
   local screen
-  local is_freebsd = (string.lower(uname()) == 'freebsd')
+  local is_freebsd = (uname() == 'freebsd')
 
   local function assert_term_colors(term, colorterm, maxcolors)
     helpers.clear({env={TERM=term}, args={}})
@@ -1176,8 +1180,8 @@ end)
 -- does not initialize the TUI.
 describe("TUI 'term' option", function()
   local screen
-  local is_bsd = not not string.find(string.lower(uname()), 'bsd')
-  local is_macos = not not string.find(string.lower(uname()), 'darwin')
+  local is_bsd = not not string.find(uname(), 'bsd')
+  local is_macos = not not string.find(uname(), 'darwin')
 
   local function assert_term(term_envvar, term_expected)
     clear()
@@ -1203,7 +1207,9 @@ describe("TUI 'term' option", function()
   end)
 
   it('gets system-provided term if $TERM is valid', function()
-    if is_bsd then  -- BSD lacks terminfo, builtin is always used.
+    if uname() == "openbsd" then
+      assert_term("xterm", "xterm")
+    elseif is_bsd then  -- BSD lacks terminfo, builtin is always used.
       assert_term("xterm", "builtin_xterm")
     elseif is_macos then
       local status, _ = pcall(assert_term, "xterm", "xterm")

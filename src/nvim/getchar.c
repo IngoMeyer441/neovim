@@ -1532,8 +1532,9 @@ int safe_vgetc(void)
   int c;
 
   c = vgetc();
-  if (c == NUL)
-    c = get_keystroke();
+  if (c == NUL) {
+    c = get_keystroke(NULL);
+  }
   return c;
 }
 
@@ -2447,9 +2448,10 @@ int inchar(
       char_u dum[DUM_LEN + 1];
 
       for (;; ) {
-        len = os_inchar(dum, DUM_LEN, 0L, 0);
-        if (len == 0 || (len == 1 && dum[0] == 3))
+        len = os_inchar(dum, DUM_LEN, 0L, 0, NULL);
+        if (len == 0 || (len == 1 && dum[0] == 3)) {
           break;
+        }
       }
       return retesc;
     }
@@ -2460,7 +2462,7 @@ int inchar(
 
     // Fill up to a third of the buffer, because each character may be
     // tripled below.
-    len = os_inchar(buf, maxlen / 3, (int)wait_time, tb_change_cnt);
+    len = os_inchar(buf, maxlen / 3, (int)wait_time, tb_change_cnt, NULL);
   }
 
   // If the typebuf was changed further down, it is like nothing was added by
@@ -2957,7 +2959,8 @@ int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev,
                 mp->m_silent = args->silent;
                 mp->m_mode = mode;
                 mp->m_expr = args->expr;
-                mp->m_script_ID = current_SID;
+                mp->m_script_ctx = current_sctx;
+                mp->m_script_ctx.sc_lnum += sourcing_lnum;
                 did_it = true;
               }
             }
@@ -3032,7 +3035,8 @@ int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev,
   mp->m_silent = args->silent;
   mp->m_mode = mode;
   mp->m_expr = args->expr;
-  mp->m_script_ID = current_SID;
+  mp->m_script_ctx = current_sctx;
+  mp->m_script_ctx.sc_lnum += sourcing_lnum;
 
   // add the new entry in front of the abbrlist or maphash[] list
   if (is_abbrev) {
@@ -3375,9 +3379,10 @@ showmap (
     msg_outtrans_special(s, FALSE);
     xfree(s);
   }
-  if (p_verbose > 0)
-    last_set_msg(mp->m_script_ID);
-  ui_flush();                          /* show one line at a time */
+  if (p_verbose > 0) {
+    last_set_msg(mp->m_script_ctx);
+  }
+  ui_flush();                          // show one line at a time
 }
 
 /// Check if a map exists that has given string in the rhs

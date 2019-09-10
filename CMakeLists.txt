@@ -408,7 +408,7 @@ endif()
 option(FEAT_TUI "Enable the Terminal UI" ON)
 
 if(FEAT_TUI)
-  find_package(Unibilium 2.0 REQUIRED)
+  find_package(UNIBILIUM 2.0 REQUIRED)
   include_directories(SYSTEM ${UNIBILIUM_INCLUDE_DIRS})
 
   list(APPEND CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
@@ -432,7 +432,7 @@ if(FEAT_TUI)
   include_directories(SYSTEM ${LIBTERMKEY_INCLUDE_DIRS})
 endif()
 
-find_package(LibVterm REQUIRED)
+find_package(LIBVTERM REQUIRED)
 include_directories(SYSTEM ${LIBVTERM_INCLUDE_DIRS})
 
 if(WIN32)
@@ -533,10 +533,7 @@ install_helper(
 #
 
 add_subdirectory(src/nvim)
-# Read compilation flags from src/nvim, used in config subdirectory below.
-include(GetCompileFlags)
-get_compile_flags(NVIM_VERSION_CFLAGS)
-
+get_directory_property(NVIM_VERSION_CFLAGS DIRECTORY src/nvim DEFINITION NVIM_VERSION_CFLAGS)
 add_subdirectory(test/includes)
 add_subdirectory(config)
 add_subdirectory(test/functional/fixtures)  # compile test programs

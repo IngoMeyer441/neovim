@@ -332,8 +332,8 @@ EXTERN int garbage_collect_at_exit INIT(= false);
 #define SID_LUA         -7      // for Lua scripts/chunks
 #define SID_API_CLIENT  -8      // for API clients
 
-// ID of script being sourced or was sourced to define the current function.
-EXTERN scid_T current_SID INIT(= 0);
+// Script CTX being sourced or was sourced to define the current function.
+EXTERN sctx_T current_sctx INIT(= { 0 COMMA 0 COMMA 0 });
 // ID of the current channel making a client API call
 EXTERN uint64_t current_channel_id INIT(= 0);
 
@@ -342,8 +342,8 @@ EXTERN bool did_source_packages INIT(= false);
 // Scope information for the code that indirectly triggered the current
 // provider function call
 EXTERN struct caller_scope {
-  scid_T SID;
-  uint8_t *sourcing_name, *autocmd_fname, *autocmd_match; 
+  sctx_T script_ctx;
+  uint8_t *sourcing_name, *autocmd_fname, *autocmd_match;
   linenr_T sourcing_lnum;
   int autocmd_bufnr;
   void *funccalp;
@@ -862,8 +862,8 @@ EXTERN char_u wim_flags[4];
 # define STL_IN_TITLE   2
 EXTERN int stl_syntax INIT(= 0);
 
-/* don't use 'hlsearch' temporarily */
-EXTERN int no_hlsearch INIT(= FALSE);
+// don't use 'hlsearch' temporarily
+EXTERN bool no_hlsearch INIT(= false);
 
 /* Page number used for %N in 'pageheader' and 'guitablabel'. */
 EXTERN linenr_T printer_page_num;

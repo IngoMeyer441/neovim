@@ -1021,9 +1021,11 @@ static int command_line_execute(VimState *state, int key)
 
   // <S-Tab> goes to last match, in a clumsy way
   if (s->c == K_S_TAB && KeyTyped) {
-    if (nextwild(&s->xpc, WILD_EXPAND_KEEP, 0, s->firstc != '@') == OK
-        && nextwild(&s->xpc, WILD_PREV, 0, s->firstc != '@') == OK
-        && nextwild(&s->xpc, WILD_PREV, 0, s->firstc != '@') == OK) {
+    if (nextwild(&s->xpc, WILD_EXPAND_KEEP, 0, s->firstc != '@') == OK) {
+      showmatches(&s->xpc, p_wmnu
+                  && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
+      nextwild(&s->xpc, WILD_PREV, 0, s->firstc != '@');
+      nextwild(&s->xpc, WILD_PREV, 0, s->firstc != '@');
       return command_line_changed(s);
     }
   }
@@ -1830,7 +1832,7 @@ static int command_line_changed(CommandLineState *s)
     // If there is no command line, don't do anything
     if (ccline.cmdlen == 0) {
       i = 0;
-      SET_NO_HLSEARCH(true);  // turn off previous highlight
+      set_no_hlsearch(true);  // turn off previous highlight
       redraw_all_later(SOME_VALID);
     } else {
       int search_flags = SEARCH_OPT + SEARCH_NOOF + SEARCH_PEEK;
@@ -1888,7 +1890,7 @@ static int command_line_changed(CommandLineState *s)
     // Disable 'hlsearch' highlighting if the pattern matches
     // everything. Avoids a flash when typing "foo\|".
     if (empty_pattern(ccline.cmdbuff)) {
-      SET_NO_HLSEARCH(true);
+      set_no_hlsearch(true);
     }
 
     validate_cursor();
@@ -1909,7 +1911,7 @@ static int command_line_changed(CommandLineState *s)
     redrawcmdline();
     s->did_incsearch = true;
   } else if (s->firstc == ':'
-             && current_SID == 0    // only if interactive
+             && current_sctx.sc_sid == 0    // only if interactive
              && *p_icm != NUL       // 'inccommand' is set
              && curbuf->b_p_ma      // buffer is modifiable
              && cmdline_star == 0   // not typing a password
@@ -5072,7 +5074,7 @@ static void * call_user_expand_func(user_expand_func_T user_expand_func,
   char_u keep = 0;
   typval_T args[4];
   char_u *pat = NULL;
-  int save_current_SID = current_SID;
+  const sctx_T save_current_sctx = current_sctx;
   struct cmdline_info save_ccline;
 
   if (xp->xp_arg == NULL || xp->xp_arg[0] == '\0' || xp->xp_line == NULL)
@@ -5098,14 +5100,15 @@ static void * call_user_expand_func(user_expand_func_T user_expand_func,
   save_ccline = ccline;
   ccline.cmdbuff = NULL;
   ccline.cmdprompt = NULL;
-  current_SID = xp->xp_scriptID;
+  current_sctx = xp->xp_script_ctx;
 
   void *const ret = user_expand_func(xp->xp_arg, 3, args);
 
   ccline = save_ccline;
-  current_SID = save_current_SID;
-  if (ccline.cmdbuff != NULL)
+  current_sctx = save_current_sctx;
+  if (ccline.cmdbuff != NULL) {
     ccline.cmdbuff[ccline.cmdlen] = keep;
+  }
 
   xfree(pat);
   return ret;
