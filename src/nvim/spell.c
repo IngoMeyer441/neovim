@@ -72,7 +72,6 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <wctype.h>
@@ -2305,6 +2304,7 @@ static int find_region(char_u *rp, char_u *region)
 ///
 /// @returns  Case type of word
 int captype(char_u *word, char_u *end)
+  FUNC_ATTR_NONNULL_ARG(1)
 {
   char_u      *p;
   int c;
@@ -2355,6 +2355,7 @@ int captype(char_u *word, char_u *end)
 // capital.  So that make_case_word() can turn WOrd into Word.
 // Add ALLCAP for "WOrD".
 static int badword_captype(char_u *word, char_u *end)
+  FUNC_ATTR_NONNULL_ALL
 {
   int flags = captype(word, end);
   int c;
@@ -2705,18 +2706,20 @@ int spell_check_sps(void)
     f = 0;
     if (ascii_isdigit(*buf)) {
       s = buf;
-      sps_limit = getdigits_int(&s);
-      if (*s != NUL && !ascii_isdigit(*s))
+      sps_limit = getdigits_int(&s, true, 0);
+      if (*s != NUL && !ascii_isdigit(*s)) {
         f = -1;
-    } else if (STRCMP(buf, "best") == 0)
+      }
+    } else if (STRCMP(buf, "best") == 0) {
       f = SPS_BEST;
-    else if (STRCMP(buf, "fast") == 0)
+    } else if (STRCMP(buf, "fast") == 0) {
       f = SPS_FAST;
-    else if (STRCMP(buf, "double") == 0)
+    } else if (STRCMP(buf, "double") == 0) {
       f = SPS_DOUBLE;
-    else if (STRNCMP(buf, "expr:", 5) != 0
-             && STRNCMP(buf, "file:", 5) != 0)
+    } else if (STRNCMP(buf, "expr:", 5) != 0
+               && STRNCMP(buf, "file:", 5) != 0) {
       f = -1;
+    }
 
     if (f == -1 || (sps_flags != 0 && f != 0)) {
       sps_flags = SPS_BEST;

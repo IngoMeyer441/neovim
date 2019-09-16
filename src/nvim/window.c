@@ -969,8 +969,8 @@ bool parse_float_config(Dictionary config, FloatConfig *fconfig, bool reconf,
   }
 
   if (has_relative != has_row || has_row != has_col) {
-    api_set_error(err, kErrorTypeValidation, "All of 'relative', 'row', and "
-                  "'col' has to be specified at once");
+    api_set_error(err, kErrorTypeValidation,
+                  "'relative' requires 'row'/'col' or 'bufpos'");
     return false;
   }
   return true;
@@ -5974,15 +5974,17 @@ file_name_in_line (
   if (file_lnum != NULL) {
     char_u *p;
 
-    /* Get the number after the file name and a separator character */
+    // Get the number after the file name and a separator character.
     p = ptr + len;
     p = skipwhite(p);
     if (*p != NUL) {
-      if (!isdigit(*p))
-        ++p;                        /* skip the separator */
+      if (!isdigit(*p)) {
+        p++;                        // skip the separator
+      }
       p = skipwhite(p);
-      if (isdigit(*p))
-        *file_lnum = getdigits_long(&p);
+      if (isdigit(*p)) {
+        *file_lnum = getdigits_long(&p, false, 0);
+      }
     }
   }
 

@@ -2936,10 +2936,10 @@ void ex_lockvar(exarg_T *eap)
   char_u      *arg = eap->arg;
   int deep = 2;
 
-  if (eap->forceit)
+  if (eap->forceit) {
     deep = -1;
-  else if (ascii_isdigit(*arg)) {
-    deep = getdigits_int(&arg);
+  } else if (ascii_isdigit(*arg)) {
+    deep = getdigits_int(&arg, false, -1);
     arg = skipwhite(arg);
   }
 
@@ -8002,8 +8002,8 @@ static void f_ctxpush(typval_T *argvars, typval_T *rettv, FunPtr fptr)
           types |= kCtxRegs;
         } else if (strequal((char *)tv_li->vval.v_string, "jumps")) {
           types |= kCtxJumps;
-        } else if (strequal((char *)tv_li->vval.v_string, "buflist")) {
-          types |= kCtxBuflist;
+        } else if (strequal((char *)tv_li->vval.v_string, "bufs")) {
+          types |= kCtxBufs;
         } else if (strequal((char *)tv_li->vval.v_string, "gvars")) {
           types |= kCtxGVars;
         } else if (strequal((char *)tv_li->vval.v_string, "sfuncs")) {
@@ -10910,31 +10910,24 @@ static void f_wait(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     EMSG2(_(e_invargval), "1");
     return;
   }
-
-  int timeout = argvars[0].vval.v_number;
-  typval_T expr = argvars[1];
-
-  int interval = -1;
-  typval_T *tv_interval = &argvars[2];
-
-  TimeWatcher *tw = NULL;
-
-  if (tv_interval->v_type == VAR_NUMBER) {
-    interval = tv_interval->vval.v_number;
-    if (interval <= 0) {
-      EMSG2(_(e_invargval), "3");
-      return;
-    }
-    // Start dummy timer
-    tw = xmalloc(sizeof(TimeWatcher));
-    time_watcher_init(&main_loop, tw, NULL);
-    tw->events = main_loop.events;
-    tw->blockable = true;
-    time_watcher_start(tw, dummy_timer_due_cb, interval, interval);
-  } else if (tv_interval->v_type != VAR_UNKNOWN) {
+  if ((argvars[2].v_type != VAR_NUMBER && argvars[2].v_type != VAR_UNKNOWN)
+      || (argvars[2].v_type == VAR_NUMBER && argvars[2].vval.v_number <= 0)) {
     EMSG2(_(e_invargval), "3");
     return;
   }
+
+  int timeout = argvars[0].vval.v_number;
+  typval_T expr = argvars[1];
+  int interval = argvars[2].v_type == VAR_NUMBER
+    ? argvars[2].vval.v_number
+    : 200;  // Default.
+  TimeWatcher *tw = xmalloc(sizeof(TimeWatcher));
+
+  // Start dummy timer.
+  time_watcher_init(&main_loop, tw, NULL);
+  tw->events = main_loop.events;
+  tw->blockable = true;
+  time_watcher_start(tw, dummy_timer_due_cb, interval, interval);
 
   typval_T argv = TV_INITIAL_VALUE;
   typval_T exprval = TV_INITIAL_VALUE;
@@ -10960,10 +10953,8 @@ static void f_wait(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   called_emsg = save_called_emsg;
 
   // Stop dummy timer
-  if (tw) {
-    time_watcher_stop(tw);
-    time_watcher_close(tw, dummy_timer_close_cb);
-  }
+  time_watcher_stop(tw);
+  time_watcher_close(tw, dummy_timer_close_cb);
 }
 
 // "win_screenpos()" function
@@ -15784,7 +15775,7 @@ static void f_setreg(typval_T *argvars, typval_T *rettv, FunPtr fptr)
           yank_type = kMTBlockWise;
           if (ascii_isdigit(stropt[1])) {
             stropt++;
-            block_len = getdigits_long((char_u **)&stropt) - 1;
+            block_len = getdigits_long((char_u **)&stropt, true, 0) - 1;
             stropt--;
           }
           break;
@@ -17593,6 +17584,9 @@ static void f_synIDattr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     case 's': {
       if (TOLOWER_ASC(what[1]) == 'p') {  // sp[#]
         p = highlight_color(id, what, modec);
+      } else if (TOLOWER_ASC(what[1]) == 't'
+                 && TOLOWER_ASC(what[2]) == 'r') {  // strikethrough
+        p = highlight_has_attr(id, HL_STRIKETHROUGH, modec);
       } else {  // standout
         p = highlight_has_attr(id, HL_STANDOUT, modec);
       }

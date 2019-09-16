@@ -157,6 +157,7 @@ end
 --- Return a human-readable representation of the given object.
 ---
 --@see https://github.com/kikito/inspect.lua
+--@see https://github.com/mpeterv/vinspect
 local function inspect(object, options)  -- luacheck: no unused
   error(object, options)  -- Stub for gen_vimdoc.py
 end
@@ -192,7 +193,7 @@ paste = (function()
       vim.api.nvim_input(line1)
       vim.api.nvim_set_option('paste', false)
     elseif mode ~= 'c' then  -- Else: discard remaining cmdline-mode chunks.
-      if phase < 2 and mode ~= 'i' and mode ~= 'R' then
+      if phase < 2 and mode ~= 'i' and mode ~= 'R' and mode ~= 't' then
         vim.api.nvim_put(lines, 'c', true, true)
         -- XXX: Normal-mode: workaround bad cursor-placement after first chunk.
         vim.api.nvim_command('normal! a')

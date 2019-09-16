@@ -2,7 +2,6 @@
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
 #include <assert.h>
-#include <stdint.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -437,18 +436,18 @@ Object nvim_eval(String expr, Error *err)
   return rv;
 }
 
-/// Execute lua code. Parameters (if any) are available as `...` inside the
+/// Execute Lua code. Parameters (if any) are available as `...` inside the
 /// chunk. The chunk can return a value.
 ///
 /// Only statements are executed. To evaluate an expression, prefix it
 /// with `return`: return my_function(...)
 ///
-/// @param code       lua code to execute
+/// @param code       Lua code to execute
 /// @param args       Arguments to the code
 /// @param[out] err   Details of an error encountered while parsing
-///                   or executing the lua code.
+///                   or executing the Lua code.
 ///
-/// @return           Return value of lua code if present or NIL.
+/// @return           Return value of Lua code if present or NIL.
 Object nvim_execute_lua(String code, Array args, Error *err)
   FUNC_API_SINCE(3) FUNC_API_REMOTE_ONLY
 {
@@ -1028,66 +1027,70 @@ fail:
 /// Exactly one of `external` and `relative` must be specified. The `width` and
 /// `height` of the new window must be specified.
 ///
-/// With editor positioning row=0, col=0 refers to the top-left corner of the
-/// screen-grid and row=Lines-1, Columns-1 refers to the bottom-right corner.
-/// Floating point values are allowed, but the builtin implementation (used by
-/// TUI and GUIs without multigrid support) will always round down to nearest
-/// integer.
+/// With relative=editor (row=0,col=0) refers to the top-left corner of the
+/// screen-grid and (row=Lines-1,col=Columns-1) refers to the bottom-right
+/// corner. Fractional values are allowed, but the builtin implementation
+/// (used by non-multigrid UIs) will always round down to nearest integer.
 ///
 /// Out-of-bounds values, and configurations that make the float not fit inside
-/// the main editor, are allowed. The builtin implementation will truncate
-/// values so floats are completely within the main screen grid. External GUIs
+/// the main editor, are allowed. The builtin implementation truncates values
+/// so floats are fully within the main screen grid. External GUIs
 /// could let floats hover outside of the main window like a tooltip, but
 /// this should not be used to specify arbitrary WM screen positions.
 ///
-/// @param buffer handle of buffer to be displayed in the window
-/// @param enter  whether the window should be entered (made the current window)
-/// @param config Dictionary for the window configuration accepts these keys:
-///   - `relative`: If set, the window becomes a floating window. The window
-///       will be placed with row,col coordinates relative to one of the
-///       following:
-///      - "editor" the global editor grid
-///      - "win"    a window. Use `win` to specify a window id,
-///                 or the current window will be used by default.
-///      - "cursor" the cursor position in current window.
-///   - `win`: When using relative='win', window id of the window where the
-///       position is defined.
-///   - `anchor`: The corner of the float that the row,col position defines:
-///      - "NW" north-west (default)
-///      - "NE" north-east
-///      - "SW" south-west
-///      - "SE" south-east
-///   - `height`: window height (in character cells). Minimum of 1.
-///   - `width`: window width (in character cells). Minimum of 1.
-///   - 'bufpos': position float relative text inside window `win` (only
-///               when relative="win"). Takes a tuple of zero-indexed
-///               [line, column]. Note: `row` and `col` if present, still
-///               applies relative this position. By default `row=1` and `col=0`
-///               are used (with default NW anchor), to make the float
-///               behave like a tooltip under the buffer text.
-///   - `row`: row position. Screen cell height are used as unit. Can be
-///       floating point.
-///   - `col`: column position. Screen cell width is used as unit. Can be
-///       floating point.
-///   - `focusable`: Whether window can be focused by wincmds and
-///       mouse events. Defaults to true. Even if set to false, the window
-///       can still be entered using |nvim_set_current_win()| API call.
+/// Example (Lua): window-relative float
+/// <pre>
+///     vim.api.nvim_open_win(0, false,
+///       {relative='win', row=3, col=3, width=12, height=3})
+/// </pre>
+///
+/// Example (Lua): buffer-relative float (travels as buffer is scrolled)
+/// <pre>
+///     vim.api.nvim_open_win(0, false,
+///       {relative='win', width=12, height=3, bufpos={100,10}})
+/// </pre>
+///
+/// @param buffer Buffer to display, or 0 for current buffer
+/// @param enter  Enter the window (make it the current window)
+/// @param config Map defining the window configuration. Keys:
+///   - `relative`: Sets the window layout to "floating", placed at (row,col)
+///                 coordinates relative to one of:
+///      - "editor" The global editor grid
+///      - "win"    Window given by the `win` field, or current window by
+///                 default.
+///      - "cursor" Cursor position in current window.
+///   - `win`: |window-ID| for relative="win".
+///   - `anchor`: Decides which corner of the float to place at (row,col):
+///      - "NW" northwest (default)
+///      - "NE" northeast
+///      - "SW" southwest
+///      - "SE" southeast
+///   - `width`: Window width (in character cells). Minimum of 1.
+///   - `height`: Window height (in character cells). Minimum of 1.
+///   - `bufpos`: Places float relative to buffer text (only when
+///               relative="win"). Takes a tuple of zero-indexed [line, column].
+///               `row` and `col` if given are applied relative to this
+///               position, else they default to `row=1` and `col=0`
+///               (thus like a tooltip near the buffer text).
+///   - `row`: Row position in units of "screen cell height", may be fractional.
+///   - `col`: Column position in units of "screen cell width", may be
+///            fractional.
+///   - `focusable`: Enable focus by user actions (wincmds, mouse events).
+///       Defaults to true. Non-focusable windows can be entered by
+///       |nvim_set_current_win()|.
 ///   - `external`: GUI should display the window as an external
 ///       top-level window. Currently accepts no other positioning
 ///       configuration together with this.
-///   - `style`: Configure the apparance of the window. Currently only takes
+///   - `style`: Configure the appearance of the window. Currently only takes
 ///       one non-empty value:
 ///       - "minimal"  Nvim will display the window with many UI options
-///                    disabled. This is useful when displaing a temporary
+///                    disabled. This is useful when displaying a temporary
 ///                    float where the text should not be edited. Disables
 ///                    'number', 'relativenumber', 'cursorline', 'cursorcolumn',
 ///                    'foldcolumn', 'spell' and 'list' options. 'signcolumn'
 ///                    is changed to `auto`. The end-of-buffer region is hidden
 ///                    by setting `eob` flag of 'fillchars' to a space char,
 ///                    and clearing the |EndOfBuffer| region in 'winhighlight'.
-///
-///       top-level window. Currently accepts no other positioning
-///       configuration together with this.
 /// @param[out] err Error details, if any
 ///
 /// @return Window handle, or 0 on error
@@ -1415,32 +1418,52 @@ Dictionary nvim_get_color_map(void)
 
 /// Gets a map of the current editor state.
 ///
-/// @param  types  Context types ("regs", "jumps", "buflist", "gvars", ...)
-///                to gather, or NIL for all (see |context-types|).
+/// @param opts  Optional parameters.
+///               - types:  List of |context-types| ("regs", "jumps", "bufs",
+///                 "gvars", …) to gather, or empty for "all".
+/// @param[out]  err  Error details, if any
 ///
 /// @return map of global |context|.
-Dictionary nvim_get_context(Array types)
+Dictionary nvim_get_context(Dictionary opts, Error *err)
   FUNC_API_SINCE(6)
 {
-  int int_types = 0;
-  if (types.size == 1 && types.items[0].type == kObjectTypeNil) {
-    int_types = kCtxAll;
-  } else {
+  Array types = ARRAY_DICT_INIT;
+  for (size_t i = 0; i < opts.size; i++) {
+    String k = opts.items[i].key;
+    Object v = opts.items[i].value;
+    if (strequal("types", k.data)) {
+      if (v.type != kObjectTypeArray) {
+        api_set_error(err, kErrorTypeValidation, "invalid value for key: %s",
+                      k.data);
+        return (Dictionary)ARRAY_DICT_INIT;
+      }
+      types = v.data.array;
+    } else {
+      api_set_error(err, kErrorTypeValidation, "unexpected key: %s", k.data);
+      return (Dictionary)ARRAY_DICT_INIT;
+    }
+  }
+
+  int int_types = types.size > 0 ? 0 : kCtxAll;
+  if (types.size > 0) {
     for (size_t i = 0; i < types.size; i++) {
       if (types.items[i].type == kObjectTypeString) {
-        const char *const current = types.items[i].data.string.data;
-        if (strequal(current, "regs")) {
+        const char *const s = types.items[i].data.string.data;
+        if (strequal(s, "regs")) {
           int_types |= kCtxRegs;
-        } else if (strequal(current, "jumps")) {
+        } else if (strequal(s, "jumps")) {
           int_types |= kCtxJumps;
-        } else if (strequal(current, "buflist")) {
-          int_types |= kCtxBuflist;
-        } else if (strequal(current, "gvars")) {
+        } else if (strequal(s, "bufs")) {
+          int_types |= kCtxBufs;
+        } else if (strequal(s, "gvars")) {
           int_types |= kCtxGVars;
-        } else if (strequal(current, "sfuncs")) {
+        } else if (strequal(s, "sfuncs")) {
           int_types |= kCtxSFuncs;
-        } else if (strequal(current, "funcs")) {
+        } else if (strequal(s, "funcs")) {
           int_types |= kCtxFuncs;
+        } else {
+          api_set_error(err, kErrorTypeValidation, "unexpected type: %s", s);
+          return (Dictionary)ARRAY_DICT_INIT;
         }
       }
     }

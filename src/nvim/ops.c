@@ -264,10 +264,8 @@ void op_shift(oparg_T *oap, int curs_top, int amount)
     --curbuf->b_op_end.col;
 }
 
-/*
- * shift the current line one shiftwidth left (if left != 0) or right
- * leaves cursor on first blank in the line
- */
+// Shift the current line one shiftwidth left (if left != 0) or right
+// leaves cursor on first blank in the line.
 void shift_line(
     int left,
     int round,
@@ -5577,11 +5575,12 @@ void cursor_pos_info(dict_T *dict)
     }
 
     bom_count = bomb_size();
-    if (bom_count > 0) {
+    if (dict == NULL && bom_count > 0) {
       vim_snprintf((char *)IObuff + STRLEN(IObuff), IOSIZE - STRLEN(IObuff),
                    _("(+%" PRId64 " for BOM)"), (int64_t)bom_count);
     }
     if (dict == NULL) {
+      // Don't shorten this message, the user asked for it.
       p = p_shm;
       p_shm = (char_u *)"";
       msg(IObuff);
@@ -5715,7 +5714,7 @@ bool prepare_yankreg_from_object(yankreg_T *reg, String regtype, size_t lines)
       return false;
     }
     const char *p = regtype.data+1;
-    reg->y_width = getdigits_int((char_u **)&p)-1;
+    reg->y_width = getdigits_int((char_u **)&p, false, 1) - 1;
     if (regtype.size > (size_t)(p-regtype.data)) {
       return false;
     }

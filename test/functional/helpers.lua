@@ -777,12 +777,12 @@ end
 
 function module.parse_context(ctx)
   local parsed = {}
-  for _, item in ipairs({'regs', 'jumps', 'buflist', 'gvars'}) do
+  for _, item in ipairs({'regs', 'jumps', 'bufs', 'gvars'}) do
     parsed[item] = filter(function(v)
       return type(v) == 'table'
     end, module.call('msgpackparse', ctx[item]))
   end
-  parsed['buflist'] = parsed['buflist'][1]
+  parsed['bufs'] = parsed['bufs'][1]
   return map(function(v)
     if #v == 0 then
       return nil
@@ -794,6 +794,13 @@ end
 function module.add_builddir_to_rtp()
   -- Add runtime from build dir for doc/tags (used with :help).
   module.command(string.format([[set rtp+=%s/runtime]], module.test_build_dir))
+end
+
+-- Kill process with given pid
+function module.os_kill(pid)
+  return os.execute((iswin()
+    and 'taskkill /f /t /pid '..pid..' > nul'
+    or  'kill -9 '..pid..' > /dev/null'))
 end
 
 module = global_helpers.tbl_extend('error', module, global_helpers)

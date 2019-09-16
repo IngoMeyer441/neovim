@@ -306,6 +306,33 @@ describe('TUI', function()
     expect_child_buf_lines({''})
   end)
 
+  it('paste: terminal mode', function()
+    feed_data(':set statusline=^^^^^^^\n')
+    feed_data(':terminal '..nvim_dir..'/tty-test\n')
+    feed_data('i')
+    screen:expect{grid=[[
+      tty ready                                         |
+      {1: }                                                 |
+                                                        |
+                                                        |
+      {5:^^^^^^^                                           }|
+      {3:-- TERMINAL --}                                    |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+    feed_data('\027[200~')
+    feed_data('hallo')
+    feed_data('\027[201~')
+    screen:expect{grid=[[
+      tty ready                                         |
+      hallo{1: }                                            |
+                                                        |
+                                                        |
+      {5:^^^^^^^                                           }|
+      {3:-- TERMINAL --}                                    |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+  end)
+
   it('paste: normal-mode (+CRLF #10872)', function()
     feed_data(':set ruler')
     wait_for_mode('c')
@@ -512,7 +539,7 @@ describe('TUI', function()
                                                         |
       {4:~                                                 }|
       {5:                                                  }|
-      {8:paste: Error executing lua: vim.lua:196: Vim:E21: }|
+      {8:paste: Error executing lua: vim.lua:197: Vim:E21: }|
       {8:Cannot make changes, 'modifiable' is off}          |
       {10:Press ENTER or type command to continue}{1: }          |
       {3:-- TERMINAL --}                                    |
@@ -640,11 +667,11 @@ describe('TUI', function()
     screen:set_option('rgb', true)
     screen:set_default_attr_ids({
       [1] = {reverse = true},
-      [2] = {foreground = 13},
+      [2] = {foreground = tonumber('0x4040ff')},
       [3] = {bold = true, reverse = true},
       [4] = {bold = true},
-      [5] = {reverse = true, foreground = 4},
-      [6] = {foreground = 4},
+      [5] = {reverse = true, foreground = tonumber('0xe0e000')},
+      [6] = {foreground = tonumber('0xe0e000')},
       [7] = {reverse = true, foreground = Screen.colors.SeaGreen4},
       [8] = {foreground = Screen.colors.SeaGreen4},
       [9] = {bold = true, foreground = Screen.colors.Blue1},
@@ -694,8 +721,8 @@ describe('TUI', function()
                                                         |
       {4:~                                                 }|
       {5:                                                  }|
-      [[['height', 6], ['override', v:false], ['rgb', v:|
-      false], ['width', 50]]]                           |
+      [[['chan', 0], ['height', 6], ['override', v:false|
+      ], ['rgb', v:false], ['width', 50]]]              |
       {10:Press ENTER or type command to continue}{1: }          |
       {3:-- TERMINAL --}                                    |
     ]=])
@@ -740,11 +767,36 @@ describe('TUI', function()
   end)
 end)
 
+describe('TUI UIEnter/UILeave', function()
+  it('fires exactly once, after VimEnter', function()
+    clear()
+    local screen = thelpers.screen_setup(0,
+      '["'..nvim_prog..'", "-u", "NONE", "-i", "NONE"'
+      ..[[, "--cmd", "set noswapfile noshowcmd noruler"]]
+      ..[[, "--cmd", "let g:evs = []"]]
+      ..[[, "--cmd", "autocmd UIEnter  * :call add(g:evs, 'UIEnter')"]]
+      ..[[, "--cmd", "autocmd UILeave  * :call add(g:evs, 'UILeave')"]]
+      ..[[, "--cmd", "autocmd VimEnter * :call add(g:evs, 'VimEnter')"]]
+      ..']'
+    )
+    feed_data(":echo g:evs\n")
+    screen:expect{grid=[[
+      {1: }                                                 |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name]                                         }|
+      ['VimEnter', 'UIEnter']                           |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+  end)
+end)
+
 describe('TUI FocusGained/FocusLost', function()
   local screen
 
   before_each(function()
-    helpers.clear()
+    clear()
     screen = thelpers.screen_setup(0, '["'..nvim_prog
       ..'", "-u", "NONE", "-i", "NONE", "--cmd", "set noswapfile noshowcmd noruler"]')
     feed_data(":autocmd FocusGained * echo 'gained'\n")
