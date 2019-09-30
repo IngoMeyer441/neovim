@@ -566,7 +566,6 @@ describe('TUI', function()
     feed_data('\027[200~'..expected..'\027[201~')
     feed_data(' end')
     expected = expected..' end'
-    expect_child_buf_lines({expected})
     screen:expect([[
       zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz|
       zzzzzzzzzzzzzz end{1: }                               |
@@ -576,6 +575,24 @@ describe('TUI', function()
       {3:-- INSERT --}                                      |
       {3:-- TERMINAL --}                                    |
     ]])
+    expect_child_buf_lines({expected})
+  end)
+
+  it('paste: less-than sign in cmdline  #11088', function()
+    local expected = '<'
+    feed_data(':')
+    wait_for_mode('c')
+    -- "bracketed paste"
+    feed_data('\027[200~'..expected..'\027[201~')
+    screen:expect{grid=[[
+                                                        |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name]                                         }|
+      :<{1: }                                               |
+      {3:-- TERMINAL --}                                    |
+    ]]}
   end)
 
   it('paste: big burst of input', function()
