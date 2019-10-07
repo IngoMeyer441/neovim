@@ -929,7 +929,7 @@ void handle_swap_exists(bufref_T *old_curbuf)
 
     // User selected Recover at ATTENTION prompt.
     msg_scroll = true;
-    ml_recover();
+    ml_recover(false);
     MSG_PUTS("\n");     // don't overwrite the last message
     cmdline_row = msg_row;
     do_modelines(0);
@@ -4629,7 +4629,8 @@ do_arg_all(
           if (i < alist->al_ga.ga_len
               && (AARGLIST(alist)[i].ae_fnum == buf->b_fnum
                   || path_full_compare(alist_name(&AARGLIST(alist)[i]),
-                                       buf->b_ffname, true) & kEqualFiles)) {
+                                       buf->b_ffname,
+                                       true, true) & kEqualFiles)) {
             int weight = 1;
 
             if (old_curtab == curtab) {
@@ -5177,6 +5178,13 @@ bool bt_help(const buf_T *const buf)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
   return buf != NULL && buf->b_help;
+}
+
+// Return true if "buf" is a normal buffer, 'buftype' is empty.
+bool bt_normal(const buf_T *const buf)
+  FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  return buf != NULL && buf->b_p_bt[0] == NUL;
 }
 
 // Return true if "buf" is the quickfix buffer.

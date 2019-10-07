@@ -6708,17 +6708,18 @@ static void ex_preserve(exarg_T *eap)
 /// ":recover".
 static void ex_recover(exarg_T *eap)
 {
-  /* Set recoverymode right away to avoid the ATTENTION prompt. */
-  recoverymode = TRUE;
+  // Set recoverymode right away to avoid the ATTENTION prompt.
+  recoverymode = true;
   if (!check_changed(curbuf, (p_awa ? CCGD_AW : 0)
           | CCGD_MULTWIN
           | (eap->forceit ? CCGD_FORCEIT : 0)
           | CCGD_EXCMD)
 
       && (*eap->arg == NUL
-          || setfname(curbuf, eap->arg, NULL, TRUE) == OK))
-    ml_recover();
-  recoverymode = FALSE;
+          || setfname(curbuf, eap->arg, NULL, true) == OK)) {
+    ml_recover(true);
+  }
+  recoverymode = false;
 }
 
 /*
@@ -9553,7 +9554,7 @@ put_view(
    */
   if ((*flagp & SSOP_FOLDS)
       && wp->w_buffer->b_ffname != NULL
-      && (*wp->w_buffer->b_p_bt == NUL || bt_help(wp->w_buffer))
+      && (bt_normal(wp->w_buffer) || bt_help(wp->w_buffer))
       ) {
     if (put_folds(fd, wp) == FAIL)
       return FAIL;
@@ -10010,10 +10011,11 @@ static void ex_setfiletype(exarg_T *eap)
 
 static void ex_digraphs(exarg_T *eap)
 {
-  if (*eap->arg != NUL)
+  if (*eap->arg != NUL) {
     putdigraph(eap->arg);
-  else
-    listdigraphs();
+  } else {
+    listdigraphs(eap->forceit);
+  }
 }
 
 static void ex_set(exarg_T *eap)

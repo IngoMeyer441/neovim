@@ -38,7 +38,7 @@ module.nvim_prog = (
 module.nvim_set = (
   'set shortmess+=IS background=light noswapfile noautoindent'
   ..' laststatus=1 undodir=. directory=. viewdir=. backupdir=.'
-  ..' belloff= wildoptions-=pum noshowcmd noruler nomore')
+  ..' belloff= wildoptions-=pum noshowcmd noruler nomore redrawdebug=invalid')
 module.nvim_argv = {
   module.nvim_prog, '-u', 'NONE', '-i', 'NONE',
   '--cmd', module.nvim_set, '--embed'}
@@ -437,6 +437,7 @@ function module.new_argv(...)
         'NVIM_LOG_FILE',
         'NVIM_RPLUGIN_MANIFEST',
         'GCOV_ERROR_FILE',
+        'TMPDIR',
       }) do
         if not env_tbl[k] then
           env_tbl[k] = os.getenv(k)
