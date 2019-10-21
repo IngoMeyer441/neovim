@@ -317,10 +317,10 @@ if(HAS_DIAG_COLOR_FLAG)
   endif()
 endif()
 
-option(TRAVIS_CI_BUILD "Travis/QuickBuild CI, extra flags will be set" OFF)
+option(TRAVIS_CI_BUILD "Travis/sourcehut CI, extra flags will be set" OFF)
 
 if(TRAVIS_CI_BUILD)
-  message(STATUS "Travis/QuickBuild CI build enabled")
+  message(STATUS "Travis/sourcehut CI build enabled")
   add_compile_options(-Werror)
   if(DEFINED ENV{BUILD_32BIT})
     # Get some test coverage for unsigned char
@@ -562,10 +562,7 @@ if(BUSTED_PRG)
   endif()
 
   set(UNITTEST_PREREQS nvim-test unittest-headers)
-  set(FUNCTIONALTEST_PREREQS nvim printargs-test shell-test streams-test ${GENERATED_HELP_TAGS})
-  if(NOT WIN32)
-    list(APPEND FUNCTIONALTEST_PREREQS tty-test)
-  endif()
+  set(FUNCTIONALTEST_PREREQS nvim printenv-test printargs-test shell-test streams-test tty-test ${GENERATED_HELP_TAGS})
   set(BENCHMARK_PREREQS nvim tty-test)
 
   # Useful for automated build systems, if they want to manually run the tests.
