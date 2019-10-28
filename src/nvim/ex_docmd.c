@@ -3750,8 +3750,7 @@ static linenr_T get_address(exarg_T *eap,
           curwin->w_cursor.col = 0;
         }
         searchcmdlen = 0;
-        if (!do_search(NULL, c, cmd, 1L,
-                       SEARCH_HIS | SEARCH_MSG, NULL, NULL)) {
+        if (!do_search(NULL, c, cmd, 1L, SEARCH_HIS | SEARCH_MSG, NULL)) {
           curwin->w_cursor = pos;
           cmd = NULL;
           goto error;
@@ -3788,8 +3787,7 @@ static linenr_T get_address(exarg_T *eap,
         pos.coladd = 0;
         if (searchit(curwin, curbuf, &pos, NULL,
                      *cmd == '?' ? BACKWARD : FORWARD,
-                     (char_u *)"", 1L, SEARCH_MSG,
-                     i, (linenr_T)0, NULL, NULL) != FAIL) {
+                     (char_u *)"", 1L, SEARCH_MSG, i, NULL) != FAIL) {
           lnum = pos.lnum;
         } else {
           cmd = NULL;
@@ -6070,9 +6068,11 @@ static bool before_quit_autocmds(win_T *wp, bool quit_all, int forceit)
   if (quit_all
       || (check_more(false, forceit) == OK && only_one_window())) {
     apply_autocmds(EVENT_EXITPRE, NULL, NULL, false, curbuf);
-    // Refuse to quit when locked or when the buffer in the last window is
-    // being closed (can only happen in autocommands).
-    if (curbuf_locked()
+    // Refuse to quit when locked or when the window was closed or the
+    // buffer in the last window is being closed (can only happen in
+    // autocommands).
+    if (!win_valid(wp)
+        || curbuf_locked()
         || (curbuf->b_nwindows == 1 && curbuf->b_locked > 0)) {
       return true;
     }
@@ -10135,6 +10135,17 @@ static void ex_folddo(exarg_T *eap)
 
   global_exe(eap->arg);  // Execute the command on the marked lines.
   ml_clearmarked();      // clear rest of the marks
+}
+
+// Returns true if the supplied Ex cmdidx is for a location list command
+// instead of a quickfix command.
+bool is_loclist_cmd(int cmdidx)
+  FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  if (cmdidx < 0 || cmdidx > CMD_SIZE) {
+    return false;
+  }
+  return cmdnames[cmdidx].cmd_name[0] == 'l';
 }
 
 bool get_pressedreturn(void)

@@ -4,7 +4,7 @@ set -e
 set -o pipefail
 
 if [[ "${CI_TARGET}" == lint ]]; then
-  python -m pip -q install --user --upgrade flake8
+  python3 -m pip -q install --user --upgrade flake8
   exit
 fi
 
@@ -26,8 +26,11 @@ npm install -g neovim
 npm link neovim
 
 echo "Install tree-sitter npm package"
-npm install -g tree-sitter-cli
-npm link tree-sitter-cli
+
+# FIXME
+# https://github.com/tree-sitter/tree-sitter/commit/e14e285a1087264a8c74a7c62fcaecc49db9d904
+# If queries added to tree-sitter-c, we can use latest tree-sitter-cli
+npm install -g tree-sitter-cli@v0.15.9
 
 echo "Install tree-sitter c parser"
 curl "https://codeload.github.com/tree-sitter/tree-sitter-c/tar.gz/v0.15.2" -o tree_sitter_c.tar.gz
@@ -44,3 +47,4 @@ else
   cd src/
   gcc -m32 -o "$TREE_SITTER_DIR/bin/c.so" -shared parser.c -I.
 fi
+test -f "$TREE_SITTER_DIR/bin/c.so"
