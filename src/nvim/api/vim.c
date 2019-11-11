@@ -1040,10 +1040,9 @@ fail:
 /// @param enter  Enter the window (make it the current window)
 /// @param config Map defining the window configuration. Keys:
 ///   - `relative`: Sets the window layout to "floating", placed at (row,col)
-///                 coordinates relative to one of:
+///                 coordinates relative to:
 ///      - "editor" The global editor grid
-///      - "win"    Window given by the `win` field, or current window by
-///                 default.
+///      - "win"    Window given by the `win` field, or current window.
 ///      - "cursor" Cursor position in current window.
 ///   - `win`: |window-ID| for relative="win".
 ///   - `anchor`: Decides which corner of the float to place at (row,col):
@@ -1252,7 +1251,7 @@ Boolean nvim_paste(String data, Boolean crlf, Integer phase, Error *err)
     draining = true;
     goto theend;
   }
-  if (!(State & CMDLINE) && !(State & INSERT) && (phase == -1 || phase == 1)) {
+  if (!(State & (CMDLINE | INSERT)) && (phase == -1 || phase == 1)) {
     ResetRedobuff();
     AppendCharToRedobuff('a');  // Dot-repeat.
   }
@@ -1270,7 +1269,7 @@ Boolean nvim_paste(String data, Boolean crlf, Integer phase, Error *err)
       }
     }
   }
-  if (!(State & CMDLINE) && !(State & INSERT) && (phase == -1 || phase == 3)) {
+  if (!(State & (CMDLINE | INSERT)) && (phase == -1 || phase == 3)) {
     AppendCharToRedobuff(ESC);  // Dot-repeat.
   }
 theend:

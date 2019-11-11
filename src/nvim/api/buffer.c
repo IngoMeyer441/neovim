@@ -101,25 +101,39 @@ String buffer_get_line(Buffer buffer, Integer index, Error *err)
   return rv;
 }
 
-/// Activates buffer-update events on a channel, or as lua callbacks.
+/// Activates buffer-update events on a channel, or as Lua callbacks.
+///
+/// @see |nvim_buf_detach()|
+/// @see |api-buffer-updates-lua|
 ///
 /// @param channel_id
 /// @param buffer Buffer handle, or 0 for current buffer
-/// @param send_buffer Set to true if the initial notification should contain
-///        the whole buffer. If so, the first notification will be a
-///        `nvim_buf_lines_event`. Otherwise, the first notification will be
-///        a `nvim_buf_changedtick_event`. Not used for lua callbacks.
+/// @param send_buffer True if the initial notification should contain the
+///        whole buffer: first notification will be `nvim_buf_lines_event`.
+///        Else the first notification will be `nvim_buf_changedtick_event`.
+///        Not for Lua callbacks.
 /// @param  opts  Optional parameters.
-///             - `on_lines`:       lua callback received on change.
-///             - `on_changedtick`: lua callback received on changedtick
-///                                 increment without text change.
-///             - `utf_sizes`:      include UTF-32 and UTF-16 size of
-///                                 the replaced region.
-///               See |api-buffer-updates-lua| for more information
+///             - on_lines: Lua callback invoked on change.
+///               Return `true` to detach. Args:
+///               - buffer handle
+///               - b:changedtick
+///               - first line that changed (zero-indexed)
+///               - last line that was changed
+///               - last line in the updated range
+///               - byte count of previous contents
+///               - deleted_codepoints (if `utf_sizes` is true)
+///               - deleted_codeunits (if `utf_sizes` is true)
+///             - on_changedtick: Lua callback invoked on changedtick
+///               increment without text change. Args:
+///               - buffer handle
+///               - b:changedtick
+///             - on_detach: Lua callback invoked on detach. Args:
+///               - buffer handle
+///             - utf_sizes: include UTF-32 and UTF-16 size of the replaced
+///               region, as args to `on_lines`.
 /// @param[out] err Error details, if any
-/// @return False when updates couldn't be enabled because the buffer isn't
-///         loaded or `opts` contained an invalid key; otherwise True.
-///         TODO: LUA_API_NO_EVAL
+/// @return False if attach failed (invalid parameter, or buffer isn't loaded);
+///         otherwise True. TODO: LUA_API_NO_EVAL
 Boolean nvim_buf_attach(uint64_t channel_id,
                         Buffer buffer,
                         Boolean send_buffer,
@@ -183,13 +197,14 @@ error:
 
 /// Deactivates buffer-update events on the channel.
 ///
-/// For Lua callbacks see |api-lua-detach|.
+/// @see |nvim_buf_attach()|
+/// @see |api-lua-detach| for detaching Lua callbacks
 ///
 /// @param channel_id
 /// @param buffer Buffer handle, or 0 for current buffer
 /// @param[out] err Error details, if any
-/// @return False when updates couldn't be disabled because the buffer
-///         isn't loaded; otherwise True.
+/// @return False if detach failed (because the buffer isn't loaded);
+///         otherwise True.
 Boolean nvim_buf_detach(uint64_t channel_id,
                         Buffer buffer,
                         Error *err)
@@ -1192,7 +1207,57 @@ free_exit:
   return 0;
 }
 
-Dictionary nvim__buf_stats(Buffer buffer, Error *err)
+/// Get the virtual text (annotation) for a buffer line.
+///
+/// The virtual text is returned as list of lists, whereas the inner lists have
+/// either one or two elements. The first element is the actual text, the
+/// optional second element is the highlight group.
+///
+/// The format is exactly the same as given to nvim_buf_set_virtual_text().
+///
+/// If there is no virtual text associated with the given line, an empty list
+/// is returned.
+///
+/// @param buffer   Buffer handle, or 0 for current buffer
+/// @param line     Line to get the virtual text from (zero-indexed)
+/// @param[out] err Error details, if any
+/// @return         List of virtual text chunks
+Array nvim_buf_get_virtual_text(Buffer buffer, Integer lnum, Error *err)
+  FUNC_API_SINCE(7)
+{
+  Array chunks = ARRAY_DICT_INIT;
+
+  buf_T *buf = find_buffer_by_handle(buffer, err);
+  if (!buf) {
+    return chunks;
+  }
+
+  if (lnum < 0 || lnum >= MAXLNUM) {
+    api_set_error(err, kErrorTypeValidation, "Line number outside range");
+    return chunks;
+  }
+
+  BufhlLine *lineinfo = bufhl_tree_ref(&buf->b_bufhl_info, (linenr_T)(lnum + 1),
+                                       false);
+  if (!lineinfo) {
+    return chunks;
+  }
+
+  for (size_t i = 0; i < lineinfo->virt_text.size; i++) {
+    Array chunk = ARRAY_DICT_INIT;
+    VirtTextChunk *vtc = &lineinfo->virt_text.items[i];
+    ADD(chunk, STRING_OBJ(cstr_to_string(vtc->text)));
+    if (vtc->hl_id > 0) {
+      ADD(chunk, STRING_OBJ(cstr_to_string(
+          (const char *)syn_id2name(vtc->hl_id))));
+    }
+    ADD(chunks, ARRAY_OBJ(chunk));
+  }
+
+  return chunks;
+}
+
+Dictionary nvim__uf_stats(Buffer buffer, Error *err)
 {
   Dictionary rv = ARRAY_DICT_INIT;
 
