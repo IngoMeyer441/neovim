@@ -167,8 +167,7 @@ end
 ---
 --- Example: To remove ANSI color codes when pasting:
 --- <pre>
---- vim.paste = (function()
----   local overridden = vim.paste
+--- vim.paste = (function(overridden)
 ---   return function(lines, phase)
 ---     for i,line in ipairs(lines) do
 ---       -- Scrub ANSI color codes from paste input.
@@ -176,7 +175,7 @@ end
 ---     end
 ---     overridden(lines, phase)
 ---   end
---- end)()
+--- end)(vim.paste)
 --- </pre>
 ---
 --@see |paste|
@@ -256,19 +255,26 @@ local function __index(t, key)
     -- Expose all `vim.shared` functions on the `vim` module.
     t[key] = require('vim.shared')[key]
     return t[key]
+  elseif require('vim.uri')[key] ~= nil then
+    -- Expose all `vim.uri` functions on the `vim` module.
+    t[key] = require('vim.uri')[key]
+    return t[key]
+  elseif key == 'lsp' then
+    t.lsp = require('vim.lsp')
+    return t.lsp
   end
 end
 
 
 -- vim.fn.{func}(...)
-local function fn_index(t, key)
-  local function func(...)
+local function _fn_index(t, key)
+  local function _fn(...)
     return vim.call(key, ...)
   end
-  t[key] = func
-  return func
+  t[key] = _fn
+  return _fn
 end
-local fn = setmetatable({}, {__index=fn_index})
+local fn = setmetatable({}, {__index=_fn_index})
 
 local module = {
   _update_package_paths = _update_package_paths,

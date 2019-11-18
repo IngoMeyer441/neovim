@@ -4559,9 +4559,9 @@ static qfline_T *qf_find_closest_entry(qf_list_T *qfl,
 
 /// Get the nth quickfix entry below the specified entry treating multiple
 /// entries on a single line as one. Searches forward in the list.
-static qfline_T *qf_get_nth_below_entry(qfline_T *entry,
-                                        int *errornr,
-                                        linenr_T n)
+static void qf_get_nth_below_entry(qfline_T *entry,
+                                   int *errornr,
+                                   linenr_T n)
 {
   while (n-- > 0 && !got_int) {
     qfline_T *first_entry = entry;
@@ -4582,15 +4582,13 @@ static qfline_T *qf_get_nth_below_entry(qfline_T *entry,
     entry = entry->qf_next;
     (*errornr)++;
   }
-
-  return entry;
 }
 
 /// Get the nth quickfix entry above the specified entry treating multiple
 /// entries on a single line as one. Searches backwards in the list.
-static qfline_T *qf_get_nth_above_entry(qfline_T *entry,
-                                        int *errornr,
-                                        linenr_T n)
+static void qf_get_nth_above_entry(qfline_T *entry,
+                                   int *errornr,
+                                   linenr_T n)
 {
   while (n-- > 0 && !got_int) {
     if (entry->qf_prev == NULL
@@ -4604,8 +4602,6 @@ static qfline_T *qf_get_nth_above_entry(qfline_T *entry,
     // If multiple entries are on the same line, then use the first entry
     entry = qf_find_first_entry_on_line(entry, errornr);
   }
-
-  return entry;
 }
 
 /// Find the n'th quickfix entry adjacent to line 'lnum' in buffer 'bnr' in the
@@ -4629,9 +4625,9 @@ static int qf_find_nth_adj_entry(qf_list_T *qfl,
   if (--n > 0) {
     // Go to the n'th entry in the current buffer
     if (dir == FORWARD) {
-      adj_entry = qf_get_nth_below_entry(adj_entry, &errornr, n);
+      qf_get_nth_below_entry(adj_entry, &errornr, n);
     } else {
-      adj_entry = qf_get_nth_above_entry(adj_entry, &errornr, n);
+      qf_get_nth_above_entry(adj_entry, &errornr, n);
     }
   }
 
@@ -5779,11 +5775,13 @@ int qf_get_properties(win_T *wp, dict_T *what, dict_T *retdict)
 }
 
 /// Add a new quickfix entry to list at 'qf_idx' in the stack 'qi' from the
-/// items in the dict 'd'.
+/// items in the dict 'd'. If it is a valid error entry, then set 'valid_entry'
+/// to true.
 static int qf_add_entry_from_dict(
     qf_list_T *qfl,
     const dict_T *d,
-    bool first_entry)
+    bool first_entry,
+    bool *valid_entry)
   FUNC_ATTR_NONNULL_ALL
 {
   static bool did_bufnr_emsg;
@@ -5846,6 +5844,10 @@ static int qf_add_entry_from_dict(
   xfree(pattern);
   xfree(text);
 
+  if (valid) {
+    *valid_entry = true;
+  }
+
   return status;
 }
 
@@ -5857,6 +5859,7 @@ static int qf_add_entries(qf_info_T *qi, int qf_idx, list_T *list,
   qf_list_T *qfl = qf_get_list(qi, qf_idx);
   qfline_T *old_last = NULL;
   int retval = OK;
+  bool valid_entry = false;
 
   if (action == ' ' || qf_idx == qi->qf_listcount) {
     // make place for a new list
@@ -5881,23 +5884,30 @@ static int qf_add_entries(qf_info_T *qi, int qf_idx, list_T *list,
       continue;
     }
 
-    retval = qf_add_entry_from_dict(qfl, d, li == tv_list_first(list));
+    retval = qf_add_entry_from_dict(qfl, d, li == tv_list_first(list),
+                                    &valid_entry);
     if (retval == QF_FAIL) {
       break;
     }
   });
 
-  if (qfl->qf_index == 0) {
-    // no valid entry
-    qfl->qf_nonevalid = true;
-  } else {
+  // Check if any valid error entries are added to the list.
+  if (valid_entry) {
     qfl->qf_nonevalid = false;
+  } else if (qfl->qf_index == 0) {
+    qfl->qf_nonevalid = true;
   }
+
+  // If not appending to the list, set the current error to the first entry
   if (action != 'a') {
     qfl->qf_ptr = qfl->qf_start;
-    if (!qf_list_empty(qfl)) {
-      qfl->qf_index = 1;
-    }
+  }
+
+  // Update the current error index if not appending to the list or if the
+  // list was empty before and it is not empty now.
+  if ((action != 'a' || qfl->qf_index == 0)
+      && !qf_list_empty(qfl)) {
+    qfl->qf_index = 1;
   }
 
   // Don't update the cursor in quickfix window when appending entries
