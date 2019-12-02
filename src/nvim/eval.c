@@ -2872,7 +2872,7 @@ void set_context_for_expression(expand_T *xp, char_u *arg, cmdidx_T cmdidx)
   int c;
   char_u      *p;
 
-  if (cmdidx == CMD_let) {
+  if (cmdidx == CMD_let || cmdidx == CMD_const) {
     xp->xp_context = EXPAND_USER_VARS;
     if (vim_strpbrk(arg, (char_u *)"\"'+-*/%.=!?~|&$([<>,#") == NULL) {
       /* ":let var1 var2 ...": find last space. */
@@ -11503,6 +11503,9 @@ static void f_glob2regpat(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   static const char *const has_list[] = {
+#if defined(BSD) && !defined(__APPLE__)
+    "bsd",
+#endif
 #ifdef UNIX
     "unix",
 #endif

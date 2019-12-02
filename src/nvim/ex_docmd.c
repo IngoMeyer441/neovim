@@ -2126,6 +2126,7 @@ static char_u * do_one_cmd(char_u **cmdlinep,
     case CMD_browse:
     case CMD_call:
     case CMD_confirm:
+    case CMD_const:
     case CMD_delfunction:
     case CMD_djump:
     case CMD_dlist:
@@ -2150,6 +2151,7 @@ static char_u * do_one_cmd(char_u **cmdlinep,
     case CMD_leftabove:
     case CMD_let:
     case CMD_lockmarks:
+    case CMD_lockvar:
     case CMD_lua:
     case CMD_match:
     case CMD_mzscheme:
@@ -2178,6 +2180,7 @@ static char_u * do_one_cmd(char_u **cmdlinep,
     case CMD_tilde:
     case CMD_topleft:
     case CMD_unlet:
+    case CMD_unlockvar:
     case CMD_verbose:
     case CMD_vertical:
     case CMD_wincmd:
@@ -3437,6 +3440,7 @@ const char * set_one_cmd_context(
   case CMD_syntax:
     set_context_in_syntax_cmd(xp, arg);
     break;
+  case CMD_const:
   case CMD_let:
   case CMD_if:
   case CMD_elseif:
@@ -5133,9 +5137,11 @@ static void uc_list(char_u *name, size_t name_len)
   ucmd_T      *cmd;
   int len;
   uint32_t a;
-  garray_T    *gap;
 
-  gap = &curbuf->b_ucmds;
+  // In cmdwin, the alternative buffer should be used.
+  garray_T *gap = (cmdwin_type != 0 && get_cmdline_type() == NUL)
+    ? &prevwin->w_buffer->b_ucmds
+    : &curbuf->b_ucmds;
   for (;; ) {
     for (i = 0; i < gap->ga_len; ++i) {
       cmd = USER_CMD_GA(gap, i);
@@ -5984,13 +5990,21 @@ char_u *get_user_cmd_addr_type(expand_T *xp, int idx)
 /*
  * Function given to ExpandGeneric() to obtain the list of user command names.
  */
-char_u *get_user_commands(expand_T *xp, int idx)
+char_u *get_user_commands(expand_T *xp FUNC_ATTR_UNUSED, int idx)
+  FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  if (idx < curbuf->b_ucmds.ga_len)
-    return USER_CMD_GA(&curbuf->b_ucmds, idx)->uc_name;
-  idx -= curbuf->b_ucmds.ga_len;
-  if (idx < ucmds.ga_len)
+  // In cmdwin, the alternative buffer should be used.
+  const buf_T *const buf = (cmdwin_type != 0 && get_cmdline_type() == NUL)
+    ? prevwin->w_buffer
+    : curbuf;
+
+  if (idx < buf->b_ucmds.ga_len) {
+    return USER_CMD_GA(&buf->b_ucmds, idx)->uc_name;
+  }
+  idx -= buf->b_ucmds.ga_len;
+  if (idx < ucmds.ga_len) {
     return USER_CMD(idx)->uc_name;
+  }
   return NULL;
 }
 

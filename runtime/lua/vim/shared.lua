@@ -226,16 +226,17 @@ function vim.tbl_add_reverse_lookup(o)
   return o
 end
 
--- Extends a list-like table with the values of another list-like table.
---
--- NOTE: This *mutates* dst!
--- @see |extend()|
---
--- @param dst list which will be modified and appended to.
--- @param src list from which values will be inserted.
--- @param start Start index on src. defaults to 1
--- @param finish Final index on src. defaults to #src
--- @returns dst
+--- Extends a list-like table with the values of another list-like table.
+---
+--- NOTE: This mutates dst!
+---
+--@see |vim.tbl_extend()|
+---
+--@param dst list which will be modified and appended to.
+--@param src list from which values will be inserted.
+--@param start Start index on src. defaults to 1
+--@param finish Final index on src. defaults to #src
+--@returns dst
 function vim.list_extend(dst, src, start, finish)
   vim.validate {
     dst = {dst, 't'};
@@ -317,6 +318,26 @@ end
 function vim.pesc(s)
   vim.validate{s={s,'s'}}
   return s:gsub('[%(%)%.%%%+%-%*%?%[%]%^%$]', '%%%1')
+end
+
+--- Test if `prefix` is a prefix of `s` for strings.
+--
+-- @param s String to check
+-- @param prefix Potential prefix
+-- @return boolean True if prefix is a prefix of s
+function vim.startswith(s, prefix)
+  vim.validate { s = {s, 's'}; prefix = {prefix, 's'}; }
+  return s:sub(1, #prefix) == prefix
+end
+
+--- Test if `suffix` is a suffix of `s` for strings.
+--
+-- @param s String to check
+-- @param suffix Potential suffix
+-- @return boolean True if suffix is a suffix of s
+function vim.endswith(s, suffix)
+  vim.validate { s = {s, 's'}; suffix = {suffix, 's'}; }
+  return #suffix == 0 or s:sub(-#suffix) == suffix
 end
 
 --- Validates a parameter specification (types and values).
