@@ -35,7 +35,7 @@ module.nvim_prog = (
 )
 -- Default settings for the test session.
 module.nvim_set = (
-  'set shortmess+=IS background=light noswapfile noautoindent'
+  'set shortmess+=IS background=light noswapfile noautoindent startofline'
   ..' laststatus=1 undodir=. directory=. viewdir=. backupdir=.'
   ..' belloff= wildoptions-=pum noshowcmd noruler nomore redrawdebug=invalid')
 module.nvim_argv = {
@@ -706,7 +706,7 @@ module.curwinmeths = module.create_callindex(module.curwin)
 module.curtabmeths = module.create_callindex(module.curtab)
 
 function module.exec_lua(code, ...)
-  return module.meths.execute_lua(code, {...})
+  return module.meths.exec_lua(code, {...})
 end
 
 function module.redir_exec(cmd)
