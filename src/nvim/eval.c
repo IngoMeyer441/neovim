@@ -16018,7 +16018,7 @@ static void f_setpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   const char *const name = tv_get_string_chk(argvars);
   if (name != NULL) {
     if (list2fpos(&argvars[1], &pos, &fnum, &curswant) == OK) {
-      if (--pos.col < 0) {
+      if (pos.col != MAXCOL && --pos.col < 0) {
         pos.col = 0;
       }
       if (name[0] == '.' && name[1] == NUL) {
@@ -19045,6 +19045,15 @@ static void f_virtcol(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   fp = var2fpos(&argvars[0], FALSE, &fnum);
   if (fp != NULL && fp->lnum <= curbuf->b_ml.ml_line_count
       && fnum == curbuf->b_fnum) {
+    // Limit the column to a valid value, getvvcol() doesn't check.
+    if (fp->col < 0) {
+      fp->col = 0;
+    } else {
+      const size_t len = STRLEN(ml_get(fp->lnum));
+      if (fp->col > (colnr_T)len) {
+        fp->col = (colnr_T)len;
+      }
+    }
     getvvcol(curwin, fp, NULL, NULL, &vcol);
     ++vcol;
   }
@@ -21242,6 +21251,7 @@ void ex_echo(exarg_T *eap)
   char_u      *arg = eap->arg;
   typval_T rettv;
   bool atstart = true;
+  bool need_clear = true;
   const int did_emsg_before = did_emsg;
 
   if (eap->skip)
@@ -21284,7 +21294,7 @@ void ex_echo(exarg_T *eap)
       char *tofree = encode_tv2echo(&rettv, NULL);
       if (*tofree != NUL) {
         msg_ext_set_kind("echo");
-        msg_multiline_attr(tofree, echo_attr, true);
+        msg_multiline_attr(tofree, echo_attr, true, &need_clear);
       }
       xfree(tofree);
     }
@@ -21297,7 +21307,9 @@ void ex_echo(exarg_T *eap)
     emsg_skip--;
   } else {
     // remove text that may still be there from the command
-    msg_clr_eos();
+    if (need_clear) {
+      msg_clr_eos();
+    }
     if (eap->cmdidx == CMD_echo) {
       msg_end();
     }

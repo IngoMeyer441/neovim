@@ -1826,10 +1826,13 @@ change_indent (
 
     /* We only put back the new line up to the cursor */
     new_line[curwin->w_cursor.col] = NUL;
+    int new_col = curwin->w_cursor.col;
 
     // Put back original line
     ml_replace(curwin->w_cursor.lnum, orig_line, false);
     curwin->w_cursor.col = orig_col;
+
+    curbuf_splice_pending++;
 
     /* Backspace from cursor to start of line */
     backspace_until_column(0);
@@ -1838,13 +1841,16 @@ change_indent (
     ins_bytes(new_line);
 
     xfree(new_line);
-  }
 
-  // change_indent seems to bec called twice, this combination only triggers
-  // once for both calls
-  if (new_cursor_col - vcol != 0) {
-    extmark_col_adjust(curbuf, curwin->w_cursor.lnum, 0, 0, amount,
-                       kExtmarkUndo);
+    curbuf_splice_pending--;
+
+    // TODO(bfredl): test for crazy edge cases, like we stand on a TAB or
+    // something? does this even do the right text change then?
+    int delta = orig_col - new_col;
+    extmark_splice(curbuf, curwin->w_cursor.lnum-1, new_col,
+                   0, delta < 0 ? -delta : 0,
+                   0, delta > 0 ? delta : 0,
+                   kExtmarkUndo);
   }
 }
 
@@ -3379,6 +3385,7 @@ static bool ins_compl_prep(int c)
 {
   char_u *ptr;
   bool retval = false;
+  const int prev_mode = ctrl_x_mode;
 
   /* Forget any previous 'special' messages if this is actually
    * a ^X mode key - bar ^R, in which case we wait to see what it gives us.
@@ -3587,6 +3594,18 @@ static bool ins_compl_prep(int c)
 
       auto_format(FALSE, TRUE);
 
+      {
+        const int new_mode = ctrl_x_mode;
+
+        // Trigger the CompleteDone event to give scripts a chance to
+        // act upon the completion.  Do this before clearing the info,
+        // and restore ctrl_x_mode, so that complete_info() can be
+        // used.
+        ctrl_x_mode = prev_mode;
+        ins_apply_autocmds(EVENT_COMPLETEDONE);
+        ctrl_x_mode = new_mode;
+      }
+
       ins_compl_free();
       compl_started = false;
       compl_matches = 0;
@@ -3611,9 +3630,6 @@ static bool ins_compl_prep(int c)
        */
       if (want_cindent && in_cinkeys(KEY_COMPLETE, ' ', inindent(0)))
         do_c_expr_indent();
-      /* Trigger the CompleteDone event to give scripts a chance to act
-       * upon the completion. */
-      ins_apply_autocmds(EVENT_COMPLETEDONE);
     }
   } else if (ctrl_x_mode == CTRL_X_LOCAL_MSG)
     /* Trigger the CompleteDone event to give scripts a chance to act
@@ -3741,6 +3757,8 @@ expand_by_function(
     case VAR_DICT:
       matchdict = rettv.vval.v_dict;
       break;
+    case VAR_SPECIAL:
+      FALLTHROUGH;
     default:
       // TODO(brammool): Give error message?
       tv_clear(&rettv);
@@ -5204,7 +5222,7 @@ static int ins_complete(int c, bool enable_pum)
     }
   }
 
-  /* Show a message about what (completion) mode we're in. */
+  // Show a message about what (completion) mode we're in.
   showmode();
   if (!shortmess(SHM_COMPLETIONMENU)) {
     if (edit_submode_extra != NULL) {

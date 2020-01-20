@@ -76,6 +76,9 @@
 #include "nvim/undo.h"
 #include "nvim/window.h"
 #include "nvim/os/os.h"
+#ifdef WIN32
+# include "nvim/os/pty_conpty_win.h"
+#endif
 #include "nvim/api/private/helpers.h"
 #include "nvim/os/input.h"
 #include "nvim/os/lang.h"
@@ -4735,13 +4738,6 @@ bool get_tty_option(char *name, char **value)
   if (strequal(name, "term")) {
     if (value) {
       *value = p_term ? xstrdup(p_term) : xstrdup("nvim");
-    }
-    return true;
-  }
-
-  if (strequal(name, "tenc") || strequal(name, "termencoding")) {
-    if (value) {
-      *value = xstrdup("utf-8");
     }
     return true;
   }
