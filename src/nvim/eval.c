@@ -70,6 +70,7 @@
 #include "nvim/regexp.h"
 #include "nvim/screen.h"
 #include "nvim/search.h"
+#include "nvim/ex_session.h"
 #include "nvim/sha256.h"
 #include "nvim/sign.h"
 #include "nvim/spell.h"
@@ -16241,7 +16242,8 @@ static void f_settagstack(typval_T *argvars, typval_T *rettv, FunPtr fptr)
         if (actstr == NULL) {
           return;
         }
-        if ((*actstr == 'r' || *actstr == 'a') && actstr[1] == NUL) {
+        if ((*actstr == 'r' || *actstr == 'a' || *actstr == 't')
+            && actstr[1] == NUL) {
           action = *actstr;
         } else {
             EMSG2(_(e_invact2), actstr);
@@ -22131,11 +22133,12 @@ ret_free:
 static char_u *
 trans_function_name(
     char_u **pp,
-    int skip,                      // only find the end, don't evaluate
+    bool skip,                     // only find the end, don't evaluate
     int flags,
     funcdict_T *fdp,               // return: info about dictionary used
     partial_T **partial            // return: partial of a FuncRef
 )
+  FUNC_ATTR_NONNULL_ARG(1)
 {
   char_u      *name = NULL;
   const char_u *start;
@@ -22322,7 +22325,7 @@ trans_function_name(
   }
 
   name = xmalloc(len + lead + 1);
-  if (lead > 0){
+  if (!skip && lead > 0) {
     name[0] = K_SPECIAL;
     name[1] = KS_EXTRA;
     name[2] = (int)KE_SNR;
