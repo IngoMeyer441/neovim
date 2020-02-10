@@ -23,6 +23,7 @@ endif()
 set(TOUCHES_DIR ${PROJECT_BINARY_DIR}/touches)
 set(GENERATOR_DIR ${CMAKE_CURRENT_LIST_DIR}/generators)
 set(GENERATED_DIR ${PROJECT_BINARY_DIR}/src/nvim/auto)
+set(BINARY_LIB_DIR ${PROJECT_BINARY_DIR}/lib/nvim/)
 set(API_DISPATCH_GENERATOR ${GENERATOR_DIR}/gen_api_dispatch.lua)
 set(API_UI_EVENTS_GENERATOR ${GENERATOR_DIR}/gen_api_ui_events.lua)
 set(GENERATOR_C_GRAMMAR ${GENERATOR_DIR}/c_grammar.lua)
@@ -545,6 +546,17 @@ else()
   add_custom_target(nvim_runtime_deps)  # Stub target to avoid CMP0046.
 endif()
 set_target_properties(nvim_runtime_deps PROPERTIES FOLDER deps)
+
+file(MAKE_DIRECTORY ${BINARY_LIB_DIR})
+
+# install treesitter parser if bundled
+if(EXISTS ${DEPS_PREFIX}/lib/nvim/parser)
+  file(COPY ${DEPS_PREFIX}/lib/nvim/parser DESTINATION ${BINARY_LIB_DIR})
+endif()
+
+install(DIRECTORY ${BINARY_LIB_DIR}
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/nvim/
+  USE_SOURCE_PERMISSIONS)
 
 add_library(
   libnvim
