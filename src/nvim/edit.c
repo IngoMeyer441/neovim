@@ -574,10 +574,8 @@ static int insert_check(VimState *state)
     foldCheckClose();
   }
 
-  int cmdchar_todo = s->cmdchar;
   if (bt_prompt(curbuf)) {
-    init_prompt(cmdchar_todo);
-    cmdchar_todo = NUL;
+    init_prompt(s->cmdchar);
   }
 
   // If we inserted a character at the last position of the last line in the
@@ -4085,7 +4083,7 @@ static int ins_compl_get_exp(pos_T *ini)
           type = CTRL_X_PATH_DEFINES;
         else if (*e_cpt == ']' || *e_cpt == 't') {
           type = CTRL_X_TAGS;
-          vim_snprintf((char *)IObuff, IOSIZE, _("Scanning tags."));
+          vim_snprintf((char *)IObuff, IOSIZE, "%s", _("Scanning tags."));
           (void)msg_trunc_attr(IObuff, true, HL_ATTR(HLF_R));
         } else {
           type = -1;
