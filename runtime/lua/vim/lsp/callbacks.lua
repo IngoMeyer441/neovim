@@ -32,12 +32,19 @@ M['textDocument/publishDiagnostics'] = function(_, _, result)
   util.buf_diagnostics_save_positions(bufnr, result.diagnostics)
   util.buf_diagnostics_underline(bufnr, result.diagnostics)
   util.buf_diagnostics_virtual_text(bufnr, result.diagnostics)
-  -- util.set_loclist(result.diagnostics)
+  util.buf_diagnostics_signs(bufnr, result.diagnostics)
+  vim.api.nvim_command("doautocmd User LspDiagnosticsChanged")
 end
 
 M['textDocument/references'] = function(_, _, result)
   if not result then return end
-  util.set_qflist(result)
+  util.set_qflist(util.locations_to_items(result))
+end
+
+M['textDocument/documentSymbol'] = function(_, _, result, _, bufnr)
+  if not result or vim.tbl_isempty(result) then return end
+
+  util.set_qflist(util.symbols_to_items(result, bufnr))
   api.nvim_command("copen")
   api.nvim_command("wincmd p")
 end
@@ -96,7 +103,7 @@ local function location_callback(_, method, result)
   end
   util.jump_to_location(result[1])
   if #result > 1 then
-    util.set_qflist(result)
+    util.set_qflist(util.locations_to_items(result))
     api.nvim_command("copen")
     api.nvim_command("wincmd p")
   end
@@ -194,6 +201,12 @@ M['textDocument/peekDefinition'] = function(_, _, result, _)
   })
   -- TODO(ashkan) change highlight group?
   api.nvim_buf_add_highlight(headbuf, -1, 'Keyword', 0, -1)
+end
+
+M['textDocument/documentHighlight'] = function(_, _, result, _)
+  if not result then return end
+  local bufnr = api.nvim_get_current_buf()
+  util.buf_highlight_references(bufnr, result)
 end
 
 local function log_message(_, _, result, client_id)
