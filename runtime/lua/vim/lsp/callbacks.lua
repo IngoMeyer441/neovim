@@ -50,6 +50,8 @@ end
 M['textDocument/references'] = function(_, _, result)
   if not result then return end
   util.set_qflist(util.locations_to_items(result))
+  api.nvim_command("copen")
+  api.nvim_command("wincmd p")
 end
 
 M['textDocument/documentSymbol'] = function(_, _, result, _, bufnr)
@@ -112,11 +114,20 @@ local function location_callback(_, method, result)
     local _ = log.info() and log.info(method, 'No location found')
     return nil
   end
-  util.jump_to_location(result[1])
-  if #result > 1 then
-    util.set_qflist(util.locations_to_items(result))
-    api.nvim_command("copen")
-    api.nvim_command("wincmd p")
+
+  -- textDocument/definition can return Location or Location[]
+  -- https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_definition
+
+  if vim.tbl_islist(result) then
+    util.jump_to_location(result[1])
+
+    if #result > 1 then
+      util.set_qflist(util.locations_to_items(result))
+      api.nvim_command("copen")
+      api.nvim_command("wincmd p")
+    end
+  else
+    util.jump_to_location(result)
   end
 end
 
@@ -138,21 +149,6 @@ M['textDocument/signatureHelp'] = function(_, method, result)
     end
     return lines, util.try_trim_markdown_code_blocks(lines)
   end)
-end
-
-M['textDocument/peekDefinition'] = function(_, _, result, _)
-  if not (result and result[1]) then return end
-  local loc = result[1]
-  local bufnr = vim.uri_to_bufnr(loc.uri) or error("not found: "..tostring(loc.uri))
-  local start = loc.range.start
-  local finish = loc.range["end"]
-  util.open_floating_peek_preview(bufnr, start, finish, { offset_x = 1 })
-  local headbuf = util.open_floating_preview({"Peek:"}, nil, {
-    offset_y = -(finish.line - start.line);
-    width = finish.character - start.character + 2;
-  })
-  -- TODO(ashkan) change highlight group?
-  api.nvim_buf_add_highlight(headbuf, -1, 'Keyword', 0, -1)
 end
 
 M['textDocument/documentHighlight'] = function(_, _, result, _)

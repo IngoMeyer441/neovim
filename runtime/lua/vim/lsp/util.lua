@@ -6,6 +6,31 @@ local list_extend = vim.list_extend
 
 local M = {}
 
+--- Diagnostics received from the server via `textDocument/publishDiagnostics`
+-- by buffer.
+--
+--  {<bufnr>: {diagnostics}}
+--
+-- This contains only entries for active buffers. Entries for detached buffers
+-- are discarded.
+--
+-- If you override the `textDocument/publishDiagnostic` callback,
+-- this will be empty unless you call `buf_diagnostics_save_positions`.
+--
+--
+-- Diagnostic is:
+--
+-- {
+--    range: Range
+--    message: string
+--    severity?: DiagnosticSeverity
+--    code?: number | string
+--    source?: string
+--    tags?: DiagnosticTag[]
+--    relatedInformation?: DiagnosticRelatedInformation[]
+-- }
+M.diagnostics_by_buf = {}
+
 local split = vim.split
 local function split_lines(value)
   return split(value, '\n', true)
@@ -134,8 +159,8 @@ end
 function M.apply_text_document_edit(text_document_edit)
   local text_document = text_document_edit.textDocument
   local bufnr = vim.uri_to_bufnr(text_document.uri)
-  -- TODO(ashkan) check this is correct.
-  if (M.buf_versions[bufnr] or 0) > text_document.version then
+  -- `VersionedTextDocumentIdentifier`s version may be nil https://microsoft.github.io/language-server-protocol/specification#versionedTextDocumentIdentifier
+  if text_document.version ~= nil and M.buf_versions[bufnr] > text_document.version then
     print("Buffer ", text_document.uri, " newer than edits.")
     return
   end
@@ -157,11 +182,23 @@ local function sort_completion_items(items)
   end
 end
 
+-- Returns text that should be inserted when selecting completion item. The precedence is as follows:
+-- textEdit.newText > insertText > label
+-- https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
+local function get_completion_word(item)
+  if item.textEdit ~= nil and item.textEdit.newText ~= nil then
+    return item.textEdit.newText
+  elseif item.insertText ~= nil then
+    return item.insertText
+  end
+  return item.label
+end
+
 -- Some lanuguage servers return complementary candidates whose prefixes do not match are also returned.
 -- So we exclude completion candidates whose prefix does not match.
 local function remove_unmatch_completion_items(items, prefix)
   return vim.tbl_filter(function(item)
-    local word = item.insertText or item.label
+    local word = get_completion_word(item)
     return vim.startswith(word, prefix)
   end, items)
 end
@@ -193,7 +230,7 @@ function M.text_document_completion_list_to_complete_items(result, prefix)
       end
     end
 
-    local word = completion_item.insertText or completion_item.label
+    local word = get_completion_word(completion_item)
     table.insert(matches, {
       word = word,
       abbr = completion_item.label,
@@ -585,31 +622,6 @@ function M.open_floating_preview(contents, filetype, opts)
   return floating_bufnr, floating_winnr
 end
 
-local function validate_lsp_position(pos)
-  validate { pos = {pos, 't'} }
-  validate {
-    line = {pos.line, 'n'};
-    character = {pos.character, 'n'};
-  }
-  return true
-end
-
-function M.open_floating_peek_preview(bufnr, start, finish, opts)
-  validate {
-    bufnr = {bufnr, 'n'};
-    start = {start, validate_lsp_position, 'valid start Position'};
-    finish = {finish, validate_lsp_position, 'valid finish Position'};
-    opts = { opts, 't', true };
-  }
-  local width = math.max(finish.character - start.character + 1, 1)
-  local height = math.max(finish.line - start.line + 1, 1)
-  local floating_winnr = api.nvim_open_win(bufnr, false, M.make_floating_popup_options(width, height, opts))
-  api.nvim_win_set_cursor(floating_winnr, {start.line+1, start.character})
-  api.nvim_command("autocmd CursorMoved * ++once lua pcall(vim.api.nvim_win_close, "..floating_winnr..", true)")
-  return floating_winnr
-end
-
-
 local function highlight_range(bufnr, ns, hiname, start, finish)
   if start[1] == finish[1] then
     -- TODO care about encoding here since this is in byte index?
@@ -624,8 +636,6 @@ local function highlight_range(bufnr, ns, hiname, start, finish)
 end
 
 do
-  local all_buffer_diagnostics = {}
-
   local diagnostic_ns = api.nvim_create_namespace("vim_lsp_diagnostics")
   local reference_ns = api.nvim_create_namespace("vim_lsp_references")
   local sign_ns = 'vim_lsp_signs'
@@ -681,13 +691,12 @@ do
     -- if #marks == 0 then
     --   return
     -- end
-    -- local buffer_diagnostics = all_buffer_diagnostics[bufnr]
     local lines = {"Diagnostics:"}
     local highlights = {{0, "Bold"}}
 
-    local buffer_diagnostics = all_buffer_diagnostics[bufnr]
+    local buffer_diagnostics = M.diagnostics_by_buf[bufnr]
     if not buffer_diagnostics then return end
-    local line_diagnostics = buffer_diagnostics[line]
+    local line_diagnostics = M.diagnostics_group_by_line(buffer_diagnostics)[line]
     if not line_diagnostics then return end
 
     for i, diagnostic in ipairs(line_diagnostics) do
@@ -698,6 +707,7 @@ do
       -- TODO(ashkan) make format configurable?
       local prefix = string.format("%d. ", i)
       local hiname = severity_highlights[diagnostic.severity]
+      assert(hiname, 'unknown severity: ' .. tostring(diagnostic.severity))
       local message_lines = split_lines(diagnostic.message)
       table.insert(lines, prefix..message_lines[1])
       table.insert(highlights, {#prefix + 1, hiname})
@@ -715,6 +725,8 @@ do
     return popup_bufnr, winnr
   end
 
+  --- Saves the diagnostics (Diagnostic[]) into diagnostics_by_buf
+  --
   function M.buf_diagnostics_save_positions(bufnr, diagnostics)
     validate {
       bufnr = {bufnr, 'n', true};
@@ -723,28 +735,15 @@ do
     if not diagnostics then return end
     bufnr = bufnr == 0 and api.nvim_get_current_buf() or bufnr
 
-    if not all_buffer_diagnostics[bufnr] then
+    if not M.diagnostics_by_buf[bufnr] then
       -- Clean up our data when the buffer unloads.
       api.nvim_buf_attach(bufnr, false, {
         on_detach = function(b)
-          all_buffer_diagnostics[b] = nil
+          M.diagnostics_by_buf[b] = nil
         end
       })
     end
-    all_buffer_diagnostics[bufnr] = {}
-    local buffer_diagnostics = all_buffer_diagnostics[bufnr]
-
-    for _, diagnostic in ipairs(diagnostics) do
-      local start = diagnostic.range.start
-      -- local mark_id = api.nvim_buf_set_extmark(bufnr, diagnostic_ns, 0, start.line, 0, {})
-      -- buffer_diagnostics[mark_id] = diagnostic
-      local line_diagnostics = buffer_diagnostics[start.line]
-      if not line_diagnostics then
-        line_diagnostics = {}
-        buffer_diagnostics[start.line] = line_diagnostics
-      end
-      table.insert(line_diagnostics, diagnostic)
-    end
+    M.diagnostics_by_buf[bufnr] = diagnostics
   end
 
   function M.buf_diagnostics_underline(bufnr, diagnostics)
@@ -788,15 +787,26 @@ do
     end
   end
 
-  function M.buf_diagnostics_virtual_text(bufnr, diagnostics)
-    local buffer_line_diagnostics = all_buffer_diagnostics[bufnr]
-    if not buffer_line_diagnostics then
-      M.buf_diagnostics_save_positions(bufnr, diagnostics)
+  function M.diagnostics_group_by_line(diagnostics)
+    if not diagnostics then return end
+    local diagnostics_by_line = {}
+    for _, diagnostic in ipairs(diagnostics) do
+      local start = diagnostic.range.start
+      local line_diagnostics = diagnostics_by_line[start.line]
+      if not line_diagnostics then
+        line_diagnostics = {}
+        diagnostics_by_line[start.line] = line_diagnostics
+      end
+      table.insert(line_diagnostics, diagnostic)
     end
-    buffer_line_diagnostics = all_buffer_diagnostics[bufnr]
-    if not buffer_line_diagnostics then
+    return diagnostics_by_line
+  end
+
+  function M.buf_diagnostics_virtual_text(bufnr, diagnostics)
+    if not diagnostics then
       return
     end
+    local buffer_line_diagnostics = M.diagnostics_group_by_line(diagnostics)
     for line, line_diags in pairs(buffer_line_diagnostics) do
       local virt_texts = {}
       for i = 1, #line_diags - 1 do
@@ -808,31 +818,29 @@ do
       api.nvim_buf_set_virtual_text(bufnr, diagnostic_ns, line, virt_texts, {})
     end
   end
+
   function M.buf_diagnostics_count(kind)
     local bufnr = vim.api.nvim_get_current_buf()
-    local buffer_line_diagnostics = all_buffer_diagnostics[bufnr]
-    if not buffer_line_diagnostics then return end
+    local diagnostics = M.diagnostics_by_buf[bufnr]
+    if not diagnostics then return end
     local count = 0
-    for _, line_diags in pairs(buffer_line_diagnostics) do
-      for _, diag in ipairs(line_diags) do
-        if protocol.DiagnosticSeverity[kind] == diag.severity then count = count + 1 end
+    for _, diagnostic in pairs(diagnostics) do
+      if protocol.DiagnosticSeverity[kind] == diagnostic.severity then
+        count = count + 1
       end
     end
     return count
   end
-  function M.buf_diagnostics_signs(bufnr, diagnostics)
-    vim.fn.sign_define('LspDiagnosticsErrorSign', {text=vim.g['LspDiagnosticsErrorSign'] or 'E', texthl='LspDiagnosticsError', linehl='', numhl=''})
-    vim.fn.sign_define('LspDiagnosticsWarningSign', {text=vim.g['LspDiagnosticsWarningSign'] or 'W', texthl='LspDiagnosticsWarning', linehl='', numhl=''})
-    vim.fn.sign_define('LspDiagnosticsInformationSign', {text=vim.g['LspDiagnosticsInformationSign'] or 'I', texthl='LspDiagnosticsInformation', linehl='', numhl=''})
-    vim.fn.sign_define('LspDiagnosticsHintSign', {text=vim.g['LspDiagnosticsHintSign'] or 'H', texthl='LspDiagnosticsHint', linehl='', numhl=''})
 
+  local diagnostic_severity_map = {
+    [protocol.DiagnosticSeverity.Error] = "LspDiagnosticsErrorSign";
+    [protocol.DiagnosticSeverity.Warning] = "LspDiagnosticsWarningSign";
+    [protocol.DiagnosticSeverity.Information] = "LspDiagnosticsInformationSign";
+    [protocol.DiagnosticSeverity.Hint] = "LspDiagnosticsHintSign";
+  }
+
+  function M.buf_diagnostics_signs(bufnr, diagnostics)
     for _, diagnostic in ipairs(diagnostics) do
-      local diagnostic_severity_map = {
-        [protocol.DiagnosticSeverity.Error] = "LspDiagnosticsErrorSign";
-        [protocol.DiagnosticSeverity.Warning] = "LspDiagnosticsWarningSign";
-        [protocol.DiagnosticSeverity.Information] = "LspDiagnosticsInformationSign";
-        [protocol.DiagnosticSeverity.Hint] = "LspDiagnosticsHintSign";
-      }
       vim.fn.sign_place(0, sign_ns, diagnostic_severity_map[diagnostic.severity], bufnr, {lnum=(diagnostic.range.start.line+1)})
     end
   end

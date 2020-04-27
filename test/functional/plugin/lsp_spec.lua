@@ -812,4 +812,78 @@ describe('LSP', function()
       }, buf_lines(1))
     end)
   end)
+
+  describe('completion_list_to_complete_items', function()
+    -- Completion option precedence:
+    -- textEdit.newText > insertText > label
+    -- https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
+    it('should choose right completion option', function ()
+      local prefix = 'foo'
+      local completion_list = {
+        -- resolves into label
+        { label='foobar' },
+        { label='foobar', textEdit={} },
+        -- resolves into insertText
+        { label='foocar', insertText='foobar' },
+        { label='foocar', insertText='foobar', textEdit={} },
+        -- resolves into textEdit.newText
+        { label='foocar', insertText='foodar', textEdit={newText='foobar'} },
+        { label='foocar', textEdit={newText='foobar'} }
+      }
+      local completion_list_items = {items=completion_list}
+      local expected = {
+        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar'},
+        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar'},
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar'},
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar'},
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar'},
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar'},
+      }
+
+      eq(expected, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], completion_list, prefix))
+      eq(expected, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], completion_list_items, prefix))
+      eq({}, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], {}, prefix))
+    end)
+  end)
+  describe('buf_diagnostics_save_positions', function()
+    it('stores the diagnostics in diagnostics_by_buf', function ()
+      local diagnostics = {
+        { range = {}; message = "diag1" },
+        { range = {}; message = "diag2" },
+      }
+      exec_lua([[
+        vim.lsp.util.buf_diagnostics_save_positions(...)]], 0, diagnostics)
+      eq(1, exec_lua [[ return #vim.lsp.util.diagnostics_by_buf ]])
+      eq(diagnostics, exec_lua [[
+        for _, diagnostics in pairs(vim.lsp.util.diagnostics_by_buf) do
+          return diagnostics
+        end
+      ]])
+    end)
+  end)
+  describe('lsp.util.show_line_diagnostics', function()
+    it('creates floating window and returns popup bufnr and winnr if current line contains diagnostics', function()
+      eq(3, exec_lua [[
+        local buffer = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buffer, 0, -1, false, {
+          "testing";
+          "123";
+        })
+        local diagnostics = {
+          {
+            range = {
+              start = { line = 0; character = 1; };
+              ["end"] = { line = 0; character = 3; };
+            };
+            severity = vim.lsp.protocol.DiagnosticSeverity.Error;
+            message = "Syntax error";
+          },
+        }
+        vim.api.nvim_win_set_buf(0, buffer)
+        vim.lsp.util.buf_diagnostics_save_positions(vim.fn.bufnr(buffer), diagnostics)
+        local popup_bufnr, winnr = vim.lsp.util.show_line_diagnostics()
+        return popup_bufnr
+      ]])
+    end)
+  end)
 end)

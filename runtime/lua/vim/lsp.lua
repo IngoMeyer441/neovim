@@ -198,6 +198,7 @@ local function text_document_did_open_handler(bufnr, client)
     }
   }
   client.notify('textDocument/didOpen', params)
+  util.buf_versions[bufnr] = params.textDocument.version
 end
 
 --- LSP client object.
@@ -722,6 +723,7 @@ function lsp.buf_attach_client(bufnr, client_id)
             client.notify('textDocument/didClose', params)
           end
         end)
+        util.buf_versions[bufnr] = nil
         all_buffer_active_clients[bufnr] = nil
       end;
       -- TODO if we know all of the potential clients ahead of time, then we
@@ -1014,6 +1016,22 @@ end
 function lsp.get_log_path()
   return log.get_filename()
 end
+
+local function define_default_sign(name, properties)
+  if not vim.fn.sign_getdefined(name) then
+    vim.fn.sign_define(name, properties)
+  end
+end
+
+-- Define the LspDiagnostics signs if they're not defined already.
+local function define_default_lsp_diagnostics_signs()
+  define_default_sign('LspDiagnosticsErrorSign', {text='E', texthl='LspDiagnosticsError', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsWarningSign', {text='W', texthl='LspDiagnosticsWarning', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsInformationSign', {text='I', texthl='LspDiagnosticsInformation', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsHintSign', {text='H', texthl='LspDiagnosticsHint', linehl='', numhl=''})
+end
+
+define_default_lsp_diagnostics_signs()
 
 return lsp
 -- vim:sw=2 ts=2 et

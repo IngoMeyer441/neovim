@@ -64,7 +64,7 @@ FAQ                                                     *lsp-faq*
 - Q: How to force-reload LSP?
   A: Stop all clients, then reload the buffer. >
 
-  :lua vim.lsp.stop_all_clients()
+  :lua vim.lsp.stop_client(vim.lsp.get_active_clients())
   :edit
 
 - Q: Why isn't completion working?
@@ -752,9 +752,6 @@ npcall({fn}, {...})                                     *vim.lsp.buf.npcall()*
 ok_or_nil({status}, {...})                           *vim.lsp.buf.ok_or_nil()*
                 TODO: Documentation
 
-peek_definition()                              *vim.lsp.buf.peek_definition()*
-                TODO: Documentation
-
                                               *vim.lsp.buf.range_formatting()*
 range_formatting({options}, {start_pos}, {end_pos})
                 TODO: Documentation
@@ -915,6 +912,21 @@ apply_text_edits({text_edits}, {bufnr})
 apply_workspace_edit({workspace_edit})
                 TODO: Documentation
 
+                                         *vim.lsp.util.diagnostics_by_buf*
+diagnostics_by_buf
+                A table containing diagnostics grouped by buf.
+
+                {<bufnr>: {diagnostics}}
+
+		{diagnostics} is an array of diagnostics.
+
+                By default this is populated by the
+                `textDocument/publishDiagnostics` callback via
+                |vim.lsp.util.buf_diagnostics_save_positions|.
+
+                It contains entries for active buffers. Once a buffer is
+                detached the entries for it are discarded.
+
 buf_clear_diagnostics({bufnr})          *vim.lsp.util.buf_clear_diagnostics()*
                 TODO: Documentation
  
@@ -945,9 +957,14 @@ buf_diagnostics_count({kind})
 buf_clear_references({bufnr})            *vim.lsp.util.buf_clear_references()*
                 TODO: Documentation
 
-                               *vim.lsp.util.buf_diagnostics_save_positions()*
+                                        *vim.lsp.util.buf_diagnostics_save()*
 buf_diagnostics_save_positions({bufnr}, {diagnostics})
-                TODO: Documentation
+                Stores the diagnostics into |vim.lsp.util.diagnostics_by_buf|
+
+                Parameters: ~
+                    {bufr}         bufnr for which the diagnostics are for.
+                    {diagnostics}  Diagnostics[] received from the
+                                   langauge server.
 
                                     *vim.lsp.util.buf_diagnostics_underline()*
 buf_diagnostics_underline({bufnr}, {diagnostics})
@@ -960,12 +977,12 @@ buf_diagnostics_virtual_text({bufnr}, {diagnostics})
                                  *vim.lsp.util.buf_diagnostics_signs()*
 buf_diagnostics_signs({bufnr}, {diagnostics})
                 Place signs for each diagnostic in the sign column.
-                Sign characters can be customized with the following options:
+                Sign characters can be customized with the following commands:
 >
-let g:LspDiagnosticsErrorSign = 'E'
-let g:LspDiagnosticsWarningSign = 'W'
-let g:LspDiagnosticsInformationSign = 'I'
-let g:LspDiagnosticsHintSign = 'H'
+sign define LspDiagnosticsErrorSign text=E texthl=LspDiagnosticsError linehl= numhl=
+sign define LspDiagnosticsWarningSign text=W texthl=LspDiagnosticsWarning linehl= numhl=
+sign define LspDiagnosticsInformationSign text=I texthl=LspDiagnosticsInformation linehl= numhl=
+sign define LspDiagnosticsHintSign text=H texthl=LspDiagnosticsHint linehl= numhl=
 <
 
 
@@ -1031,10 +1048,6 @@ npcall({fn}, {...})                                    *vim.lsp.util.npcall()*
                 TODO: Documentation
 
 ok_or_nil({status}, {...})                          *vim.lsp.util.ok_or_nil()*
-                TODO: Documentation
-
-                                   *vim.lsp.util.open_floating_peek_preview()*
-open_floating_peek_preview({bufnr}, {start}, {finish}, {opts})
                 TODO: Documentation
 
                                         *vim.lsp.util.open_floating_preview()*
