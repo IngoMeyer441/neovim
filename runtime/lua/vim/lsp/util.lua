@@ -240,6 +240,13 @@ function M.text_document_completion_list_to_complete_items(result, prefix)
       icase = 1,
       dup = 1,
       empty = 1,
+      user_data = {
+        nvim = {
+          lsp = {
+            completion_item = completion_item
+          }
+        }
+      },
     })
   end
 
@@ -417,14 +424,23 @@ function M.make_floating_popup_options(width, height, opts)
 end
 
 function M.jump_to_location(location)
-  if location.uri == nil then return end
-  local bufnr = vim.uri_to_bufnr(location.uri)
+  -- location may be Location or LocationLink
+  local uri = location.uri or location.targetUri
+  if uri == nil then return end
+  local bufnr = vim.uri_to_bufnr(uri)
   -- Save position in jumplist
   vim.cmd "normal! m'"
-  -- TODO(ashkan) use tagfunc here to update tagstack.
+
+  -- Push a new item into tagstack
+  local items = {}
+  table.insert(items, {tagname=vim.fn.expand("<cword>"), from=vim.fn.getpos('.')})
+  vim.fn.settagstack(vim.fn.bufnr('%'), {items=items}, 't')
+
+  --- Jump to new location
   api.nvim_set_current_buf(bufnr)
-  local row = location.range.start.line
-  local col = location.range.start.character
+  local range = location.range or location.targetSelectionRange
+  local row = range.start.line
+  local col = range.start.character
   local line = api.nvim_buf_get_lines(0, row, row+1, true)[1]
   col = vim.str_byteindex(line, col)
   api.nvim_win_set_cursor(0, {row + 1, col})
@@ -666,6 +682,7 @@ do
       table.insert(cmd_parts, k.."="..v)
     end
     api.nvim_command(table.concat(cmd_parts, ' '))
+    api.nvim_command('highlight link ' .. highlight_name .. 'Sign ' .. highlight_name)
     severity_highlights[severity] = highlight_name
   end
 
@@ -862,9 +879,11 @@ function M.locations_to_items(locations)
     end;
   })
   for _, d in ipairs(locations) do
-    local start = d.range.start
-    local fname = assert(vim.uri_to_fname(d.uri))
-    table.insert(grouped[fname], {start = start})
+    -- locations may be Location or LocationLink
+    local uri = d.uri or d.targetUri
+    local fname = assert(vim.uri_to_fname(uri))
+    local range = d.range or d.targetSelectionRange
+    table.insert(grouped[fname], {start = range.start})
   end
 
 
@@ -942,10 +961,8 @@ function M.symbols_to_items(symbols, bufnr)
           text = '['..kind..'] '..symbol.name
         })
         if symbol.children then
-          for _, child in ipairs(symbol) do
-            for _, v in ipairs(_symbols_to_items(child, _items, _bufnr)) do
-              vim.list_extend(_items, v)
-            end
+          for _, v in ipairs(_symbols_to_items(symbol.children, _items, _bufnr)) do
+            vim.list_extend(_items, v)
           end
         end
       end

@@ -533,6 +533,7 @@ function lsp.start_client(config)
       or (not client.resolved_capabilities.goto_definition and method == 'textDocument/definition')
       or (not client.resolved_capabilities.implementation and method == 'textDocument/implementation')
       or (not client.resolved_capabilities.document_symbol and method == 'textDocument/documentSymbol')
+      or (not client.resolved_capabilities.workspace_symbol and method == 'textDocument/workspaceSymbol')
     then
       callback(unsupported_method(method), method, nil, client_id, bufnr)
       return
@@ -1017,21 +1018,18 @@ function lsp.get_log_path()
   return log.get_filename()
 end
 
-local function define_default_sign(name, properties)
-  if not vim.fn.sign_getdefined(name) then
-    vim.fn.sign_define(name, properties)
-  end
-end
-
 -- Define the LspDiagnostics signs if they're not defined already.
-local function define_default_lsp_diagnostics_signs()
-  define_default_sign('LspDiagnosticsErrorSign', {text='E', texthl='LspDiagnosticsError', linehl='', numhl=''})
-  define_default_sign('LspDiagnosticsWarningSign', {text='W', texthl='LspDiagnosticsWarning', linehl='', numhl=''})
-  define_default_sign('LspDiagnosticsInformationSign', {text='I', texthl='LspDiagnosticsInformation', linehl='', numhl=''})
-  define_default_sign('LspDiagnosticsHintSign', {text='H', texthl='LspDiagnosticsHint', linehl='', numhl=''})
+do
+  local function define_default_sign(name, properties)
+    if vim.tbl_isempty(vim.fn.sign_getdefined(name)) then
+      vim.fn.sign_define(name, properties)
+    end
+  end
+  define_default_sign('LspDiagnosticsErrorSign', {text='E', texthl='LspDiagnosticsErrorSign', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsWarningSign', {text='W', texthl='LspDiagnosticsWarningSign', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsInformationSign', {text='I', texthl='LspDiagnosticsInformationSign', linehl='', numhl=''})
+  define_default_sign('LspDiagnosticsHintSign', {text='H', texthl='LspDiagnosticsHintSign', linehl='', numhl=''})
 end
-
-define_default_lsp_diagnostics_signs()
 
 return lsp
 -- vim:sw=2 ts=2 et

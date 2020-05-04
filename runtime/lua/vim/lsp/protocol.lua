@@ -644,6 +644,18 @@ function protocol.make_client_capabilities()
         -- TODO(tjdevries): Implement this
         contextSupport = false;
       };
+      declaration = {
+        linkSupport = true;
+      };
+      definition = {
+        linkSupport = true;
+      };
+      implementation = {
+        linkSupport = true;
+      };
+      typeDefinition = {
+        linkSupport = true;
+      };
       hover = {
         dynamicRegistration = false;
         contentFormat = { protocol.MarkupKind.Markdown; protocol.MarkupKind.PlainText };
@@ -677,7 +689,21 @@ function protocol.make_client_capabilities()
         hierarchicalDocumentSymbolSupport = true;
       };
     };
-    workspace = nil;
+    workspace = {
+      symbol = {
+        dynamicRegistration = false;
+        symbolKind = {
+          valueSet = (function()
+            local res = {}
+            for k in pairs(protocol.SymbolKind) do
+              if type(k) == 'number' then table.insert(res, k) end
+            end
+            return res
+          end)();
+        };
+        hierarchicalWorkspaceSymbolSupport = true;
+      };
+    };
     experimental = nil;
   }
 end
