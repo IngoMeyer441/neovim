@@ -770,15 +770,16 @@ describe('LSP', function()
       exec_lua([[require'vim.lsp'; return vim.fn.getcompletion('Lsp', 'highlight')]]))
   end)
 
-  describe('apply_edits', function()
+  describe('apply_text_edits', function()
     before_each(function()
       insert(dedent([[
         First line of text
         Second line of text
         Third line of text
-        Fourth line of text]]))
+        Fourth line of text
+        å å ɧ 汉语 ↥ 🤦 🦄]]))
     end)
-    it('applies apply simple edits', function()
+    it('applies simple edits', function()
       local edits = {
         make_edit(0, 0, 0, 0, {"123"});
         make_edit(1, 0, 1, 1, {"2"});
@@ -790,6 +791,7 @@ describe('LSP', function()
         '2econd line of text';
         '3ird line of text';
         'Fourth line of text';
+        'å å ɧ 汉语 ↥ 🤦 🦄';
       }, buf_lines(1))
     end)
     it('applies complex edits', function()
@@ -813,7 +815,102 @@ describe('LSP', function()
         'The next line of text';
         'another line of text';
         'before this!';
+        'å å ɧ 汉语 ↥ 🤦 🦄';
       }, buf_lines(1))
+    end)
+    it('applies non-ASCII characters edits', function()
+      local edits = {
+        make_edit(4, 3, 4, 4, {"ä"});
+      }
+      exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1)
+      eq({
+        'First line of text';
+        'Second line of text';
+        'Third line of text';
+        'Fourth line of text';
+        'å ä ɧ 汉语 ↥ 🤦 🦄';
+      }, buf_lines(1))
+    end)
+  end)
+
+  describe('apply_text_document_edit', function()
+    local target_bufnr
+    before_each(function()
+      target_bufnr = exec_lua [[
+        local bufnr = vim.fn.bufadd("fake/uri")
+        local lines = {"1st line of text", "2nd line of text"}
+        vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
+        return bufnr
+      ]]
+    end)
+    it('correctly goes ahead with the edit if all is normal', function()
+      local text_document_edit = {
+        edits = {
+          make_edit(0, 0, 0, 3, "First")
+        },
+        textDocument = {
+          uri = "file://fake/uri";
+          version = 5
+        }
+      }
+      exec_lua([[
+        local args = {...}
+        local target_bufnr = args[2]
+        vim.lsp.util.buf_versions[target_bufnr] = 4
+        vim.lsp.util.apply_text_document_edit(...)
+      ]], text_document_edit, target_bufnr)
+      eq({
+        'First line of text';
+        '2nd line of text';
+      }, buf_lines(target_bufnr))
+    end)
+    it('correctly goes ahead with the edit if the version is vim.NIL', function()
+      -- we get vim.NIL when we decode json null value.
+      local json = exec_lua[[
+        return vim.fn.json_decode("{ \"a\": 1, \"b\": null }")
+      ]]
+      eq(json.b, exec_lua("return vim.NIL"))
+
+      local text_document_edit = {
+        edits = {
+          make_edit(0, 0, 0, 3, "First")
+        },
+        textDocument = {
+          uri = "file://fake/uri";
+          version = exec_lua("return vim.NIL")
+        }
+      }
+      exec_lua([[
+        local args = {...}
+        local target_bufnr = args[2]
+        vim.lsp.util.buf_versions[target_bufnr] = vim.NIL
+        vim.lsp.util.apply_text_document_edit(...)
+      ]], text_document_edit, target_bufnr)
+      eq({
+        'First line of text';
+        '2nd line of text';
+      }, buf_lines(target_bufnr))
+    end)
+    it('skips the edit if the version of the edit is behind the local buffer ', function()
+      local text_document_edit = {
+        edits = {
+          make_edit(0, 0, 0, 3, "First")
+        },
+        textDocument = {
+          uri = "file://fake/uri";
+          version = 1
+        }
+      }
+      exec_lua([[
+        local args = {...}
+        local target_bufnr = args[2]
+        vim.lsp.util.buf_versions[target_bufnr] = 2
+        vim.lsp.util.apply_text_document_edit(...)
+      ]], text_document_edit, target_bufnr)
+      eq({
+        '1st line of text';
+        '2nd line of text';
+      }, buf_lines(target_bufnr))
     end)
   end)
 
@@ -836,12 +933,12 @@ describe('LSP', function()
       }
       local completion_list_items = {items=completion_list}
       local expected = {
-        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label = 'foobar' } } } } },
-        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foobar', textEdit={} } } }  } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foobar' } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foobar', textEdit={} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar', textEdit={newText='foobar'} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = '', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', textEdit={newText='foobar'} } } } } },
+        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label = 'foobar' } } } } },
+        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foobar', textEdit={} } } }  } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foobar' } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foobar', textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar', textEdit={newText='foobar'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', textEdit={newText='foobar'} } } } } },
       }
 
       eq(expected, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], completion_list, prefix))
@@ -1139,6 +1236,30 @@ describe('LSP', function()
           }
           return vim.lsp.util.symbols_to_items(sym_info, nil)
         ]])
+    end)
+  end)
+
+  describe('lsp.util._get_completion_item_kind_name', function()
+    describe('returns the name specified by protocol', function()
+      eq("Text", exec_lua("return vim.lsp.util._get_completion_item_kind_name(1)"))
+      eq("TypeParameter", exec_lua("return vim.lsp.util._get_completion_item_kind_name(25)"))
+    end)
+    describe('returns the name not specified by protocol', function()
+      eq("Unknown", exec_lua("return vim.lsp.util._get_completion_item_kind_name(nil)"))
+      eq("Unknown", exec_lua("return vim.lsp.util._get_completion_item_kind_name(vim.NIL)"))
+      eq("Unknown", exec_lua("return vim.lsp.util._get_completion_item_kind_name(1000)"))
+    end)
+  end)
+
+  describe('lsp.util._get_symbol_kind_name', function()
+    describe('returns the name specified by protocol', function()
+      eq("File", exec_lua("return vim.lsp.util._get_symbol_kind_name(1)"))
+      eq("TypeParameter", exec_lua("return vim.lsp.util._get_symbol_kind_name(26)"))
+    end)
+    describe('returns the name not specified by protocol', function()
+      eq("Unknown", exec_lua("return vim.lsp.util._get_symbol_kind_name(nil)"))
+      eq("Unknown", exec_lua("return vim.lsp.util._get_symbol_kind_name(vim.NIL)"))
+      eq("Unknown", exec_lua("return vim.lsp.util._get_symbol_kind_name(1000)"))
     end)
   end)
 end)

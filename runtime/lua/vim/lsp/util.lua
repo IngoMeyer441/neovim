@@ -96,16 +96,28 @@ end)
 
 function M.apply_text_edits(text_edits, bufnr)
   if not next(text_edits) then return end
+  if not api.nvim_buf_is_loaded(bufnr) then
+    vim.fn.bufload(bufnr)
+  end
   local start_line, finish_line = math.huge, -1
   local cleaned = {}
   for i, e in ipairs(text_edits) do
+    -- adjust start and end column for UTF-16 encoding of non-ASCII characters
+    local start_row = e.range.start.line
+    local start_col = e.range.start.character
+    local start_bline = api.nvim_buf_get_lines(bufnr, start_row, start_row+1, true)[1]
+    start_col = vim.str_byteindex(start_bline, start_col)
+    local end_row = e.range["end"].line
+    local end_col = e.range["end"].character
+    local end_bline = api.nvim_buf_get_lines(bufnr, end_row, end_row+1, true)[1]
+    end_col = vim.str_byteindex(end_bline, end_col)
     start_line = math.min(e.range.start.line, start_line)
     finish_line = math.max(e.range["end"].line, finish_line)
     -- TODO(ashkan) sanity check ranges for overlap.
     table.insert(cleaned, {
       i = i;
-      A = {e.range.start.line; e.range.start.character};
-      B = {e.range["end"].line; e.range["end"].character};
+      A = {start_row; start_col};
+      B = {end_row; end_col};
       lines = vim.split(e.newText, '\n', true);
     })
   end
@@ -113,9 +125,6 @@ function M.apply_text_edits(text_edits, bufnr)
   -- Reverse sort the orders so we can apply them without interfering with
   -- eachother. Also add i as a sort key to mimic a stable sort.
   table.sort(cleaned, edit_sort_key)
-  if not api.nvim_buf_is_loaded(bufnr) then
-    vim.fn.bufload(bufnr)
-  end
   local lines = api.nvim_buf_get_lines(bufnr, start_line, finish_line + 1, false)
   local fix_eol = api.nvim_buf_get_option(bufnr, 'fixeol')
   local set_eol = fix_eol and api.nvim_buf_line_count(bufnr) <= finish_line + 1
@@ -160,7 +169,7 @@ function M.apply_text_document_edit(text_document_edit)
   local text_document = text_document_edit.textDocument
   local bufnr = vim.uri_to_bufnr(text_document.uri)
   -- `VersionedTextDocumentIdentifier`s version may be nil https://microsoft.github.io/language-server-protocol/specification#versionedTextDocumentIdentifier
-  if text_document.version ~= nil and M.buf_versions[bufnr] > text_document.version then
+  if text_document.version ~= vim.NIL and M.buf_versions[bufnr] > text_document.version then
     print("Buffer ", text_document.uri, " newer than edits.")
     return
   end
@@ -203,6 +212,13 @@ local function remove_unmatch_completion_items(items, prefix)
   end, items)
 end
 
+-- Acording to LSP spec, if the client set "completionItemKind.valueSet",
+-- the client must handle it properly even if it receives a value outside the specification.
+-- https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
+function M._get_completion_item_kind_name(completion_item_kind)
+  return protocol.CompletionItemKind[completion_item_kind] or "Unknown"
+end
+
 --- Getting vim complete-items with incomplete flag.
 -- @params CompletionItem[], CompletionList or nil (https://microsoft.github.io/language-server-protocol/specification#textDocument_completion)
 -- @return { matches = complete-items table, incomplete = boolean  }
@@ -234,7 +250,7 @@ function M.text_document_completion_list_to_complete_items(result, prefix)
     table.insert(matches, {
       word = word,
       abbr = completion_item.label,
-      kind = protocol.CompletionItemKind[completion_item.kind] or '',
+      kind = M._get_completion_item_kind_name(completion_item.kind),
       menu = completion_item.detail or '',
       info = info,
       icase = 1,
@@ -432,12 +448,13 @@ function M.jump_to_location(location)
   vim.cmd "normal! m'"
 
   -- Push a new item into tagstack
-  local items = {}
-  table.insert(items, {tagname=vim.fn.expand("<cword>"), from=vim.fn.getpos('.')})
-  vim.fn.settagstack(vim.fn.bufnr('%'), {items=items}, 't')
+  local from = {vim.fn.bufnr('%'), vim.fn.line('.'), vim.fn.col('.'), 0}
+  local items = {{tagname=vim.fn.expand('<cword>'), from=from}}
+  vim.fn.settagstack(vim.fn.win_getid(), {items=items}, 't')
 
-  --- Jump to new location
+  --- Jump to new location (adjusting for UTF-16 encoding of characters)
   api.nvim_set_current_buf(bufnr)
+  api.nvim_buf_set_option(0, 'buflisted', true)
   local range = location.range or location.targetSelectionRange
   local row = range.start.line
   local col = range.start.character
@@ -934,6 +951,13 @@ function M.set_qflist(items)
   })
 end
 
+-- Acording to LSP spec, if the client set "symbolKind.valueSet",
+-- the client must handle it properly even if it receives a value outside the specification.
+-- https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_documentSymbol
+function M._get_symbol_kind_name(symbol_kind)
+  return protocol.SymbolKind[symbol_kind] or "Unknown"
+end
+
 --- Convert symbols to quickfix list items
 ---
 --@symbols DocumentSymbol[] or SymbolInformation[]
@@ -942,7 +966,7 @@ function M.symbols_to_items(symbols, bufnr)
     for _, symbol in ipairs(_symbols) do
       if symbol.location then -- SymbolInformation type
         local range = symbol.location.range
-        local kind = protocol.SymbolKind[symbol.kind]
+        local kind = M._get_symbol_kind_name(symbol.kind)
         table.insert(_items, {
           filename = vim.uri_to_fname(symbol.location.uri),
           lnum = range.start.line + 1,
@@ -951,7 +975,7 @@ function M.symbols_to_items(symbols, bufnr)
           text = '['..kind..'] '..symbol.name,
         })
       elseif symbol.range then -- DocumentSymbole type
-        local kind = protocol.SymbolKind[symbol.kind]
+        local kind = M._get_symbol_kind_name(symbol.kind)
         table.insert(_items, {
           -- bufnr = _bufnr,
           filename = vim.api.nvim_buf_get_name(_bufnr),
