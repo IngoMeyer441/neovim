@@ -94,6 +94,19 @@ local edit_sort_key = sort_by_key(function(e)
   return {e.A[1], e.A[2], e.i}
 end)
 
+local function get_line_byte_from_line_character(bufnr, lnum, cnum)
+  -- Skip check when the byte and character position is the same
+  if cnum > 0 then
+    local lines = api.nvim_buf_get_lines(bufnr, lnum, lnum+1, false)
+
+    if #lines > 0 then
+      return vim.str_byteindex(lines[1], cnum)
+    end
+  end
+
+  return cnum
+end
+
 function M.apply_text_edits(text_edits, bufnr)
   if not next(text_edits) then return end
   if not api.nvim_buf_is_loaded(bufnr) then
@@ -104,13 +117,15 @@ function M.apply_text_edits(text_edits, bufnr)
   for i, e in ipairs(text_edits) do
     -- adjust start and end column for UTF-16 encoding of non-ASCII characters
     local start_row = e.range.start.line
-    local start_col = e.range.start.character
-    local start_bline = api.nvim_buf_get_lines(bufnr, start_row, start_row+1, true)[1]
-    start_col = vim.str_byteindex(start_bline, start_col)
+    local start_col = get_line_byte_from_line_character(
+      bufnr,
+      start_row,
+      e.range.start.character)
     local end_row = e.range["end"].line
-    local end_col = e.range["end"].character
-    local end_bline = api.nvim_buf_get_lines(bufnr, end_row, end_row+1, true)[1]
-    end_col = vim.str_byteindex(end_bline, end_col)
+    local end_col = get_line_byte_from_line_character(
+      bufnr,
+      end_row,
+      e.range["end"].character)
     start_line = math.min(e.range.start.line, start_line)
     finish_line = math.max(e.range["end"].line, finish_line)
     -- TODO(ashkan) sanity check ranges for overlap.
@@ -168,10 +183,12 @@ end
 function M.apply_text_document_edit(text_document_edit)
   local text_document = text_document_edit.textDocument
   local bufnr = vim.uri_to_bufnr(text_document.uri)
-  -- `VersionedTextDocumentIdentifier`s version may be nil https://microsoft.github.io/language-server-protocol/specification#versionedTextDocumentIdentifier
-  if text_document.version ~= vim.NIL and M.buf_versions[bufnr] > text_document.version then
-    print("Buffer ", text_document.uri, " newer than edits.")
-    return
+  if text_document.version then
+    -- `VersionedTextDocumentIdentifier`s version may be null https://microsoft.github.io/language-server-protocol/specification#versionedTextDocumentIdentifier
+    if text_document.version ~= vim.NIL and M.buf_versions[bufnr] ~= nil and M.buf_versions[bufnr] > text_document.version then
+      print("Buffer ", text_document.uri, " newer than edits.")
+      return
+    end
   end
   M.apply_text_edits(text_document_edit.edits, bufnr)
 end
@@ -718,19 +735,28 @@ do
     return severity_highlights[severity]
   end
 
-  function M.show_line_diagnostics()
+  function M.get_line_diagnostics()
     local bufnr = api.nvim_get_current_buf()
-    local line = api.nvim_win_get_cursor(0)[1] - 1
+    local linenr = api.nvim_win_get_cursor(0)[1] - 1
+
+    local buffer_diagnostics = M.diagnostics_by_buf[bufnr]
+
+    if not buffer_diagnostics then
+      return {}
+    end
+
+    local diagnostics_by_line = M.diagnostics_group_by_line(buffer_diagnostics)
+    return diagnostics_by_line[linenr] or {}
+  end
+
+  function M.show_line_diagnostics()
     -- local marks = api.nvim_buf_get_extmarks(bufnr, diagnostic_ns, {line, 0}, {line, -1}, {})
     -- if #marks == 0 then
     --   return
     -- end
     local lines = {"Diagnostics:"}
     local highlights = {{0, "Bold"}}
-
-    local buffer_diagnostics = M.diagnostics_by_buf[bufnr]
-    if not buffer_diagnostics then return end
-    local line_diagnostics = M.diagnostics_group_by_line(buffer_diagnostics)[line]
+    local line_diagnostics = M.get_line_diagnostics()
     if not line_diagnostics then return end
 
     for i, diagnostic in ipairs(line_diagnostics) do
@@ -1042,14 +1068,26 @@ function M.try_trim_markdown_code_blocks(lines)
 end
 
 local str_utfindex = vim.str_utfindex
-function M.make_position_params()
+local function make_position_param()
   local row, col = unpack(api.nvim_win_get_cursor(0))
   row = row - 1
   local line = api.nvim_buf_get_lines(0, row, row+1, true)[1]
   col = str_utfindex(line, col)
+  return { line = row; character = col; }
+end
+
+function M.make_position_params()
   return {
     textDocument = M.make_text_document_params();
-    position = { line = row; character = col; }
+    position = make_position_param()
+  }
+end
+
+function M.make_range_params()
+  local position = make_position_param()
+  return {
+    textDocument = { uri = vim.uri_from_bufnr(0) },
+    range = { start = position; ["end"] = position; }
   }
 end
 

@@ -620,6 +620,15 @@ function protocol.make_client_capabilities()
         -- Send textDocument/didSave after saving (BufWritePost)
         didSave = true;
       };
+      codeAction = {
+        dynamicRegistration = false;
+
+        codeActionLiteralSupport = {
+          codeActionKind = {
+            valueSet = {};
+          };
+        };
+      };
       completion = {
         dynamicRegistration = false;
         completionItem = {
@@ -703,6 +712,7 @@ function protocol.make_client_capabilities()
         };
         hierarchicalWorkspaceSymbolSupport = true;
       };
+      applyEdit = true;
     };
     experimental = nil;
   }
