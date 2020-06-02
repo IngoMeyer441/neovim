@@ -3,6 +3,7 @@ local vim = vim
 local validate = vim.validate
 local api = vim.api
 local list_extend = vim.list_extend
+local highlight = require 'vim.highlight'
 
 local M = {}
 
@@ -199,6 +200,66 @@ function M.get_current_line_to_cursor()
   return line:sub(pos[2]+1)
 end
 
+local function parse_snippet_rec(input, inner)
+  local res = ""
+
+  local close, closeend = nil, nil
+  if inner then
+    close, closeend = input:find("}", 1, true)
+    while close ~= nil and input:sub(close-1,close-1) == "\\" do
+      close, closeend = input:find("}", closeend+1, true)
+    end
+  end
+
+  local didx = input:find('$',  1, true)
+  if didx == nil and close == nil then
+    return input, ""
+  elseif close ~=nil and (didx == nil or close < didx) then
+    -- No inner placeholders
+    return input:sub(0, close-1), input:sub(closeend+1)
+  end
+
+  res = res .. input:sub(0, didx-1)
+  input = input:sub(didx+1)
+
+  local tabstop, tabstopend = input:find('^%d+')
+  local placeholder, placeholderend = input:find('^{%d+:')
+  local choice, choiceend = input:find('^{%d+|')
+
+  if tabstop then
+    input = input:sub(tabstopend+1)
+  elseif choice then
+    input = input:sub(choiceend+1)
+    close, closeend = input:find("|}", 1, true)
+
+    res = res .. input:sub(0, close-1)
+    input = input:sub(closeend+1)
+  elseif placeholder then
+    -- TODO: add support for variables
+    input = input:sub(placeholderend+1)
+
+    -- placeholders and variables are recursive
+    while input ~= "" do
+      local r, tail = parse_snippet_rec(input, true)
+      r = r:gsub("\\}", "}")
+
+      res = res .. r
+      input = tail
+    end
+  else
+    res = res .. "$"
+  end
+
+  return res, input
+end
+
+-- Parse completion entries, consuming snippet tokens
+function M.parse_snippet(input)
+  local res, _ = parse_snippet_rec(input, false)
+
+  return res
+end
+
 -- Sort by CompletionItem.sortText
 -- https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
 local function sort_completion_items(items)
@@ -213,9 +274,17 @@ end
 -- https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
 local function get_completion_word(item)
   if item.textEdit ~= nil and item.textEdit.newText ~= nil then
-    return item.textEdit.newText
+    if protocol.InsertTextFormat[item.insertTextFormat] == "PlainText" then
+      return item.textEdit.newText
+    else
+      return M.parse_snippet(item.textEdit.newText)
+    end
   elseif item.insertText ~= nil then
-    return item.insertText
+    if protocol.InsertTextFormat[item.insertTextFormat] == "PlainText" then
+      return item.insertText
+    else
+      return M.parse_snippet(item.insertText)
+    end
   end
   return item.label
 end
@@ -481,6 +550,28 @@ function M.jump_to_location(location)
   return true
 end
 
+--- Preview a location in a floating windows
+---
+--- behavior depends on type of location:
+---   - for Location, range is shown (e.g., function definition)
+---   - for LocationLink, targetRange is shown (e.g., body of function definition)
+---
+--@param location a single Location or LocationLink
+--@return bufnr,winnr buffer and window number of floating window or nil
+function M.preview_location(location)
+  -- location may be LocationLink or Location (more useful for the former)
+  local uri = location.targetUri or location.uri
+  if uri == nil then return end
+  local bufnr = vim.uri_to_bufnr(uri)
+  if not api.nvim_buf_is_loaded(bufnr) then
+    vim.fn.bufload(bufnr)
+  end
+  local range = location.targetRange or location.range
+  local contents = api.nvim_buf_get_lines(bufnr, range.start.line, range["end"].line+1, false)
+  local filetype = api.nvim_buf_get_option(bufnr, 'filetype')
+  return M.open_floating_preview(contents, filetype)
+end
+
 local function find_window_by_var(name, value)
   for _, win in ipairs(api.nvim_list_wins()) do
     if npcall(api.nvim_win_get_var, win, name) == value then
@@ -601,7 +692,7 @@ function M.fancy_floating_markdown(contents, opts)
 
   vim.cmd("ownsyntax markdown")
   local idx = 1
-  local function highlight_region(ft, start, finish)
+  local function apply_syntax_to_region(ft, start, finish)
     if ft == '' then return end
     local name = ft..idx
     idx = idx + 1
@@ -617,8 +708,8 @@ function M.fancy_floating_markdown(contents, opts)
   -- make sure that regions between code blocks are definitely markdown.
   -- local ph = {start = 0; finish = 1;}
   for _, h in ipairs(highlights) do
-    -- highlight_region('markdown', ph.finish, h.start)
-    highlight_region(h.ft, h.start, h.finish)
+    -- apply_syntax_to_region('markdown', ph.finish, h.start)
+    apply_syntax_to_region(h.ft, h.start, h.finish)
     -- ph = h
   end
 
@@ -670,19 +761,6 @@ function M.open_floating_preview(contents, filetype, opts)
   api.nvim_buf_set_option(floating_bufnr, 'modifiable', false)
   M.close_preview_autocmd({"CursorMoved", "CursorMovedI", "BufHidden"}, floating_winnr)
   return floating_bufnr, floating_winnr
-end
-
-local function highlight_range(bufnr, ns, hiname, start, finish)
-  if start[1] == finish[1] then
-    -- TODO care about encoding here since this is in byte index?
-    api.nvim_buf_add_highlight(bufnr, ns, hiname, start[1], start[2], finish[2])
-  else
-    api.nvim_buf_add_highlight(bufnr, ns, hiname, start[1], start[2], -1)
-    for line = start[1] + 1, finish[1] - 1 do
-      api.nvim_buf_add_highlight(bufnr, ns, hiname, line, 0, -1)
-    end
-    api.nvim_buf_add_highlight(bufnr, ns, hiname, finish[1], 0, finish[2])
-  end
 end
 
 do
@@ -818,8 +896,7 @@ do
         [protocol.DiagnosticSeverity.Hint]='Hint',
       }
 
-      -- TODO care about encoding here since this is in byte index?
-      highlight_range(bufnr, diagnostic_ns,
+      highlight.range(bufnr, diagnostic_ns,
         underline_highlight_name..hlmap[diagnostic.severity],
         {start.line, start.character},
         {finish.line, finish.character}
@@ -843,7 +920,7 @@ do
         [protocol.DocumentHighlightKind.Write] = "LspReferenceWrite";
       }
       local kind = reference["kind"] or protocol.DocumentHighlightKind.Text
-      highlight_range(bufnr, reference_ns, document_highlight_kind[kind], start_pos, end_pos)
+      highlight.range(bufnr, reference_ns, document_highlight_kind[kind], start_pos, end_pos)
     end
   end
 

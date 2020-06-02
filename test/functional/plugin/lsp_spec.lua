@@ -6,6 +6,7 @@ local buf_lines = helpers.buf_lines
 local dedent = helpers.dedent
 local exec_lua = helpers.exec_lua
 local eq = helpers.eq
+local pcall_err = helpers.pcall_err
 local pesc = helpers.pesc
 local insert = helpers.insert
 local retry = helpers.retry
@@ -705,7 +706,6 @@ describe('LSP', function()
         end;
       }
     end)
-
   end)
 
   describe("parsing tests", function()
@@ -733,7 +733,23 @@ describe('LSP', function()
         end;
       }
     end)
+  end)
+  describe('lsp._cmd_parts test', function()
+    local function _cmd_parts(input)
+      return exec_lua([[
+        lsp = require('vim.lsp')
+        return lsp._cmd_parts(...)
+      ]], input)
+    end
+    it('should valid cmd argument', function()
+      eq(true, pcall(_cmd_parts, {"nvim"}))
+      eq(true, pcall(_cmd_parts, {"nvim", "--head"}))
+    end)
 
+    it('should invalid cmd argument', function()
+      eq('Error executing lua: .../shared.lua: cmd: expected list, got nvim', pcall_err(_cmd_parts, "nvim"))
+      eq('Error executing lua: .../shared.lua: cmd argument: expected string, got number', pcall_err(_cmd_parts, {"nvim", 1}))
+    end)
   end)
 end)
 
@@ -957,7 +973,14 @@ describe('LSP', function()
         { label='foocar', insertText='foobar', textEdit={} },
         -- resolves into textEdit.newText
         { label='foocar', insertText='foodar', textEdit={newText='foobar'} },
-        { label='foocar', textEdit={newText='foobar'} }
+        { label='foocar', textEdit={newText='foobar'} },
+        -- real-world snippet text
+        { label='foocar', insertText='foodar', textEdit={newText='foobar(${1:place holder}, ${2:more ...holder{\\}})'} },
+        { label='foocar', insertText='foodar(${1:var1} typ1, ${2:var2} *typ2) {$0\\}', textEdit={} },
+        -- nested snippet tokens
+        { label='foocar', insertText='foodar(${1:var1 ${2|typ2,typ3|} ${3:tail}}) {$0\\}', textEdit={} },
+        -- plain text
+        { label='foocar', insertText='foodar(${1:var1})', insertTextFormat=1, textEdit={} },
       }
       local completion_list_items = {items=completion_list}
       local expected = {
@@ -967,6 +990,10 @@ describe('LSP', function()
         { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foobar', textEdit={} } } } } },
         { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar', textEdit={newText='foobar'} } } } } },
         { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', textEdit={newText='foobar'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar(place holder, more ...holder{})', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar', textEdit={newText='foobar(${1:place holder}, ${2:more ...holder{\\}})'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(var1 typ1, var2 *typ2) {}', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar(${1:var1} typ1, ${2:var2} *typ2) {$0\\}', textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(var1 typ2,typ3 tail) {}', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar(${1:var1 ${2|typ2,typ3|} ${3:tail}}) {$0\\}', textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(${1:var1})', user_data = { nvim = { lsp = { completion_item = { label='foocar', insertText='foodar(${1:var1})', insertTextFormat=1, textEdit={} } } } } },
       }
 
       eq(expected, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], completion_list, prefix))
