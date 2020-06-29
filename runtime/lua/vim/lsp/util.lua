@@ -119,6 +119,7 @@ function M.apply_text_edits(text_edits, bufnr)
   if not api.nvim_buf_is_loaded(bufnr) then
     vim.fn.bufload(bufnr)
   end
+  api.nvim_buf_set_option(bufnr, 'buflisted', true)
   local start_line, finish_line = math.huge, -1
   local cleaned = {}
   for i, e in ipairs(text_edits) do
@@ -1257,6 +1258,30 @@ end
 
 function M.make_text_document_params()
   return { uri = vim.uri_from_bufnr(0) }
+end
+
+--- Get visual width of tabstop.
+---
+--@see |softtabstop|
+--@param bufnr (optional, number): Buffer handle, defaults to current
+--@returns (number) tabstop visual width
+function M.get_effective_tabstop(bufnr)
+  validate { bufnr = {bufnr, 'n', true} }
+  local bo = bufnr and vim.bo[bufnr] or vim.bo
+  local sts = bo.softtabstop
+  return (sts > 0 and sts) or (sts < 0 and bo.shiftwidth) or bo.tabstop
+end
+
+function M.make_formatting_params(options)
+  validate { options = {options, 't', true} }
+  options = vim.tbl_extend('keep', options or {}, {
+    tabSize = M.get_effective_tabstop();
+    insertSpaces = vim.bo.expandtab;
+  })
+  return {
+    textDocument = { uri = vim.uri_from_bufnr(0) };
+    options = options;
+  }
 end
 
 -- @param buf buffer handle or 0 for current.

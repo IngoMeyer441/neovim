@@ -65,17 +65,16 @@ function M.completion(context)
 end
 
 function M.formatting(options)
-  validate { options = {options, 't', true} }
-  local sts = vim.bo.softtabstop;
-  options = vim.tbl_extend('keep', options or {}, {
-    tabSize = (sts > 0 and sts) or (sts < 0 and vim.bo.shiftwidth) or vim.bo.tabstop;
-    insertSpaces = vim.bo.expandtab;
-  })
-  local params = {
-    textDocument = { uri = vim.uri_from_bufnr(0) };
-    options = options;
-  }
+  local params = util.make_formatting_params(options)
   return request('textDocument/formatting', params)
+end
+
+function M.formatting_sync(options, timeout_ms)
+  local params = util.make_formatting_params(options)
+  local result = vim.lsp.buf_request_sync(0, "textDocument/formatting", params, timeout_ms)
+  if not result then return end
+  result = result[1].result
+  vim.lsp.util.apply_text_edits(result)
 end
 
 function M.range_formatting(options, start_pos, end_pos)
@@ -116,7 +115,7 @@ function M.rename(new_name)
   -- TODO(ashkan) use prepareRename
   -- * result: [`Range`](#range) \| `{ range: Range, placeholder: string }` \| `null` describing the range of the string to rename and optionally a placeholder text of the string content to be renamed. If `null` is returned then it is deemed that a 'textDocument/rename' request is not valid at the given position.
   local params = util.make_position_params()
-  new_name = new_name or npcall(vfn.input, "New Name: ")
+  new_name = new_name or npcall(vfn.input, "New Name: ", vfn.expand('<cword>'))
   if not (new_name and #new_name > 0) then return end
   params.newName = new_name
   request('textDocument/rename', params)
