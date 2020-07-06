@@ -255,6 +255,8 @@ function vim.schedule_wrap(cb)
   end)
 end
 
+--- <Docs described in |vim.empty_dict()| >
+--@private
 function vim.empty_dict()
   return setmetatable({}, vim._empty_dict_mt)
 end
@@ -286,6 +288,9 @@ local function __index(t, key)
   elseif key == 'lsp' then
     t.lsp = require('vim.lsp')
     return t.lsp
+  elseif key == 'highlight' then
+    t.highlight = require('vim.highlight')
+    return t.highlight
   end
 end
 
