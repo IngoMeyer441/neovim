@@ -4717,6 +4717,14 @@ static void f_insert(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
 }
 
+// "interrupt()" function
+static void f_interrupt(typval_T *argvars FUNC_ATTR_UNUSED,
+                        typval_T *rettv FUNC_ATTR_UNUSED,
+                        FunPtr fptr FUNC_ATTR_UNUSED)
+{
+  got_int = true;
+}
+
 /*
  * "invert(expr)" function
  */
@@ -5277,7 +5285,7 @@ static void libcall_common(typval_T *argvars, typval_T *rettv, int out_type)
   // input variables
   char *str_in = (in_type == VAR_STRING)
       ? (char *)argvars[2].vval.v_string : NULL;
-  int64_t int_in = argvars[2].vval.v_number;
+  int int_in = argvars[2].vval.v_number;
 
   // output variables
   char **str_out = (out_type == VAR_STRING)

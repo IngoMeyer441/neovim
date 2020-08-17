@@ -543,6 +543,14 @@ static lua_State *nlua_enter(void)
   return lstate;
 }
 
+/// Force an update of lua's package paths if runtime path has changed.
+bool nlua_update_package_path(void)
+{
+  lua_State *const lstate = nlua_enter();
+
+  return !!lstate;
+}
+
 static void nlua_print_event(void **argv)
 {
   char *str = argv[0];
@@ -1457,3 +1465,40 @@ void nlua_free_typval_dict(dict_T *const d)
     d->lua_table_ref = LUA_NOREF;
   }
 }
+
+void nlua_execute_log_keystroke(int c)
+{
+  char_u buf[NUMBUFLEN];
+  size_t buf_len = special_to_buf(c, mod_mask, false, buf);
+
+  lua_State *const lstate = nlua_enter();
+
+#ifndef NDEBUG
+  int top = lua_gettop(lstate);
+#endif
+
+  // [ vim ]
+  lua_getglobal(lstate, "vim");
+
+  // [ vim, vim._log_keystroke ]
+  lua_getfield(lstate, -1, "_log_keystroke");
+  luaL_checktype(lstate, -1, LUA_TFUNCTION);
+
+  // [ vim, vim._log_keystroke, buf ]
+  lua_pushlstring(lstate, (const char *)buf, buf_len);
+
+  if (lua_pcall(lstate, 1, 0, 0)) {
+    nlua_error(
+        lstate,
+        _("Error executing vim.log_keystroke lua callback: %.*s"));
+  }
+
+  // [ vim ]
+  lua_pop(lstate, 1);
+
+#ifndef NDEBUG
+  // [ ]
+  assert(top == lua_gettop(lstate));
+#endif
+}
+

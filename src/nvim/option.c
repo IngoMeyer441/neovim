@@ -80,6 +80,7 @@
 #ifdef WIN32
 # include "nvim/os/pty_conpty_win.h"
 #endif
+#include "nvim/lua/executor.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/os/input.h"
 #include "nvim/os/lang.h"
@@ -1354,11 +1355,11 @@ int do_set(
       // Disallow changing some options from modelines.
       if (opt_flags & OPT_MODELINE) {
         if (flags & (P_SECURE | P_NO_ML)) {
-          errmsg = (char_u *)_("E520: Not allowed in a modeline");
+          errmsg = (char_u *)N_("E520: Not allowed in a modeline");
           goto skip;
         }
         if ((flags & P_MLE) && !p_mle) {
-          errmsg = (char_u *)_(
+          errmsg = (char_u *)N_(
               "E992: Not allowed in a modeline when 'modelineexpr' is off");
           goto skip;
         }
@@ -1375,7 +1376,7 @@ int do_set(
 
       // Disallow changing some options in the sandbox
       if (sandbox != 0 && (flags & P_SECURE)) {
-        errmsg = (char_u *)_(e_sandbox);
+        errmsg = e_sandbox;
         goto skip;
       }
 
@@ -1711,6 +1712,7 @@ int do_set(
 #ifdef BACKSLASH_IN_FILENAME
                     && !((flags & P_EXPAND)
                          && vim_isfilec(arg[1])
+                         && !ascii_iswhite(arg[1])
                          && (arg[1] != '\\'
                              || (s == newval
                                  && arg[2] != '\\')))
@@ -3343,6 +3345,10 @@ ambw_end:
   } else if (varp == &curwin->w_p_winhl) {
     if (!parse_winhl_opt(curwin)) {
       errmsg = e_invarg;
+    }
+  } else if (varp == &p_rtp) {  // 'runtimepath'
+    if (!nlua_update_package_path()) {
+      errmsg = (char_u *)N_("E970: Failed to initialize lua interpreter");
     }
   } else {
     // Options that are a list of flags.
