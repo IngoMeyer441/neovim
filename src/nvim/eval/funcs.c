@@ -32,6 +32,7 @@
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/lua/executor.h"
+#include "nvim/macros.h"
 #include "nvim/mark.h"
 #include "nvim/math.h"
 #include "nvim/memline.h"
@@ -86,7 +87,9 @@ KHASH_MAP_INIT_STR(functions, VimLFuncDef)
 #endif
 
 PRAGMA_DIAG_PUSH_IGNORE_MISSING_PROTOTYPES
+PRAGMA_DIAG_PUSH_IGNORE_IMPLICIT_FALLTHROUGH
 #include "funcs.generated.h"
+PRAGMA_DIAG_POP
 PRAGMA_DIAG_POP
 #endif
 
@@ -9944,6 +9947,16 @@ static void f_strpart(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     len = 0;
   } else if (n + len > (varnumber_T)slen) {
     len = slen - n;
+  }
+
+  if (argvars[2].v_type != VAR_UNKNOWN && argvars[3].v_type != VAR_UNKNOWN) {
+    int off;
+
+    // length in characters
+    for (off = n; off < (int)slen && len > 0; len--) {
+      off += utfc_ptr2len((char_u *)p + off);
+    }
+    len = off - n;
   }
 
   rettv->v_type = VAR_STRING;
