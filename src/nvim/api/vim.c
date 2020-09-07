@@ -204,9 +204,9 @@ Integer nvim_get_hl_id_by_name(String name)
 ///
 /// On execution error: does not fail, but updates v:errmsg.
 ///
-///  If you need to input sequences like <C-o> use |nvim_replace_termcodes|
-///  to replace the termcodes and then pass the resulting string to
-///  nvim_feedkeys. You'll also want to enable escape_csi.
+/// If you need to input sequences like <C-o> use |nvim_replace_termcodes| to
+/// replace the termcodes and then pass the resulting string to nvim_feedkeys.
+/// You'll also want to enable escape_csi.
 ///
 /// Example:
 /// <pre>
@@ -2626,4 +2626,10 @@ void nvim__put_attr(Integer id, Integer start_row, Integer start_col,
   }
   decorations_add_luahl_attr(attr, (int)start_row, (colnr_T)start_col,
                              (int)end_row, (colnr_T)end_col);
+}
+
+void nvim__screenshot(String path)
+  FUNC_API_FAST
+{
+  ui_call_screenshot(path);
 }

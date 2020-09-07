@@ -935,6 +935,21 @@ void ex_pydo3(exarg_T *eap)
   script_host_do_range("python3", eap);
 }
 
+void ex_perl(exarg_T *eap)
+{
+  script_host_execute("perl", eap);
+}
+
+void ex_perlfile(exarg_T *eap)
+{
+  script_host_execute_file("perl", eap);
+}
+
+void ex_perldo(exarg_T *eap)
+{
+  script_host_do_range("perl", eap);
+}
+
 // Command line expansion for :profile.
 static enum {
   PEXP_SUBCMD,          ///< expand :profile sub-commands
@@ -4157,7 +4172,7 @@ static void script_host_execute(char *name, exarg_T *eap)
     tv_list_append_number(args, (int)eap->line1);
     tv_list_append_number(args, (int)eap->line2);
 
-    (void)eval_call_provider(name, "execute", args);
+    (void)eval_call_provider(name, "execute", args, true);
   }
 }
 
@@ -4172,7 +4187,7 @@ static void script_host_execute_file(char *name, exarg_T *eap)
   // current range
   tv_list_append_number(args, (int)eap->line1);
   tv_list_append_number(args, (int)eap->line2);
-  (void)eval_call_provider(name, "execute_file", args);
+  (void)eval_call_provider(name, "execute_file", args, true);
 }
 
 static void script_host_do_range(char *name, exarg_T *eap)
@@ -4181,7 +4196,7 @@ static void script_host_do_range(char *name, exarg_T *eap)
   tv_list_append_number(args, (int)eap->line1);
   tv_list_append_number(args, (int)eap->line2);
   tv_list_append_string(args, (const char *)eap->arg, -1);
-  (void)eval_call_provider(name, "do_range", args);
+  (void)eval_call_provider(name, "do_range", args, true);
 }
 
 /// ":drop"

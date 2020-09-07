@@ -299,10 +299,9 @@ end
 ---
 --@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
 local function sort_completion_items(items)
-  if items[1] and items[1].sortText then
-    table.sort(items, function(a, b) return a.sortText < b.sortText
-    end)
-  end
+  table.sort(items, function(a, b)
+    return (a.sortText or a.label) < (b.sortText or b.label)
+  end)
 end
 
 --@private
@@ -1438,6 +1437,9 @@ local function make_position_param()
   local row, col = unpack(api.nvim_win_get_cursor(0))
   row = row - 1
   local line = api.nvim_buf_get_lines(0, row, row+1, true)[1]
+  if not line then
+    return { line = 0; character = 0; }
+  end
   col = str_utfindex(line, col)
   return { line = row; character = col; }
 end

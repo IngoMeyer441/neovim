@@ -2554,6 +2554,7 @@ win_line (
   }
 
   // If this line has a sign with line highlighting set line_attr.
+  // TODO(bfredl, vigoux): this should not take priority over decorations!
   v = buf_getsigntype(wp->w_buffer, lnum, SIGN_LINEHL, 0, 1);
   if (v != 0) {
     line_attr = sign_get_attr((int)v, SIGN_LINEHL);
@@ -6210,7 +6211,7 @@ void win_grid_alloc(win_T *wp)
       || grid->Rows != rows
       || grid->Columns != cols) {
     if (want_allocation) {
-      grid_alloc(grid, rows, cols, wp->w_grid.valid, wp->w_grid.valid);
+      grid_alloc(grid, rows, cols, wp->w_grid.valid, false);
       grid->valid = true;
     } else {
       // Single grid mode, all rendering will be redirected to default_grid.
