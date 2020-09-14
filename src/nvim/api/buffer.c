@@ -175,8 +175,7 @@ Boolean nvim_buf_attach(uint64_t channel_id,
       }
       cb.on_lines = v->data.luaref;
       v->data.luaref = LUA_NOREF;
-    } else if (is_lua && strequal("_on_bytes", k.data)) {
-      // NB: undocumented, untested and incomplete interface!
+    } else if (is_lua && strequal("on_bytes", k.data)) {
       if (v->type != kObjectTypeLuaRef) {
         api_set_error(err, kErrorTypeValidation, "callback is not a function");
         goto error;
@@ -213,10 +212,10 @@ Boolean nvim_buf_attach(uint64_t channel_id,
 
 error:
   // TODO(bfredl): ASAN build should check that the ref table is empty?
-  executor_free_luaref(cb.on_lines);
-  executor_free_luaref(cb.on_bytes);
-  executor_free_luaref(cb.on_changedtick);
-  executor_free_luaref(cb.on_detach);
+  api_free_luaref(cb.on_lines);
+  api_free_luaref(cb.on_bytes);
+  api_free_luaref(cb.on_changedtick);
+  api_free_luaref(cb.on_detach);
   return false;
 }
 
@@ -243,78 +242,6 @@ Boolean nvim_buf_detach(uint64_t channel_id,
 
   buf_updates_unregister(buf, channel_id);
   return true;
-}
-
-static void buf_clear_luahl(buf_T *buf, bool force)
-{
-  if (buf->b_luahl || force) {
-    executor_free_luaref(buf->b_luahl_start);
-    executor_free_luaref(buf->b_luahl_window);
-    executor_free_luaref(buf->b_luahl_line);
-    executor_free_luaref(buf->b_luahl_end);
-  }
-  buf->b_luahl_start = LUA_NOREF;
-  buf->b_luahl_window = LUA_NOREF;
-  buf->b_luahl_line = LUA_NOREF;
-  buf->b_luahl_end = LUA_NOREF;
-}
-
-/// Unstabilized interface for defining syntax hl in lua.
-///
-/// This is not yet safe for general use, lua callbacks will need to
-/// be restricted, like textlock and probably other stuff.
-///
-/// The API on_line/nvim__put_attr is quite raw and not intended to be the
-/// final shape. Ideally this should operate on chunks larger than a single
-/// line to reduce interpreter overhead, and generate annotation objects
-/// (bufhl/virttext) on the fly but using the same representation.
-void nvim__buf_set_luahl(uint64_t channel_id, Buffer buffer,
-                         DictionaryOf(LuaRef) opts, Error *err)
-  FUNC_API_LUA_ONLY
-{
-  buf_T *buf = find_buffer_by_handle(buffer, err);
-
-  if (!buf) {
-    return;
-  }
-
-  redraw_buf_later(buf, NOT_VALID);
-  buf_clear_luahl(buf, false);
-
-  for (size_t i = 0; i < opts.size; i++) {
-    String k = opts.items[i].key;
-    Object *v = &opts.items[i].value;
-    if (strequal("on_start", k.data)) {
-      if (v->type != kObjectTypeLuaRef) {
-        api_set_error(err, kErrorTypeValidation, "callback is not a function");
-        goto error;
-      }
-      buf->b_luahl_start = v->data.luaref;
-      v->data.luaref = LUA_NOREF;
-    } else if (strequal("on_window", k.data)) {
-      if (v->type != kObjectTypeLuaRef) {
-        api_set_error(err, kErrorTypeValidation, "callback is not a function");
-        goto error;
-      }
-      buf->b_luahl_window = v->data.luaref;
-      v->data.luaref = LUA_NOREF;
-    } else if (strequal("on_line", k.data)) {
-      if (v->type != kObjectTypeLuaRef) {
-        api_set_error(err, kErrorTypeValidation, "callback is not a function");
-        goto error;
-      }
-      buf->b_luahl_line = v->data.luaref;
-      v->data.luaref = LUA_NOREF;
-    } else {
-      api_set_error(err, kErrorTypeValidation, "unexpected key: %s", k.data);
-      goto error;
-    }
-  }
-  buf->b_luahl = true;
-  return;
-error:
-  buf_clear_luahl(buf, true);
-  buf->b_luahl = false;
 }
 
 void nvim__buf_redraw_range(Buffer buffer, Integer first, Integer last,
@@ -1665,43 +1592,6 @@ void nvim_buf_clear_highlight(Buffer buffer,
   nvim_buf_clear_namespace(buffer, ns_id, line_start, line_end, err);
 }
 
-static VirtText parse_virt_text(Array chunks, Error *err)
-{
-  VirtText virt_text = KV_INITIAL_VALUE;
-  for (size_t i = 0; i < chunks.size; i++) {
-    if (chunks.items[i].type != kObjectTypeArray) {
-      api_set_error(err, kErrorTypeValidation, "Chunk is not an array");
-      goto free_exit;
-    }
-    Array chunk = chunks.items[i].data.array;
-    if (chunk.size == 0 || chunk.size > 2
-        || chunk.items[0].type != kObjectTypeString
-        || (chunk.size == 2 && chunk.items[1].type != kObjectTypeString)) {
-      api_set_error(err, kErrorTypeValidation,
-                    "Chunk is not an array with one or two strings");
-      goto free_exit;
-    }
-
-    String str = chunk.items[0].data.string;
-    char *text = transstr(str.size > 0 ? str.data : "");  // allocates
-
-    int hl_id = 0;
-    if (chunk.size == 2) {
-      String hl = chunk.items[1].data.string;
-      if (hl.size > 0) {
-        hl_id = syn_check_group((char_u *)hl.data, (int)hl.size);
-      }
-    }
-    kv_push(virt_text, ((VirtTextChunk){ .text = text, .hl_id = hl_id }));
-  }
-
-  return virt_text;
-
-free_exit:
-  clear_virttext(&virt_text);
-  return virt_text;
-}
-
 
 /// Set the virtual text (annotation) for a buffer line.
 ///
@@ -1776,6 +1666,44 @@ Integer nvim_buf_set_virtual_text(Buffer buffer,
   return src_id;
 }
 
+/// call a function with buffer as temporary current buffer
+///
+/// This temporarily switches current buffer to "buffer".
+/// If the current window already shows "buffer", the window is not switched
+/// If a window inside the current tabpage (including a float) already shows the
+/// buffer One of these windows will be set as current window temporarily.
+/// Otherwise a temporary scratch window (calleed the "autocmd window" for
+/// historical reasons) will be used.
+///
+/// This is useful e.g. to call vimL functions that only work with the current
+/// buffer/window currently, like |termopen()|.
+///
+/// @param buffer     Buffer handle, or 0 for current buffer
+/// @param fun        Function to call inside the buffer (currently lua callable
+///                   only)
+/// @param[out] err   Error details, if any
+/// @return           Return value of function. NB: will deepcopy lua values
+///                   currently, use upvalues to send lua references in and out.
+Object nvim_buf_call(Buffer buffer, LuaRef fun, Error *err)
+  FUNC_API_SINCE(7)
+  FUNC_API_LUA_ONLY
+{
+  buf_T *buf = find_buffer_by_handle(buffer, err);
+  if (!buf) {
+    return NIL;
+  }
+  try_start();
+  aco_save_T aco;
+  aucmd_prepbuf(&aco, (buf_T *)buf);
+
+  Array args = ARRAY_DICT_INIT;
+  Object res = nlua_call_ref(fun, NULL, args, true, err);
+
+  aucmd_restbuf(&aco);
+  try_end(err);
+  return res;
+}
+
 Dictionary nvim__buf_stats(Buffer buffer, Error *err)
 {
   Dictionary rv = ARRAY_DICT_INIT;
@@ -1796,6 +1724,7 @@ Dictionary nvim__buf_stats(Buffer buffer, Error *err)
   // NB: this should be zero at any time API functions are called,
   // this exists to debug issues
   PUT(rv, "dirty_bytes", INTEGER_OBJ((Integer)buf->deleted_bytes));
+  PUT(rv, "dirty_bytes2", INTEGER_OBJ((Integer)buf->deleted_bytes2));
 
   u_header_T *uhp = NULL;
   if (buf->b_u_curhead != NULL) {
