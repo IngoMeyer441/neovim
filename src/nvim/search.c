@@ -651,6 +651,10 @@ int searchit(
         colnr_T col = at_first_line && (options & SEARCH_COL) ? pos->col : 0;
         nmatched = vim_regexec_multi(&regmatch, win, buf,
                                      lnum, col, tm, timed_out);
+        // vim_regexec_multi() may clear "regprog"
+        if (regmatch.regprog == NULL) {
+          break;
+        }
         // Abort searching on an error (e.g., out of stack).
         if (called_emsg || (timed_out != NULL && *timed_out)) {
           break;
@@ -720,6 +724,10 @@ int searchit(
                                                    lnum, matchcol, tm,
                                                    timed_out)) == 0) {
                 match_ok = false;
+                break;
+              }
+              // vim_regexec_multi() may clear "regprog"
+              if (regmatch.regprog == NULL) {
                 break;
               }
               matchpos = regmatch.startpos[0];
@@ -811,10 +819,13 @@ int searchit(
                   }
                   break;
               }
-
-              /* Need to get the line pointer again, a
-               * multi-line search may have made it invalid. */
-              ptr = ml_get_buf(buf, lnum + matchpos.lnum, FALSE);
+              // vim_regexec_multi() may clear "regprog"
+              if (regmatch.regprog == NULL) {
+                break;
+              }
+              // Need to get the line pointer again, a
+              // multi-line search may have made it invalid.
+              ptr = ml_get_buf(buf, lnum + matchpos.lnum, false);
             }
 
             /*
@@ -890,6 +901,11 @@ int searchit(
           break;                    /* if second loop, stop where started */
       }
       at_first_line = FALSE;
+
+      // vim_regexec_multi() may clear "regprog"
+      if (regmatch.regprog == NULL) {
+        break;
+      }
 
       // Stop the search if wrapscan isn't set, "stop_lnum" is
       // specified, after an interrupt, after a match and after looping
@@ -1155,8 +1171,8 @@ int do_search(
       pat = p;                              /* put pat after search command */
     }
 
-    if ((options & SEARCH_ECHO) && messaging()
-        && !cmd_silent && msg_silent == 0) {
+    if ((options & SEARCH_ECHO) && messaging() && !msg_silent
+        && (!cmd_silent || !shortmess(SHM_SEARCHCOUNT))) {
       char_u      *trunc;
       char_u      off_buf[40];
       size_t      off_len = 0;
@@ -1165,7 +1181,8 @@ int do_search(
       msg_start();
 
       // Get the offset, so we know how long it is.
-      if (spats[0].off.line || spats[0].off.end || spats[0].off.off) {
+      if (!cmd_silent
+          && (spats[0].off.line || spats[0].off.end || spats[0].off.off)) {
         p = off_buf;  // -V507
         *p++ = dirc;
         if (spats[0].off.end) {
@@ -1190,14 +1207,14 @@ int do_search(
         p = searchstr;
       }
 
-      if (!shortmess(SHM_SEARCHCOUNT)) {
+      if (!shortmess(SHM_SEARCHCOUNT) || cmd_silent) {
         // Reserve enough space for the search pattern + offset +
         // search stat.  Use all the space available, so that the
         // search state is right aligned.  If there is not enough space
         // msg_strtrunc() will shorten in the middle.
         if (ui_has(kUIMessages)) {
           len = 0;  // adjusted below
-        } else if (msg_scrolled != 0) {
+        } else if (msg_scrolled != 0 && !cmd_silent) {
           // Use all the columns.
           len = (Rows - msg_row) * Columns - 1;
         } else {
@@ -1214,11 +1231,13 @@ int do_search(
 
       xfree(msgbuf);
       msgbuf = xmalloc(len);
-      {
-        memset(msgbuf, ' ', len);
-        msgbuf[0] = dirc;
-        msgbuf[len - 1] = NUL;
+      memset(msgbuf, ' ', len);
+      msgbuf[len - 1] = NUL;
 
+      // do not fill the msgbuf buffer, if cmd_silent is set, leave it
+      // empty for the search_stat feature.
+      if (!cmd_silent) {
+        msgbuf[0] = dirc;
         if (utf_iscomposing(utf_ptr2char(p))) {
           // Use a space to draw the composing char on.
           msgbuf[1] = ' ';
@@ -1362,12 +1381,15 @@ int do_search(
     // Show [1/15] if 'S' is not in 'shortmess'.
     if ((options & SEARCH_ECHO)
         && messaging()
-        && !(cmd_silent + msg_silent)
+        && !msg_silent
         && c != FAIL
         && !shortmess(SHM_SEARCHCOUNT)
         && msgbuf != NULL) {
       search_stat(dirc, &pos, show_top_bot_msg, msgbuf,
-                  (count != 1 || has_offset));
+                  (count != 1
+                   || has_offset
+                   || (!(fdo_flags & FDO_SEARCH)
+                       && hasFolding(curwin->w_cursor.lnum, NULL, NULL))));
     }
 
     // The search command can be followed by a ';' to do another search.
@@ -4237,7 +4259,8 @@ is_zero_width(char_u *pattern, int move, pos_T *cur, Direction direction)
       if (nmatched != 0) {
         break;
       }
-    } while (direction == FORWARD
+    } while (regmatch.regprog != NULL
+             && direction == FORWARD
              ? regmatch.startpos[0].col < pos.col
              : regmatch.startpos[0].col > pos.col);
 
@@ -4356,7 +4379,9 @@ static void search_stat(int dirc, pos_T *pos,
 
       len = STRLEN(t);
       if (show_top_bot_msg && len + 2 < SEARCH_STAT_BUF_LEN) {
-        STRCPY(t + len, " W");
+        memmove(t + 2, t, len);
+        t[0] = 'W';
+        t[1] = ' ';
         len += 2;
       }
 
