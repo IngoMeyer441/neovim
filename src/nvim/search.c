@@ -3436,7 +3436,6 @@ current_tagblock(
   pos_T start_pos;
   pos_T end_pos;
   pos_T old_start, old_end;
-  char_u      *spat, *epat;
   char_u      *p;
   char_u      *cp;
   int len;
@@ -3490,9 +3489,9 @@ again:
    */
   for (long n = 0; n < count; n++) {
     if (do_searchpair(
-        (char_u *)"<[^ \t>/!]\\+\\%(\\_s\\_[^>]\\{-}[^/]>\\|$\\|\\_s\\=>\\)",
-        (char_u *)"",
-        (char_u *)"</[^>]*>", BACKWARD, NULL, 0,
+        "<[^ \t>/!]\\+\\%(\\_s\\_[^>]\\{-}[^/]>\\|$\\|\\_s\\=>\\)",
+        "",
+        "</[^>]*>", BACKWARD, NULL, 0,
         NULL, (linenr_T)0, 0L) <= 0) {
       curwin->w_cursor = old_pos;
       goto theend;
@@ -3514,12 +3513,15 @@ again:
     curwin->w_cursor = old_pos;
     goto theend;
   }
-  spat = xmalloc(len + 31);
-  epat = xmalloc(len + 9);
-  sprintf((char *)spat, "<%.*s\\>\\%%(\\s\\_[^>]\\{-}[^/]>\\|>\\)\\c", len, p);
-  sprintf((char *)epat, "</%.*s>\\c", len, p);
+  const size_t spat_len = len + 39;
+  char *const spat = xmalloc(spat_len);
+  const size_t epat_len = len + 9;
+  char *const epat = xmalloc(epat_len);
+  snprintf(spat, spat_len,
+           "<%.*s\\>\\%%(\\_s\\_[^>]\\{-}\\_[^/]>\\|\\_s\\?>\\)\\c", len, p);
+  snprintf(epat, epat_len, "</%.*s>\\c", len, p);
 
-  const int r = do_searchpair(spat, (char_u *)"", epat, FORWARD, NULL,
+  const int r = do_searchpair(spat, "", epat, FORWARD, NULL,
                               0, NULL, (linenr_T)0, 0L);
 
   xfree(spat);
@@ -4097,7 +4099,7 @@ abort_search:
 int
 current_search(
     long count,
-    int forward  // true for forward, false for backward
+    bool forward  // true for forward, false for backward
 )
 {
   bool old_p_ws = p_ws;
@@ -4111,6 +4113,11 @@ current_search(
   pos_T orig_pos;               // position of the cursor at beginning
   pos_T pos;                    // position after the pattern
   int result;                   // result of various function calls
+
+  // When searching forward and the cursor is at the start of the Visual
+  // area, skip the first search backward, otherwise it doesn't move.
+  const bool skip_first_backward = forward && VIsual_active
+    && lt(curwin->w_cursor, VIsual);
 
   orig_pos = pos = curwin->w_cursor;
   if (VIsual_active) {
@@ -4129,13 +4136,20 @@ current_search(
     return FAIL;  // pattern not found
   }
 
-  /*
-   * The trick is to first search backwards and then search forward again,
-   * so that a match at the current cursor position will be correctly
-   * captured.
-   */
+  // The trick is to first search backwards and then search forward again,
+  // so that a match at the current cursor position will be correctly
+  // captured.  When "forward" is false do it the other way around.
   for (int i = 0; i < 2; i++) {
-    int dir = forward ? i : !i;
+    int dir;
+    if (forward) {
+      if (i == 0 && skip_first_backward) {
+        continue;
+      }
+      dir = i;
+    } else {
+      dir = !i;
+    }
+
     int flags = 0;
 
     if (!dir && !zero_width) {
@@ -4182,10 +4196,16 @@ current_search(
     VIsual = start_pos;
   }
 
-  // put cursor on last character of match
+  // put the cursor after the match
   curwin->w_cursor = end_pos;
   if (lt(VIsual, end_pos) && forward) {
-    dec_cursor();
+    if (skip_first_backward) {
+      // put the cursor on the start of the match
+      curwin->w_cursor = pos;
+    } else {
+      // put the cursor on last character of match
+      dec_cursor();
+    }
   } else if (VIsual_active && lt(curwin->w_cursor, VIsual) && forward) {
     curwin->w_cursor = pos;   // put the cursor on the start of the match
   }

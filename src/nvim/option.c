@@ -3438,6 +3438,7 @@ ambw_end:
       // recursively, to avoid endless recurrence.
       apply_autocmds(EVENT_SYNTAX, curbuf->b_p_syn, curbuf->b_fname,
                      value_changed || syn_recursive == 1, curbuf);
+      curbuf->b_flags |= BF_SYN_SET;
       syn_recursive--;
     } else if (varp == &(curbuf->b_p_ft)) {
       // 'filetype' is set, trigger the FileType autocommand
@@ -7269,7 +7270,8 @@ unsigned int get_bkc_value(buf_T *buf)
 }
 
 /// Return the current end-of-line type: EOL_DOS, EOL_UNIX or EOL_MAC.
-int get_fileformat(buf_T *buf)
+int get_fileformat(const buf_T *buf)
+  FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL
 {
   int c = *buf->b_p_ff;
 
