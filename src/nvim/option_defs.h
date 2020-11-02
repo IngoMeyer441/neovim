@@ -188,6 +188,7 @@ enum {
 #define GO_ASELML       'A'             // autoselect modeless selection
 #define GO_BOT          'b'             // use bottom scrollbar
 #define GO_CONDIALOG    'c'             // use console dialog
+#define GO_DARKTHEME    'd'             // use dark theme variant
 #define GO_TABLINE      'e'             // may show tabline
 #define GO_FORG         'f'             // start GUI in foreground
 #define GO_GREY         'g'             // use grey menu items
@@ -205,7 +206,7 @@ enum {
 #define GO_FOOTER       'F'             // add footer
 #define GO_VERTICAL     'v'             // arrange dialog buttons vertically
 #define GO_KEEPWINSIZE  'k'             // keep GUI window size
-#define GO_ALL          "aAbcefFghilmMprTvk"  // all possible flags for 'go'
+#define GO_ALL "aAbcdefFghilmMprTvk"    // all possible flags for 'go'
 
 // flags for 'comments' option
 #define COM_NEST        'n'             // comments strings nest
@@ -373,6 +374,9 @@ EXTERN long p_columns;          // 'columns'
 EXTERN int p_confirm;           // 'confirm'
 EXTERN int p_cp;                // 'compatible'
 EXTERN char_u   *p_cot;         // 'completeopt'
+# ifdef BACKSLASH_IN_FILENAME
+EXTERN char_u   *p_csl;         // 'completeslash'
+# endif
 EXTERN long p_pb;               // 'pumblend'
 EXTERN long p_ph;               // 'pumheight'
 EXTERN long p_pw;               // 'pumwidth'
@@ -744,6 +748,7 @@ enum {
   , BV_CPT
   , BV_DICT
   , BV_TSR
+  , BV_CSL
   , BV_CFU
   , BV_DEF
   , BV_INC

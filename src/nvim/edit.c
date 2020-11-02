@@ -4171,6 +4171,21 @@ static int ins_compl_get_exp(pos_T *ini)
                            EW_FILE|EW_DIR|EW_ADDSLASH|EW_SILENT) == OK) {
         // May change home directory back to "~".
         tilde_replace(compl_pattern, num_matches, matches);
+#ifdef BACKSLASH_IN_FILENAME
+        if (curbuf->b_p_csl[0] != NUL) {
+          for (int i = 0; i < num_matches; i++) {
+            char_u  *ptr = matches[i];
+            while (*ptr != NUL) {
+              if (curbuf->b_p_csl[0] == 's' && *ptr == '\\') {
+                *ptr = '/';
+              } else if (curbuf->b_p_csl[0] == 'b' && *ptr == '/') {
+                *ptr = '\\';
+              }
+              ptr += utfc_ptr2len(ptr);
+            }
+          }
+        }
+#endif
         ins_compl_add_matches(num_matches, matches, p_fic || p_wic);
       }
       break;
@@ -8556,7 +8571,7 @@ static void ins_up(
     if (old_topline != curwin->w_topline
         || old_topfill != curwin->w_topfill
         )
-      redraw_later(VALID);
+      redraw_later(curwin, VALID);
     start_arrow(&tpos);
     can_cindent = true;
   } else {
@@ -8604,7 +8619,7 @@ static void ins_down(
     if (old_topline != curwin->w_topline
         || old_topfill != curwin->w_topfill
         )
-      redraw_later(VALID);
+      redraw_later(curwin, VALID);
     start_arrow(&tpos);
     can_cindent = true;
   } else {
@@ -8998,7 +9013,7 @@ static int ins_ctrl_ey(int tc)
       scrolldown_clamp();
     else
       scrollup_clamp();
-    redraw_later(VALID);
+    redraw_later(curwin, VALID);
   } else {
     c = ins_copychar(curwin->w_cursor.lnum + (c == Ctrl_Y ? -1 : 1));
     if (c != NUL) {
