@@ -41,7 +41,7 @@
 #include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/state.h"
-#include "nvim/extmark.h"
+#include "nvim/decoration.h"
 #include "nvim/syntax.h"
 #include "nvim/getchar.h"
 #include "nvim/os/input.h"
@@ -741,7 +741,11 @@ Integer nvim_strwidth(String text, Error *err)
 ArrayOf(String) nvim_list_runtime_paths(void)
   FUNC_API_SINCE(1)
 {
+  // TODO(bfredl): this should just work:
+  // return nvim_get_runtime_file(NULL_STRING, true);
+
   Array rv = ARRAY_DICT_INIT;
+
   char_u *rtp = p_rtp;
 
   if (*rtp == NUL) {
@@ -788,22 +792,30 @@ ArrayOf(String) nvim_list_runtime_paths(void)
 /// @param name pattern of files to search for
 /// @param all whether to return all matches or only the first
 /// @return list of absolute paths to the found files
-ArrayOf(String) nvim_get_runtime_file(String name, Boolean all)
+ArrayOf(String) nvim_get_runtime_file(String name, Boolean all, Error *err)
   FUNC_API_SINCE(7)
+  FUNC_API_FAST
 {
   Array rv = ARRAY_DICT_INIT;
-  if (!name.data) {
+
+  // TODO(bfredl):
+  if (name.size == 0) {
+    api_set_error(err, kErrorTypeValidation, "not yet implemented");
     return rv;
   }
+
   int flags = DIP_START | (all ? DIP_ALL : 0);
-  do_in_runtimepath((char_u *)name.data, flags, find_runtime_cb, &rv);
+  do_in_runtimepath((char_u *)name.data,
+                    flags, find_runtime_cb, &rv);
   return rv;
 }
 
 static void find_runtime_cb(char_u *fname, void *cookie)
 {
   Array *rv = (Array *)cookie;
-  ADD(*rv, STRING_OBJ(cstr_to_string((char *)fname)));
+  if (fname != NULL) {
+    ADD(*rv, STRING_OBJ(cstr_to_string((char *)fname)));
+  }
 }
 
 String nvim__get_lib_dir(void)
@@ -2673,8 +2685,11 @@ void nvim__screenshot(String path)
   ui_call_screenshot(path);
 }
 
-static void clear_provider(DecorationProvider *p)
+static void clear_provider(DecorProvider *p)
 {
+  if (p == NULL) {
+    return;
+  }
   NLUA_CLEAR_REF(p->redraw_start);
   NLUA_CLEAR_REF(p->redraw_buf);
   NLUA_CLEAR_REF(p->redraw_win);
@@ -2699,7 +2714,7 @@ static void clear_provider(DecorationProvider *p)
 /// callback can return `false` to disable the provider until the next redraw.
 /// Similarily, return `false` in `on_win` will skip the `on_lines` calls
 /// for that window (but any extmarks set in `on_win` will still be used).
-/// A plugin managing multiple sources of decorations should ideally only set
+/// A plugin managing multiple sources of decoration should ideally only set
 /// one provider, and merge the sources internally. You can use multiple `ns_id`
 /// for the extmarks set/modified inside the callback anyway.
 ///
@@ -2727,7 +2742,7 @@ void nvim_set_decoration_provider(Integer ns_id, DictionaryOf(LuaRef) opts,
                                   Error *err)
   FUNC_API_SINCE(7) FUNC_API_LUA_ONLY
 {
-  DecorationProvider *p = get_provider((NS)ns_id, true);
+  DecorProvider *p = get_provider((NS)ns_id, true);
   clear_provider(p);
 
   // regardless of what happens, it seems good idea to redraw

@@ -41,6 +41,7 @@
 #include "nvim/main.h"
 #include "nvim/mark.h"
 #include "nvim/extmark.h"
+#include "nvim/decoration.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/message.h"
@@ -3450,13 +3451,13 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout,
 
   sub_firstline = NULL;
 
-  /*
-   * ~ in the substitute pattern is replaced with the old pattern.
-   * We do it here once to avoid it to be replaced over and over again.
-   * But don't do it when it starts with "\=", then it's an expression.
-   */
-  if (!(sub[0] == '\\' && sub[1] == '='))
+  // ~ in the substitute pattern is replaced with the old pattern.
+  // We do it here once to avoid it to be replaced over and over again.
+  // But don't do it when it starts with "\=", then it's an expression.
+  assert(sub != NULL);
+  if (!(sub[0] == '\\' && sub[1] == '=')) {
     sub = regtilde(sub, p_magic);
+  }
 
   // Check for a match on each line.
   // If preview: limit to max('cmdwinheight', viewport).
