@@ -1503,10 +1503,6 @@ static char_u * do_one_cmd(char_u **cmdlinep,
       errormsg = (char_u *)_(e_sandbox);
       goto doend;
     }
-    if (restricted != 0 && (ea.argt & RESTRICT)) {
-      errormsg = (char_u *)_("E981: Command not allowed in restricted mode");
-      goto doend;
-    }
     if (!MODIFIABLE(curbuf) && (ea.argt & MODIFY)
         // allow :put in terminals
         && (!curbuf->terminal || ea.cmdidx != CMD_put)) {
@@ -2509,12 +2505,8 @@ static void append_command(char_u *cmd)
   STRCAT(IObuff, ": ");
   d = IObuff + STRLEN(IObuff);
   while (*s != NUL && d - IObuff < IOSIZE - 7) {
-    if (
-      enc_utf8 ? (s[0] == 0xc2 && s[1] == 0xa0) :
-      *s == 0xa0) {
-      s +=
-        enc_utf8 ? 2 :
-        1;
+    if (s[0] == 0xc2 && s[1] == 0xa0) {
+      s += 2;
       STRCPY(d, "<a0>");
       d += 4;
     } else
@@ -5568,7 +5560,8 @@ static char_u *uc_split_args(char_u *arg, size_t *lenp)
         break;
       len += 3;       /* "," */
     } else {
-      int charlen = (*mb_ptr2len)(p);
+      const int charlen = utfc_ptr2len(p);
+
       len += charlen;
       p += charlen;
     }
@@ -6624,25 +6617,22 @@ static void ex_hide(exarg_T *eap)
 /// ":stop" and ":suspend": Suspend Vim.
 static void ex_stop(exarg_T *eap)
 {
-  // Disallow suspending in restricted mode (-Z)
-  if (!check_restricted()) {
-    if (!eap->forceit) {
-      autowrite_all();
-    }
-    apply_autocmds(EVENT_VIMSUSPEND, NULL, NULL, false, NULL);
-
-    // TODO(bfredl): the TUI should do this on suspend
-    ui_cursor_goto(Rows - 1, 0);
-    ui_call_grid_scroll(1, 0, Rows, 0, Columns, 1, 0);
-    ui_flush();
-    ui_call_suspend();  // call machine specific function
-
-    ui_flush();
-    maketitle();
-    resettitle();  // force updating the title
-    ui_refresh();  // may have resized window
-    apply_autocmds(EVENT_VIMRESUME, NULL, NULL, false, NULL);
+  if (!eap->forceit) {
+    autowrite_all();
   }
+  apply_autocmds(EVENT_VIMSUSPEND, NULL, NULL, false, NULL);
+
+  // TODO(bfredl): the TUI should do this on suspend
+  ui_cursor_goto(Rows - 1, 0);
+  ui_call_grid_scroll(1, 0, Rows, 0, Columns, 1, 0);
+  ui_flush();
+  ui_call_suspend();  // call machine specific function
+
+  ui_flush();
+  maketitle();
+  resettitle();  // force updating the title
+  ui_refresh();  // may have resized window
+  apply_autocmds(EVENT_VIMRESUME, NULL, NULL, false, NULL);
 }
 
 // ":exit", ":xit" and ":wq": Write file and quite the current window.
@@ -8273,12 +8263,10 @@ static void ex_normal(exarg_T *eap)
     return;
   }
 
-  /*
-   * vgetc() expects a CSI and K_SPECIAL to have been escaped.  Don't do
-   * this for the K_SPECIAL leading byte, otherwise special keys will not
-   * work.
-   */
-  if (has_mbyte) {
+  // vgetc() expects a CSI and K_SPECIAL to have been escaped.  Don't do
+  // this for the K_SPECIAL leading byte, otherwise special keys will not
+  // work.
+  {
     int len = 0;
 
     /* Count the number of characters to be escaped. */
@@ -8317,9 +8305,8 @@ static void ex_normal(exarg_T *eap)
         check_cursor_moved(curwin);
       }
 
-      exec_normal_cmd(
-          arg != NULL ? arg :
-          eap->arg, eap->forceit ? REMAP_NONE : REMAP_YES, FALSE);
+      exec_normal_cmd(arg != NULL ? arg : eap->arg,
+                      eap->forceit ? REMAP_NONE : REMAP_YES, false);
     } while (eap->addr_count > 0 && eap->line1 <= eap->line2 && !got_int);
   }
 

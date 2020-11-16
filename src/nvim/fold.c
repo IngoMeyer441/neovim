@@ -616,7 +616,11 @@ void foldCreate(win_T *wp, pos_T start, pos_T end)
         break;
       }
     }
-    i = (int)(fp - (fold_T *)gap->ga_data);
+    if (gap->ga_len == 0) {
+      i = 0;
+    } else {
+      i = (int)(fp - (fold_T *)gap->ga_data);
+    }
   }
 
   ga_grow(gap, 1);
@@ -1033,11 +1037,11 @@ void foldAdjustVisual(void)
   if (hasFolding(end->lnum, NULL, &end->lnum)) {
     ptr = ml_get(end->lnum);
     end->col = (colnr_T)STRLEN(ptr);
-    if (end->col > 0 && *p_sel == 'o')
-      --end->col;
-    /* prevent cursor from moving on the trail byte */
-    if (has_mbyte)
-      mb_adjust_cursor();
+    if (end->col > 0 && *p_sel == 'o') {
+      end->col--;
+    }
+    // prevent cursor from moving on the trail byte
+    mb_adjust_cursor();
   }
 }
 

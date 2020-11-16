@@ -205,7 +205,7 @@ static void float_op_wrapper(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
 static void api_wrapper(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -783,10 +783,10 @@ static void byteidx(typval_T *argvars, typval_T *rettv, int comp)
     if (*t == NUL) {  // EOL reached.
       return;
     }
-    if (enc_utf8 && comp) {
+    if (comp) {
       t += utf_ptr2len((const char_u *)t);
     } else {
-      t += (*mb_ptr2len)((const char_u *)t);
+      t += utfc_ptr2len((const char_u *)t);
     }
   }
   rettv->vval.v_number = (varnumber_T)(t - str);
@@ -862,7 +862,7 @@ static void f_chanclose(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -901,7 +901,7 @@ static void f_chansend(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -1427,9 +1427,7 @@ static void f_cursor(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   // Make sure the cursor is in a valid position.
   check_cursor();
   // Correct cursor for multi-byte character.
-  if (has_mbyte) {
-    mb_adjust_cursor();
-  }
+  mb_adjust_cursor();
 
   curwin->w_set_curswant = set_curswant;
   rettv->vval.v_number = 0;
@@ -1480,7 +1478,7 @@ static void f_deepcopy(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 static void f_delete(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   rettv->vval.v_number = -1;
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -1515,7 +1513,7 @@ static void f_delete(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 // dictwatcheradd(dict, key, funcref) function
 static void f_dictwatcheradd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -1553,7 +1551,7 @@ static void f_dictwatcheradd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 // dictwatcherdel(dict, key, funcref) function
 static void f_dictwatcherdel(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -4198,7 +4196,7 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     } else if (STRICMP(name, "ttyout") == 0) {
       n = stdout_isatty;
     } else if (STRICMP(name, "multi_byte_encoding") == 0) {
-      n = has_mbyte != 0;
+      n = true;
     } else if (STRICMP(name, "syntax_items") == 0) {
       n = syntax_present(curwin);
 #ifdef UNIX
@@ -4798,7 +4796,7 @@ static void f_jobpid(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -4822,7 +4820,7 @@ static void f_jobresize(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -4855,7 +4853,7 @@ static void f_jobstart(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -4988,7 +4986,7 @@ static void f_jobstop(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -5021,7 +5019,7 @@ static void f_jobwait(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
   if (argvars[0].v_type != VAR_LIST || (argvars[1].v_type != VAR_NUMBER
@@ -5239,7 +5237,7 @@ static void libcall_common(typval_T *argvars, typval_T *rettv, int out_type)
     rettv->vval.v_string = NULL;
   }
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -5942,8 +5940,9 @@ static void f_mkdir(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   int prot = 0755;  // -V536
 
   rettv->vval.v_number = FAIL;
-  if (check_restricted() || check_secure())
+  if (check_secure()) {
     return;
+  }
 
   char buf[NUMBUFLEN];
   const char *const dir = tv_get_string_buf(&argvars[0], buf);
@@ -6832,7 +6831,7 @@ static void f_remove(typval_T *argvars, typval_T *rettv, FunPtr fptr)
  */
 static void f_rename(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     rettv->vval.v_number = -1;
   } else {
     char buf[NUMBUFLEN];
@@ -7230,7 +7229,7 @@ static void f_rpcnotify(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -7266,7 +7265,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->vval.v_number = 0;
   const int l_provider_call_nesting = provider_call_nesting;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -7363,7 +7362,7 @@ static void f_rpcstart(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -7429,7 +7428,7 @@ static void f_rpcstop(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -7891,7 +7890,7 @@ static void f_serverstart(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;  // Address of the new server
 
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -7933,7 +7932,7 @@ static void f_serverstart(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 /// "serverstop()" function
 static void f_serverstop(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -8024,14 +8023,9 @@ static void f_setcharsearch(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   if ((d = argvars[0].vval.v_dict) != NULL) {
     char_u *const csearch = (char_u *)tv_dict_get_string(d, "char", false);
     if (csearch != NULL) {
-      if (enc_utf8) {
-        int pcc[MAX_MCO];
-        int c = utfc_ptr2char(csearch, pcc);
-        set_last_csearch(c, csearch, utfc_ptr2len(csearch));
-      }
-      else
-        set_last_csearch(PTR2CHAR(csearch),
-                         csearch, utfc_ptr2len(csearch));
+      int pcc[MAX_MCO];
+      const int c = utfc_ptr2char(csearch, pcc);
+      set_last_csearch(c, csearch, utfc_ptr2len(csearch));
     }
 
     di = tv_dict_find(d, S_LEN("forward"));
@@ -10466,7 +10460,7 @@ static void f_tempname(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 // "termopen(cmd[, cwd])" function
 static void f_termopen(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  if (check_restricted() || check_secure()) {
+  if (check_secure()) {
     return;
   }
 
@@ -10710,72 +10704,54 @@ static void f_tr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   garray_T ga;
   ga_init(&ga, (int)sizeof(char), 80);
 
-  if (!has_mbyte) {
-    // Not multi-byte: fromstr and tostr must be the same length.
-    if (strlen(fromstr) != strlen(tostr)) {
-      goto error;
-    }
-  }
-
   // fromstr and tostr have to contain the same number of chars.
   bool first = true;
   while (*in_str != NUL) {
-    if (has_mbyte) {
-      const char *cpstr = in_str;
-      const int inlen = (*mb_ptr2len)((const char_u *)in_str);
-      int cplen = inlen;
-      int idx = 0;
-      int fromlen;
-      for (const char *p = fromstr; *p != NUL; p += fromlen) {
-        fromlen = (*mb_ptr2len)((const char_u *)p);
-        if (fromlen == inlen && STRNCMP(in_str, p, inlen) == 0) {
-          int tolen;
-          for (p = tostr; *p != NUL; p += tolen) {
-            tolen = (*mb_ptr2len)((const char_u *)p);
-            if (idx-- == 0) {
-              cplen = tolen;
-              cpstr = (char *)p;
-              break;
-            }
-          }
-          if (*p == NUL) {  // tostr is shorter than fromstr.
-            goto error;
-          }
-          break;
-        }
-        idx++;
-      }
-
-      if (first && cpstr == in_str) {
-        // Check that fromstr and tostr have the same number of
-        // (multi-byte) characters.  Done only once when a character
-        // of in_str doesn't appear in fromstr.
-        first = false;
+    const char *cpstr = in_str;
+    const int inlen = utfc_ptr2len((const char_u *)in_str);
+    int cplen = inlen;
+    int idx = 0;
+    int fromlen;
+    for (const char *p = fromstr; *p != NUL; p += fromlen) {
+      fromlen = utfc_ptr2len((const char_u *)p);
+      if (fromlen == inlen && STRNCMP(in_str, p, inlen) == 0) {
         int tolen;
-        for (const char *p = tostr; *p != NUL; p += tolen) {
-          tolen = (*mb_ptr2len)((const char_u *)p);
-          idx--;
+        for (p = tostr; *p != NUL; p += tolen) {
+          tolen = utfc_ptr2len((const char_u *)p);
+          if (idx-- == 0) {
+            cplen = tolen;
+            cpstr = (char *)p;
+            break;
+          }
         }
-        if (idx != 0) {
+        if (*p == NUL) {  // tostr is shorter than fromstr.
           goto error;
         }
+        break;
       }
-
-      ga_grow(&ga, cplen);
-      memmove((char *)ga.ga_data + ga.ga_len, cpstr, (size_t)cplen);
-      ga.ga_len += cplen;
-
-      in_str += inlen;
-    } else {
-      // When not using multi-byte chars we can do it faster.
-      const char *const p = strchr(fromstr, *in_str);
-      if (p != NULL) {
-        ga_append(&ga, tostr[p - fromstr]);
-      } else {
-        ga_append(&ga, *in_str);
-      }
-      in_str++;
+      idx++;
     }
+
+    if (first && cpstr == in_str) {
+      // Check that fromstr and tostr have the same number of
+      // (multi-byte) characters.  Done only once when a character
+      // of in_str doesn't appear in fromstr.
+      first = false;
+      int tolen;
+      for (const char *p = tostr; *p != NUL; p += tolen) {
+        tolen = utfc_ptr2len((const char_u *)p);
+        idx--;
+      }
+      if (idx != 0) {
+        goto error;
+      }
+    }
+
+    ga_grow(&ga, cplen);
+    memmove((char *)ga.ga_data + ga.ga_len, cpstr, (size_t)cplen);
+    ga.ga_len += cplen;
+
+    in_str += inlen;
   }
 
   // add a terminating NUL
