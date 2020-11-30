@@ -4047,7 +4047,7 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 #if defined(WIN32)
     "win32",
 #endif
-#if defined(WIN64) || defined(_WIN64)
+#ifdef _WIN64
     "win64",
 #endif
     "fname_case",
@@ -10990,6 +10990,31 @@ static void f_win_findbuf(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 static void f_win_getid(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   rettv->vval.v_number = win_getid(argvars);
+}
+
+/// "win_gettype(nr)" function
+static void f_win_gettype(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  win_T *wp = curwin;
+
+  rettv->v_type = VAR_STRING;
+  rettv->vval.v_string = NULL;
+  if (argvars[0].v_type != VAR_UNKNOWN) {
+    wp = find_win_by_nr_or_id(&argvars[0]);
+    if (wp == NULL) {
+      rettv->vval.v_string = vim_strsave((char_u *)"unknown");
+      return;
+    }
+  }
+  if (wp == aucmd_win) {
+    rettv->vval.v_string = vim_strsave((char_u *)"autocmd");
+  } else if (wp->w_p_pvw) {
+    rettv->vval.v_string = vim_strsave((char_u *)"preview");
+  } else if (wp->w_floating) {
+    rettv->vval.v_string = vim_strsave((char_u *)"popup");
+  } else if (wp == curwin && cmdwin_type != 0) {
+    rettv->vval.v_string = vim_strsave((char_u *)"command");
+  }
 }
 
 /// "win_gotoid()" function
