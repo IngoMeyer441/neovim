@@ -149,7 +149,7 @@ end
 --@param options Table with valid `FormattingOptions` entries.
 --@param start_pos ({number, number}, optional) mark-indexed position.
 ---Defaults to the start of the last visual selection.
---@param start_pos ({number, number}, optional) mark-indexed position.
+--@param end_pos ({number, number}, optional) mark-indexed position.
 ---Defaults to the end of the last visual selection.
 function M.range_formatting(options, start_pos, end_pos)
   validate { options = {options, 't', true} }
@@ -239,6 +239,7 @@ function M.outgoing_calls()
 end
 
 --- List workspace folders.
+---
 function M.list_workspace_folders()
   local workspace_folders = {}
   for _, client in ipairs(vim.lsp.buf_get_clients()) do
@@ -249,7 +250,8 @@ function M.list_workspace_folders()
   return workspace_folders
 end
 
---- Add a workspace folder.
+--- Add the folder at path to the workspace folders. If {path} is
+--- not provided, the user will be prompted for a path using |input()|.
 function M.add_workspace_folder(workspace_folder)
   workspace_folder = workspace_folder or npcall(vfn.input, "Workspace Folder: ", vfn.expand('%:p:h'))
   vim.api.nvim_command("redraw")
@@ -275,7 +277,9 @@ function M.add_workspace_folder(workspace_folder)
   end
 end
 
---- Remove a workspace folder.
+--- Remove the folder at path from the workspace folders. If
+--- {path} is not provided, the user will be prompted for
+--- a path using |input()|.
 function M.remove_workspace_folder(workspace_folder)
   workspace_folder = workspace_folder or npcall(vfn.input, "Workspace Folder: ", vfn.expand('%:p:h'))
   vim.api.nvim_command("redraw")

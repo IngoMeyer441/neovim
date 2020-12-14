@@ -169,6 +169,14 @@ void early_init(mparm_T *paramp)
   init_normal_cmds();   // Init the table of Normal mode commands.
   highlight_init();
 
+#ifdef WIN32
+  OSVERSIONINFO ovi;
+  ovi.dwOSVersionInfoSize = sizeof(ovi);
+  GetVersionEx(&ovi);
+  snprintf(windowsVersion, sizeof(windowsVersion), "%d.%d",
+           (int)ovi.dwMajorVersion, (int)ovi.dwMinorVersion);
+#endif
+
 #if defined(HAVE_LOCALE_H)
   // Setup to use the current locale (for ctype() and many other things).
   // NOTE: Translated messages with encodings other than latin1 will not
@@ -1414,7 +1422,10 @@ static void read_stdin(void)
   no_wait_return = true;
   int save_msg_didany = msg_didany;
   set_buflisted(true);
-  (void)open_buffer(true, NULL, 0);  // create memfile and read file
+
+  // Create memfile and read from stdin.
+  (void)open_buffer(true, NULL, 0);
+
   if (BUFEMPTY() && curbuf->b_next != NULL) {
     // stdin was empty, go to buffer 2 (e.g. "echo file1 | xargs nvim"). #8561
     do_cmdline_cmd("silent! bnext");
