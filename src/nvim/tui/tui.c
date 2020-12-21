@@ -2038,6 +2038,7 @@ static void augment_terminfo(TUIData *data, const char *term,
   if (data->unibi_ext.set_underline_style == -1) {
       int ext_bool_Su = unibi_find_ext_bool(ut, "Su");  // used by kitty
       if (vte_version >= 5102
+          || tmux
           || (ext_bool_Su != -1
               && unibi_get_ext_bool(ut, (size_t)ext_bool_Su))) {
           data->unibi_ext.set_underline_style = (int)unibi_add_ext_str(
