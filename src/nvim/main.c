@@ -539,7 +539,7 @@ int main(int argc, char **argv)
   // When a startup script or session file setup for diff'ing and
   // scrollbind, sync the scrollbind now.
   if (curwin->w_p_diff && curwin->w_p_scb) {
-    update_topline();
+    update_topline(curwin);
     check_scrollbind((linenr_T)0, 0L);
     TIME_MSG("diff scrollbinding");
   }
@@ -653,7 +653,18 @@ void getout(int exitval)
         }
       }
     }
-    apply_autocmds(EVENT_VIMLEAVEPRE, NULL, NULL, FALSE, curbuf);
+
+    int unblock = 0;
+    // deathtrap() blocks autocommands, but we do want to trigger
+    // VimLeavePre.
+    if (is_autocmd_blocked()) {
+      unblock_autocmds();
+      unblock++;
+    }
+    apply_autocmds(EVENT_VIMLEAVEPRE, NULL, NULL, false, curbuf);
+    if (unblock) {
+      block_autocmds();
+    }
   }
 
   if (p_shada && *p_shada != NUL) {
@@ -662,7 +673,17 @@ void getout(int exitval)
   }
 
   if (v_dying <= 1) {
+    int unblock = 0;
+
+    // deathtrap() blocks autocommands, but we do want to trigger VimLeave.
+    if (is_autocmd_blocked()) {
+      unblock_autocmds();
+      unblock++;
+    }
     apply_autocmds(EVENT_VIMLEAVE, NULL, NULL, false, curbuf);
+    if (unblock) {
+      block_autocmds();
+    }
   }
 
   profile_dump();
@@ -1985,7 +2006,7 @@ static void version(void)
   info_message = TRUE;  // use mch_msg(), not mch_errmsg()
   list_version();
   msg_putchar('\n');
-  msg_didout = FALSE;
+  msg_didout = false;
 }
 
 /// Prints help message for "nvim -h" or "nvim --help".

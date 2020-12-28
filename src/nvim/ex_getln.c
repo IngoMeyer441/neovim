@@ -523,7 +523,7 @@ static void may_do_incsearch_highlighting(int firstc, long count,
   // positioned in the same way as the actual search command
   restore_viewstate(&s->old_viewstate);
   changed_cline_bef_curs();
-  update_topline();
+  update_topline(curwin);
 
   if (found != 0) {
     pos_T save_pos = curwin->w_cursor;
@@ -1082,6 +1082,7 @@ static int command_line_execute(VimState *state, int key)
     if (s->c == K_DOWN && ccline.cmdpos > 0
         && ccline.cmdbuff[ccline.cmdpos - 1] == '.') {
       s->c = (int)p_wc;
+      KeyTyped = true;  // in case the key was mapped
     } else if (s->c == K_UP) {
       // Hitting <Up>: Remove one submenu name in front of the
       // cursor
@@ -1112,6 +1113,7 @@ static int command_line_execute(VimState *state, int key)
         cmdline_del(i);
       }
       s->c = (int)p_wc;
+      KeyTyped = true;  // in case the key was mapped
       s->xpc.xp_context = EXPAND_NOTHING;
     }
   }
@@ -1134,6 +1136,7 @@ static int command_line_execute(VimState *state, int key)
             || ccline.cmdbuff[ccline.cmdpos - 3] != '.')) {
       // go down a directory
       s->c = (int)p_wc;
+      KeyTyped = true;  // in case the key was mapped
     } else if (STRNCMP(s->xpc.xp_pattern, upseg + 1, 3) == 0
         && s->c == K_DOWN) {
       // If in a direct ancestor, strip off one ../ to go down
@@ -1154,6 +1157,7 @@ static int command_line_execute(VimState *state, int key)
           && (vim_ispathsep(ccline.cmdbuff[j - 3]) || j == i + 2)) {
         cmdline_del(j - 2);
         s->c = (int)p_wc;
+        KeyTyped = true;  // in case the key was mapped
       }
     } else if (s->c == K_UP) {
       // go up a directory
@@ -1546,7 +1550,7 @@ static int may_do_command_line_next_incsearch(int firstc, long count,
     set_search_match(&s->match_end);
     curwin->w_cursor = s->match_start;
     changed_cline_bef_curs();
-    update_topline();
+    update_topline(curwin);
     validate_cursor();
     highlight_match = true;
     save_viewstate(&s->old_viewstate);
@@ -2242,7 +2246,7 @@ static int command_line_changed(CommandLineState *s)
     // Restore the window "view".
     curwin->w_cursor   = s->is_state.save_cursor;
     restore_viewstate(&s->is_state.old_viewstate);
-    update_topline();
+    update_topline(curwin);
 
     redrawcmdline();
 
@@ -2251,7 +2255,9 @@ static int command_line_changed(CommandLineState *s)
     close_preview_windows();
     update_screen(SOME_VALID);  // Clear 'inccommand' preview.
   } else {
-    may_do_incsearch_highlighting(s->firstc, s->count, &s->is_state);
+    if (s->xpc.xp_context == EXPAND_NOTHING) {
+      may_do_incsearch_highlighting(s->firstc, s->count, &s->is_state);
+    }
   }
 
   if (cmdmsg_rl || (p_arshape && !p_tbidi)) {
@@ -2740,8 +2746,8 @@ redraw:
 
   no_mapping--;
 
-  /* make following messages go to the next line */
-  msg_didout = FALSE;
+  // make following messages go to the next line
+  msg_didout = false;
   msg_col = 0;
   if (msg_row < Rows - 1) {
     msg_row++;

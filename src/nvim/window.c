@@ -1637,6 +1637,19 @@ bool win_valid(const win_T *win) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
   return false;
 }
 
+// Find window "handle" in the current tab page.
+// Return NULL if not found.
+win_T *win_find_by_handle(handle_T handle)
+  FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+    if (wp->handle == handle) {
+      return wp;
+    }
+  }
+  return NULL;
+}
+
 /// Check if "win" is a pointer to an existing window in any tabpage.
 ///
 /// @param  win  window to check
@@ -4527,7 +4540,7 @@ static void win_enter_ext(win_T *wp, bool undo_sync, int curwin_invalid,
 
   // Might need to scroll the old window before switching, e.g., when the
   // cursor was moved.
-  update_topline();
+  update_topline(curwin);
 
   // may have to copy the buffer options when 'cpo' contains 'S'
   if (wp->w_buffer != curbuf) {
@@ -5000,7 +5013,10 @@ void win_size_save(garray_T *gap)
 
 {
   ga_init(gap, (int)sizeof(int), 1);
-  ga_grow(gap, win_count() * 2);
+  ga_grow(gap, win_count() * 2 + 1);
+  // first entry is value of 'lines'
+  ((int *)gap->ga_data)[gap->ga_len++] = Rows;
+
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     ((int *)gap->ga_data)[gap->ga_len++] =
       wp->w_width + wp->w_vsep_width;
@@ -5008,18 +5024,18 @@ void win_size_save(garray_T *gap)
   }
 }
 
-/*
- * Restore window sizes, but only if the number of windows is still the same.
- * Does not free the growarray.
- */
+// Restore window sizes, but only if the number of windows is still the same
+// and 'lines' didn't change.
+// Does not free the growarray.
 void win_size_restore(garray_T *gap)
+  FUNC_ATTR_NONNULL_ALL
 {
-  if (win_count() * 2 == gap->ga_len) {
-    /* The order matters, because frames contain other frames, but it's
-     * difficult to get right. The easy way out is to do it twice. */
-    for (int j = 0; j < 2; ++j)
-    {
-      int i = 0;
+  if (win_count() * 2 + 1 == gap->ga_len
+      && ((int *)gap->ga_data)[0] == Rows) {
+    // The order matters, because frames contain other frames, but it's
+    // difficult to get right. The easy way out is to do it twice.
+    for (int j = 0; j < 2; j++) {
+      int i = 1;
       FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
         int width = ((int *)gap->ga_data)[i++];
         int height = ((int *)gap->ga_data)[i++];
@@ -5860,10 +5876,10 @@ void scroll_to_fraction(win_T *wp, int prev_height)
   }
 
   if (wp == curwin) {
-    if (get_scrolloff_value()) {
-      update_topline();
+    if (get_scrolloff_value(wp)) {
+      update_topline(wp);
     }
-    curs_columns(false);        // validate w_wrow
+    curs_columns(wp, false);        // validate w_wrow
   }
   if (prev_height > 0) {
     wp->w_prev_fraction_row = wp->w_wrow;
@@ -5919,8 +5935,8 @@ void win_set_inner_size(win_T *wp)
     changed_line_abv_curs_win(wp);
     invalidate_botline_win(wp);
     if (wp == curwin) {
-      update_topline();
-      curs_columns(true);  // validate w_wrow
+      update_topline(wp);
+      curs_columns(wp, true);  // validate w_wrow
     }
     redraw_later(wp, NOT_VALID);
   }

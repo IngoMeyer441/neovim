@@ -2979,6 +2979,15 @@ const char * set_one_cmd_context(
 
   const char *arg = (const char *)skipwhite((const char_u *)p);
 
+  // Skip over ++argopt argument
+  if ((ea.argt & ARGOPT) && *arg != NUL && strncmp(arg, "++", 2) == 0) {
+    p = arg;
+    while (*p && !ascii_isspace(*p)) {
+      MB_PTR_ADV(p);
+    }
+    arg = (const char *)skipwhite((const char_u *)p);
+  }
+
   if (ea.cmdidx == CMD_write || ea.cmdidx == CMD_update) {
     if (*arg == '>') {  // Append.
       if (*++arg == '>') {
@@ -4979,7 +4988,6 @@ static int uc_add_command(char_u *name, size_t name_len, char_u *rep,
   FUNC_ATTR_NONNULL_ARG(1, 3)
 {
   ucmd_T      *cmd = NULL;
-  char_u      *p;
   int i;
   int cmp = 1;
   char_u      *rep_buf = NULL;
@@ -5039,7 +5047,7 @@ static int uc_add_command(char_u *name, size_t name_len, char_u *rep,
   if (cmp != 0) {
     ga_grow(gap, 1);
 
-    p = vim_strnsave(name, (int)name_len);
+    char_u *const p = vim_strnsave(name, name_len);
 
     cmd = USER_CMD_GA(gap, i);
     memmove(cmd + 1, cmd, (gap->ga_len - i) * sizeof(ucmd_T));
@@ -6188,8 +6196,9 @@ int parse_compl_arg(const char_u *value, int vallen, int *complp,
     return FAIL;
   }
 
-  if (arg != NULL)
-    *compl_arg = vim_strnsave(arg, (int)arglen);
+  if (arg != NULL) {
+    *compl_arg = vim_strnsave(arg, arglen);
+  }
   return OK;
 }
 
@@ -7362,7 +7371,7 @@ static void ex_syncbind(exarg_T *eap)
     topline = curwin->w_topline;
     FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
       if (wp->w_p_scb && wp->w_buffer) {
-        y = wp->w_buffer->b_ml.ml_line_count - get_scrolloff_value();
+        y = wp->w_buffer->b_ml.ml_line_count - get_scrolloff_value(curwin);
         if (topline > y) {
           topline = y;
         }
@@ -8050,7 +8059,7 @@ static void ex_redraw(exarg_T *eap)
   RedrawingDisabled = 0;
   p_lz = FALSE;
   validate_cursor();
-  update_topline();
+  update_topline(curwin);
   if (eap->forceit) {
     redraw_all_later(NOT_VALID);
   }
@@ -8062,8 +8071,8 @@ static void ex_redraw(exarg_T *eap)
   RedrawingDisabled = r;
   p_lz = p;
 
-  /* Reset msg_didout, so that a message that's there is overwritten. */
-  msg_didout = FALSE;
+  // Reset msg_didout, so that a message that's there is overwritten.
+  msg_didout = false;
   msg_col = 0;
 
   /* No need to wait after an intentional redraw. */
@@ -8199,10 +8208,11 @@ static void ex_mark(exarg_T *eap)
  */
 void update_topline_cursor(void)
 {
-  check_cursor();               /* put cursor on valid line */
-  update_topline();
-  if (!curwin->w_p_wrap)
+  check_cursor();               // put cursor on valid line
+  update_topline(curwin);
+  if (!curwin->w_p_wrap) {
     validate_cursor();
+  }
   update_curswant();
 }
 
@@ -9282,7 +9292,7 @@ static void ex_match(exarg_T *eap)
   } else {
     p = skiptowhite(eap->arg);
     if (!eap->skip) {
-      g = vim_strnsave(eap->arg, (int)(p - eap->arg));
+      g = vim_strnsave(eap->arg, p - eap->arg);
     }
     p = skipwhite(p);
     if (*p == NUL) {

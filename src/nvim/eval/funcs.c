@@ -4206,6 +4206,8 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       n = true;
     } else if (STRICMP(name, "syntax_items") == 0) {
       n = syntax_present(curwin);
+    } else if (STRICMP(name, "clipboard_working") == 0) {
+      n = eval_has_provider("clipboard");
 #ifdef UNIX
     } else if (STRICMP(name, "unnamedplus") == 0) {
       n = eval_has_provider("clipboard");
@@ -6551,7 +6553,7 @@ static void f_readfile(typval_T *argvars, typval_T *rettv, FunPtr fptr)
         }
         if (prevlen == 0) {
           assert(len < INT_MAX);
-          s = vim_strnsave(start, (int)len);
+          s = vim_strnsave(start, len);
         } else {
           /* Change "prev" buffer to be the right size.  This way
            * the bytes are only copied once, and very long lines are
@@ -10853,7 +10855,7 @@ static void f_trim(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       }
     }
   }
-  rettv->vval.v_string = vim_strnsave(head, (int)(tail - head));
+  rettv->vval.v_string = vim_strnsave(head, tail - head);
 }
 
 /*

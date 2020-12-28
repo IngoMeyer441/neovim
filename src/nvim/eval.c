@@ -2556,6 +2556,7 @@ void free_for_info(void *fi_void)
 
 
 void set_context_for_expression(expand_T *xp, char_u *arg, cmdidx_T cmdidx)
+  FUNC_ATTR_NONNULL_ALL
 {
   int got_eq = FALSE;
   int c;
@@ -2638,6 +2639,23 @@ void set_context_for_expression(expand_T *xp, char_u *arg, cmdidx_T cmdidx)
       }
     }
   }
+
+  // ":exe one two" completes "two"
+  if ((cmdidx == CMD_execute
+       || cmdidx == CMD_echo
+       || cmdidx == CMD_echon
+       || cmdidx == CMD_echomsg)
+      && xp->xp_context == EXPAND_EXPRESSION) {
+    for (;;) {
+      char_u *const n = skiptowhite(arg);
+
+      if (n == arg || ascii_iswhite_or_nul(*skipwhite(n))) {
+        break;
+      }
+      arg = skipwhite(n);
+    }
+  }
+
   xp->xp_pattern = arg;
 }
 
@@ -5404,7 +5422,7 @@ static int get_literal_key(char_u **arg, typval_T *tv)
   for (p = *arg; ASCII_ISALNUM(*p) || *p == '_' || *p == '-'; p++) {
   }
   tv->v_type = VAR_STRING;
-  tv->vval.v_string = vim_strnsave(*arg, (int)(p - *arg));
+  tv->vval.v_string = vim_strnsave(*arg, p - *arg);
 
   *arg = skipwhite(p);
   return OK;
@@ -7070,7 +7088,7 @@ void set_buffer_lines(buf_T *buf, linenr_T lnum_arg, bool append,
       }
     }
     check_cursor_col();
-    update_topline();
+    update_topline(curwin);
   }
 
   if (!is_curbuf) {
@@ -7782,13 +7800,13 @@ pos_T *var2fpos(const typval_T *const tv, const int dollar_lnum,
   if (name[0] == 'w' && dollar_lnum) {
     pos.col = 0;
     if (name[1] == '0') {               // "w0": first visible line
-      update_topline();
+      update_topline(curwin);
       // In silent Ex mode topline is zero, but that's not a valid line
       // number; use one instead.
       pos.lnum = curwin->w_topline > 0 ? curwin->w_topline : 1;
       return &pos;
     } else if (name[1] == '$') {      // "w$": last visible line
-      validate_botline();
+      validate_botline(curwin);
       // In silent Ex mode botline is zero, return zero then.
       pos.lnum = curwin->w_botline > 0 ? curwin->w_botline - 1 : 0;
       return &pos;
@@ -10246,9 +10264,6 @@ repeat:
   if (src[*usedlen] == ':'
       && (src[*usedlen + 1] == 's'
           || (src[*usedlen + 1] == 'g' && src[*usedlen + 2] == 's'))) {
-    char_u      *str;
-    char_u      *pat;
-    char_u      *sub;
     int sep;
     char_u      *flags;
     int didit = FALSE;
@@ -10265,13 +10280,13 @@ repeat:
       // find end of pattern
       p = vim_strchr(s, sep);
       if (p != NULL) {
-        pat = vim_strnsave(s, (int)(p - s));
+        char_u *const pat = vim_strnsave(s, p - s);
         s = p + 1;
         // find end of substitution
         p = vim_strchr(s, sep);
         if (p != NULL) {
-          sub = vim_strnsave(s, (int)(p - s));
-          str = vim_strnsave(*fnamep, *fnamelen);
+          char_u *const sub = vim_strnsave(s, p - s);
+          char_u *const str = vim_strnsave(*fnamep, *fnamelen);
           *usedlen = (size_t)(p + 1 - src);
           s = do_string_sub(str, pat, sub, NULL, flags);
           *fnamep = s;
