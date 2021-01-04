@@ -3210,11 +3210,7 @@ ambw_end:
   }
 
   if (varp == &p_mouse) {
-    if (*p_mouse == NUL) {
-      ui_call_mouse_off();
-    } else {
-      setmouse();  // in case 'mouse' changed
-    }
+    setmouse();  // in case 'mouse' changed
   }
 
   if (curwin->w_curswant != MAXCOL
@@ -4338,6 +4334,7 @@ static char *set_num_option(int opt_idx, char_u *varp, long value,
     char buf_old[NUMBUFLEN];
     char buf_new[NUMBUFLEN];
     char buf_type[7];
+
     vim_snprintf(buf_old, ARRAY_SIZE(buf_old), "%ld", old_value);
     vim_snprintf(buf_new, ARRAY_SIZE(buf_new), "%ld", value);
     vim_snprintf(buf_type, ARRAY_SIZE(buf_type), "%s",
@@ -4983,11 +4980,7 @@ void ui_refresh_options(void)
     ui_call_option_set(name, value);
   }
   if (p_mouse != NULL) {
-    if (*p_mouse == NUL) {
-      ui_call_mouse_off();
-    } else {
-      setmouse();
-    }
+    setmouse();
   }
 }
 

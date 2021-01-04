@@ -3810,10 +3810,10 @@ static void ins_compl_fixRedoBufForLeader(char_u *ptr_arg)
  */
 static buf_T *ins_compl_next_buf(buf_T *buf, int flag)
 {
-  static win_T *wp;
+  static win_T *wp = NULL;
 
   if (flag == 'w') {            // just windows
-    if (buf == curbuf) {        // first call for this flag/expansion
+    if (buf == curbuf || wp == NULL) {  // first call for this flag/expansion
       wp = curwin;
     }
     assert(wp);
@@ -7803,7 +7803,7 @@ static bool ins_esc(long *count, int cmdchar, bool nomove)
   // Otherwise remove the mode message.
   if (reg_recording != 0 || restart_edit != NUL) {
     showmode();
-  } else if (p_smd && (got_int || !skip_showmode())) {
+  } else if (p_smd) {
     MSG("");
   }
   // Exit Insert mode
@@ -8328,9 +8328,6 @@ static void ins_mouse(int c)
 {
   pos_T tpos;
   win_T       *old_curwin = curwin;
-
-  if (!mouse_has(MOUSE_INSERT))
-    return;
 
   undisplay_dollar();
   tpos = curwin->w_cursor;

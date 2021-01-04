@@ -1884,9 +1884,6 @@ static int command_line_handle_key(CommandLineState *s)
     return command_line_not_changed(s);                 // Ignore mouse
 
   case K_MIDDLEMOUSE:
-    if (!mouse_has(MOUSE_COMMAND)) {
-      return command_line_not_changed(s);                   // Ignore mouse
-    }
     cmdline_paste(eval_has_provider("clipboard") ? '*' : 0, true, true);
     redrawcmd();
     return command_line_changed(s);
@@ -1908,10 +1905,6 @@ static int command_line_handle_key(CommandLineState *s)
       s->ignore_drag_release = true;
     } else {
       s->ignore_drag_release = false;
-    }
-
-    if (!mouse_has(MOUSE_COMMAND)) {
-      return command_line_not_changed(s);                   // Ignore mouse
     }
 
     ccline.cmdspos = cmd_startcol();
@@ -2746,8 +2739,8 @@ redraw:
 
   no_mapping--;
 
-  // make following messages go to the next line
-  msg_didout = false;
+  /* make following messages go to the next line */
+  msg_didout = FALSE;
   msg_col = 0;
   if (msg_row < Rows - 1) {
     msg_row++;
@@ -4787,7 +4780,7 @@ char_u *addstar(char_u *fname, size_t len, int context)
  *  EXPAND_COMMANDS	    Cursor is still touching the command, so complete
  *			    it.
  *  EXPAND_BUFFERS	    Complete file names for :buf and :sbuf commands.
- *  EXPAND_FILES	    After command with XFILE set, or after setting
+ *  EXPAND_FILES	    After command with EX_XFILE set, or after setting
  *			    with P_EXPAND set.	eg :e ^I, :w>>^I
  *  EXPAND_DIRECTORIES	    In some cases this is used instead of the latter
  *			    when we know only directories are of interest.  eg

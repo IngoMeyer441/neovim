@@ -76,9 +76,6 @@ static char_u * const namespace_char = (char_u *)"abglstvw";
 /// Variable used for g:
 static ScopeDictDictItem globvars_var;
 
-/// g: value
-#define globvarht globvardict.dv_hashtab
-
 /*
  * Old Vim variables such as "v:version" are also available without the "v:".
  * Also in functions.  We need a special hashtable for them.
@@ -5951,6 +5948,19 @@ int assert_exception(typval_T *argvars)
   return 0;
 }
 
+static void assert_append_cmd_or_arg(garray_T *gap, typval_T *argvars,
+                                     const char *cmd)
+  FUNC_ATTR_NONNULL_ALL
+{
+  if (argvars[1].v_type != VAR_UNKNOWN && argvars[2].v_type != VAR_UNKNOWN) {
+    char *const tofree = encode_tv2echo(&argvars[2], NULL);
+    ga_concat(gap, (char_u *)tofree);
+    xfree(tofree);
+  } else {
+    ga_concat(gap, (char_u *)cmd);
+  }
+}
+
 int assert_fails(typval_T *argvars)
   FUNC_ATTR_NONNULL_ALL
 {
@@ -5969,14 +5979,7 @@ int assert_fails(typval_T *argvars)
   if (!called_emsg) {
     prepare_assert_error(&ga);
     ga_concat(&ga, (const char_u *)"command did not fail: ");
-    if (argvars[1].v_type != VAR_UNKNOWN
-        && argvars[2].v_type != VAR_UNKNOWN) {
-      char *const tofree = encode_tv2echo(&argvars[2], NULL);
-      ga_concat(&ga, (char_u *)tofree);
-      xfree(tofree);
-    } else {
-      ga_concat(&ga, (const char_u *)cmd);
-    }
+    assert_append_cmd_or_arg(&ga, argvars, cmd);
     assert_error(&ga);
     ga_clear(&ga);
     ret = 1;
@@ -5989,6 +5992,8 @@ int assert_fails(typval_T *argvars)
       prepare_assert_error(&ga);
       fill_assert_error(&ga, &argvars[2], NULL, &argvars[1],
                         &vimvars[VV_ERRMSG].vv_tv, ASSERT_OTHER);
+      ga_concat(&ga, (char_u *)": ");
+      assert_append_cmd_or_arg(&ga, argvars, cmd);
       assert_error(&ga);
       ga_clear(&ga);
       ret = 1;
