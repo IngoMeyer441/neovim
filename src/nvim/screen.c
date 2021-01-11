@@ -2417,8 +2417,8 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
     }
   }
 
-  if (wp->w_p_list) {
-    if (curwin->w_p_lcs_chars.space
+  if (wp->w_p_list && !has_fold) {
+    if (wp->w_p_lcs_chars.space
         || wp->w_p_lcs_chars.trail
         || wp->w_p_lcs_chars.nbsp) {
       extra_check = true;
@@ -2665,7 +2665,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
         }
       }
 
-      //sign column
+      // sign column, this is hit until sign_idx reaches count
       if (draw_state == WL_SIGN - 1 && n_extra == 0) {
           draw_state = WL_SIGN;
           /* Show the sign column when there are any signs in this
@@ -2883,8 +2883,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
     }
 
     if (draw_state == WL_LINE
-        && foldinfo.fi_level != 0
-        && foldinfo.fi_lines > 0
+        && has_fold
         && vcol == 0
         && n_extra == 0
         && row == startrow) {
@@ -2905,8 +2904,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
     }
 
     if (draw_state == WL_LINE
-        && foldinfo.fi_level != 0
-        && foldinfo.fi_lines > 0
+        && has_fold
         && col < grid->Columns
         && n_extra == 0
         && row == startrow) {
@@ -2918,8 +2916,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
     }
 
     if (draw_state == WL_LINE
-        && foldinfo.fi_level != 0
-        && foldinfo.fi_lines > 0
+        && has_fold
         && col >= grid->Columns
         && n_extra != 0
         && row == startrow) {
@@ -3087,7 +3084,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
                                   || vcol < fromcol || vcol_prev < fromcol_prev
                                   || vcol >= tocol)) {
         char_attr = line_attr;
-    } else {
+      } else {
         attr_pri = false;
         if (has_syntax) {
           char_attr = syntax_attr;
@@ -3742,7 +3739,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
       }
       wp->w_wrow = row;
       did_wcol = true;
-      curwin->w_valid |= VALID_WCOL|VALID_WROW|VALID_VIRTCOL;
+      wp->w_valid |= VALID_WCOL|VALID_WROW|VALID_VIRTCOL;
     }
 
     // Don't override visual selection highlighting.
@@ -3835,9 +3832,9 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
           // Add a blank character to highlight.
           schar_from_ascii(linebuf_char[off], ' ');
         }
-        if (area_attr == 0) {
-          /* Use attributes from match with highest priority among
-           * 'search_hl' and the match list. */
+        if (area_attr == 0 && !has_fold) {
+          // Use attributes from match with highest priority among
+          // 'search_hl' and the match list.
           char_attr = search_hl.attr;
           cur = wp->w_match_head;
           shl_flag = FALSE;
@@ -4053,6 +4050,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
         && !wp->w_p_wrap
         && filler_todo <= 0
         && (wp->w_p_rl ? col == 0 : col == grid->Columns - 1)
+        && !has_fold
         && (*ptr != NUL
             || lcs_eol_one > 0
             || (n_extra && (c_extra != NUL || *p_extra != NUL)))) {
@@ -4347,6 +4345,10 @@ void screen_adjust_grid(ScreenGrid **grid, int *row_off, int *col_off)
 // Get information needed to display the sign in line 'lnum' in window 'wp'.
 // If 'nrcol' is TRUE, the sign is going to be displayed in the number column.
 // Otherwise the sign is going to be displayed in the sign column.
+//
+// @param count max number of signs
+// @param[out] n_extrap number of characters from pp_extra to display
+// @param[in, out] sign_idxp Index of the displayed sign
 static void get_sign_display_info(
     bool nrcol,
     win_T *wp,
@@ -4423,6 +4425,8 @@ static void get_sign_display_info(
   (*sign_idxp)++;
   if (*sign_idxp < count) {
     *draw_statep = WL_SIGN - 1;
+  } else {
+    *sign_idxp = 0;
   }
 }
 
