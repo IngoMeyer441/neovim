@@ -121,6 +121,9 @@ local active_clients = {}
 local all_buffer_active_clients = {}
 local uninitialized_clients = {}
 
+-- Tracks all buffers attached to a client.
+local all_client_active_buffers = {}
+
 --@private
 --- Invokes a function for each LSP client attached to the buffer {bufnr}.
 ---
@@ -226,6 +229,7 @@ local function validate_client_config(config)
     on_error        = { config.on_error, "f", true };
     on_exit         = { config.on_exit, "f", true };
     on_init         = { config.on_init, "f", true };
+    settings        = { config.settings, "t", true };
     before_init     = { config.before_init, "f", true };
     offset_encoding = { config.offset_encoding, "s", true };
     flags           = { config.flags, "t", true };
@@ -399,6 +403,10 @@ end
 ---
 --@param handlers Map of language server method names to |lsp-handler|
 ---
+--@param settings Map with language server specific settings. These are
+--- returned to the language server if requested via `workspace/configuration`.
+--- Keys are case-sensitive.
+---
 --@param init_options Values to pass in the initialization request
 --- as `initializationOptions`. See `initialize` in the LSP spec.
 ---
@@ -425,7 +433,10 @@ end
 --- the server may send. For example, clangd sends
 --- `initialize_result.offsetEncoding` if `capabilities.offsetEncoding` was
 --- sent to it. You can only modify the `client.offset_encoding` here before
---- any notifications are sent.
+--- any notifications are sent. Most language servers expect to be sent client specified settings after
+--- initialization. Neovim does not make this assumption. A
+--- `workspace/didChangeConfiguration` notification should be sent
+---  to the server during on_init.
 ---
 --@param on_exit Callback (code, signal, client_id) invoked on client
 --- exit.
@@ -458,6 +469,7 @@ function lsp.start_client(config)
   local cmd, cmd_args, offset_encoding = cleaned_config.cmd, cleaned_config.cmd_args, cleaned_config.offset_encoding
 
   config.flags = config.flags or {}
+  config.settings = config.settings or {}
 
   local client_id = next_client_id()
 
@@ -582,12 +594,19 @@ function lsp.start_client(config)
     local valid_traces = {
       off = 'off'; messages = 'messages'; verbose = 'verbose';
     }
+    local version = vim.version()
     local initialize_params = {
       -- The process Id of the parent process that started the server. Is null if
       -- the process has not been started by another process.  If the parent
       -- process is not alive then the server should exit (see exit notification)
       -- its process.
       processId = uv.getpid();
+      -- Information about the client
+      -- since 3.15.0
+      clientInfo = {
+        name = "Neovim",
+        version = string.format("%s.%s.%s", version.major, version.minor, version.patch)
+      };
       -- The rootPath of the workspace. Is null if no folder is open.
       --
       -- @deprecated in favour of rootUri.
@@ -917,7 +936,7 @@ function lsp.buf_attach_client(bufnr, client_id)
       on_lines = text_document_did_change_handler;
       on_detach = function()
         local params = { textDocument = { uri = uri; } }
-        for_each_buffer_client(bufnr, function(client, _client_id)
+        for_each_buffer_client(bufnr, function(client, _)
           if client.resolved_capabilities.text_document_open_close then
             client.notify('textDocument/didClose', params)
           end
@@ -931,6 +950,13 @@ function lsp.buf_attach_client(bufnr, client_id)
       utf_sizes = true;
     })
   end
+
+  if not all_client_active_buffers[client_id] then
+    all_client_active_buffers[client_id] = {}
+  end
+
+  table.insert(all_client_active_buffers[client_id], bufnr)
+
   if buffer_client_ids[client_id] then return end
   -- This is our first time attaching this client to this buffer.
   buffer_client_ids[client_id] = true
@@ -962,6 +988,19 @@ function lsp.get_client_by_id(client_id)
   return active_clients[client_id] or uninitialized_clients[client_id]
 end
 
+--- Returns list of buffers attached to client_id.
+--
+--@param client_id client id
+--@returns list of buffer ids
+function lsp.get_buffers_by_client_id(client_id)
+  local active_client_buffers = all_client_active_buffers[client_id]
+  if active_client_buffers then
+    return active_client_buffers
+  else
+    return {}
+  end
+end
+
 --- Stops a client(s).
 ---
 --- You can also use the `stop()` function on a |vim.lsp.client| object.
@@ -979,12 +1018,23 @@ end
 function lsp.stop_client(client_id, force)
   local ids = type(client_id) == 'table' and client_id or {client_id}
   for _, id in ipairs(ids) do
+    local resolved_client_id
     if type(id) == 'table' and id.stop ~= nil then
       id.stop(force)
+      resolved_client_id = id.id
     elseif active_clients[id] then
       active_clients[id].stop(force)
+      resolved_client_id = id
     elseif uninitialized_clients[id] then
       uninitialized_clients[id].stop(true)
+      resolved_client_id = id
+    end
+    if resolved_client_id then
+      local client_buffers = lsp.get_buffers_by_client_id(resolved_client_id)
+      for idx = 1, #client_buffers do
+        lsp.diagnostic.clear(client_buffers[idx], resolved_client_id)
+      end
+      all_client_active_buffers[resolved_client_id] = nil
     end
   end
 end
