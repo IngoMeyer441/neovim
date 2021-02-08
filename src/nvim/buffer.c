@@ -3236,7 +3236,7 @@ void maketitle(void)
                          0, maxlen, NULL, NULL);
         title_str = (char_u *)buf;
         if (called_emsg) {
-          set_string_option_direct((char_u *)"titlestring", -1, (char_u *)"",
+          set_string_option_direct("titlestring", -1, (char_u *)"",
                                    OPT_FREE, SID_ERROR);
         }
         called_emsg |= save_called_emsg;
@@ -3346,7 +3346,7 @@ void maketitle(void)
                          p_iconstring, use_sandbox,
                          0, 0, NULL, NULL);
         if (called_emsg) {
-          set_string_option_direct((char_u *)"iconstring", -1,
+          set_string_option_direct("iconstring", -1,
                                    (char_u *)"", OPT_FREE, SID_ERROR);
         }
         called_emsg |= save_called_emsg;
@@ -3486,7 +3486,7 @@ int build_stl_str_hl(
     stl_items = xmalloc(sizeof(stl_item_t) * stl_items_len);
     stl_groupitems = xmalloc(sizeof(int) * stl_items_len);
     stl_hltab  = xmalloc(sizeof(stl_hlrec_t) * stl_items_len);
-    stl_tabtab = xmalloc(sizeof(stl_hlrec_t) * stl_items_len);
+    stl_tabtab = xmalloc(sizeof(StlClickRecord) * stl_items_len);
     stl_separator_locations = xmalloc(sizeof(int) * stl_items_len);
   }
 
@@ -3940,9 +3940,9 @@ int build_stl_str_hl(
 
       // Store the current buffer number as a string variable
       vim_snprintf((char *)buf_tmp, sizeof(buf_tmp), "%d", curbuf->b_fnum);
-      set_internal_string_var((char_u *)"g:actual_curbuf", buf_tmp);
+      set_internal_string_var("g:actual_curbuf", buf_tmp);
       vim_snprintf((char *)win_tmp, sizeof(win_tmp), "%d", curwin->handle);
-      set_internal_string_var((char_u *)"g:actual_curwin", win_tmp);
+      set_internal_string_var("g:actual_curwin", win_tmp);
 
       buf_T *const save_curbuf = curbuf;
       win_T *const save_curwin = curwin;
@@ -4482,22 +4482,15 @@ int build_stl_str_hl(
     int num_separators = 0;
     for (int i = 0; i < itemcnt; i++) {
       if (stl_items[i].type == Separate) {
+        // Create an array of the start location for each
+        // separator mark.
+        stl_separator_locations[num_separators] = i;
         num_separators++;
       }
     }
 
     // If we have separated groups, then we deal with it now
     if (num_separators) {
-      // Create an array of the start location for each
-      // separator mark.
-      int index = 0;
-      for (int i = 0; i < itemcnt; i++) {
-        if (stl_items[i].type == Separate) {
-          stl_separator_locations[index] = i;
-          index++;
-        }
-      }
-
       int standard_spaces = (maxwidth - width) / num_separators;
       int final_spaces = (maxwidth - width) -
         standard_spaces * (num_separators - 1);

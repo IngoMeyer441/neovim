@@ -790,7 +790,10 @@ void ex_retab(exarg_T *eap)
             for (col = 0; col < len; col++) {
               ptr[col] = (col < num_tabs) ? '\t' : ' ';
             }
-            ml_replace(lnum, new_line, false);
+            if (ml_replace(lnum, new_line, false) == OK) {
+              // "new_line" may have been copied
+              new_line = curbuf->b_ml.ml_line_ptr;
+            }
             if (first_line == 0) {
               first_line = lnum;
             }
@@ -2413,7 +2416,10 @@ int do_ecmd(
                      (flags & ECMD_HIDE) || curbuf->terminal ? 0 : DOBUF_UNLOAD,
                      false);
 
-        the_curwin->w_closing = false;
+        // Autocommands may have closed the window.
+        if (win_valid(the_curwin)) {
+          the_curwin->w_closing = false;
+        }
         buf->b_locked--;
 
         // autocmds may abort script processing
@@ -3310,11 +3316,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout,
   int save_b_changed = curbuf->b_changed;
   bool preview = (State & CMDPREVIEW);
 
-  // inccommand tests fail without this check
-  if (!preview) {
-    // Required for Undo to work for extmarks.
-    u_save_cursor();
-  }
+  bool did_save = false;
 
   if (!global_busy) {
     sub_nsubs = 0;
@@ -3991,6 +3993,11 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout,
           int matchcols = end.col - ((end.lnum == start.lnum)
                                      ? start.col : 0);
           int subcols = new_endcol - ((lnum == lnum_start) ? start_col : 0);
+          if (!did_save) {
+            // Required for Undo to work for extmarks.
+            u_save_cursor();
+            did_save = true;
+          }
           extmark_splice(curbuf, lnum_start-1, start_col,
                          end.lnum-start.lnum, matchcols, replaced_bytes,
                          lnum-lnum_start, subcols, sublen-1, kExtmarkUndo);
@@ -4220,7 +4227,7 @@ skip:
   size_t subsize = preview_lines.subresults.size;
   if (preview && !aborting()) {
     if (got_quit || profile_passed_limit(timeout)) {  // Too slow, disable.
-      set_string_option_direct((char_u *)"icm", -1, (char_u *)"", OPT_FREE,
+      set_string_option_direct("icm", -1, (char_u *)"", OPT_FREE,
                                SID_NONE);
     } else if (*p_icm != NUL &&  pat != NULL) {
       if (pre_src_id == 0) {
@@ -4521,7 +4528,7 @@ prepare_tagpreview (
       RESET_BINDING(curwin);                /* don't take over 'scrollbind'
                                                and 'cursorbind' */
       curwin->w_p_diff = false;             // no 'diff'
-      set_string_option_direct((char_u *)"fdc", -1,     // no 'foldcolumn'
+      set_string_option_direct("fdc", -1,     // no 'foldcolumn'
                                (char_u *)"0", OPT_FREE, SID_NONE);
       return true;
     }
@@ -5016,7 +5023,7 @@ int find_help_tags(const char_u *arg, int *num_matches, char_u ***matches,
 static void prepare_help_buffer(void)
 {
   curbuf->b_help = true;
-  set_string_option_direct((char_u *)"buftype", -1, (char_u *)"help",
+  set_string_option_direct("buftype", -1, (char_u *)"help",
                            OPT_FREE|OPT_LOCAL, 0);
 
   // Always set these options after jumping to a help tag, because the
@@ -5026,13 +5033,13 @@ static void prepare_help_buffer(void)
   // Only set it when needed, buf_init_chartab() is some work.
   char_u *p = (char_u *)"!-~,^*,^|,^\",192-255";
   if (STRCMP(curbuf->b_p_isk, p) != 0) {
-    set_string_option_direct((char_u *)"isk", -1, p, OPT_FREE|OPT_LOCAL, 0);
+    set_string_option_direct("isk", -1, p, OPT_FREE|OPT_LOCAL, 0);
     check_buf_options(curbuf);
     (void)buf_init_chartab(curbuf, FALSE);
   }
 
   // Don't use the global foldmethod.
-  set_string_option_direct((char_u *)"fdm", -1, (char_u *)"manual",
+  set_string_option_direct("fdm", -1, (char_u *)"manual",
                            OPT_FREE|OPT_LOCAL, 0);
 
   curbuf->b_p_ts = 8;         // 'tabstop' is 8.
@@ -5652,7 +5659,7 @@ static buf_T *show_sub(exarg_T *eap, pos_T old_cusr,
   cmdmod.tab = 0;                 // disable :tab modifier
   cmdmod.noswapfile = true;       // disable swap for preview buffer
   // disable file info message
-  set_string_option_direct((char_u *)"shm", -1, (char_u *)"F", OPT_FREE,
+  set_string_option_direct("shm", -1, (char_u *)"F", OPT_FREE,
                            SID_NONE);
 
   bool outside_curline = (eap->line1 != old_cusr.lnum
@@ -5775,7 +5782,7 @@ static buf_T *show_sub(exarg_T *eap, pos_T old_cusr,
   update_screen(SOME_VALID);
   RedrawingDisabled = save_rd;
 
-  set_string_option_direct((char_u *)"shm", -1, save_shm_p, OPT_FREE, SID_NONE);
+  set_string_option_direct("shm", -1, save_shm_p, OPT_FREE, SID_NONE);
   xfree(save_shm_p);
 
   cmdmod = save_cmdmod;
