@@ -5084,9 +5084,13 @@ ExpandFromContext (
   }
   if (xp->xp_context == EXPAND_BUFFERS)
     return ExpandBufnames(pat, num_file, file, options);
+  if (xp->xp_context == EXPAND_DIFF_BUFFERS) {
+    return ExpandBufnames(pat, num_file, file, options | BUF_DIFF_FILTER);
+  }
   if (xp->xp_context == EXPAND_TAGS
-      || xp->xp_context == EXPAND_TAGS_LISTFILES)
+      || xp->xp_context == EXPAND_TAGS_LISTFILES) {
     return expand_tags(xp->xp_context == EXPAND_TAGS, pat, num_file, file);
+  }
   if (xp->xp_context == EXPAND_COLORS) {
     char *directories[] = { "colors", NULL };
     return ExpandRTDir(pat, DIP_START + DIP_OPT, num_file, file, directories);
@@ -6441,7 +6445,7 @@ static int open_cmdwin(void)
   cmdwin_level = ccline.level;
 
   // Create empty command-line buffer.
-  buf_open_scratch(0, "[Command Line]");
+  buf_open_scratch(0, _("[Command Line]"));
   // Command-line buffer has bufhidden=wipe, unlike a true "scratch" buffer.
   set_option_value("bh", 0L, "wipe", OPT_LOCAL);
   curwin->w_p_rl = cmdmsg_rl;

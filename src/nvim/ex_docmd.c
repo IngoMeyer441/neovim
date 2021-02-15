@@ -3512,6 +3512,13 @@ const char * set_one_cmd_context(
     xp->xp_context = EXPAND_BUFFERS;
     xp->xp_pattern = (char_u *)arg;
     break;
+  case CMD_diffget:
+  case CMD_diffput:
+    // If current buffer is in diff mode, complete buffer names
+    // which are in diff mode, and different than current buffer.
+    xp->xp_context = EXPAND_DIFF_BUFFERS;
+    xp->xp_pattern = (char_u *)arg;
+    break;
   case CMD_USER:
   case CMD_USER_BUF:
     if (context != EXPAND_NOTHING) {
@@ -5174,6 +5181,7 @@ static const char *command_complete[] =
   [EXPAND_CSCOPE] = "cscope",
   [EXPAND_USER_DEFINED] = "custom",
   [EXPAND_USER_LIST] = "customlist",
+  [EXPAND_DIFF_BUFFERS] = "diff_buffer",
   [EXPAND_DIRECTORIES] = "dir",
   [EXPAND_ENV_VARS] = "environment",
   [EXPAND_EVENTS] = "event",
@@ -6274,14 +6282,14 @@ int parse_compl_arg(const char_u *value, int vallen, int *complp,
   return OK;
 }
 
-int cmdcomplete_str_to_type(char_u *complete_str)
+int cmdcomplete_str_to_type(const char *complete_str)
 {
     for (int i = 0; i < (int)(ARRAY_SIZE(command_complete)); i++) {
       char *cmd_compl = get_command_complete(i);
       if (cmd_compl == NULL) {
         continue;
       }
-      if (STRCMP(complete_str, command_complete[i]) == 0) {
+      if (strcmp(complete_str, command_complete[i]) == 0) {
         return i;
       }
     }
@@ -7271,9 +7279,7 @@ static void ex_find(exarg_T *eap)
   }
 }
 
-/*
- * ":edit", ":badd", ":visual".
- */
+/// ":edit", ":badd", ":balt", ":visual".
 static void ex_edit(exarg_T *eap)
 {
   do_exedit(eap, NULL);
@@ -7347,7 +7353,9 @@ do_exedit(
     else if (eap->cmdidx == CMD_enew)
       readonlymode = FALSE;         /* 'readonly' doesn't make sense in an
                                        empty buffer */
-    setpcmark();
+    if (eap->cmdidx != CMD_balt && eap->cmdidx != CMD_badd) {
+      setpcmark();
+    }
     if (do_ecmd(0, (eap->cmdidx == CMD_enew ? NULL : eap->arg),
                 NULL, eap, eap->do_ecmd_lnum,
                 (buf_hide(curbuf) ? ECMD_HIDE : 0)
@@ -7355,6 +7363,7 @@ do_exedit(
                 // After a split we can use an existing buffer.
                 + (old_curwin != NULL ? ECMD_OLDBUF : 0)
                 + (eap->cmdidx == CMD_badd ? ECMD_ADDBUF : 0)
+                + (eap->cmdidx == CMD_balt ? ECMD_ALTBUF : 0)
                 , old_curwin == NULL ? curwin : NULL) == FAIL) {
       // Editing the file failed.  If the window was split, close it.
       if (old_curwin != NULL) {
@@ -8725,7 +8734,7 @@ ssize_t find_cmdline_var(const char_u *src, size_t *usedlen)
  * Evaluate cmdline variables.
  *
  * change '%'	    to curbuf->b_ffname
- *	  '#'	    to curwin->w_altfile
+ *	  '#'	    to curwin->w_alt_fnum
  *	  '<cword>' to word under the cursor
  *	  '<cWORD>' to WORD under the cursor
  *	  '<cexpr>' to C-expression under the cursor
