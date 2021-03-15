@@ -117,8 +117,12 @@ char_u *get_function_name(expand_T *xp, int idx)
     intidx = -1;
   if (intidx < 0) {
     name = get_user_func_name(xp, idx);
-    if (name != NULL)
+    if (name != NULL) {
+      if (*name != '<' && STRNCMP("g:", xp->xp_pattern, 2) == 0) {
+        return cat_prefix_varname('g', name);
+      }
       return name;
+    }
   }
   while ((size_t)++intidx < ARRAY_SIZE(functions)
          && functions[intidx].name[0] == '\0') {
@@ -3029,10 +3033,11 @@ static void f_getchar(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
     if (argvars[0].v_type == VAR_UNKNOWN) {
       // getchar(): blocking wait.
+      // TODO(bfredl): deduplicate shared logic with state_enter ?
       if (!(char_avail() || using_script() || input_available())) {
         (void)os_inchar(NULL, 0, -1, 0, main_loop.events);
         if (!multiqueue_empty(main_loop.events)) {
-          multiqueue_process_events(main_loop.events);
+          state_handle_k_event();
           continue;
         }
       }
@@ -10730,7 +10735,7 @@ static void f_termopen(typval_T *argvars, typval_T *rettv, FunPtr fptr)
                INTEGER_OBJ(pid), false, false, &err);
   api_clear_error(&err);
 
-  channel_terminal_open(chan);
+  channel_terminal_open(curbuf, chan);
   channel_create_event(chan, NULL);
 }
 
