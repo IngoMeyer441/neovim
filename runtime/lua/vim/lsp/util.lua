@@ -518,13 +518,13 @@ end
 --- precedence is as follows: textEdit.newText > insertText > label
 --@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
 local function get_completion_word(item)
-  if item.textEdit ~= nil and item.textEdit.newText ~= nil then
+  if item.textEdit ~= nil and item.textEdit.newText ~= nil and item.textEdit.newText ~= "" then
     if protocol.InsertTextFormat[item.insertTextFormat] == "PlainText" then
       return item.textEdit.newText
     else
       return M.parse_snippet(item.textEdit.newText)
     end
-  elseif item.insertText ~= nil then
+  elseif item.insertText ~= nil and item.insertText ~= "" then
     if protocol.InsertTextFormat[item.insertTextFormat] == "PlainText" then
       return item.insertText
     else
@@ -612,6 +612,62 @@ function M.text_document_completion_list_to_complete_items(result, prefix)
   return matches
 end
 
+
+--- Rename old_fname to new_fname
+--
+--@param opts (table)
+--         overwrite? bool
+--         ignoreIfExists? bool
+function M.rename(old_fname, new_fname, opts)
+  opts = opts or {}
+  local bufnr = vim.fn.bufadd(old_fname)
+  vim.fn.bufload(bufnr)
+  local target_exists = vim.loop.fs_stat(new_fname) ~= nil
+  if target_exists and not opts.overwrite or opts.ignoreIfExists then
+    vim.notify('Rename target already exists. Skipping rename.')
+    return
+  end
+  local ok, err = os.rename(old_fname, new_fname)
+  assert(ok, err)
+  api.nvim_buf_call(bufnr, function()
+    vim.cmd('saveas! ' .. vim.fn.fnameescape(new_fname))
+  end)
+end
+
+
+local function create_file(change)
+  local opts = change.options or {}
+  -- from spec: Overwrite wins over `ignoreIfExists`
+  local fname = vim.uri_to_fname(change.uri)
+  if not opts.ignoreIfExists or opts.overwrite then
+    local file = io.open(fname, 'w')
+    file:close()
+  end
+  vim.fn.bufadd(fname)
+end
+
+
+local function delete_file(change)
+  local opts = change.options or {}
+  local fname = vim.uri_to_fname(change.uri)
+  local stat = vim.loop.fs_stat(fname)
+  if opts.ignoreIfNotExists and not stat then
+    return
+  end
+  assert(stat, "Cannot delete not existing file or folder " .. fname)
+  local flags
+  if stat and stat.type == 'directory' then
+    flags = opts.recursive and 'rf' or 'd'
+  else
+    flags = ''
+  end
+  local bufnr = vim.fn.bufadd(fname)
+  local result = tonumber(vim.fn.delete(fname, flags))
+  assert(result == 0, 'Could not delete file: ' .. fname .. ', stat: ' .. vim.inspect(stat))
+  api.nvim_buf_delete(bufnr, { force = true })
+end
+
+
 --- Applies a `WorkspaceEdit`.
 ---
 --@param workspace_edit (table) `WorkspaceEdit`
@@ -619,8 +675,17 @@ end
 function M.apply_workspace_edit(workspace_edit)
   if workspace_edit.documentChanges then
     for idx, change in ipairs(workspace_edit.documentChanges) do
-      if change.kind then
-        -- TODO(ashkan) handle CreateFile/RenameFile/DeleteFile
+      if change.kind == "rename" then
+        M.rename(
+          vim.uri_to_fname(change.oldUri),
+          vim.uri_to_fname(change.newUri),
+          change.options
+        )
+      elseif change.kind == 'create' then
+        create_file(change)
+      elseif change.kind == 'delete' then
+        delete_file(change)
+      elseif change.kind then
         error(string.format("Unsupported change: %q", vim.inspect(change)))
       else
         M.apply_text_document_edit(change, idx)
@@ -846,8 +911,8 @@ function M.preview_location(location)
   end
   local range = location.targetRange or location.range
   local contents = api.nvim_buf_get_lines(bufnr, range.start.line, range["end"].line+1, false)
-  local filetype = api.nvim_buf_get_option(bufnr, 'filetype')
-  return M.open_floating_preview(contents, filetype)
+  local syntax = api.nvim_buf_get_option(bufnr, 'syntax')
+  return M.open_floating_preview(contents, syntax)
 end
 
 --@private
@@ -1036,7 +1101,6 @@ function M.fancy_floating_markdown(contents, opts)
   api.nvim_win_set_option(winnr, 'concealcursor', 'n')
 
   vim.cmd("ownsyntax lsp_markdown")
-  vim.cmd("set filetype=lsp_markdown")
   local idx = 1
   --@private
   local function apply_syntax_to_region(ft, start, finish)
@@ -1137,7 +1201,7 @@ end
 --- Shows contents in a floating window.
 ---
 --@param contents table of lines to show in window
---@param filetype string of filetype to set for opened buffer
+--@param syntax string of syntax to set for opened buffer
 --@param opts dictionary with optional fields
 --             - height    of floating window
 --             - width     of floating window
@@ -1150,10 +1214,10 @@ end
 --             - pad_bottom number of lines to pad contents at bottom
 --@returns bufnr,winnr buffer and window number of the newly created floating
 ---preview window
-function M.open_floating_preview(contents, filetype, opts)
+function M.open_floating_preview(contents, syntax, opts)
   validate {
     contents = { contents, 't' };
-    filetype = { filetype, 's', true };
+    syntax = { syntax, 's', true };
     opts = { opts, 't', true };
   }
   opts = opts or {}
@@ -1166,12 +1230,12 @@ function M.open_floating_preview(contents, filetype, opts)
   local width, height = M._make_floating_popup_size(contents, opts)
 
   local floating_bufnr = api.nvim_create_buf(false, true)
-  if filetype then
-    api.nvim_buf_set_option(floating_bufnr, 'filetype', filetype)
+  if syntax then
+    api.nvim_buf_set_option(floating_bufnr, 'syntax', syntax)
   end
   local float_option = M.make_floating_popup_options(width, height, opts)
   local floating_winnr = api.nvim_open_win(floating_bufnr, false, float_option)
-  if filetype == 'markdown' then
+  if syntax == 'markdown' then
     api.nvim_win_set_option(floating_winnr, 'conceallevel', 2)
   end
   api.nvim_buf_set_lines(floating_bufnr, 0, -1, true, contents)
