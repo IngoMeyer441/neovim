@@ -4312,6 +4312,7 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     "title",
     "user-commands",        // was accidentally included in 5.4
     "user_commands",
+    "vartabs",
     "vertsplit",
     "virtualedit",
     "visual",
@@ -8809,8 +8810,6 @@ static void f_settagstack(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
     if (set_tagstack(wp, d, action) == OK) {
       rettv->vval.v_number = 0;
-    } else {
-      EMSG(_(e_listreq));
     }
 }
 
@@ -8850,6 +8849,18 @@ static void f_shellescape(typval_T *argvars, typval_T *rettv, FunPtr fptr)
  */
 static void f_shiftwidth(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
+  rettv->vval.v_number = 0;
+
+  if (argvars[0].v_type != VAR_UNKNOWN) {
+    long col;
+
+    col = (long)tv_get_number_chk(argvars, NULL);
+    if (col < 0) {
+      return;  // type error; errmsg already given
+    }
+    rettv->vval.v_number = get_sw_value_col(curbuf, col);
+    return;
+  }
   rettv->vval.v_number = get_sw_value(curbuf);
 }
 
@@ -10189,6 +10200,38 @@ static void f_strpart(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = (char_u *)xmemdupz(p + n, (size_t)len);
+}
+
+// "strptime({format}, {timestring})" function
+static void f_strptime(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  char fmt_buf[NUMBUFLEN];
+  char str_buf[NUMBUFLEN];
+
+  struct tm tmval = {
+    .tm_isdst = -1,
+  };
+  char *fmt = (char *)tv_get_string_buf(&argvars[0], fmt_buf);
+  char *str = (char *)tv_get_string_buf(&argvars[1], str_buf);
+
+  vimconv_T conv = {
+    .vc_type = CONV_NONE,
+  };
+  char_u *enc = enc_locale();
+  convert_setup(&conv, p_enc, enc);
+  if (conv.vc_type != CONV_NONE) {
+    fmt = (char *)string_convert(&conv, (char_u *)fmt, NULL);
+  }
+  if (fmt == NULL
+      || os_strptime(str, fmt, &tmval) == NULL
+      || (rettv->vval.v_number = mktime(&tmval)) == -1) {
+    rettv->vval.v_number = 0;
+  }
+  if (conv.vc_type != CONV_NONE) {
+    xfree(fmt);
+  }
+  convert_setup(&conv, NULL, NULL);
+  xfree(enc);
 }
 
 /*
