@@ -38,13 +38,13 @@ lsp._request_name_to_capability = {
   ['textDocument/declaration'] = 'declaration';
   ['textDocument/typeDefinition'] = 'type_definition';
   ['textDocument/documentSymbol'] = 'document_symbol';
-  ['textDocument/workspaceSymbol'] = 'workspace_symbol';
   ['textDocument/prepareCallHierarchy'] = 'call_hierarchy';
   ['textDocument/rename'] = 'rename';
   ['textDocument/codeAction'] = 'code_action';
   ['textDocument/codeLens'] = 'code_lens';
   ['codeLens/resolve'] = 'code_lens_resolve';
   ['workspace/executeCommand'] = 'execute_command';
+  ['workspace/symbol'] = 'workspace_symbol';
   ['textDocument/references'] = 'find_references';
   ['textDocument/rangeFormatting'] = 'document_range_formatting';
   ['textDocument/formatting'] = 'document_formatting';
@@ -850,20 +850,23 @@ do
     end
 
     util.buf_versions[bufnr] = changedtick
-    -- Lazy initialize these because clients may not even need them.
-    local incremental_changes = once(function(client)
+
+    local incremental_changes = function(client)
       local lines = nvim_buf_get_lines(bufnr, 0, -1, true)
       local startline =  math.min(firstline + 1, math.min(#client._cached_buffers[bufnr], #lines))
       local endline =  math.min(-(#lines - new_lastline), -1)
-      local incremental_change = vim.lsp.util.compute_diff(client._cached_buffers[bufnr], lines, startline, endline)
+      local incremental_change = vim.lsp.util.compute_diff(
+        client._cached_buffers[bufnr], lines, startline, endline, client.offset_encoding or "utf-16")
       client._cached_buffers[bufnr] = lines
       return incremental_change
-    end)
+    end
+
     local full_changes = once(function()
       return {
         text = buf_get_full_text(bufnr);
       };
     end)
+
     local uri = vim.uri_from_bufnr(bufnr)
     for_each_buffer_client(bufnr, function(client)
       local allow_incremental_sync = if_nil(client.config.flags.allow_incremental_sync, true)
@@ -928,10 +931,25 @@ function lsp.buf_attach_client(bufnr, client_id)
     all_buffer_active_clients[bufnr] = buffer_client_ids
 
     local uri = vim.uri_from_bufnr(bufnr)
-    nvim_command(string.format("autocmd BufWritePost <buffer=%d> lua vim.lsp._text_document_did_save_handler(0)", bufnr))
+    local buf_did_save_autocommand = [=[
+      augroup lsp_c_%d_b_%d_did_save
+        au!
+        au BufWritePost <buffer=%d> lua vim.lsp._text_document_did_save_handler(0)
+      augroup END
+    ]=]
+    vim.api.nvim_exec(string.format(buf_did_save_autocommand, client_id, bufnr, bufnr), false)
     -- First time, so attach and set up stuff.
     vim.api.nvim_buf_attach(bufnr, false, {
       on_lines = text_document_did_change_handler;
+      on_reload = function()
+        local params = { textDocument = { uri = uri; } }
+        for_each_buffer_client(bufnr, function(client, _)
+          if client.resolved_capabilities.text_document_open_close then
+            client.notify('textDocument/didClose', params)
+          end
+          text_document_did_open_handler(bufnr, client)
+        end)
+      end;
       on_detach = function()
         local params = { textDocument = { uri = uri; } }
         for_each_buffer_client(bufnr, function(client, _)

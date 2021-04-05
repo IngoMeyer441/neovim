@@ -1085,6 +1085,7 @@ typedef struct {
   bool focusable;
   WinStyle style;
   bool border;
+  bool shadow;
   schar_T border_chars[8];
   int border_hl_ids[8];
   int border_attr[8];
@@ -1201,6 +1202,7 @@ struct window_S {
     int tab1;                       ///< first tab character
     int tab2;                       ///< second tab character
     int tab3;                       ///< third tab character
+    int lead;
     int trail;
     int conceal;
   } w_p_lcs_chars;
@@ -1265,7 +1267,7 @@ struct window_S {
   int w_height_request;
   int w_width_request;
 
-  int w_border_adj;
+  int w_border_adj[4];  // top, right, bottom, left
   // outer size of window grid, including border
   int w_height_outer;
   int w_width_outer;

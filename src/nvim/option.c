@@ -2001,7 +2001,9 @@ static void didset_options2(void)
 
   // Parse default for 'wildmode'.
   check_opt_wim();
+  xfree(curbuf->b_p_vsts_array);
   tabstop_set(curbuf->b_p_vsts, &curbuf->b_p_vsts_array);
+  xfree(curbuf->b_p_vts_array);
   tabstop_set(curbuf->b_p_vts,  &curbuf->b_p_vts_array);
 }
 
@@ -3167,9 +3169,7 @@ ambw_end:
       if (errmsg == NULL) {
         long *oldarray = curbuf->b_p_vts_array;
         if (tabstop_set(*varp, &(curbuf->b_p_vts_array))) {
-          if (oldarray) {
-            xfree(oldarray);
-          }
+          xfree(oldarray);
           if (foldmethodIsIndent(curwin)) {
             foldUpdateAll(curwin);
           }
@@ -3437,6 +3437,12 @@ skip:
   return NULL;    // no error
 }
 
+void check_blending(win_T *wp)
+{
+  wp->w_grid_alloc.blending =
+    wp->w_p_winbl > 0 || (wp->w_floating && wp->w_float_config.shadow);
+}
+
 
 /// Handle setting 'listchars' or 'fillchars'.
 /// Assume monocell characters
@@ -3477,6 +3483,7 @@ static char_u *set_chars_option(win_T *wp, char_u **varp, bool set)
     { &wp->w_p_lcs_chars.prec,    "precedes", NUL  },
     { &wp->w_p_lcs_chars.space,   "space",    NUL  },
     { &wp->w_p_lcs_chars.tab2,    "tab",      NUL  },
+    { &wp->w_p_lcs_chars.lead,    "lead",     NUL  },
     { &wp->w_p_lcs_chars.trail,   "trail",    NUL  },
     { &wp->w_p_lcs_chars.conceal, "conceal",  NUL  },
   };
@@ -4379,7 +4386,7 @@ static char *set_num_option(int opt_idx, char_u *varp, long value,
     // 'floatblend'
     curwin->w_p_winbl = MAX(MIN(curwin->w_p_winbl, 100), 0);
     curwin->w_hl_needs_update = true;
-    curwin->w_grid_alloc.blending = curwin->w_p_winbl > 0;
+    check_blending(curwin);
   }
 
 
@@ -5894,6 +5901,7 @@ void didset_window_options(win_T *wp)
   set_chars_option(wp, &wp->w_p_fcs, true);
   set_chars_option(wp, &wp->w_p_lcs, true);
   parse_winhl_opt(wp);  // sets w_hl_needs_update also for w_p_winbl
+  check_blending(wp);
   wp->w_grid_alloc.blending = wp->w_p_winbl > 0;
 }
 
@@ -7606,7 +7614,9 @@ int win_signcol_count(win_T *wp)
     }
   }
 
-  return MAX(minimum, MIN(maximum, needed_signcols));
+  int ret = MAX(minimum, MIN(maximum, needed_signcols));
+  assert(ret <= SIGN_SHOW_MAX);
+  return ret;
 }
 
 /// Get window or buffer local options

@@ -5289,10 +5289,10 @@ bool set_ref_in_item(typval_T *tv, int copyID, ht_stack_T **ht_stack,
 
         QUEUE *w = NULL;
         DictWatcher *watcher = NULL;
-        QUEUE_FOREACH(w, &dd->watchers) {
+        QUEUE_FOREACH(w, &dd->watchers, {
           watcher = tv_dict_watcher_node_data(w);
           set_ref_in_callback(&watcher->callback, copyID, ht_stack, list_stack);
-        }
+        })
       }
       break;
     }
@@ -5867,26 +5867,53 @@ int assert_inrange(typval_T *argvars)
   FUNC_ATTR_NONNULL_ALL
 {
   bool error = false;
-  const varnumber_T lower = tv_get_number_chk(&argvars[0], &error);
-  const varnumber_T upper = tv_get_number_chk(&argvars[1], &error);
-  const varnumber_T actual = tv_get_number_chk(&argvars[2], &error);
 
-  if (error) {
-    return 0;
-  }
-  if (actual < lower || actual > upper) {
-    garray_T ga;
-    prepare_assert_error(&ga);
+  if (argvars[0].v_type == VAR_FLOAT
+      || argvars[1].v_type == VAR_FLOAT
+      || argvars[2].v_type == VAR_FLOAT) {
+    const float_T flower = tv_get_float(&argvars[0]);
+    const float_T fupper = tv_get_float(&argvars[1]);
+    const float_T factual = tv_get_float(&argvars[2]);
 
-    char msg[55];
-    vim_snprintf(msg, sizeof(msg),
-                 "range %" PRIdVARNUMBER " - %" PRIdVARNUMBER ",",
-                 lower, upper);
-    fill_assert_error(&ga, &argvars[3], (char_u *)msg, NULL, &argvars[2],
-                      ASSERT_INRANGE);
-    assert_error(&ga);
-    ga_clear(&ga);
-    return 1;
+    if (factual < flower || factual > fupper) {
+      garray_T ga;
+      prepare_assert_error(&ga);
+      if (argvars[3].v_type != VAR_UNKNOWN) {
+        char_u *const tofree = (char_u *)encode_tv2string(&argvars[3], NULL);
+        ga_concat(&ga, tofree);
+        xfree(tofree);
+      } else {
+        char msg[80];
+        vim_snprintf(msg, sizeof(msg), "Expected range %g - %g, but got %g",
+                     flower, fupper, factual);
+        ga_concat(&ga, (char_u *)msg);
+      }
+      assert_error(&ga);
+      ga_clear(&ga);
+      return 1;
+    }
+  } else {
+    const varnumber_T lower = tv_get_number_chk(&argvars[0], &error);
+    const varnumber_T upper = tv_get_number_chk(&argvars[1], &error);
+    const varnumber_T actual = tv_get_number_chk(&argvars[2], &error);
+
+    if (error) {
+      return 0;
+    }
+    if (actual < lower || actual > upper) {
+      garray_T ga;
+      prepare_assert_error(&ga);
+
+      char msg[55];
+      vim_snprintf(msg, sizeof(msg),
+                   "range %" PRIdVARNUMBER " - %" PRIdVARNUMBER ",",
+                   lower, upper);
+      fill_assert_error(&ga, &argvars[3], (char_u *)msg, NULL, &argvars[2],
+                        ASSERT_INRANGE);
+      assert_error(&ga);
+      ga_clear(&ga);
+      return 1;
+    }
   }
   return 0;
 }
@@ -5952,6 +5979,35 @@ static void assert_append_cmd_or_arg(garray_T *gap, typval_T *argvars,
   } else {
     ga_concat(gap, (char_u *)cmd);
   }
+}
+
+int assert_beeps(typval_T *argvars, bool no_beep)
+  FUNC_ATTR_NONNULL_ALL
+{
+  const char *const cmd = tv_get_string_chk(&argvars[0]);
+  int ret = 0;
+
+  called_vim_beep = false;
+  suppress_errthrow = true;
+  emsg_silent = false;
+  do_cmdline_cmd(cmd);
+  if (no_beep ? called_vim_beep : !called_vim_beep) {
+    garray_T ga;
+    prepare_assert_error(&ga);
+    if (no_beep) {
+      ga_concat(&ga, (const char_u *)"command did beep: ");
+    } else {
+      ga_concat(&ga, (const char_u *)"command did not beep: ");
+    }
+    ga_concat(&ga, (const char_u *)cmd);
+    assert_error(&ga);
+    ga_clear(&ga);
+    ret = 1;
+  }
+
+  suppress_errthrow = false;
+  emsg_on_display = false;
+  return ret;
 }
 
 int assert_fails(typval_T *argvars)
@@ -6207,6 +6263,7 @@ void common_function(typval_T *argvars, typval_T *rettv,
     // function(dict.MyFunc, [arg])
     arg_pt = argvars[0].vval.v_partial;
     s = partial_name(arg_pt);
+    // TODO(bfredl): do the entire nlua_is_table_from_lua dance
   } else {
     // function('MyFunc', [arg], dict)
     s = (char_u *)tv_get_string(&argvars[0]);
@@ -7306,7 +7363,6 @@ bool callback_from_typval(Callback *const callback, typval_T *const arg)
     char_u *name = nlua_register_table_as_callable(arg);
 
     if (name != NULL) {
-      func_ref(name);
       callback->data.funcref = vim_strsave(name);
       callback->type = kCallbackFuncref;
     } else {

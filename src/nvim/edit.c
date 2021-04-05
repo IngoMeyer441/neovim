@@ -7269,7 +7269,6 @@ bool in_cinkeys(int keytyped, int when, bool line_is_empty)
   char_u *p;
   char_u *line;
   int icase;
-  int i;
 
   if (keytyped == NUL) {
     // Can happen with CTRL-Y and CTRL-E on a short line.
@@ -7354,8 +7353,9 @@ bool in_cinkeys(int keytyped, int when, bool line_is_empty)
             && p[curwin->w_cursor.col - 1] == ':'
             && p[curwin->w_cursor.col - 2] == ':') {
           p[curwin->w_cursor.col - 1] = ' ';
-          i = (cin_iscase(p, FALSE) || cin_isscopedecl(p)
-               || cin_islabel());
+          const bool i = cin_iscase(p, false)
+            || cin_isscopedecl(p)
+            || cin_islabel();
           p = get_cursor_line_ptr();
           p[curwin->w_cursor.col - 1] = ':';
           if (i) {
@@ -8787,10 +8787,6 @@ static bool ins_tab(void)
     getvcol(curwin, &fpos, &vcol, NULL, NULL);
     getvcol(curwin, cursor, &want_vcol, NULL, NULL);
 
-    // save start of changed region for extmark_splice
-    int start_row = fpos.lnum;
-    colnr_T start_col = fpos.col;
-
     // Use as many TABs as possible.  Beware of 'breakindent', 'showbreak'
     // and 'linebreak' adding extra virtual columns.
     while (ascii_iswhite(*ptr)) {
@@ -8841,8 +8837,8 @@ static bool ins_tab(void)
           }
         }
         if (!(State & VREPLACE_FLAG)) {
-          extmark_splice_cols(curbuf, start_row - 1, start_col,
-                              cursor->col - start_col, fpos.col - start_col,
+          extmark_splice_cols(curbuf, fpos.lnum - 1, change_col,
+                              cursor->col - change_col, fpos.col - change_col,
                               kExtmarkUndo);
         }
       }
