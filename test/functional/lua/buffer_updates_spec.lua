@@ -461,6 +461,36 @@ describe('lua: nvim_buf_attach on_bytes', function()
       }
     end)
 
+    it("deleting lines", function()
+      local check_events = setup_eventcheck(verify, origlines)
+
+      feed("dd")
+
+      check_events {
+        { "test1", "bytes", 1, 3, 0, 0, 0, 1, 0, 16, 0, 0, 0 };
+      }
+
+      feed("d2j")
+
+      check_events {
+        { "test1", "bytes", 1, 4, 0, 0, 0, 3, 0, 48, 0, 0, 0 };
+      }
+
+      feed("ld<c-v>2j")
+
+      check_events {
+        { "test1", "bytes", 1, 5, 0, 1, 1, 0, 1, 1, 0, 0, 0 };
+        { "test1", "bytes", 1, 5, 1, 1, 16, 0, 1, 1, 0, 0, 0 };
+        { "test1", "bytes", 1, 5, 2, 1, 31, 0, 1, 1, 0, 0, 0 };
+      }
+
+      feed("vjwd")
+
+      check_events {
+        { "test1", "bytes", 1, 10, 0, 1, 1, 1, 9, 23, 0, 0, 0 };
+      }
+    end)
+
     it("changing lines", function()
       local check_events = setup_eventcheck(verify, origlines)
 
@@ -869,6 +899,41 @@ describe('lua: nvim_buf_attach on_bytes', function()
         { "test1", "bytes", 1, 4, 2, 0, 9, 0, 0, 0, 0, 3, 3 },
       }
 
+    end)
+
+    it(":luado", function()
+      local check_events = setup_eventcheck(verify, {"abc", "12345"})
+
+      command(".luado return 'a'")
+
+      check_events {
+        { "test1", "bytes", 1, 3, 0, 0, 0, 0, 3, 3, 0, 1, 1 };
+      }
+
+      command("luado return 10")
+
+      check_events {
+        { "test1", "bytes", 1, 4, 0, 0, 0, 0, 1, 1, 0, 2, 2 };
+        { "test1", "bytes", 1, 5, 1, 0, 3, 0, 5, 5, 0, 2, 2 };
+      }
+
+    end)
+
+    it("flushes deleted bytes on move", function()
+      local check_events = setup_eventcheck(verify, {"AAA", "BBB", "CCC", "DDD"})
+
+      feed(":.move+1<cr>")
+
+      check_events {
+        { "test1", "bytes", 1, 5, 0, 0, 0, 1, 0, 4, 0, 0, 0 };
+        { "test1", "bytes", 1, 5, 1, 0, 4, 0, 0, 0, 1, 0, 4 };
+      }
+
+      feed("jd2j")
+
+      check_events {
+        { "test1", "bytes", 1, 6, 2, 0, 8, 2, 0, 8, 0, 0, 0 };
+      }
     end)
 
     teardown(function()
