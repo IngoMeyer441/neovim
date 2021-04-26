@@ -104,10 +104,14 @@ String nvim_exec(String src, Boolean output, Error *err)
   }
 
   try_start();
-  msg_silent++;
+  if (output) {
+    msg_silent++;
+  }
   do_source_str(src.data, "nvim_exec()");
-  capture_ga = save_capture_ga;
-  msg_silent = save_msg_silent;
+  if (output) {
+    capture_ga = save_capture_ga;
+    msg_silent = save_msg_silent;
+  }
   try_end(err);
 
   if (ERROR_SET(err)) {
@@ -1263,6 +1267,7 @@ fail:
 /// @param buffer the buffer to use (expected to be empty)
 /// @param opts   Optional parameters. Reserved for future use.
 /// @param[out] err Error details, if any
+/// @return Channel id, or 0 on error
 Integer nvim_open_term(Buffer buffer, Dictionary opts, Error *err)
   FUNC_API_SINCE(7)
 {
