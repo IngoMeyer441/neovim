@@ -2720,12 +2720,9 @@ static char_u *get_str_line(int c, void *cookie, int indent, bool do_concat)
     i++;
   }
   size_t line_length = i - p->offset;
-  garray_T ga;
-  ga_init(&ga, (int)sizeof(char_u), (int)line_length);
-  ga_concat_len(&ga, (char *)p->buf + p->offset, line_length);
-  ga_append(&ga, '\0');
+  char_u *buf = xmemdupz(p->buf + p->offset, line_length);
   p->offset = i + 1;
-  return ga.ga_data;
+  return buf;
 }
 
 static int source_using_linegetter(void *cookie,
@@ -3624,6 +3621,14 @@ void set_lang_var(void)
   loc = get_locale_val(LC_TIME);
 # endif
   set_vim_var_string(VV_LC_TIME, loc, -1);
+
+# ifdef HAVE_GET_LOCALE_VAL
+  loc = get_locale_val(LC_COLLATE);
+# else
+  // setlocale() not supported: use the default value
+  loc = "C";
+# endif
+  set_vim_var_string(VV_COLLATE, loc, -1);
 }
 
 #ifdef HAVE_WORKING_LIBINTL
@@ -3664,6 +3669,10 @@ void ex_language(exarg_T *eap)
       what = LC_TIME;
       name = skipwhite(p);
       whatstr = "time ";
+    } else if (STRNICMP(eap->arg, "collate", p - eap->arg) == 0) {
+      what = LC_COLLATE;
+      name = skipwhite(p);
+      whatstr = "collate ";
     }
   }
 
@@ -3708,7 +3717,7 @@ void ex_language(exarg_T *eap)
       // Reset $LC_ALL, otherwise it would overrule everything.
       os_setenv("LC_ALL", "", 1);
 
-      if (what != LC_TIME) {
+      if (what != LC_TIME && what != LC_COLLATE) {
         // Tell gettext() what to translate to.  It apparently doesn't
         // use the currently effective locale.
         if (what == LC_ALL) {
@@ -3723,7 +3732,7 @@ void ex_language(exarg_T *eap)
         }
       }
 
-      // Set v:lang, v:lc_time and v:ctype to the final result.
+      // Set v:lang, v:lc_time, v:collate and v:ctype to the final result.
       set_lang_var();
       maketitle();
     }
@@ -3808,12 +3817,15 @@ char_u *get_lang_arg(expand_T *xp, int idx)
   if (idx == 2) {
     return (char_u *)"time";
   }
+  if (idx == 3) {
+    return (char_u *)"collate";
+  }
 
   init_locales();
   if (locales == NULL) {
     return NULL;
   }
-  return locales[idx - 3];
+  return locales[idx - 4];
 }
 
 /// Function given to ExpandGeneric() to obtain the available locales.
