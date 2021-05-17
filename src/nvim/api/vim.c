@@ -221,6 +221,12 @@ Dictionary nvim__get_hl_defs(Integer ns_id, Error *err)
 ///            in addition the following keys are also recognized:
 ///              `default`: don't override existing definition,
 ///                         like `hi default`
+///              `ctermfg`: sets foreground of cterm color
+///              `ctermbg`: sets background of cterm color
+///              `cterm`  : cterm attribute map. sets attributed for
+///                         cterm colors. similer to `hi cterm`
+///                         Note: by default cterm attributes are
+///                               same as attributes of gui color
 /// @param[out] err Error details, if any
 ///
 /// TODO: ns_id = 0, should modify :highlight namespace
@@ -1411,6 +1417,15 @@ void nvim_chan_send(Integer chan, String data, Error *err)
 ///   - `external`: GUI should display the window as an external
 ///       top-level window. Currently accepts no other positioning
 ///       configuration together with this.
+///   - `zindex`: Stacking order. floats with higher `zindex` go on top on
+///               floats with lower indices. Must be larger than zero. The
+///               following screen elements have hard-coded z-indices:
+///       - 100: insert completion popupmenu
+///       - 200: message scrollback
+///       - 250: cmdline completion popupmenu (when wildoptions+=pum)
+///     The default value for floats are 50.  In general, values below 100 are
+///     recommended, unless there is a good reason to overshadow builtin
+///     elements.
 ///   - `style`: Configure the appearance of the window. Currently only takes
 ///       one non-empty value:
 ///       - "minimal"  Nvim will display the window with many UI options

@@ -763,10 +763,13 @@ void ui_ext_win_position(win_T *wp)
       }
       api_clear_error(&dummy);
     }
+
+    wp->w_grid_alloc.zindex = wp->w_float_config.zindex;
     if (ui_has(kUIMultigrid)) {
       String anchor = cstr_to_string(float_anchor_str[c.anchor]);
       ui_call_win_float_pos(wp->w_grid_alloc.handle, wp->handle, anchor,
-                            grid->handle, row, col, c.focusable);
+                            grid->handle, row, col, c.focusable,
+                            wp->w_grid_alloc.zindex);
     } else {
       // TODO(bfredl): ideally, compositor should work like any multigrid UI
       // and use standard win_pos events.
@@ -2286,7 +2289,7 @@ int win_close(win_T *win, bool free_buf)
     return FAIL;     // window is already being closed
   }
   if (win == aucmd_win) {
-    EMSG(_("E813: Cannot close autocmd window"));
+    EMSG(_(e_autocmd_close));
     return FAIL;
   }
   if ((firstwin == aucmd_win || lastwin == aucmd_win) && one_window()) {

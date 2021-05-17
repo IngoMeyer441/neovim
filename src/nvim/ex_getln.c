@@ -3571,6 +3571,7 @@ static void save_cmdline(struct cmdline_info *ccp)
  * Restore ccline after it has been saved with save_cmdline().
  */
 static void restore_cmdline(struct cmdline_info *ccp)
+  FUNC_ATTR_NONNULL_ALL
 {
   ccline = *ccp;
 }
@@ -3580,6 +3581,7 @@ static void restore_cmdline(struct cmdline_info *ccp)
  * passed to restore_cmdline_alloc() later.
  */
 char_u *save_cmdline_alloc(void)
+  FUNC_ATTR_NONNULL_RET
 {
   struct cmdline_info *p = xmalloc(sizeof(struct cmdline_info));
   save_cmdline(p);
@@ -3590,6 +3592,7 @@ char_u *save_cmdline_alloc(void)
  * Restore the command line from the return value of save_cmdline_alloc().
  */
 void restore_cmdline_alloc(char_u *p)
+  FUNC_ATTR_NONNULL_ALL
 {
   restore_cmdline((struct cmdline_info *)p);
   xfree(p);
@@ -6635,11 +6638,13 @@ static int open_cmdwin(void)
     wp = curwin;
     set_bufref(&bufref, curbuf);
     win_goto(old_curwin);
-    win_close(wp, true);
+    if (win_valid(wp) && wp != curwin) {
+      win_close(wp, true);
+    }
 
     // win_close() may have already wiped the buffer when 'bh' is
-    // set to 'wipe'.
-    if (bufref_valid(&bufref)) {
+    // set to 'wipe', autocommands may have closed other windows
+    if (bufref_valid(&bufref) && bufref.br_buf != curbuf) {
       close_buffer(NULL, bufref.br_buf, DOBUF_WIPE, false);
     }
 
