@@ -595,10 +595,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	set to one of CJK locales.  See Unicode Standard Annex #11
 	(http://www.unicode.org/reports/tr11).
 
-	Vim may set this option automatically at startup time when Vim is
-	compiled with the |+termresponse| feature and if t_u7 is set to the
-	escape sequence to request cursor position report.
-
 			*'autochdir'* *'acd'* *'noautochdir'* *'noacd'*
 'autochdir' 'acd'	boolean (default off)
 			global
@@ -4603,6 +4599,19 @@ A jump table for the options with a short description can be found at |Q_op|.
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
+						*'quickfixtextfunc'* *'qftf'*
+'quickfixtextfunc' 'qftf'	string (default "")
+			global
+	This option specifies a function to be used to get the text to display
+	in the quickfix and location list windows.  This can be used to
+	customize the information displayed in the quickfix or location window
+	for each entry in the corresponding quickfix or location list.  See
+	|quickfix-window-function| for an explanation of how to write the
+	function and an example.
+
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
+
 						*'quoteescape'* *'qe'*
 'quoteescape' 'qe'	string	(default "\")
 			local to buffer
@@ -5043,6 +5052,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global values for local options)
 	   options	all options and mappings (also global values for local
 			options)
+	   skiprtp	exclude 'runtimepath' and 'packpath' from the options
 	   resize	size of the Vim window: 'lines' and 'columns'
 	   sesdir	the directory in which the session file is located
 			will become the current directory (useful with
@@ -6429,7 +6439,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	a single <Esc> is assumed. Many TUI cursor key codes start with <Esc>.
 
 	On very slow systems this may fail, causing cursor keys not to work
-	sometimes.  If you discover this problem you can ":set ttimeout=9999".
+	sometimes.  If you discover this problem you can ":set ttimeoutlen=9999".
 	Nvim will wait for the next character to arrive after an <Esc>.
 
 						*'timeoutlen'* *'tm'*

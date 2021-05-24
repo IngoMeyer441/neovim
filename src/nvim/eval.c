@@ -1619,7 +1619,7 @@ void list_hashtable_vars(hashtab_T *ht, const char *prefix, int empty,
       char buf[IOSIZE];
 
       // apply :filter /pat/ to variable name
-      xstrlcpy(buf, prefix, IOSIZE - 1);
+      xstrlcpy(buf, prefix, IOSIZE);
       xstrlcat(buf, (char *)di->di_key, IOSIZE);
       if (message_filtered((char_u *)buf)) {
         continue;
@@ -6326,7 +6326,7 @@ void get_qf_loc_list(int is_qf, win_T *wp, typval_T *what_arg,
   if (what_arg->v_type == VAR_UNKNOWN) {
     tv_list_alloc_ret(rettv, kListLenMayKnow);
     if (is_qf || wp != NULL) {
-      (void)get_errorlist(NULL, wp, -1, rettv->vval.v_list);
+      (void)get_errorlist(NULL, wp, -1, 0, rettv->vval.v_list);
     }
   } else {
     tv_dict_alloc_ret(rettv);

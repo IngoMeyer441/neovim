@@ -4,6 +4,7 @@ local validate = vim.validate
 local api = vim.api
 local list_extend = vim.list_extend
 local highlight = require 'vim.highlight'
+local uv = vim.loop
 
 local npcall = vim.F.npcall
 local split = vim.split
@@ -73,7 +74,7 @@ function M.set_lines(lines, A, B, new_lines)
   -- way the LSP describes the range including the last newline is by
   -- specifying a line number after what we would call the last line.
   local i_n = math.min(B[1] + 1, #lines)
-  if not (i_0 >= 1 and i_0 <= #lines and i_n >= 1 and i_n <= #lines) then
+  if not (i_0 >= 1 and i_0 <= #lines + 1 and i_n >= 1 and i_n <= #lines) then
     error("Invalid range: "..vim.inspect{A = A; B = B; #lines, new_lines})
   end
   local prefix = ""
@@ -566,13 +567,15 @@ end
 --@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
 local function get_completion_word(item)
   if item.textEdit ~= nil and item.textEdit.newText ~= nil and item.textEdit.newText ~= "" then
-    if protocol.InsertTextFormat[item.insertTextFormat] == "PlainText" then
+    local insert_text_format = protocol.InsertTextFormat[item.insertTextFormat]
+    if insert_text_format == "PlainText" or insert_text_format == nil then
       return item.textEdit.newText
     else
       return M.parse_snippet(item.textEdit.newText)
     end
   elseif item.insertText ~= nil and item.insertText ~= "" then
-    if protocol.InsertTextFormat[item.insertTextFormat] == "PlainText" then
+    local insert_text_format = protocol.InsertTextFormat[item.insertTextFormat]
+    if insert_text_format == "PlainText" or insert_text_format == nil then
       return item.insertText
     else
       return M.parse_snippet(item.insertText)
@@ -802,9 +805,10 @@ end
 --- Converts `textDocument/SignatureHelp` response to markdown lines.
 ---
 --@param signature_help Response of `textDocument/SignatureHelp`
+--@param ft optional filetype that will be use as the `lang` for the label markdown code block
 --@returns list of lines of converted markdown.
 --@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_signatureHelp
-function M.convert_signature_help_to_markdown_lines(signature_help)
+function M.convert_signature_help_to_markdown_lines(signature_help, ft)
   if not signature_help.signatures then
     return
   end
@@ -822,7 +826,12 @@ function M.convert_signature_help_to_markdown_lines(signature_help)
   if not signature then
     return
   end
-  vim.list_extend(contents, vim.split(signature.label, '\n', true))
+  local label = signature.label
+  if ft then
+    -- wrap inside a code block so fancy_markdown can render it properly
+    label = ("```%s\n%s\n```"):format(ft, label)
+  end
+  vim.list_extend(contents, vim.split(label, '\n', true))
   if signature.documentation then
     M.convert_input_to_markdown_lines(signature.documentation, contents)
   end
@@ -914,23 +923,6 @@ function M.make_floating_popup_options(width, height, opts)
   }
 end
 
-local function _should_add_to_tagstack(new_item)
-  local stack = vim.fn.gettagstack()
-
-  -- Check if we're at the bottom of the tagstack.
-  if stack.curidx <= 1 then return true end
-
-  local top_item = stack.items[stack.curidx-1]
-
-  -- Check if the item at the top of the tagstack is exactly the
-  -- same as the one we want to push.
-  if top_item.tagname ~= new_item.tagname then return true end
-  for i, v in ipairs(top_item.from) do
-    if v ~= new_item.from[i] then return true end
-  end
-  return false
-end
-
 --- Jumps to a location.
 ---
 --@param location (`Location`|`LocationLink`)
@@ -939,36 +931,22 @@ function M.jump_to_location(location)
   -- location may be Location or LocationLink
   local uri = location.uri or location.targetUri
   if uri == nil then return end
-
-  local from_bufnr = vim.fn.bufnr('%')
-  local from = {from_bufnr, vim.fn.line('.'), vim.fn.col('.'), 0}
-  local item = {tagname=vim.fn.expand('<cword>'), from=from}
-
+  local bufnr = vim.uri_to_bufnr(uri)
   -- Save position in jumplist
-  vim.cmd("mark '")
+  vim.cmd "normal! m'"
+
+  -- Push a new item into tagstack
+  local from = {vim.fn.bufnr('%'), vim.fn.line('.'), vim.fn.col('.'), 0}
+  local items = {{tagname=vim.fn.expand('<cword>'), from=from}}
+  vim.fn.settagstack(vim.fn.win_getid(), {items=items}, 't')
 
   --- Jump to new location (adjusting for UTF-16 encoding of characters)
-  local bufnr = vim.uri_to_bufnr(uri)
   api.nvim_set_current_buf(bufnr)
   api.nvim_buf_set_option(0, 'buflisted', true)
   local range = location.range or location.targetSelectionRange
   local row = range.start.line
   local col = get_line_byte_from_position(0, range.start)
-  -- This prevents the tagstack to be filled with items that provide
-  -- no motion when CTRL-T is pressed because they're both the source
-  -- and the destination.
-  local motionless =
-    bufnr == from_bufnr and
-    row+1 == from[2] and col+1 == from[3]
-  if not motionless and _should_add_to_tagstack(item) then
-    local winid = vim.fn.win_getid()
-    local items = {item}
-    vim.fn.settagstack(winid, {items=items}, 't')
-  end
-
-  -- Jump to new location
   api.nvim_win_set_cursor(0, {row + 1, col})
-
   return true
 end
 
@@ -980,7 +958,7 @@ end
 ---
 --@param location a single `Location` or `LocationLink`
 --@returns (bufnr,winnr) buffer and window number of floating window or nil
-function M.preview_location(location)
+function M.preview_location(location, opts)
   -- location may be LocationLink or Location (more useful for the former)
   local uri = location.targetUri or location.uri
   if uri == nil then return end
@@ -991,7 +969,13 @@ function M.preview_location(location)
   local range = location.targetRange or location.range
   local contents = api.nvim_buf_get_lines(bufnr, range.start.line, range["end"].line+1, false)
   local syntax = api.nvim_buf_get_option(bufnr, 'syntax')
-  return M.open_floating_preview(contents, syntax)
+  if syntax == "" then
+    -- When no syntax is set, we use filetype as fallback. This might not result
+    -- in a valid syntax definition. See also ft detection in fancy_floating_win.
+    -- An empty syntax is more common now with TreeSitter, since TS disables syntax.
+    syntax = api.nvim_buf_get_option(bufnr, 'filetype')
+  end
+  return M.open_floating_preview(contents, syntax, opts)
 end
 
 --@private
@@ -1115,12 +1099,16 @@ function M.fancy_floating_markdown(contents, opts)
       local ft = line:match("^```([a-zA-Z0-9_]*)$")
       -- local ft = line:match("^```(.*)$")
       -- TODO(ashkan): validate the filetype here.
+      local is_pre = line:match("^%s*<pre>%s*$")
+      if is_pre then
+        ft = ""
+      end
       if ft then
         local start = #stripped
         i = i + 1
         while i <= #contents do
           line = contents[i]
-          if line == "```" then
+          if line == "```" or (is_pre and line:match("^%s*</pre>%s*$")) then
             i = i + 1
             break
           end
@@ -1149,12 +1137,19 @@ function M.fancy_floating_markdown(contents, opts)
   local insert_separator = opts.separator
   if insert_separator == nil then insert_separator = true end
   if insert_separator then
-    for i, h in ipairs(highlights) do
-      h.start = h.start + i - 1
-      h.finish = h.finish + i - 1
+    local offset = 0
+    for _, h in ipairs(highlights) do
+      h.start = h.start + offset
+      h.finish = h.finish + offset
+      -- check if a seperator already exists and use that one instead of creating a new one
       if h.finish + 1 <= #stripped then
-        table.insert(stripped, h.finish + 1, string.rep("─", math.min(width, opts.wrap_at or width)))
-        height = height + 1
+        if stripped[h.finish + 1]:match("^---+$") then
+          stripped[h.finish + 1] = string.rep("─", math.min(width, opts.wrap_at or width))
+        else
+          table.insert(stripped, h.finish + 1, string.rep("─", math.min(width, opts.wrap_at or width)))
+          offset = offset + 1
+          height = height + 1
+        end
       end
     end
   end
@@ -1173,27 +1168,28 @@ function M.fancy_floating_markdown(contents, opts)
   api.nvim_win_set_option(winnr, 'concealcursor', 'n')
 
   vim.cmd("ownsyntax lsp_markdown")
+
   local idx = 1
   --@private
   local function apply_syntax_to_region(ft, start, finish)
-    if ft == '' then return end
+    if ft == "" then
+      vim.cmd(string.format("syntax region markdownCode start=+\\%%%dl+ end=+\\%%%dl+ keepend extend", start, finish + 1))
+      return
+    end
     local name = ft..idx
     idx = idx + 1
     local lang = "@"..ft:upper()
+    -- HACK: reset current_syntax, since some syntax files like markdown won't load if it is already set
+    pcall(vim.api.nvim_buf_del_var, bufnr, "current_syntax")
     -- TODO(ashkan): better validation before this.
     if not pcall(vim.cmd, string.format("syntax include %s syntax/%s.vim", lang, ft)) then
       return
     end
-    vim.cmd(string.format("syntax region %s start=+\\%%%dl+ end=+\\%%%dl+ contains=%s", name, start, finish + 1, lang))
+    vim.cmd(string.format("syntax region %s start=+\\%%%dl+ end=+\\%%%dl+ contains=%s keepend", name, start, finish + 1, lang))
   end
-  -- Previous highlight region.
-  -- TODO(ashkan): this wasn't working for some reason, but I would like to
-  -- make sure that regions between code blocks are definitely markdown.
-  -- local ph = {start = 0; finish = 1;}
+
   for _, h in ipairs(highlights) do
-    -- apply_syntax_to_region('markdown', ph.finish, h.start)
     apply_syntax_to_region(h.ft, h.start, h.finish)
-    -- ph = h
   end
 
   vim.api.nvim_set_current_win(cwin)
@@ -1366,6 +1362,45 @@ local position_sort = sort_by_key(function(v)
   return {v.start.line, v.start.character}
 end)
 
+-- Gets the zero-indexed line from the given uri.
+-- For non-file uris, we load the buffer and get the line.
+-- If a loaded buffer exists, then that is used.
+-- Otherwise we get the line using libuv which is a lot faster than loading the buffer.
+--@param uri string uri of the resource to get the line from
+--@param row number zero-indexed line number
+--@return string the line at row in filename
+function M.get_line(uri, row)
+  -- load the buffer if this is not a file uri
+  -- Custom language server protocol extensions can result in servers sending URIs with custom schemes. Plugins are able to load these via `BufReadCmd` autocmds.
+  if uri:sub(1, 4) ~= "file" then
+    local bufnr = vim.uri_to_bufnr(uri)
+    vim.fn.bufload(bufnr)
+    return (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or { "" })[1]
+  end
+
+  local filename = vim.uri_to_fname(uri)
+
+  -- use loaded buffers if available
+  if vim.fn.bufloaded(filename) == 1 then
+    local bufnr = vim.fn.bufnr(filename, false)
+    return (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or { "" })[1]
+  end
+
+  local fd = uv.fs_open(filename, "r", 438)
+  -- TODO: what should we do in this case?
+  if not fd then return "" end
+  local stat = uv.fs_fstat(fd)
+  local data = uv.fs_read(fd, stat.size, 0)
+  uv.fs_close(fd)
+
+  local lnum = 0
+  for line in string.gmatch(data, "([^\n]*)\n?") do
+    if lnum == row then return line end
+    lnum = lnum + 1
+  end
+  return ""
+end
+
 --- Returns the items with the byte position calculated correctly and in sorted
 --- order, for display in quickfix and location lists.
 ---
@@ -1394,14 +1429,12 @@ function M.locations_to_items(locations)
   for _, uri in ipairs(keys) do
     local rows = grouped[uri]
     table.sort(rows, position_sort)
-    local bufnr = vim.uri_to_bufnr(uri)
-    vim.fn.bufload(bufnr)
     local filename = vim.uri_to_fname(uri)
     for _, temp in ipairs(rows) do
       local pos = temp.start
       local row = pos.line
-      local line = (api.nvim_buf_get_lines(bufnr, row, row + 1, false) or {""})[1]
-      local col = M.character_offset(bufnr, row, pos.character)
+      local line = M.get_line(uri, row)
+      local col = pos.character
       table.insert(items, {
         filename = filename,
         lnum = row + 1,
@@ -1459,13 +1492,13 @@ function M.symbols_to_items(symbols, bufnr)
           kind = kind,
           text = '['..kind..'] '..symbol.name,
         })
-      elseif symbol.range then -- DocumentSymbole type
+      elseif symbol.selectionRange then -- DocumentSymbole type
         local kind = M._get_symbol_kind_name(symbol.kind)
         table.insert(_items, {
           -- bufnr = _bufnr,
           filename = vim.api.nvim_buf_get_name(_bufnr),
-          lnum = symbol.range.start.line + 1,
-          col = symbol.range.start.character + 1,
+          lnum = symbol.selectionRange.start.line + 1,
+          col = symbol.selectionRange.start.character + 1,
           kind = kind,
           text = '['..kind..'] '..symbol.name
         })
