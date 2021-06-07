@@ -1459,6 +1459,9 @@ void nvim_chan_send(Integer chan, String data, Error *err)
 ///     By default `FloatBorder` highlight is used which links to `VertSplit`
 ///     when not defined.  It could also be specified by character:
 ///       [ {"+", "MyCorner"}, {"x", "MyBorder"} ]
+///   - `noautocmd`: If true then no buffer-related autocommand events such as
+///                  |BufEnter|, |BufLeave| or |BufWinEnter| may fire from
+///                  calling this function.
 ///
 /// @param[out] err Error details, if any
 ///
@@ -1469,7 +1472,7 @@ Window nvim_open_win(Buffer buffer, Boolean enter, Dictionary config,
   FUNC_API_CHECK_TEXTLOCK
 {
   FloatConfig fconfig = FLOAT_CONFIG_INIT;
-  if (!parse_float_config(config, &fconfig, false, err)) {
+  if (!parse_float_config(config, &fconfig, false, true, err)) {
     return 0;
   }
   win_T *wp = win_new_float(NULL, fconfig, err);
@@ -1484,7 +1487,7 @@ Window nvim_open_win(Buffer buffer, Boolean enter, Dictionary config,
     return 0;
   }
   if (buffer > 0) {
-    nvim_win_set_buf(wp->handle, buffer, err);
+    win_set_buf(wp->handle, buffer, fconfig.noautocmd, err);
   }
 
   if (fconfig.style == kWinStyleMinimal) {
@@ -2951,6 +2954,7 @@ void nvim_set_decoration_provider(Integer ns_id, DictionaryOf(LuaRef) opts,
   FUNC_API_SINCE(7) FUNC_API_LUA_ONLY
 {
   DecorProvider *p = get_decor_provider((NS)ns_id, true);
+  assert(p != NULL);
   decor_provider_clear(p);
 
   // regardless of what happens, it seems good idea to redraw

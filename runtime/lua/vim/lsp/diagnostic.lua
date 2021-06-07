@@ -1197,44 +1197,56 @@ end
 ---             - Exclusive severity to consider. Overrides {severity_limit}
 ---         - {severity_limit}: (DiagnosticSeverity)
 ---             - Limit severity of diagnostics found. E.g. "Warning" means { "Error", "Warning" } will be valid.
+---         - {workspace}: (boolean, default false)
+---             - Set the list with workspace diagnostics
 function M.set_loclist(opts)
   opts = opts or {}
 
   local open_loclist = if_nil(opts.open_loclist, true)
 
-  local bufnr = vim.api.nvim_get_current_buf()
-  local buffer_diags = M.get(bufnr, opts.client_id)
-
-  if opts.severity then
-    buffer_diags = filter_to_severity_limit(opts.severity, buffer_diags)
-  elseif opts.severity_limit then
-    buffer_diags = filter_by_severity_limit(opts.severity_limit, buffer_diags)
-  end
+  local win_id = vim.api.nvim_get_current_win()
+  local current_bufnr = vim.api.nvim_get_current_buf()
+  local diags = opts.workspace and M.get_all() or {
+    [current_bufnr] = M.get(current_bufnr, opts.client_id)
+  }
 
   local items = {}
-  local insert_diag = function(diag)
+  local insert_diag = function(bufnr, diag)
     local pos = diag.range.start
     local row = pos.line
-    local col = util.character_offset(bufnr, row, pos.character)
 
-    local line = (api.nvim_buf_get_lines(bufnr, row, row + 1, false) or {""})[1]
+    local col = util.character_offset(bufnr, row, pos.character) or 0
 
     table.insert(items, {
       bufnr = bufnr,
       lnum = row + 1,
       col = col + 1,
-      text = line .. " | " .. diag.message,
+      text = diag.message,
       type = loclist_type_map[diag.severity or DiagnosticSeverity.Error] or 'E',
     })
   end
 
-  for _, diag in ipairs(buffer_diags) do
-    insert_diag(diag)
+  for bufnr, diagnostic in pairs(diags) do
+    if opts.severity then
+      diagnostic = filter_to_severity_limit(opts.severity, diagnostic)
+    elseif opts.severity_limit then
+      diagnostic = filter_by_severity_limit(opts.severity_limit, diagnostic)
+    end
+
+    for _, diag in ipairs(diagnostic) do
+      insert_diag(bufnr, diag)
+    end
   end
 
-  table.sort(items, function(a, b) return a.lnum < b.lnum end)
+  table.sort(items, function(a, b)
+    if a.bufnr == b.bufnr then
+      return a.lnum < b.lnum
+    else
+      return a.bufnr < b.bufnr
+    end
+  end)
 
-  util.set_loclist(items)
+  util.set_loclist(items, win_id)
   if open_loclist then
     vim.cmd [[lopen]]
   end

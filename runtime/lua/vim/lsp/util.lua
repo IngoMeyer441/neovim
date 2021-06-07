@@ -40,14 +40,37 @@ local function get_border_size(opts)
   local width = 0
 
   if type(border) == 'string' then
-    -- 'single', 'double', etc.
-    height = 2
-    width = 2
+    local border_size = {none = {0, 0}, single = {2, 2}, double = {2, 2}, shadow = {1, 1}}
+    if border_size[border] == nil then
+      error("floating preview border is not correct. Please refer to the docs |vim.api.nvim_open_win()|"
+              .. vim.inspect(border))
+    end
+    height, width = unpack(border_size[border])
   else
-    height = height + vim.fn.strdisplaywidth(border[2][1])  -- top
-    height = height + vim.fn.strdisplaywidth(border[6][1])  -- bottom
-    width  = width  + vim.fn.strdisplaywidth(border[4][1])  -- right
-    width  = width  + vim.fn.strdisplaywidth(border[8][1])  -- left
+    local function border_width(id)
+      if type(border[id]) == "table" then
+        -- border specified as a table of <character, highlight group>
+        return vim.fn.strdisplaywidth(border[id][1])
+      elseif type(border[id]) == "string" then
+        -- border specified as a list of border characters
+        return vim.fn.strdisplaywidth(border[id])
+      end
+      error("floating preview border is not correct. Please refer to the docs |vim.api.nvim_open_win()|" .. vim.inspect(border))
+    end
+    local function border_height(id)
+      if type(border[id]) == "table" then
+        -- border specified as a table of <character, highlight group>
+        return #border[id][1] > 0 and 1 or 0
+      elseif type(border[id]) == "string" then
+        -- border specified as a list of border characters
+        return #border[id] > 0 and 1 or 0
+      end
+      error("floating preview border is not correct. Please refer to the docs |vim.api.nvim_open_win()|" .. vim.inspect(border))
+    end
+    height = height + border_height(2)  -- top
+    height = height + border_height(6)  -- bottom
+    width  = width  + border_width(4)  -- right
+    width  = width  + border_width(8)  -- left
   end
 
   return { height = height, width = width }
@@ -915,6 +938,7 @@ function M.make_floating_popup_options(width, height, opts)
     anchor = anchor,
     col = col + (opts.offset_x or 0),
     height = height,
+    focusable = opts.focusable,
     relative = 'cursor',
     row = row + (opts.offset_y or 0),
     style = 'minimal',
@@ -1304,18 +1328,19 @@ end
 --@param contents table of lines to show in window
 --@param syntax string of syntax to set for opened buffer
 --@param opts dictionary with optional fields
---             - height    of floating window
---             - width     of floating window
---             - wrap boolean enable wrapping of long lines (defaults to true)
---             - wrap_at   character to wrap at for computing height when wrap is enabled
---             - max_width  maximal width of floating window
---             - max_height maximal height of floating window
---             - pad_left   number of columns to pad contents at left
---             - pad_right  number of columns to pad contents at right
---             - pad_top    number of lines to pad contents at top
---             - pad_bottom number of lines to pad contents at bottom
---             - focus_id if a popup with this id is opened, then focus it
---             - close_events list of events that closes the floating window
+---             - height    of floating window
+---             - width     of floating window
+---             - wrap boolean enable wrapping of long lines (defaults to true)
+---             - wrap_at   character to wrap at for computing height when wrap is enabled
+---             - max_width  maximal width of floating window
+---             - max_height maximal height of floating window
+---             - pad_left   number of columns to pad contents at left
+---             - pad_right  number of columns to pad contents at right
+---             - pad_top    number of lines to pad contents at top
+---             - pad_bottom number of lines to pad contents at bottom
+---             - focus_id if a popup with this id is opened, then focus it
+---             - close_events list of events that closes the floating window
+---             - focusable (boolean, default true): Make float focusable
 --@returns bufnr,winnr buffer and window number of the newly created floating
 ---preview window
 function M.open_floating_preview(contents, syntax, opts)
@@ -1332,7 +1357,7 @@ function M.open_floating_preview(contents, syntax, opts)
   local bufnr = api.nvim_get_current_buf()
 
   -- check if this popup is focusable and we need to focus
-  if opts.focus_id then
+  if opts.focus_id and opts.focusable ~= false then
     -- Go back to previous window if we are in a focusable one
     local current_winnr = api.nvim_get_current_win()
     if npcall(api.nvim_win_get_var, current_winnr, opts.focus_id) then
@@ -1348,6 +1373,13 @@ function M.open_floating_preview(contents, syntax, opts)
         return api.nvim_win_get_buf(win), win
       end
     end
+  end
+
+  -- check if another floating preview already exists for this buffer
+  -- and close it if needed
+  local existing_float = npcall(api.nvim_buf_get_var, bufnr, "lsp_floating_preview")
+  if existing_float and api.nvim_win_is_valid(existing_float) then
+    api.nvim_win_close(existing_float, true)
   end
 
   local floating_bufnr = api.nvim_create_buf(false, true)
@@ -1395,6 +1427,7 @@ function M.open_floating_preview(contents, syntax, opts)
   if opts.focus_id then
     api.nvim_win_set_var(floating_winnr, opts.focus_id, bufnr)
   end
+  api.nvim_buf_set_var(bufnr, "lsp_floating_preview", floating_winnr)
 
   return floating_bufnr, floating_winnr
 end
@@ -1442,12 +1475,33 @@ end)
 --@param row number zero-indexed line number
 --@return string the line at row in filename
 function M.get_line(uri, row)
+  return M.get_lines(uri, { row })[row]
+end
+
+-- Gets the zero-indexed lines from the given uri.
+-- For non-file uris, we load the buffer and get the lines.
+-- If a loaded buffer exists, then that is used.
+-- Otherwise we get the lines using libuv which is a lot faster than loading the buffer.
+--@param uri string uri of the resource to get the lines from
+--@param rows number[] zero-indexed line numbers
+--@return table<number string> a table mapping rows to lines
+function M.get_lines(uri, rows)
+  rows = type(rows) == "table" and rows or { rows }
+
+  local function buf_lines(bufnr)
+    local lines = {}
+    for _, row in pairs(rows) do
+      lines[row] = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or { "" })[1]
+    end
+    return lines
+  end
+
   -- load the buffer if this is not a file uri
   -- Custom language server protocol extensions can result in servers sending URIs with custom schemes. Plugins are able to load these via `BufReadCmd` autocmds.
   if uri:sub(1, 4) ~= "file" then
     local bufnr = vim.uri_to_bufnr(uri)
     vim.fn.bufload(bufnr)
-    return (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or { "" })[1]
+    return buf_lines(bufnr)
   end
 
   local filename = vim.uri_to_fname(uri)
@@ -1455,22 +1509,44 @@ function M.get_line(uri, row)
   -- use loaded buffers if available
   if vim.fn.bufloaded(filename) == 1 then
     local bufnr = vim.fn.bufnr(filename, false)
-    return (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or { "" })[1]
+    return buf_lines(bufnr)
   end
 
+  -- get the data from the file
   local fd = uv.fs_open(filename, "r", 438)
-  -- TODO: what should we do in this case?
   if not fd then return "" end
   local stat = uv.fs_fstat(fd)
   local data = uv.fs_read(fd, stat.size, 0)
   uv.fs_close(fd)
 
+  local lines = {} -- rows we need to retrieve
+  local need = 0 -- keep track of how many unique rows we need
+  for _, row in pairs(rows) do
+    if not lines[row] then
+      need = need + 1
+    end
+    lines[row] = true
+  end
+
+  local found = 0
   local lnum = 0
+
   for line in string.gmatch(data, "([^\n]*)\n?") do
-    if lnum == row then return line end
+    if lines[lnum] == true then
+      lines[lnum] = line
+      found = found + 1
+      if found == need then break end
+    end
     lnum = lnum + 1
   end
-  return ""
+
+  -- change any lines we didn't find to the empty string
+  for i, line in pairs(lines) do
+    if line == true then
+      lines[i] = ""
+    end
+  end
+  return lines
 end
 
 --- Returns the items with the byte position calculated correctly and in sorted
@@ -1502,10 +1578,22 @@ function M.locations_to_items(locations)
     local rows = grouped[uri]
     table.sort(rows, position_sort)
     local filename = vim.uri_to_fname(uri)
+
+    -- list of row numbers
+    local uri_rows = {}
     for _, temp in ipairs(rows) do
       local pos = temp.start
       local row = pos.line
-      local line = M.get_line(uri, row)
+      table.insert(uri_rows, row)
+    end
+
+    -- get all the lines for this uri
+    local lines = M.get_lines(uri, uri_rows)
+
+    for _, temp in ipairs(rows) do
+      local pos = temp.start
+      local row = pos.line
+      local line = lines[row] or ""
       local col = pos.character
       table.insert(items, {
         filename = filename,
@@ -1518,12 +1606,13 @@ function M.locations_to_items(locations)
   return items
 end
 
---- Fills current window's location list with given list of items.
+--- Fills target window's location list with given list of items.
 --- Can be obtained with e.g. |vim.lsp.util.locations_to_items()|.
+--- Defaults to current window.
 ---
 --@param items (table) list of items
-function M.set_loclist(items)
-  vim.fn.setloclist(0, {}, ' ', {
+function M.set_loclist(items, win_id)
+  vim.fn.setloclist(win_id or 0, {}, ' ', {
     title = 'Language Server';
     items = items;
   })
@@ -1764,8 +1853,9 @@ end
 --@param row 0-indexed line
 --@param col 0-indexed byte offset in line
 --@returns (number, number) UTF-32 and UTF-16 index of the character in line {row} column {col} in buffer {buf}
-function M.character_offset(buf, row, col)
-  local line = api.nvim_buf_get_lines(buf, row, row+1, true)[1]
+function M.character_offset(bufnr, row, col)
+  local uri = vim.uri_from_bufnr(bufnr)
+  local line = M.get_line(uri, row)
   -- If the col is past the EOL, use the line length.
   if col > #line then
     return str_utfindex(line)
