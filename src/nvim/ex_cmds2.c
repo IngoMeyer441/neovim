@@ -27,6 +27,7 @@
 #include "nvim/ex_getln.h"
 #include "nvim/fileio.h"
 #include "nvim/getchar.h"
+#include "nvim/globals.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -53,6 +54,7 @@
 #include "nvim/os/fs_defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/defs.h"
+#include "nvim/lua/executor.h"
 
 
 /// Growarray to store info about already sourced scripts.
@@ -2421,6 +2423,7 @@ void ex_compiler(exarg_T *eap)
   if (*eap->arg == NUL) {
     // List all compiler scripts.
     do_cmdline_cmd("echo globpath(&rtp, 'compiler/*.vim')");  // NOLINT
+    do_cmdline_cmd("echo globpath(&rtp, 'compiler/*.lua')");  // NOLINT
   } else {
     size_t bufsize = STRLEN(eap->arg) + 14;
     buf = xmalloc(bufsize);
@@ -2445,7 +2448,11 @@ void ex_compiler(exarg_T *eap)
 
     snprintf((char *)buf, bufsize, "compiler/%s.vim", eap->arg);
     if (source_in_path(p_rtp, buf, DIP_ALL) == FAIL) {
-      EMSG2(_("E666: compiler not supported: %s"), eap->arg);
+      // Try lua compiler
+      snprintf((char *)buf, bufsize, "compiler/%s.lua", eap->arg);
+      if (source_in_path(p_rtp, buf, DIP_ALL) == FAIL) {
+        EMSG2(_("E666: compiler not supported: %s"), eap->arg);
+      }
     }
     xfree(buf);
 
@@ -2656,8 +2663,13 @@ static void cmd_source_buffer(const exarg_T *eap)
       .curr_lnum = eap->line1,
       .final_lnum = eap->line2,
   };
-  source_using_linegetter((void *)&cookie, get_buffer_line,
-                          ":source (no file)");
+  if (curbuf != NULL && curbuf->b_fname
+      && path_with_extension((const char *)curbuf->b_fname, "lua")) {
+    nlua_source_using_linegetter(get_buffer_line, (void *)&cookie, ":source");
+  } else {
+    source_using_linegetter((void *)&cookie, get_buffer_line,
+                            ":source (no file)");
+  }
 }
 
 /// ":source" and associated commands.
@@ -2769,7 +2781,8 @@ int do_source_str(const char *cmd, const char *traceback_name)
   return source_using_linegetter((void *)&cookie, get_str_line, traceback_name);
 }
 
-/// Reads the file `fname` and executes its lines as Ex commands.
+/// When fname is a 'lua' file nlua_exec_file() is invoked to source it.
+/// Otherwise reads the file `fname` and executes its lines as Ex commands.
 ///
 /// This function may be called recursively!
 ///
@@ -2988,10 +3001,15 @@ int do_source(char_u *fname, int check_other, int is_vimrc)
     firstline = p;
   }
 
-  // Call do_cmdline, which will call getsourceline() to get the lines.
-  do_cmdline(firstline, getsourceline, (void *)&cookie,
-             DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_REPEAT);
-  retval = OK;
+  if (path_with_extension((const char *)fname, "lua")) {
+    // Source the file as lua
+    retval = (int)nlua_exec_file((const char *)fname);
+  } else {
+    // Call do_cmdline, which will call getsourceline() to get the lines.
+    do_cmdline(firstline, getsourceline, (void *)&cookie,
+               DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_REPEAT);
+    retval = OK;
+  }
 
   if (l_do_profiling == PROF_YES) {
     // Get "si" again, "script_items" may have been reallocated.

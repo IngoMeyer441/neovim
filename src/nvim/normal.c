@@ -818,7 +818,7 @@ static bool normal_get_command_count(NormalState *s)
     }
 
     if (s->ca.count0 < 0) {
-      // got too large!
+      // overflow
       s->ca.count0 = 999999999L;
     }
 
@@ -1025,9 +1025,13 @@ static int normal_execute(VimState *state, int key)
     // If you give a count before AND after the operator, they are
     // multiplied.
     if (s->ca.count0) {
-      s->ca.count0 *= s->ca.opcount;
+      s->ca.count0 = (long)((uint64_t)s->ca.count0 * (uint64_t)s->ca.opcount);
     } else {
       s->ca.count0 = s->ca.opcount;
+    }
+    if (s->ca.count0 < 0) {
+      // overflow
+      s->ca.count0 = 999999999L;
     }
   }
 
@@ -1866,6 +1870,7 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
         }
       } else {
         curwin->w_p_lbr = lbr_saved;
+        oap->excl_tr_ws = cap->cmdchar == 'z';
         (void)op_yank(oap, !gui_yank, false);
       }
       check_cursor_col();
@@ -4389,6 +4394,9 @@ dozet:
   case 'p':
     nv_put(cap);
     break;
+  // "zy" Yank without trailing spaces
+  case 'y':  nv_operator(cap);
+             break;
 
   /* "zF": create fold command */
   /* "zf": create fold operator */
@@ -4596,7 +4604,9 @@ dozet:
     if (ptr == NULL && (len = find_ident_under_cursor(&ptr, FIND_IDENT)) == 0)
       return;
     assert(len <= INT_MAX);
-    spell_add_word(ptr, (int)len, nchar == 'w' || nchar == 'W',
+    spell_add_word(ptr, (int)len,
+                   nchar == 'w' || nchar == 'W'
+                   ? SPELL_ADD_BAD : SPELL_ADD_GOOD,
                    (nchar == 'G' || nchar == 'W') ? 0 : (int)cap->count1,
                    undo);
   }
@@ -5816,6 +5826,9 @@ static void nv_percent(cmdarg_T *cap)
       } else {
         curwin->w_cursor.lnum = (curbuf->b_ml.ml_line_count *
                                  cap->count0 + 99L) / 100L;
+      }
+      if (curwin->w_cursor.lnum < 1) {
+        curwin->w_cursor.lnum = 1;
       }
       if (curwin->w_cursor.lnum > curbuf->b_ml.ml_line_count) {
         curwin->w_cursor.lnum = curbuf->b_ml.ml_line_count;

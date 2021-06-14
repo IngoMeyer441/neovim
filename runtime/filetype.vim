@@ -851,6 +851,9 @@ au BufNewFile,BufRead *.jov,*.j73,*.jovial	setf jovial
 " JSON
 au BufNewFile,BufRead *.json,*.jsonp,*.webmanifest	setf json
 
+" Jupyter Notebook is also json
+au BufNewFile,BufRead *.ipynb				setf json
+
 " Kixtart
 au BufNewFile,BufRead *.kix			setf kix
 
@@ -2303,6 +2306,7 @@ au BufNewFile,BufRead *.txt
 " Use the filetype detect plugins.  They may overrule any of the previously
 " detected filetypes.
 runtime! ftdetect/*.vim
+runtime! ftdetect/*.lua
 
 " NOTE: The above command could have ended the filetypedetect autocmd group
 " and started another one. Let's make sure it has ended to get to a consistent
