@@ -34,6 +34,7 @@ jobs:
             runner: ubuntu-20.04
             os: linux
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     if: github.event.pull_request.draft == false
     env:
       CC: ${{ matrix.cc }}
@@ -64,8 +65,6 @@ jobs:
           # Workaround brew issues
           rm -f /usr/local/bin/2to3
           brew update >/dev/null
-          # remove broken mongodb-community package
-          brew remove mongodb-community
           brew upgrade
           brew install automake ccache perl cpanminus ninja
 
