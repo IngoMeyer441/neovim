@@ -165,7 +165,7 @@ static bool resizing = false;
 #endif
 #define SEARCH_HL_PRIORITY 0
 
-static char * provider_first_error = NULL;
+static char * provider_err = NULL;
 
 static bool provider_invoke(NS ns_id, const char *name, LuaRef ref,
                             Array args, bool default_true)
@@ -187,10 +187,10 @@ static bool provider_invoke(NS ns_id, const char *name, LuaRef ref,
     const char *ns_name = describe_ns(ns_id);
     ELOG("error in provider %s:%s: %s", ns_name, name, err.msg);
     bool verbose_errs = true;  // TODO(bfredl):
-    if (verbose_errs && provider_first_error == NULL) {
+    if (verbose_errs && provider_err == NULL) {
       static char errbuf[IOSIZE];
       snprintf(errbuf, sizeof errbuf, "%s: %s", ns_name, err.msg);
-      provider_first_error = xstrdup(errbuf);
+      provider_err = xstrdup(errbuf);
     }
   }
 
@@ -437,8 +437,8 @@ int update_screen(int type)
           }
         }
       }
-      redraw_cmdline = TRUE;
-      redraw_tabline = TRUE;
+      redraw_cmdline = true;
+      redraw_tabline = true;
     }
     msg_scrolled = 0;
     msg_scrolled_at_flush = 0;
@@ -2103,7 +2103,6 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
 
   bool search_attr_from_match = false;  // if search_attr is from :match
   bool has_decor = false;               // this buffer has decoration
-  bool do_virttext = false;             // draw virtual text for this line
   int win_col_offset = 0;               // offset for window columns
 
   char_u buf_fold[FOLD_TEXT_LEN + 1];   // Hold value returned by get_foldtext
@@ -2147,8 +2146,6 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
     return startrow;
 
   row = startrow;
-
-  char *err_text = NULL;
 
   buf_T *buf = wp->w_buffer;
 
@@ -2194,14 +2191,20 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
       }
     }
 
-    if (has_decor) {
-      extra_check = true;
+    if (provider_err) {
+      Decoration err_decor = DECORATION_INIT;
+      int hl_err = syn_check_group((char_u *)S_LEN("ErrorMsg"));
+      kv_push(err_decor.virt_text,
+              ((VirtTextChunk){ .text = provider_err,
+                                .hl_id = hl_err }));
+      err_decor.virt_text_width = mb_string2cells((char_u *)provider_err);
+      decor_add_ephemeral(lnum-1, 0, lnum-1, 0, &err_decor);
+      provider_err = NULL;
+      has_decor = true;
     }
 
-    if (provider_first_error) {
-      err_text = provider_first_error;
-      provider_first_error = NULL;
-      do_virttext = true;
+    if (has_decor) {
+      extra_check = true;
     }
 
     // Check for columns to display for 'colorcolumn'.
@@ -2359,7 +2362,8 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
   if (lnum == wp->w_cursor.lnum) {
     // Do not show the cursor line when Visual mode is active, because it's
     // not clear what is selected then.
-    if (wp->w_p_cul && !(wp == curwin && VIsual_active)) {
+    if (wp->w_p_cul && !(wp == curwin && VIsual_active)
+        && *wp->w_p_culopt != 'n') {
       int cul_attr = win_hl_attr(wp, HLF_CUL);
       HlAttrs ae = syn_attr2entry(cul_attr);
 
@@ -2783,6 +2787,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
               // :sign defined with "numhl" highlight.
               char_attr = num_sattr->sat_numhl;
             } else if ((wp->w_p_cul || wp->w_p_rnu)
+                       && *wp->w_p_culopt != 'l'
                        && lnum == wp->w_cursor.lnum
                        && filler_todo == 0) {
               // When 'cursorline' is set highlight the line number of
@@ -2818,7 +2823,8 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
 
           if (diff_hlf != (hlf_T)0) {
             char_attr = win_hl_attr(wp, diff_hlf);
-            if (wp->w_p_cul && lnum == wp->w_cursor.lnum) {
+            if (wp->w_p_cul && lnum == wp->w_cursor.lnum
+                && *wp->w_p_culopt != 'n') {
               char_attr = hl_combine_attr(char_attr, win_hl_attr(wp, HLF_CUL));
             }
           }
@@ -2878,7 +2884,8 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
           if (tocol == vcol)
             tocol += n_extra;
           // Combine 'showbreak' with 'cursorline', prioritizing 'showbreak'.
-          if (wp->w_p_cul && lnum == wp->w_cursor.lnum) {
+          if (wp->w_p_cul && lnum == wp->w_cursor.lnum
+              && *wp->w_p_culopt != 'n') {
             char_attr = hl_combine_attr(win_hl_attr(wp, HLF_CUL), char_attr);
           }
         }
@@ -3113,7 +3120,8 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
         }
         line_attr = win_hl_attr(wp, diff_hlf);
         // Overlay CursorLine onto diff-mode highlight.
-        if (wp->w_p_cul && lnum == wp->w_cursor.lnum) {
+        if (wp->w_p_cul && lnum == wp->w_cursor.lnum
+            && *wp->w_p_culopt != 'n') {
           line_attr = 0 != line_attr_lowprio  // Low-priority CursorLine
             ? hl_combine_attr(hl_combine_attr(win_hl_attr(wp, HLF_CUL),
                                               line_attr),
@@ -3921,7 +3929,8 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
         }
 
         int eol_attr = char_attr;
-        if (wp->w_p_cul && lnum == wp->w_cursor.lnum) {
+        if (wp->w_p_cul && lnum == wp->w_cursor.lnum
+            && *wp->w_p_culopt != 'n') {
           eol_attr = hl_combine_attr(win_hl_attr(wp, HLF_CUL), eol_attr);
         }
         linebuf_attr[off] = eol_attr;
@@ -3953,19 +3962,15 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
       if (draw_color_col)
         draw_color_col = advance_color_col(VCOL_HLC, &color_cols);
 
-      VirtText virt_text = KV_INITIAL_VALUE;
-      bool has_aligned = false;
-      if (err_text) {
-        int hl_err = syn_check_group((char_u *)S_LEN("ErrorMsg"));
-        kv_push(virt_text, ((VirtTextChunk){ .text = err_text,
-                                             .hl_id = hl_err }));
-        do_virttext = true;
-      } else if (has_decor) {
-        virt_text = decor_redraw_eol(wp->w_buffer, &decor_state, &line_attr,
-                                     &has_aligned);
-        if (kv_size(virt_text)) {
-          do_virttext = true;
-        }
+      bool has_virttext = false;
+      // Make sure alignment is the same regardless
+      // if listchars=eol:X is used or not.
+      int eol_skip = (wp->w_p_lcs_chars.eol == lcs_eol_one && eol_hl_off == 0
+                      ? 1 : 0);
+
+      if (has_decor) {
+        has_virttext = decor_redraw_eol(wp->w_buffer, &decor_state, &line_attr,
+                                        col + eol_skip);
       }
 
       if (((wp->w_p_cuc
@@ -3974,19 +3979,9 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
             grid->Columns * (row - startrow + 1) + v
             && lnum != wp->w_cursor.lnum)
            || draw_color_col || line_attr_lowprio || line_attr
-           || diff_hlf != (hlf_T)0 || do_virttext
-           || has_aligned)) {
+           || diff_hlf != (hlf_T)0 || has_virttext)) {
         int rightmost_vcol = 0;
         int i;
-
-        size_t virt_pos = 0;
-        LineState s = LINE_STATE("");
-        int virt_attr = 0;
-
-        // Make sure alignment is the same regardless
-        // if listchars=eol:X is used or not.
-        bool delay_virttext = wp->w_p_lcs_chars.eol == lcs_eol_one
-                              && eol_hl_off == 0;
 
         if (wp->w_p_cuc) {
           rightmost_vcol = wp->w_virtcol;
@@ -4013,37 +4008,15 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
         }
 
         int base_attr = hl_combine_attr(line_attr_lowprio, diff_attr);
-        if (base_attr || line_attr || has_aligned) {
+        if (base_attr || line_attr || has_virttext) {
           rightmost_vcol = INT_MAX;
         }
 
         int col_stride = wp->w_p_rl ? -1 : 1;
 
         while (wp->w_p_rl ? col >= 0 : col < grid->Columns) {
-          int cells = -1;
-          if (do_virttext && !delay_virttext) {
-            if (*s.p == NUL) {
-              if (virt_pos < virt_text.size) {
-                s.p = kv_A(virt_text, virt_pos).text;
-                int hl_id = kv_A(virt_text, virt_pos).hl_id;
-                virt_attr = hl_id > 0 ? syn_id2attr(hl_id) : 0;
-                virt_pos++;
-              } else {
-               do_virttext = false;
-              }
-            }
-            if (*s.p != NUL) {
-              cells = line_putchar(&s, &linebuf_char[off], grid->Columns - col,
-                                   false);
-            }
-          }
-          delay_virttext = false;
-
-          if (cells == -1) {
-            schar_from_ascii(linebuf_char[off], ' ');
-            cells = 1;
-          }
-          col += cells * col_stride;
+          schar_from_ascii(linebuf_char[off], ' ');
+          col += col_stride;
           if (draw_color_col) {
             draw_color_col = advance_color_col(VCOL_HLC, &color_cols);
           }
@@ -4056,24 +4029,16 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
             col_attr = mc_attr;
           }
 
-          if (do_virttext) {
-            col_attr = hl_combine_attr(col_attr, virt_attr);
-          }
-
           col_attr = hl_combine_attr(col_attr, line_attr);
 
           linebuf_attr[off] = col_attr;
-          if (cells == 2) {
-            linebuf_attr[off+1] = col_attr;
-          }
-          off += cells * col_stride;
+          off += col_stride;
 
-          if (VCOL_HLC >= rightmost_vcol && *s.p == NUL
-              && virt_pos >= virt_text.size) {
+          if (VCOL_HLC >= rightmost_vcol) {
             break;
           }
 
-          vcol += cells;
+          vcol += 1;
         }
       }
 
@@ -4392,7 +4357,6 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow,
   }
 
   xfree(p_extra_free);
-  xfree(err_text);
   return row;
 }
 
@@ -4400,13 +4364,17 @@ void draw_virt_text(buf_T *buf, int col_off, int *end_col, int max_col)
 {
   DecorState *state = &decor_state;
   int right_pos = max_col;
+  bool do_eol = state->eol_col > -1;
   for (size_t i = 0; i < kv_size(state->active); i++) {
     DecorRange *item = &kv_A(state->active, i);
     if (item->start_row == state->row && kv_size(item->decor.virt_text)) {
       if (item->win_col == -1) {
         if (item->decor.virt_text_pos == kVTRightAlign) {
-          right_pos -= item->decor.col;
+          right_pos -= item->decor.virt_text_width;
           item->win_col = right_pos;
+        } else if (item->decor.virt_text_pos == kVTEndOfLine && do_eol) {
+          item->win_col = state->eol_col;
+          state->eol_col += item->decor.virt_text_width;
         } else if (item->decor.virt_text_pos == kVTWinCol) {
           item->win_col = MAX(item->decor.col+col_off, 0);
         }
@@ -4424,14 +4392,20 @@ void draw_virt_text(buf_T *buf, int col_off, int *end_col, int max_col)
 
       while (col < max_col) {
         if (!*s.p) {
-          if (virt_pos == kv_size(vt)) {
+          if (virt_pos >= kv_size(vt)) {
             break;
           }
-          s.p = kv_A(vt, virt_pos).text;
-          int hl_id = kv_A(vt, virt_pos).hl_id;
-          virt_attr = hl_id > 0 ? syn_id2attr(hl_id) : 0;
-          virt_pos++;
-          continue;
+          virt_attr = 0;
+          do {
+            s.p = kv_A(vt, virt_pos).text;
+            int hl_id = kv_A(vt, virt_pos).hl_id;
+            virt_attr = hl_combine_attr(virt_attr,
+                                        hl_id > 0 ? syn_id2attr(hl_id) : 0);
+            virt_pos++;
+          } while (!s.p && virt_pos < kv_size(vt));
+          if (!s.p) {
+            break;
+          }
         }
         int attr;
         bool through = false;
@@ -6786,8 +6760,8 @@ void grid_del_lines(ScreenGrid *grid, int row, int line_count, int end, int col,
 
 // Show the current mode and ruler.
 //
-// If clear_cmdline is TRUE, clear the rest of the cmdline.
-// If clear_cmdline is FALSE there may be a message there that needs to be
+// If clear_cmdline is true, clear the rest of the cmdline.
+// If clear_cmdline is false there may be a message there that needs to be
 // cleared only if a mode is shown.
 // Return the length of the message (0 if no message).
 int showmode(void)
@@ -6796,7 +6770,6 @@ int showmode(void)
   int length = 0;
   int do_mode;
   int attr;
-  int nwr_save;
   int sub_attr;
 
   if (ui_has(kUIMessages) && clear_cmdline) {
@@ -6818,11 +6791,11 @@ int showmode(void)
     // Call char_avail() only when we are going to show something, because
     // it takes a bit of time.
     if (!redrawing() || (char_avail() && !KeyTyped) || msg_silent != 0) {
-      redraw_cmdline = TRUE;                    /* show mode later */
+      redraw_cmdline = true;                    // show mode later
       return 0;
     }
 
-    nwr_save = need_wait_return;
+    bool nwr_save = need_wait_return;
 
     /* wait a bit before overwriting an important message */
     check_for_delay(FALSE);
@@ -6939,10 +6912,11 @@ int showmode(void)
       need_clear = true;
     }
 
-    mode_displayed = TRUE;
-    if (need_clear || clear_cmdline)
+    mode_displayed = true;
+    if (need_clear || clear_cmdline) {
       msg_clr_eos();
-    msg_didout = FALSE;                 /* overwrite this message */
+    }
+    msg_didout = false;                 // overwrite this message
     length = msg_col;
     msg_col = 0;
     msg_no_more = false;
@@ -7198,7 +7172,7 @@ void draw_tabline(void)
 
   /* Reset the flag here again, in case evaluating 'tabline' causes it to be
    * set. */
-  redraw_tabline = FALSE;
+  redraw_tabline = false;
 }
 
 void ui_ext_tabline_update(void)
