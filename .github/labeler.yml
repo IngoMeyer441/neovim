@@ -4,7 +4,7 @@
 
 "lua":
   - runtime/lua/**/*
-  - src/nvim/lua
+  - src/nvim/lua/*
 
 "tui":
   - src/nvim/tui/tui.*
@@ -35,7 +35,7 @@
   - src/nvim/mouse*
 
 "documentation":
-  - runtime/doc/*
+  - all: ["runtime/doc/*"]
 
 "clipboard":
   - runtime/autoload/provider/clipboard.vim
@@ -47,3 +47,12 @@
   - CMakeLists.txt
   - "**/CMakeLists.txt"
   - "**/*.cmake"
+
+"tests":
+  - all: ["test/**/*"]
+
+"ci":
+  - .github/labeler.yml
+  - .github/workflows/**/*
+  - .builds/*
+  - ci/**/*
