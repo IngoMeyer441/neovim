@@ -1298,7 +1298,7 @@ struct window_S {
 
   /*
    * w_cline_height is the number of physical lines taken by the buffer line
-   * that the cursor is on.  We use this to avoid extra calls to plines().
+   * that the cursor is on.  We use this to avoid extra calls to plines_win().
    */
   int w_cline_height;               // current size of cursor line
   bool w_cline_folded;              // cursor line is folded
@@ -1395,6 +1395,7 @@ struct window_S {
   int w_briopt_min;                 // minimum width for breakindent
   int w_briopt_shift;               // additional shift for breakindent
   bool w_briopt_sbr;                // sbr in 'briopt'
+  int w_briopt_list;                // additional indent for lists
 
   // transform a pointer to a "onebuf" option into a "allbuf" option
 #define GLOBAL_WO(p)    ((char *)p + sizeof(winopt_T))
