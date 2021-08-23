@@ -1,7 +1,7 @@
 [![Neovim](https://raw.githubusercontent.com/neovim/neovim.github.io/master/logos/neovim-logo-300x87.png)](https://neovim.io)
 
 [Documentation](https://neovim.io/doc/general/) |
-[Chat](https://gitter.im/neovim/neovim) |
+[Chat](https://app.element.io/#/room/#neovim:matrix.org) |
 [Twitter](https://twitter.com/Neovim)
 
 [![GitHub CI](https://github.com/neovim/neovim/workflows/CI/badge.svg)](https://github.com/neovim/neovim/actions?query=workflow%3A%22CI%22)
@@ -64,7 +64,7 @@ To install to a non-default location:
     make CMAKE_INSTALL_PREFIX=/full/path/
     make install
 
-To inspect the build, these CMake features are useful:
+CMake hints for inspecting the build:
 
 - `cmake --build build --target help` lists all build targets.
 - `build/CMakeCache.txt` (or `cmake -LAH build/`) contains the resolved values of all CMake variables.

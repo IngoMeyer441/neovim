@@ -85,8 +85,10 @@ function TSHighlighterQuery.new(lang, query_string)
         hl = _link_default_highlight_once(lang .. hl, hl)
       end
 
-      rawset(table, capture, hl)
-      return hl
+      local id = a.nvim_get_hl_id_by_name(hl)
+
+      rawset(table, capture, id)
+      return id
     end
   })
 
@@ -120,8 +122,8 @@ end
 
 --- Creates a new highlighter using @param tree
 ---
---- @param tree The language tree to use for highlighting
---- @param opts Table used to configure the highlighter
+---@param tree The language tree to use for highlighting
+---@param opts Table used to configure the highlighter
 ---           - queries: Table to overwrite queries used by the highlighter
 function TSHighlighter.new(tree, opts)
   local self = setmetatable({}, TSHighlighter)
@@ -215,7 +217,7 @@ end
 
 --- Gets the query used for @param lang
 ---
---- @param lang A language used by the highlighter.
+---@param lang A language used by the highlighter.
 function TSHighlighter:get_query(lang)
   if not self._queries[lang] then
     self._queries[lang] = TSHighlighterQuery.new(lang)
