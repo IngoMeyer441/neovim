@@ -741,7 +741,7 @@ bool win_cursorline_standout(const win_T *wp)
  */
 static void win_update(win_T *wp, Providers *providers)
 {
-  buf_T       *buf = wp->w_buffer;
+  buf_T *buf = wp->w_buffer;
   int type;
   int top_end = 0;              /* Below last row of the top area that needs
                                    updating.  0 when no top area updating. */
@@ -765,8 +765,6 @@ static void win_update(win_T *wp, Providers *providers)
   long j;
   static bool recursive = false;  // being called recursively
   const linenr_T old_botline = wp->w_botline;
-  const int old_wrow = wp->w_wrow;
-  const int old_wcol = wp->w_wcol;
   // Remember what happened to the previous line.
 #define DID_NONE 1      // didn't update a line
 #define DID_LINE 2      // updated a normal line
@@ -1739,49 +1737,16 @@ static void win_update(win_T *wp, Providers *providers)
     wp->w_valid |= VALID_BOTLINE;
     wp->w_viewport_invalid = true;
     if (wp == curwin && wp->w_botline != old_botline && !recursive) {
-      const linenr_T old_topline = wp->w_topline;
-      const int new_wcol = wp->w_wcol;
       recursive = true;
       curwin->w_valid &= ~VALID_TOPLINE;
       update_topline(curwin);  // may invalidate w_botline again
-
-      if (old_wcol != new_wcol
-          && (wp->w_valid & (VALID_WCOL|VALID_WROW))
-          != (VALID_WCOL|VALID_WROW)) {
-        // A win_line() call applied a fix to screen cursor column to
-        // accommodate concealment of cursor line, but in this call to
-        // update_topline() the cursor's row or column got invalidated.
-        // If they are left invalid, setcursor() will recompute them
-        // but there won't be any further win_line() call to re-fix the
-        // column and the cursor will end up misplaced.  So we call
-        // cursor validation now and reapply the fix again (or call
-        // win_line() to do it for us).
-        validate_cursor();
-        if (wp->w_wcol == old_wcol
-            && wp->w_wrow == old_wrow
-            && old_topline == wp->w_topline) {
-          wp->w_wcol = new_wcol;
-        } else {
-          redrawWinline(wp, wp->w_cursor.lnum);
-        }
-      }
-      // New redraw either due to updated topline or due to wcol fix.
-      if (wp->w_redr_type != 0) {
+      if (must_redraw != 0) {
         // Don't update for changes in buffer again.
         i = curbuf->b_mod_set;
         curbuf->b_mod_set = false;
-        j = curbuf->b_mod_xlines;
-        curbuf->b_mod_xlines = 0;
         win_update(curwin, providers);
+        must_redraw = 0;
         curbuf->b_mod_set = i;
-        curbuf->b_mod_xlines = j;
-      }
-      // Other windows might have w_redr_type raised in update_topline().
-      must_redraw = 0;
-      FOR_ALL_WINDOWS_IN_TAB(wwp, curtab) {
-        if (wwp->w_redr_type > must_redraw) {
-          must_redraw = wwp->w_redr_type;
-        }
       }
       recursive = false;
     }
@@ -2034,16 +1999,16 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
   long vcol = 0;                      // virtual column (for tabs)
   long vcol_sbr = -1;                 // virtual column after showbreak
   long vcol_prev = -1;                // "vcol" of previous character
-  char_u      *line;                  // current line
-  char_u      *ptr;                   // current position in "line"
+  char_u *line;                  // current line
+  char_u *ptr;                   // current position in "line"
   int row;                            // row in the window, excl w_winrow
   ScreenGrid *grid = &wp->w_grid;     // grid specific to the window
 
   char_u extra[57];                   // sign, line number and 'fdc' must
                                       // fit in here
   int n_extra = 0;                    // number of extra chars
-  char_u      *p_extra = NULL;        // string of extra chars, plus NUL
-  char_u      *p_extra_free = NULL;   // p_extra needs to be freed
+  char_u *p_extra = NULL;        // string of extra chars, plus NUL
+  char_u *p_extra_free = NULL;   // p_extra needs to be freed
   int c_extra = NUL;                  // extra chars, all the same
   int c_final = NUL;                  // final char, mandatory if set
   int extra_attr = 0;                 // attributes when n_extra != 0
@@ -2056,7 +2021,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
 
   // saved "extra" items for when draw_state becomes WL_LINE (again)
   int saved_n_extra = 0;
-  char_u      *saved_p_extra = NULL;
+  char_u *saved_p_extra = NULL;
   int saved_c_extra = 0;
   int saved_c_final = 0;
   int saved_char_attr = 0;
@@ -2125,7 +2090,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
   int line_attr_lowprio = 0;            // low-priority attribute for the line
   int line_attr_lowprio_save;
   matchitem_T *cur;                     // points to the match list
-  match_T     *shl;                     // points to search_hl or a match
+  match_T *shl;                     // points to search_hl or a match
   bool shl_flag;                        // flag to indicate whether search_hl
                                         // has been processed or not
   bool prevcol_hl_flag;                 // flag to indicate whether prevcol
@@ -2537,7 +2502,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
     v = wp->w_leftcol;
   }
   if (v > 0 && !number_only) {
-    char_u  *prev_ptr = ptr;
+    char_u *prev_ptr = ptr;
     while (vcol < v && *ptr != NUL) {
       c = win_lbr_chartabsize(wp, line, ptr, (colnr_T)vcol, NULL);
       vcol += c;
@@ -2885,7 +2850,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
       }
 
       if (wp->w_briopt_sbr && draw_state == WL_BRI - 1
-          && n_extra == 0 && *p_sbr != NUL) {
+          && n_extra == 0 && *get_showbreak_value(wp) != NUL) {
         // draw indent after showbreak value
         draw_state = WL_BRI;
       } else if (wp->w_briopt_sbr && draw_state == WL_SBR && n_extra == 0) {
@@ -2944,19 +2909,20 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
           }
           char_attr = win_hl_attr(wp, HLF_DED);
         }
-        if (*p_sbr != NUL && need_showbreak) {
+        char_u *const sbr = get_showbreak_value(wp);
+        if (*sbr != NUL && need_showbreak) {
           // Draw 'showbreak' at the start of each broken line.
-          p_extra = p_sbr;
+          p_extra = sbr;
           c_extra = NUL;
           c_final = NUL;
-          n_extra = (int)STRLEN(p_sbr);
+          n_extra = (int)STRLEN(sbr);
           char_attr = win_hl_attr(wp, HLF_AT);
           if (wp->w_skipcol == 0 || !wp->w_p_wrap) {
             need_showbreak = false;
           }
-          vcol_sbr = vcol + MB_CHARLEN(p_sbr);
-          /* Correct end of highlighted area for 'showbreak',
-           * required when 'linebreak' is also set. */
+          vcol_sbr = vcol + MB_CHARLEN(sbr);
+          // Correct end of highlighted area for 'showbreak',
+          // required when 'linebreak' is also set.
           if (tocol == vcol) {
             tocol += n_extra;
           }
@@ -3588,6 +3554,16 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
           char_u *p = ptr - (mb_off + 1);
           // TODO: is passing p for start of the line OK?
           n_extra = win_lbr_chartabsize(wp, line, p, (colnr_T)vcol, NULL) - 1;
+
+          // We have just drawn the showbreak value, no need to add
+          // space for it again.
+          if (vcol == vcol_sbr) {
+            n_extra -= MB_CHARLEN(get_showbreak_value(wp));
+            if (n_extra < 0) {
+              n_extra = 0;
+            }
+          }
+
           if (c == TAB && n_extra + col > grid->Columns) {
             n_extra = tabstop_padding(vcol, wp->w_buffer->b_p_ts,
                                       wp->w_buffer->b_p_vts_array) - 1;
@@ -3654,10 +3630,12 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
         if (c == TAB && (!wp->w_p_list || wp->w_p_lcs_chars.tab1)) {
           int tab_len = 0;
           long vcol_adjusted = vcol;  // removed showbreak length
+          char_u *const sbr = get_showbreak_value(wp);
+
           // Only adjust the tab_len, when at the first column after the
           // showbreak value was drawn.
-          if (*p_sbr != NUL && vcol == vcol_sbr && wp->w_p_wrap) {
-            vcol_adjusted = vcol - MB_CHARLEN(p_sbr);
+          if (*sbr != NUL && vcol == vcol_sbr && wp->w_p_wrap) {
+            vcol_adjusted = vcol - MB_CHARLEN(sbr);
           }
           // tab amount depends on current column
           tab_len = tabstop_padding(vcol_adjusted,
@@ -4837,7 +4815,7 @@ static void grid_put_linebuf(ScreenGrid *grid, int row, int coloff, int endcol, 
  */
 void rl_mirror(char_u *str)
 {
-  char_u      *p1, *p2;
+  char_u *p1, *p2;
   int t;
 
   for (p1 = str, p2 = str + STRLEN(str) - 1; p1 < p2; ++p1, --p2) {
@@ -4976,31 +4954,31 @@ static int skip_status_match_char(expand_T *xp, char_u *s)
   return 0;
 }
 
-/*
- * Show wildchar matches in the status line.
- * Show at least the "match" item.
- * We start at item 'first_match' in the list and show all matches that fit.
- *
- * If inversion is possible we use it. Else '=' characters are used.
- */
-void win_redr_status_matches(expand_T *xp, int num_matches, char_u **matches,          // list of matches
-                             int match, int showtail)
+/// Show wildchar matches in the status line.
+/// Show at least the "match" item.
+/// We start at item 'first_match' in the list and show all matches that fit.
+///
+/// If inversion is possible we use it. Else '=' characters are used.
+///
+/// @param matches  list of matches
+void win_redr_status_matches(expand_T *xp, int num_matches, char_u **matches, int match,
+                             int showtail)
 {
 #define L_MATCH(m) (showtail ? sm_gettail(matches[m], false) : matches[m])
   int row;
-  char_u      *buf;
+  char_u *buf;
   int len;
   int clen;                     // length in screen cells
   int fillchar;
   int attr;
   int i;
   bool highlight = true;
-  char_u      *selstart = NULL;
+  char_u *selstart = NULL;
   int selstart_col = 0;
-  char_u      *selend = NULL;
+  char_u *selend = NULL;
   static int first_match = 0;
   bool add_left = false;
-  char_u      *s;
+  char_u *s;
   int emenu;
   int l;
 
@@ -5170,7 +5148,7 @@ void win_redr_status_matches(expand_T *xp, int num_matches, char_u **matches,   
 static void win_redr_status(win_T *wp)
 {
   int row;
-  char_u      *p;
+  char_u *p;
   int len;
   int fillchar;
   int attr;
@@ -5318,7 +5296,7 @@ static void redraw_custom_statusline(win_T *wp)
 /// line of the window right of it.  If not, then it's a vertical separator.
 bool stl_connected(win_T *wp)
 {
-  frame_T     *fr;
+  frame_T *fr;
 
   fr = wp->w_frame;
   while (fr->fr_parent != NULL) {
@@ -5344,16 +5322,16 @@ bool stl_connected(win_T *wp)
 /// @param len  length of buffer
 bool get_keymap_str(win_T *wp, char_u *fmt, char_u *buf, int len)
 {
-  char_u      *p;
+  char_u *p;
 
   if (wp->w_buffer->b_p_iminsert != B_IMODE_LMAP) {
     return false;
   }
 
   {
-    buf_T   *old_curbuf = curbuf;
-    win_T   *old_curwin = curwin;
-    char_u  *s;
+    buf_T *old_curbuf = curbuf;
+    win_T *old_curwin = curwin;
+    char_u *s;
 
     curbuf = wp->w_buffer;
     curwin = wp;
@@ -5395,12 +5373,12 @@ static void win_redr_custom(win_T *wp, bool draw_ruler)
   int len;
   int fillchar;
   char_u buf[MAXPATHL];
-  char_u      *stl;
-  char_u      *p;
+  char_u *stl;
+  char_u *p;
   stl_hlrec_t *hltab;
   StlClickRecord *tabtab;
   int use_sandbox = false;
-  win_T       *ewp;
+  win_T *ewp;
   int p_crb_save;
 
   ScreenGrid *grid = &default_grid;
@@ -5769,7 +5747,7 @@ void grid_put_schar(ScreenGrid *grid, int row, int col, char_u *schar, int attr)
 void grid_puts_len(ScreenGrid *grid, char_u *text, int textlen, int row, int col, int attr)
 {
   unsigned off;
-  char_u      *ptr = text;
+  char_u *ptr = text;
   int len = textlen;
   int c;
   unsigned max_off;
@@ -5997,7 +5975,7 @@ static void prepare_search_hl(win_T *wp, linenr_T lnum)
   FUNC_ATTR_NONNULL_ALL
 {
   matchitem_T *cur;             // points to the match list
-  match_T     *shl;             // points to search_hl or a match
+  match_T *shl;             // points to search_hl or a match
   bool shl_flag;                // flag to indicate whether search_hl
                                 // has been processed or not
 
@@ -6053,18 +6031,18 @@ static void prepare_search_hl(win_T *wp, linenr_T lnum)
   }
 }
 
-/*
- * Search for a next 'hlsearch' or match.
- * Uses shl->buf.
- * Sets shl->lnum and shl->rm contents.
- * Note: Assumes a previous match is always before "lnum", unless
- * shl->lnum is zero.
- * Careful: Any pointers for buffer lines will become invalid.
- */
-static void next_search_hl(win_T *win, match_T *shl,               // points to search_hl or a match
-                           linenr_T lnum, colnr_T mincol,                // minimal column for a match
-                           matchitem_T *cur               // to retrieve match positions if any
-                           )
+/// Search for a next 'hlsearch' or match.
+/// Uses shl->buf.
+/// Sets shl->lnum and shl->rm contents.
+/// Note: Assumes a previous match is always before "lnum", unless
+/// shl->lnum is zero.
+/// Careful: Any pointers for buffer lines will become invalid.
+///
+/// @param shl     points to search_hl or a match
+/// @param mincol  minimal column for a match
+/// @param cur     to retrieve match positions if any
+static void next_search_hl(win_T *win, match_T *shl, linenr_T lnum, colnr_T mincol,
+                           matchitem_T *cur)
   FUNC_ATTR_NONNULL_ARG(2)
 {
   linenr_T l;
@@ -6112,7 +6090,7 @@ static void next_search_hl(win_T *win, match_T *shl,               // points to 
     } else if (vim_strchr(p_cpo, CPO_SEARCH) == NULL
                || (shl->rm.endpos[0].lnum == 0
                    && shl->rm.endpos[0].col <= shl->rm.startpos[0].col)) {
-      char_u      *ml;
+      char_u *ml;
 
       matchcol = shl->rm.startpos[0].col;
       ml = ml_get_buf(shl->buf, lnum, false) + matchcol;
@@ -6174,12 +6152,12 @@ static void next_search_hl(win_T *win, match_T *shl,               // points to 
   }
 }
 
-/// If there is a match fill "shl" and return one.
-/// Return zero otherwise.
-static int next_search_hl_pos(match_T *shl,         // points to a match
-                              linenr_T lnum, posmatch_T *posmatch,  // match positions
-                              colnr_T mincol        // minimal column for a match
-                              )
+/// @param shl       points to a match. Fill on match.
+/// @param posmatch  match positions
+/// @param mincol    minimal column for a match
+///
+/// @return one on match, otherwise return zero.
+static int next_search_hl_pos(match_T *shl, linenr_T lnum, posmatch_T *posmatch, colnr_T mincol)
   FUNC_ATTR_NONNULL_ALL
 {
   int i;
@@ -6995,12 +6973,18 @@ int showmode(void)
           switch ((VIsual_select ? 4 : 0)
                   + (VIsual_mode == Ctrl_V) * 2
                   + (VIsual_mode == 'V')) {
-          case 0: p = N_(" VISUAL"); break;
-          case 1: p = N_(" VISUAL LINE"); break;
-          case 2: p = N_(" VISUAL BLOCK"); break;
-          case 4: p = N_(" SELECT"); break;
-          case 5: p = N_(" SELECT LINE"); break;
-          default: p = N_(" SELECT BLOCK"); break;
+          case 0:
+            p = N_(" VISUAL"); break;
+          case 1:
+            p = N_(" VISUAL LINE"); break;
+          case 2:
+            p = N_(" VISUAL BLOCK"); break;
+          case 4:
+            p = N_(" SELECT"); break;
+          case 5:
+            p = N_(" SELECT LINE"); break;
+          default:
+            p = N_(" SELECT BLOCK"); break;
           }
           MSG_PUTS_ATTR(_(p), attr);
         }
@@ -7111,15 +7095,15 @@ void draw_tabline(void)
   int col = 0;
   int scol = 0;
   int attr;
-  win_T       *wp;
-  win_T       *cwp;
+  win_T *wp;
+  win_T *cwp;
   int wincount;
   int modified;
   int c;
   int len;
   int attr_nosel = HL_ATTR(HLF_TP);
   int attr_fill = HL_ATTR(HLF_TPF);
-  char_u      *p;
+  char_u *p;
   int room;
   int use_sep_chars = (t_colors < 8
                        );
