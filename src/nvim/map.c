@@ -8,20 +8,18 @@
 //       khash.h does not make its own copy of the key or value.
 //
 
-#include <stdlib.h>
+#include <lauxlib.h>
+#include <lua.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
-#include <lua.h>
-#include <lauxlib.h>
-
+#include "nvim/api/private/dispatch.h"
+#include "nvim/lib/khash.h"
 #include "nvim/map.h"
 #include "nvim/map_defs.h"
-#include "nvim/vim.h"
 #include "nvim/memory.h"
-#include "nvim/api/private/dispatch.h"
-
-#include "nvim/lib/khash.h"
+#include "nvim/vim.h"
 
 #define cstr_t_hash kh_str_hash_func
 #define cstr_t_eq kh_str_hash_equal
@@ -38,11 +36,11 @@
 
 
 #if defined(ARCH_64)
-#define ptr_t_hash(key) uint64_t_hash((uint64_t)key)
-#define ptr_t_eq(a, b) uint64_t_eq((uint64_t)a, (uint64_t)b)
+# define ptr_t_hash(key) uint64_t_hash((uint64_t)key)
+# define ptr_t_eq(a, b) uint64_t_eq((uint64_t)a, (uint64_t)b)
 #elif defined(ARCH_32)
-#define ptr_t_hash(key) uint32_t_hash((uint32_t)key)
-#define ptr_t_eq(a, b) uint32_t_eq((uint32_t)a, (uint32_t)b)
+# define ptr_t_hash(key) uint32_t_hash((uint32_t)key)
+# define ptr_t_eq(a, b) uint32_t_eq((uint32_t)a, (uint32_t)b)
 #endif
 
 #define INITIALIZER(T, U) T##_##U##_initializer
@@ -52,7 +50,7 @@
 
 #define MAP_IMPL(T, U, ...) \
   INITIALIZER_DECLARE(T, U, __VA_ARGS__); \
-  __KHASH_IMPL(T##_##U##_map,, T, U, 1, T##_hash, T##_eq) \
+  __KHASH_IMPL(T##_##U##_map, , T, U, 1, T##_hash, T##_eq) \
   \
   void map_##T##_##U##_destroy(Map(T, U) *map) \
   { \

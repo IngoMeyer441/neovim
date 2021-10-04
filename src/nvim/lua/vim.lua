@@ -105,6 +105,12 @@ setmetatable(vim, {
     elseif key == 'highlight' then
       t.highlight = require('vim.highlight')
       return t.highlight
+    elseif key == 'diagnostic' then
+      t.diagnostic = require('vim.diagnostic')
+      return t.diagnostic
+    elseif key == 'ui' then
+      t.ui = require('vim.ui')
+      return t.ui
     end
   end
 })

@@ -674,7 +674,7 @@ function lsp.start_client(config)
   ---@param method (string) LSP method name
   ---@param params (table) The parameters for that method.
   function dispatch.notification(method, params)
-    local _ = log.debug() and log.debug('notification', method, params)
+    local _ = log.trace() and log.trace('notification', method, params)
     local handler = resolve_handler(method)
     if handler then
       -- Method name is provided here for convenience.
@@ -688,13 +688,13 @@ function lsp.start_client(config)
   ---@param method (string) LSP method name
   ---@param params (table) The parameters for that method
   function dispatch.server_request(method, params)
-    local _ = log.debug() and log.debug('server_request', method, params)
+    local _ = log.trace() and log.trace('server_request', method, params)
     local handler = resolve_handler(method)
     if handler then
-      local _ = log.debug() and log.debug("server_request: found handler for", method)
+      local _ = log.trace() and log.trace("server_request: found handler for", method)
       return handler(nil, params, {method=method, client_id=client_id})
     end
-    local _ = log.debug() and log.debug("server_request: no handler found for", method)
+    local _ = log.warn() and log.warn("server_request: no handler found for", method)
     return nil, lsp.rpc_response_error(protocol.ErrorCodes.MethodNotFound)
   end
 
@@ -826,11 +826,11 @@ function lsp.start_client(config)
       -- TODO(ashkan) handle errors here.
       pcall(config.before_init, initialize_params, config)
     end
-    local _ = log.debug() and log.debug(log_prefix, "initialize_params", initialize_params)
+    local _ = log.trace() and log.trace(log_prefix, "initialize_params", initialize_params)
     rpc.request('initialize', initialize_params, function(init_err, result)
       assert(not init_err, tostring(init_err))
       assert(result, "server sent empty result")
-      rpc.notify('initialized', {[vim.type_idx]=vim.types.dictionary})
+      rpc.notify('initialized', vim.empty_dict())
       client.initialized = true
       uninitialized_clients[client_id] = nil
       client.workspaceFolders = initialize_params.workspaceFolders
@@ -896,7 +896,7 @@ function lsp.start_client(config)
 
     local _ = log.debug() and log.debug(log_prefix, "client.request", client_id, method, params, handler, bufnr)
     return rpc.request(method, params, function(err, result)
-      handler(err, result, {method=method, client_id=client_id, bufnr=bufnr})
+      handler(err, result, {method=method, client_id=client_id, bufnr=bufnr, params=params})
     end)
   end
 
@@ -1534,8 +1534,34 @@ function lsp._with_extend(name, options, user_config)
   return resulting_config
 end
 
--- Define the LspDiagnostics signs if they're not defined already.
-require('vim.lsp.diagnostic')._define_default_signs_and_highlights()
+
+--- Registry for client side commands.
+--- This is an extension point for plugins to handle custom commands which are
+--- not part of the core language server protocol specification.
+---
+--- The registry is a table where the key is a unique command name,
+--- and the value is a function which is called if any LSP action
+--- (code action, code lenses, ...) triggers the command.
+---
+--- If a LSP response contains a command for which no matching entry is
+--- available in this registry, the command will be executed via the LSP server
+--- using `workspace/executeCommand`.
+---
+--- The first argument to the function will be the `Command`:
+--    Command
+--      title: String
+--      command: String
+--      arguments?: any[]
+--
+--- The second argument is the `ctx` of |lsp-handler|
+lsp.commands = setmetatable({}, {
+  __newindex = function(tbl, key, value)
+    assert(type(key) == 'string', "The key for commands in `vim.lsp.commands` must be a string")
+    assert(type(value) == 'function', "Command added to `vim.lsp.commands` must be a function")
+    rawset(tbl, key, value)
+  end;
+})
+
 
 return lsp
 -- vim:sw=2 ts=2 et

@@ -20,6 +20,7 @@ local retry = helpers.retry
 local rmdir = helpers.rmdir
 local sleep = helpers.sleep
 local iswin = helpers.iswin
+local startswith = helpers.startswith
 local write_file = helpers.write_file
 local meths = helpers.meths
 
@@ -310,7 +311,8 @@ describe('startup', function()
   end)
 
   local function pack_clear(cmd)
-    clear('--cmd', 'set packpath=test/functional/fixtures', '--cmd', cmd)
+    -- add packages after config dir in rtp but before config/after
+    clear{args={'--cmd', 'set packpath=test/functional/fixtures', '--cmd', 'let paths=split(&rtp, ",")', '--cmd', 'let &rtp = paths[0]..",test/functional/fixtures,test/functional/fixtures/middle,"..join(paths[1:],",")', '--cmd', cmd}, env={XDG_CONFIG_HOME='test/functional/fixtures/'}}
   end
 
 
@@ -347,6 +349,61 @@ describe('startup', function()
 
     pack_clear [[ packadd! bonus | lua _G.y = require'bonus'.launch() ]]
     eq('CPE 1704 TKS', exec_lua [[ return _G.y ]])
+  end)
+
+  it("handles the correct order with start packages and after/", function()
+    pack_clear [[ lua _G.test_loadorder = {} vim.cmd "runtime! filen.lua" ]]
+    eq({'ordinary', 'FANCY', 'mittel', 'FANCY after', 'ordinary after'}, exec_lua [[ return _G.test_loadorder ]])
+  end)
+
+  it("handles the correct order with start packages and after/ after startup", function()
+    pack_clear [[ lua _G.test_loadorder = {} ]]
+    command [[ runtime! filen.lua ]]
+    eq({'ordinary', 'FANCY', 'mittel', 'FANCY after', 'ordinary after'}, exec_lua [[ return _G.test_loadorder ]])
+  end)
+
+  it("handles the correct order with globpath(&rtp, ...)", function()
+    pack_clear [[ set loadplugins | lua _G.test_loadorder = {} ]]
+    command [[
+      for x in globpath(&rtp, "filen.lua",1,1)
+        call v:lua.dofile(x)
+      endfor
+    ]]
+    eq({'ordinary', 'FANCY', 'mittel', 'FANCY after', 'ordinary after'}, exec_lua [[ return _G.test_loadorder ]])
+
+    local rtp = meths.get_option'rtp'
+    ok(startswith(rtp, 'test/functional/fixtures/nvim,test/functional/fixtures/pack/*/start/*,test/functional/fixtures/start/*,test/functional/fixtures,test/functional/fixtures/middle,'), 'rtp='..rtp)
+  end)
+
+  it("handles the correct order with opt packages and after/", function()
+    pack_clear [[ lua _G.test_loadorder = {} vim.cmd "packadd! superspecial\nruntime! filen.lua" ]]
+    eq({'ordinary', 'SuperSpecial', 'FANCY', 'mittel', 'FANCY after', 'SuperSpecial after', 'ordinary after'}, exec_lua [[ return _G.test_loadorder ]])
+  end)
+
+  it("handles the correct order with opt packages and after/ after startup", function()
+    pack_clear [[ lua _G.test_loadorder = {} ]]
+    command [[
+      packadd! superspecial
+      runtime! filen.lua
+    ]]
+    eq({'ordinary', 'SuperSpecial', 'FANCY', 'mittel', 'FANCY after', 'SuperSpecial after', 'ordinary after'}, exec_lua [[ return _G.test_loadorder ]])
+  end)
+
+  it("handles the correct order with opt packages and globpath(&rtp, ...)", function()
+    pack_clear [[ set loadplugins | lua _G.test_loadorder = {} ]]
+    command [[
+      packadd! superspecial
+      for x in globpath(&rtp, "filen.lua",1,1)
+        call v:lua.dofile(x)
+      endfor
+    ]]
+    eq({'ordinary', 'SuperSpecial', 'FANCY', 'mittel', 'SuperSpecial after', 'FANCY after', 'ordinary after'}, exec_lua [[ return _G.test_loadorder ]])
+  end)
+
+  it("handles the correct order with a package that changes packpath", function()
+    pack_clear [[ lua _G.test_loadorder = {} vim.cmd "packadd! funky\nruntime! filen.lua" ]]
+    eq({'ordinary', 'funky!', 'FANCY', 'mittel', 'FANCY after', 'ordinary after'}, exec_lua [[ return _G.test_loadorder ]])
+    eq({'ordinary', 'funky!', 'mittel', 'ordinary after'}, exec_lua [[ return _G.nested_order ]])
   end)
 end)
 
@@ -462,7 +519,7 @@ describe('user config init', function()
     clear{ args_rm={'-u' }, env=xenv }
 
     eq(1, eval('g:lua_rc'))
-    eq(init_lua_path, eval('$MYVIMRC'))
+    eq(funcs.fnamemodify(init_lua_path, ':p'), eval('$MYVIMRC'))
   end)
 
   describe 'with explicitly provided config'(function()
@@ -504,6 +561,7 @@ describe('runtime:', function()
   local xenv = { XDG_CONFIG_HOME=xconfig, XDG_DATA_HOME=xdata }
 
   setup(function()
+    rmdir(xhome)
     mkdir_p(xconfig .. pathsep .. 'nvim')
     mkdir_p(xdata)
   end)
@@ -524,7 +582,7 @@ describe('runtime:', function()
     rmdir(plugin_folder_path)
   end)
 
-  it('loads plugin/*.lua from start plugins', function()
+  it('loads plugin/*.lua from start packages', function()
     local plugin_path = table.concat({xconfig, 'nvim', 'pack', 'catagory',
     'start', 'test_plugin'}, pathsep)
     local plugin_folder_path = table.concat({plugin_path, 'plugin'}, pathsep)
@@ -551,6 +609,27 @@ describe('runtime:', function()
     os.remove(profiler_file)
     rmdir(plugin_path)
   end)
+
+  it('loads plugin/*.lua from site packages', function()
+    local nvimdata = iswin() and "nvim-data" or "nvim"
+    local plugin_path = table.concat({xdata, nvimdata, 'site', 'pack', 'xa', 'start', 'yb'}, pathsep)
+    local plugin_folder_path = table.concat({plugin_path, 'plugin'}, pathsep)
+    local plugin_after_path = table.concat({plugin_path, 'after', 'plugin'}, pathsep)
+    local plugin_file_path = table.concat({plugin_folder_path, 'plugin.lua'}, pathsep)
+    local plugin_after_file_path = table.concat({plugin_after_path, 'helloo.lua'}, pathsep)
+
+    mkdir_p(plugin_folder_path)
+    write_file(plugin_file_path, [[table.insert(_G.lista, "unos")]])
+    mkdir_p(plugin_after_path)
+    write_file(plugin_after_file_path, [[table.insert(_G.lista, "dos")]])
+
+    clear{ args_rm={'-u'}, args={'--cmd', 'lua _G.lista = {}'}, env=xenv }
+
+    eq({'unos', 'dos'}, exec_lua "return _G.lista")
+
+    rmdir(plugin_path)
+  end)
+
 
   it('loads ftdetect/*.lua', function()
     local ftdetect_folder = table.concat({xconfig, 'nvim', 'ftdetect'}, pathsep)

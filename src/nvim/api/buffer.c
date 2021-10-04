@@ -3,40 +3,39 @@
 
 // Some of this code was adapted from 'if_py_both.h' from the original
 // vim source
+#include <lauxlib.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <limits.h>
-
-#include <lauxlib.h>
 
 #include "nvim/api/buffer.h"
-#include "nvim/api/private/helpers.h"
 #include "nvim/api/private/defs.h"
-#include "nvim/lua/executor.h"
-#include "nvim/vim.h"
+#include "nvim/api/private/helpers.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_updates.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
+#include "nvim/decoration.h"
+#include "nvim/ex_cmds.h"
+#include "nvim/ex_docmd.h"
+#include "nvim/extmark.h"
+#include "nvim/fileio.h"
 #include "nvim/getchar.h"
+#include "nvim/lua/executor.h"
+#include "nvim/map.h"
+#include "nvim/map_defs.h"
+#include "nvim/mark.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/misc1.h"
-#include "nvim/ex_cmds.h"
-#include "nvim/map_defs.h"
-#include "nvim/map.h"
-#include "nvim/mark.h"
-#include "nvim/ops.h"
-#include "nvim/extmark.h"
-#include "nvim/decoration.h"
-#include "nvim/fileio.h"
 #include "nvim/move.h"
+#include "nvim/ops.h"
 #include "nvim/syntax.h"
-#include "nvim/window.h"
 #include "nvim/undo.h"
-#include "nvim/ex_docmd.h"
-#include "nvim/buffer_updates.h"
+#include "nvim/vim.h"
+#include "nvim/window.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "api/buffer.c.generated.h"
@@ -149,11 +148,8 @@ Integer nvim_buf_line_count(Buffer buffer, Error *err)
 /// @param[out] err Error details, if any
 /// @return False if attach failed (invalid parameter, or buffer isn't loaded);
 ///         otherwise True. TODO: LUA_API_NO_EVAL
-Boolean nvim_buf_attach(uint64_t channel_id,
-                        Buffer buffer,
-                        Boolean send_buffer,
-                        DictionaryOf(LuaRef) opts,
-                        Error *err)
+Boolean nvim_buf_attach(uint64_t channel_id, Buffer buffer, Boolean send_buffer,
+                        DictionaryOf(LuaRef) opts, Error *err)
   FUNC_API_SINCE(4)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -237,9 +233,7 @@ error:
 /// @param[out] err Error details, if any
 /// @return False if detach failed (because the buffer isn't loaded);
 ///         otherwise True.
-Boolean nvim_buf_detach(uint64_t channel_id,
-                        Buffer buffer,
-                        Error *err)
+Boolean nvim_buf_detach(uint64_t channel_id, Buffer buffer, Error *err)
   FUNC_API_SINCE(4) FUNC_API_REMOTE_ONLY
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -252,8 +246,7 @@ Boolean nvim_buf_detach(uint64_t channel_id,
   return true;
 }
 
-void nvim__buf_redraw_range(Buffer buffer, Integer first, Integer last,
-                            Error *err)
+void nvim__buf_redraw_range(Buffer buffer, Integer first, Integer last, Error *err)
   FUNC_API_LUA_ONLY
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -376,13 +369,8 @@ static bool check_string_array(Array arr, bool disallow_nl, Error *err)
 /// @param strict_indexing  Whether out-of-bounds should be an error.
 /// @param replacement      Array of lines to use as replacement
 /// @param[out] err         Error details, if any
-void nvim_buf_set_lines(uint64_t channel_id,
-                        Buffer buffer,
-                        Integer start,
-                        Integer end,
-                        Boolean strict_indexing,
-                        ArrayOf(String) replacement,
-                        Error *err)
+void nvim_buf_set_lines(uint64_t channel_id, Buffer buffer, Integer start, Integer end,
+                        Boolean strict_indexing, ArrayOf(String) replacement, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_CHECK_TEXTLOCK
 {
@@ -554,10 +542,8 @@ end:
 /// @param end_column       Last column
 /// @param replacement      Array of lines to use as replacement
 /// @param[out] err         Error details, if any
-void nvim_buf_set_text(uint64_t channel_id, Buffer buffer,
-                       Integer start_row, Integer start_col,
-                       Integer end_row, Integer end_col,
-                       ArrayOf(String) replacement, Error *err)
+void nvim_buf_set_text(uint64_t channel_id, Buffer buffer, Integer start_row, Integer start_col,
+                       Integer end_row, Integer end_col, ArrayOf(String) replacement, Error *err)
   FUNC_API_SINCE(7)
 {
   FIXED_TEMP_ARRAY(scratch, 1);
@@ -617,17 +603,17 @@ void nvim_buf_set_text(uint64_t channel_id, Buffer buffer,
 
   // calculate byte size of old region before it gets modified/deleted
   if (start_row == end_row) {
-      old_byte = (bcount_t)end_col - start_col;
+    old_byte = (bcount_t)end_col - start_col;
   } else {
-      const char *bufline;
-      old_byte += (bcount_t)strlen(str_at_start) - start_col;
-      for (int64_t i = 1; i < end_row - start_row; i++) {
-          int64_t lnum = start_row + i;
+    const char *bufline;
+    old_byte += (bcount_t)strlen(str_at_start) - start_col;
+    for (int64_t i = 1; i < end_row - start_row; i++) {
+      int64_t lnum = start_row + i;
 
-          bufline = (char *)ml_get_buf(buf, lnum, false);
-          old_byte += (bcount_t)(strlen(bufline))+1;
-      }
-      old_byte += (bcount_t)end_col+1;
+      bufline = (char *)ml_get_buf(buf, lnum, false);
+      old_byte += (bcount_t)(strlen(bufline))+1;
+    }
+    old_byte += (bcount_t)end_col+1;
   }
 
   String first_item = replacement.items[0].data.string;
@@ -824,7 +810,7 @@ Object nvim_buf_get_var(Buffer buffer, String name, Error *err)
   buf_T *buf = find_buffer_by_handle(buffer, err);
 
   if (!buf) {
-    return (Object) OBJECT_INIT;
+    return (Object)OBJECT_INIT;
   }
 
   return dict_get_value(buf->b_vars, name, err);
@@ -872,8 +858,8 @@ ArrayOf(Dictionary) nvim_buf_get_keymap(Buffer buffer, String mode, Error *err)
 /// @see |nvim_set_keymap()|
 ///
 /// @param  buffer  Buffer handle, or 0 for current buffer
-void nvim_buf_set_keymap(Buffer buffer, String mode, String lhs, String rhs,
-                         Dictionary opts, Error *err)
+void nvim_buf_set_keymap(Buffer buffer, String mode, String lhs, String rhs, Dict(keymap) *opts,
+                         Error *err)
   FUNC_API_SINCE(6)
 {
   modify_keymap(buffer, false, mode, lhs, rhs, opts, err);
@@ -888,8 +874,7 @@ void nvim_buf_del_keymap(Buffer buffer, String mode, String lhs, Error *err)
   FUNC_API_SINCE(6)
 {
   String rhs = { .data = "", .size = 0 };
-  Dictionary opts = ARRAY_DICT_INIT;
-  modify_keymap(buffer, true, mode, lhs, rhs, opts, err);
+  modify_keymap(buffer, true, mode, lhs, rhs, NULL, err);
 }
 
 /// Gets a map of buffer-local |user-commands|.
@@ -899,22 +884,13 @@ void nvim_buf_del_keymap(Buffer buffer, String mode, String lhs, Error *err)
 /// @param[out]  err   Error details, if any.
 ///
 /// @returns Map of maps describing commands.
-Dictionary nvim_buf_get_commands(Buffer buffer, Dictionary opts, Error *err)
+Dictionary nvim_buf_get_commands(Buffer buffer, Dict(get_commands) *opts, Error *err)
   FUNC_API_SINCE(4)
 {
   bool global = (buffer == -1);
-  bool builtin = false;
-
-  for (size_t i = 0; i < opts.size; i++) {
-    String k = opts.items[i].key;
-    Object v = opts.items[i].value;
-    if (!strequal("builtin", k.data)) {
-      api_set_error(err, kErrorTypeValidation, "unexpected key: %s", k.data);
-      return (Dictionary)ARRAY_DICT_INIT;
-    }
-    if (strequal("builtin", k.data)) {
-      builtin = v.data.boolean;
-    }
+  bool builtin = api_object_to_bool(opts->builtin, "builtin", false, err);
+  if (ERROR_SET(err)) {
+    return (Dictionary)ARRAY_DICT_INIT;
   }
 
   if (global) {
@@ -980,7 +956,7 @@ Object nvim_buf_get_option(Buffer buffer, String name, Error *err)
   buf_T *buf = find_buffer_by_handle(buffer, err);
 
   if (!buf) {
-    return (Object) OBJECT_INIT;
+    return (Object)OBJECT_INIT;
   }
 
   return get_option_from(buf, SREQ_BUF, name, err);
@@ -994,8 +970,7 @@ Object nvim_buf_get_option(Buffer buffer, String name, Error *err)
 /// @param name       Option name
 /// @param value      Option value
 /// @param[out] err   Error details, if any
-void nvim_buf_set_option(uint64_t channel_id, Buffer buffer,
-                         String name, Object value, Error *err)
+void nvim_buf_set_option(uint64_t channel_id, Buffer buffer, String name, Object value, Error *err)
   FUNC_API_SINCE(1)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -1044,7 +1019,7 @@ void nvim_buf_set_name(Buffer buffer, String name, Error *err)
   // Using aucmd_*: autocommands will be executed by rename_buffer
   aco_save_T aco;
   aucmd_prepbuf(&aco, buf);
-  int ren_ret = rename_buffer((char_u *) name.data);
+  int ren_ret = rename_buffer((char_u *)name.data);
   aucmd_restbuf(&aco);
 
   if (try_end(err)) {
@@ -1105,12 +1080,11 @@ void nvim_buf_delete(Buffer buffer, Dictionary opts, Error *err)
     return;
   }
 
-  int result = do_buffer(
-      unload ? DOBUF_UNLOAD : DOBUF_WIPE,
-      DOBUF_FIRST,
-      FORWARD,
-      buf->handle,
-      force);
+  int result = do_buffer(unload ? DOBUF_UNLOAD : DOBUF_WIPE,
+                         DOBUF_FIRST,
+                         FORWARD,
+                         buf->handle,
+                         force);
 
   if (result == FAIL) {
     api_set_error(err, kErrorTypeException, "Failed to unload buffer.");
@@ -1213,8 +1187,7 @@ static Array extmark_to_array(ExtmarkInfo extmark, bool id, bool add_dict)
           ADD(chunk, STRING_OBJ(cstr_to_string(vtc->text)));
           if (vtc->hl_id > 0) {
             ADD(chunk,
-                STRING_OBJ(cstr_to_string(
-                    (const char *)syn_id2name(vtc->hl_id))));
+                STRING_OBJ(cstr_to_string((const char *)syn_id2name(vtc->hl_id))));
           }
           ADD(chunks, ARRAY_OBJ(chunk));
         }
@@ -1330,9 +1303,8 @@ ArrayOf(Integer) nvim_buf_get_extmark_by_id(Buffer buffer, Integer ns_id,
 ///          - details Whether to include the details dict
 /// @param[out] err   Error details, if any
 /// @return List of [extmark_id, row, col] tuples in "traversal order".
-Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id,
-                            Object start, Object end,
-                            Dictionary opts, Error *err)
+Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object end, Dictionary opts,
+                            Error *err)
   FUNC_API_SINCE(7)
 {
   Array rv = ARRAY_DICT_INIT;
@@ -1433,6 +1405,10 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id,
 ///               - end_col : ending col of the mark, 0-based exclusive.
 ///               - hl_group : name of the highlight group used to highlight
 ///                   this mark.
+///               - hl_eol : when true, for a multiline highlight covering the
+///                          EOL of a line, continue the highlight for the rest
+///                          of the screen line (just like for diff and
+///                          cursorline highlight).
 ///               - virt_text : virtual text to link to this mark.
 ///                   A list of [text, highlight] tuples, each representing a
 ///                   text chunk with specified highlight. `highlight` element
@@ -1460,10 +1436,28 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id,
 ///                              default
 ///                 - "combine": combine with background text color
 ///                 - "blend": blend with background text color.
-///               - hl_eol : when true, for a multiline highlight covering the
-///                          EOL of a line, continue the highlight for the rest
-///                          of the screen line (just like for diff and
-///                          cursorline highlight).
+///
+///               - virt_lines : virtual lines to add next to this mark
+///                   This should be an array over lines, where each line in
+///                   turn is an array over [text, highlight] tuples. In
+///                   general, buffer and window options do not affect the
+///                   display of the text. In particular 'wrap'
+///                   and 'linebreak' options do not take effect, so
+///                   the number of extra screen lines will always match
+///                   the size of the array. However the 'tabstop' buffer
+///                   option is still used for hard tabs. By default lines are
+///                   placed below the buffer line containing the mark.
+///
+///                   Note: currently virtual lines are limited to one block
+///                   per buffer. Thus setting a new mark disables any previous
+///                   `virt_lines` decoration. However plugins should not rely
+///                   on this behaviour, as this limitation is planned to be
+///                   removed.
+///
+///               - virt_lines_above: place virtual lines above instead.
+///               - virt_lines_leftcol: Place extmarks in the leftmost
+///                                     column of the window, bypassing
+///                                     sign and number columns.
 ///
 ///               - ephemeral : for use with |nvim_set_decoration_provider|
 ///                   callbacks. The mark will only be used for the current
@@ -1480,9 +1474,8 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id,
 ///                   example treesitter highlighting uses a value of 100.
 /// @param[out]  err   Error details, if any
 /// @return Id of the created/updated extmark
-Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id,
-                             Integer line, Integer col,
-                             Dictionary opts, Error *err)
+Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer col,
+                             Dict(set_extmark) *opts, Error *err)
   FUNC_API_SINCE(7)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -1495,178 +1488,174 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id,
     return 0;
   }
 
-  bool ephemeral = false;
 
   uint64_t id = 0;
+  if (opts->id.type == kObjectTypeInteger && opts->id.data.integer > 0) {
+    id = (uint64_t)opts->id.data.integer;
+  } else if (HAS_KEY(opts->id)) {
+      api_set_error(err, kErrorTypeValidation, "id is not a positive integer");
+      goto error;
+  }
+
   int line2 = -1;
-  Decoration decor = DECORATION_INIT;
-  colnr_T col2 = -1;
-
-  bool right_gravity = true;
-  bool end_right_gravity = false;
-  bool end_gravity_set = false;
-
-  for (size_t i = 0; i < opts.size; i++) {
-    String k = opts.items[i].key;
-    Object *v = &opts.items[i].value;
-    if (strequal("id", k.data)) {
-      if (v->type != kObjectTypeInteger || v->data.integer <= 0) {
-        api_set_error(err, kErrorTypeValidation,
-                      "id is not a positive integer");
-        goto error;
-      }
-
-      id = (uint64_t)v->data.integer;
-    } else if (strequal("end_line", k.data)) {
-      if (v->type != kObjectTypeInteger) {
-        api_set_error(err, kErrorTypeValidation,
-                      "end_line is not an integer");
-        goto error;
-      }
-      if (v->data.integer < 0 || v->data.integer > buf->b_ml.ml_line_count) {
-        api_set_error(err, kErrorTypeValidation,
-                      "end_line value outside range");
-        goto error;
-      }
-
-      line2 = (int)v->data.integer;
-    } else if (strequal("end_col", k.data)) {
-      if (v->type != kObjectTypeInteger) {
-        api_set_error(err, kErrorTypeValidation,
-                      "end_col is not an integer");
-        goto error;
-      }
-      if (v->data.integer < 0 || v->data.integer > MAXCOL) {
-        api_set_error(err, kErrorTypeValidation,
-                      "end_col value outside range");
-        goto error;
-      }
-
-      col2 = (colnr_T)v->data.integer;
-    } else if (strequal("hl_group", k.data)) {
-      String hl_group;
-      switch (v->type) {
-        case kObjectTypeString:
-          hl_group = v->data.string;
-          decor.hl_id = syn_check_group(
-              (char_u *)(hl_group.data),
-              (int)hl_group.size);
-          break;
-        case kObjectTypeInteger:
-          decor.hl_id = (int)v->data.integer;
-          break;
-        default:
-          api_set_error(err, kErrorTypeValidation,
-                        "hl_group is not valid.");
-          goto error;
-      }
-    } else if (strequal("virt_text", k.data)) {
-      if (v->type != kObjectTypeArray) {
-        api_set_error(err, kErrorTypeValidation,
-                      "virt_text is not an Array");
-        goto error;
-      }
-      decor.virt_text = parse_virt_text(v->data.array, err,
-                                        &decor.virt_text_width);
-      if (ERROR_SET(err)) {
-        goto error;
-      }
-    } else if (strequal("virt_text_pos", k.data)) {
-      if (v->type != kObjectTypeString) {
-        api_set_error(err, kErrorTypeValidation,
-                      "virt_text_pos is not a String");
-        goto error;
-      }
-      String str = v->data.string;
-      if (strequal("eol", str.data)) {
-        decor.virt_text_pos = kVTEndOfLine;
-      } else if (strequal("overlay", str.data)) {
-        decor.virt_text_pos = kVTOverlay;
-      } else if (strequal("right_align", str.data)) {
-        decor.virt_text_pos = kVTRightAlign;
-      } else {
-        api_set_error(err, kErrorTypeValidation,
-                      "virt_text_pos: invalid value");
-        goto error;
-      }
-    } else if (strequal("virt_text_win_col",  k.data)) {
-      if (v->type != kObjectTypeInteger) {
-        api_set_error(err, kErrorTypeValidation,
-                      "virt_text_win_col is not a Number of the correct size");
-        goto error;
-      }
-
-      decor.col = (int)v->data.integer;
-      decor.virt_text_pos = kVTWinCol;
-    } else if (strequal("virt_text_hide", k.data)) {
-      decor.virt_text_hide = api_object_to_bool(*v,
-                                                "virt_text_hide", false, err);
-      if (ERROR_SET(err)) {
-        goto error;
-      }
-    } else if (strequal("hl_eol", k.data)) {
-      decor.hl_eol = api_object_to_bool(*v, "hl_eol", false, err);
-      if (ERROR_SET(err)) {
-        goto error;
-      }
-    } else if (strequal("hl_mode", k.data)) {
-      if (v->type != kObjectTypeString) {
-        api_set_error(err, kErrorTypeValidation,
-                      "hl_mode is not a String");
-        goto error;
-      }
-      String str = v->data.string;
-      if (strequal("replace", str.data)) {
-        decor.hl_mode = kHlModeReplace;
-      } else if (strequal("combine", str.data)) {
-        decor.hl_mode = kHlModeCombine;
-      } else if (strequal("blend", str.data)) {
-        decor.hl_mode = kHlModeBlend;
-      } else {
-        api_set_error(err, kErrorTypeValidation,
-                      "virt_text_pos: invalid value");
-        goto error;
-      }
-    } else if (strequal("ephemeral", k.data)) {
-      ephemeral = api_object_to_bool(*v, "ephemeral", false, err);
-      if (ERROR_SET(err)) {
-        goto error;
-      }
-    } else if (strequal("priority",  k.data)) {
-      if (v->type != kObjectTypeInteger) {
-        api_set_error(err, kErrorTypeValidation,
-                      "priority is not a Number of the correct size");
-        goto error;
-      }
-
-      if (v->data.integer < 0 || v->data.integer > UINT16_MAX) {
-        api_set_error(err, kErrorTypeValidation,
-                      "priority is not a valid value");
-        goto error;
-      }
-      decor.priority = (DecorPriority)v->data.integer;
-    } else if (strequal("right_gravity", k.data)) {
-      if (v->type != kObjectTypeBoolean) {
-        api_set_error(err, kErrorTypeValidation,
-                      "right_gravity must be a boolean");
-        goto error;
-      }
-      right_gravity = v->data.boolean;
-    } else if (strequal("end_right_gravity", k.data)) {
-      if (v->type != kObjectTypeBoolean) {
-        api_set_error(err, kErrorTypeValidation,
-                      "end_right_gravity must be a boolean");
-        goto error;
-      }
-      end_right_gravity = v->data.boolean;
-      end_gravity_set = true;
+  if (opts->end_line.type == kObjectTypeInteger) {
+    Integer val = opts->end_line.data.integer;
+    if (val < 0 || val > buf->b_ml.ml_line_count) {
+      api_set_error(err, kErrorTypeValidation, "end_line value outside range");
+      goto error;
     } else {
-      api_set_error(err, kErrorTypeValidation, "unexpected key: %s", k.data);
+      line2 = (int)val;
+    }
+  } else if (HAS_KEY(opts->end_line)) {
+    api_set_error(err, kErrorTypeValidation, "end_line is not an integer");
+    goto error;
+  }
+
+  colnr_T col2 = -1;
+  if (opts->end_col.type == kObjectTypeInteger) {
+    Integer val = opts->end_col.data.integer;
+    if (val < 0 || val > MAXCOL) {
+      api_set_error(err, kErrorTypeValidation, "end_col value outside range");
+      goto error;
+    } else {
+      col2 = (int)val;
+    }
+  } else if (HAS_KEY(opts->end_col)) {
+    api_set_error(err, kErrorTypeValidation, "end_col is not an integer");
+    goto error;
+  }
+
+  Decoration decor = DECORATION_INIT;
+
+  if (HAS_KEY(opts->hl_group)) {
+    decor.hl_id = object_to_hl_id(opts->hl_group, "hl_group", err);
+    if (ERROR_SET(err)) {
       goto error;
     }
   }
 
+  if (opts->virt_text.type == kObjectTypeArray) {
+    decor.virt_text = parse_virt_text(opts->virt_text.data.array, err,
+                                      &decor.virt_text_width);
+    if (ERROR_SET(err)) {
+      goto error;
+    }
+  } else if (HAS_KEY(opts->virt_text)) {
+    api_set_error(err, kErrorTypeValidation, "virt_text is not an Array");
+    goto error;
+  }
+
+  if (opts->virt_text_pos.type == kObjectTypeString) {
+    String str = opts->virt_text_pos.data.string;
+    if (strequal("eol", str.data)) {
+      decor.virt_text_pos = kVTEndOfLine;
+    } else if (strequal("overlay", str.data)) {
+      decor.virt_text_pos = kVTOverlay;
+    } else if (strequal("right_align", str.data)) {
+      decor.virt_text_pos = kVTRightAlign;
+    } else {
+      api_set_error(err, kErrorTypeValidation, "virt_text_pos: invalid value");
+      goto error;
+    }
+  } else if (HAS_KEY(opts->virt_text_pos)) {
+    api_set_error(err, kErrorTypeValidation, "virt_text_pos is not a String");
+    goto error;
+  }
+
+  if (opts->virt_text_win_col.type == kObjectTypeInteger) {
+    decor.col = (int)opts->virt_text_win_col.data.integer;
+    decor.virt_text_pos = kVTWinCol;
+  } else if (HAS_KEY(opts->virt_text_win_col)) {
+    api_set_error(err, kErrorTypeValidation,
+                  "virt_text_win_col is not a Number of the correct size");
+    goto error;
+  }
+
+#define OPTION_TO_BOOL(target, name, val) \
+    target = api_object_to_bool(opts-> name, #name, val, err); \
+    if (ERROR_SET(err)) { \
+      goto error; \
+    }
+
+  OPTION_TO_BOOL(decor.virt_text_hide, virt_text_hide, false);
+  OPTION_TO_BOOL(decor.hl_eol, hl_eol, false);
+
+  if (opts->hl_mode.type == kObjectTypeString) {
+    String str = opts->hl_mode.data.string;
+    if (strequal("replace", str.data)) {
+      decor.hl_mode = kHlModeReplace;
+    } else if (strequal("combine", str.data)) {
+      decor.hl_mode = kHlModeCombine;
+    } else if (strequal("blend", str.data)) {
+      decor.hl_mode = kHlModeBlend;
+    } else {
+      api_set_error(err, kErrorTypeValidation,
+                    "virt_text_pos: invalid value");
+      goto error;
+    }
+  } else if (HAS_KEY(opts->hl_mode)) {
+    api_set_error(err, kErrorTypeValidation, "hl_mode is not a String");
+    goto error;
+  }
+
+  VirtLines virt_lines = KV_INITIAL_VALUE;
+  bool virt_lines_above = false;
+  bool virt_lines_leftcol = false;
+
+  if (opts->virt_lines.type == kObjectTypeArray) {
+    Array a = opts->virt_lines.data.array;
+    for (size_t j = 0; j < a.size; j++) {
+      if (a.items[j].type != kObjectTypeArray) {
+        api_set_error(err, kErrorTypeValidation, "virt_text_line item is not an Array");
+        goto error;
+      }
+      int dummig;
+      VirtText jtem = parse_virt_text(a.items[j].data.array, err, &dummig);
+      kv_push(virt_lines, jtem);
+      if (ERROR_SET(err)) {
+        goto error;
+      }
+    }
+  } else if (HAS_KEY(opts->virt_lines)) {
+    api_set_error(err, kErrorTypeValidation, "virt_lines is not an Array");
+    goto error;
+  }
+
+  OPTION_TO_BOOL(virt_lines_above, virt_lines_above, false);
+  OPTION_TO_BOOL(virt_lines_leftcol, virt_lines_leftcol, false);
+
+  if (opts->priority.type == kObjectTypeInteger) {
+    Integer val = opts->priority.data.integer;
+
+    if (val < 0 || val > UINT16_MAX) {
+      api_set_error(err, kErrorTypeValidation, "priority is not a valid value");
+      goto error;
+    }
+    decor.priority = (DecorPriority)val;
+  } else if (HAS_KEY(opts->priority)) {
+    api_set_error(err, kErrorTypeValidation, "priority is not a Number of the correct size");
+    goto error;
+  }
+
+  bool right_gravity = true;
+  OPTION_TO_BOOL(right_gravity, right_gravity, true);
+
+  // Only error out if they try to set end_right_gravity without
+  // setting end_col or end_line
+  if (line2 == -1 && col2 == -1 && HAS_KEY(opts->end_right_gravity)) {
+    api_set_error(err, kErrorTypeValidation,
+                  "cannot set end_right_gravity without setting end_line or end_col");
+    goto error;
+  }
+
+  bool end_right_gravity = false;
+  OPTION_TO_BOOL(end_right_gravity, end_right_gravity, false);
+
   size_t len = 0;
+
+  bool ephemeral = false;
+  OPTION_TO_BOOL(ephemeral, ephemeral, false);
+
   if (line < 0 || line > buf->b_ml.ml_line_count) {
     api_set_error(err, kErrorTypeValidation, "line value outside range");
     return 0;
@@ -1681,19 +1670,9 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id,
     return 0;
   }
 
-
-  // Only error out if they try to set end_right_gravity without
-  // setting end_col or end_line
-  if (line2 == -1 && col2 == -1 && end_gravity_set) {
-    api_set_error(err, kErrorTypeValidation,
-                  "cannot set end_right_gravity "
-                  "without setting end_line or end_col");
-  }
-
   if (col2 >= 0) {
     if (line2 >= 0 && line2 < buf->b_ml.ml_line_count) {
-      len = ephemeral ? MAXCOL : STRLEN(
-          ml_get_buf(buf, (linenr_T)line2 + 1, false));
+      len = ephemeral ? MAXCOL : STRLEN(ml_get_buf(buf, (linenr_T)line2 + 1, false));
     } else if (line2 == buf->b_ml.ml_line_count) {
       // We are trying to add an extmark past final newline
       len = 0;
@@ -1708,15 +1687,6 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id,
   } else if (line2 >= 0) {
     col2 = 0;
   }
-
-  if (decor.virt_text_pos == kVTRightAlign) {
-    decor.col = 0;
-    for (size_t i = 0; i < kv_size(decor.virt_text); i++) {
-      decor.col
-          += (int)mb_string2cells((char_u *)kv_A(decor.virt_text, i).text);
-    }
-  }
-
 
   Decoration *d = NULL;
 
@@ -1742,9 +1712,23 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id,
       goto error;
     }
 
-    id = extmark_set(buf, (uint64_t)ns_id, id, (int)line, (colnr_T)col,
-                     line2, col2, d, right_gravity,
-                     end_right_gravity, kExtmarkNoUndo);
+    if (kv_size(virt_lines) && buf->b_virt_line_mark) {
+      mtpos_t pos = marktree_lookup(buf->b_marktree, buf->b_virt_line_mark, NULL);
+      clear_virt_lines(buf, pos.row);  // handles pos.row == -1
+    }
+
+    uint64_t mark = extmark_set(buf, (uint64_t)ns_id, &id, (int)line, (colnr_T)col,
+                                line2, col2, d, right_gravity,
+                                end_right_gravity, kExtmarkNoUndo);
+
+    if (kv_size(virt_lines)) {
+      buf->b_virt_lines = virt_lines;
+      buf->b_virt_line_mark = mark;
+      buf->b_virt_line_pos = -1;
+      buf->b_virt_line_above = virt_lines_above;
+      buf->b_virt_line_leftcol = virt_lines_leftcol;
+      redraw_buf_line_later(buf, MIN(buf->b_ml.ml_line_count, line+1+(virt_lines_above?0:1)));
+    }
   }
 
   return (Integer)id;
@@ -1761,10 +1745,7 @@ error:
 /// @param id Extmark id
 /// @param[out] err   Error details, if any
 /// @return true if the extmark was found, else false
-Boolean nvim_buf_del_extmark(Buffer buffer,
-                             Integer ns_id,
-                             Integer id,
-                             Error *err)
+Boolean nvim_buf_del_extmark(Buffer buffer, Integer ns_id, Integer id, Error *err)
   FUNC_API_SINCE(7)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -1810,13 +1791,8 @@ Boolean nvim_buf_del_extmark(Buffer buffer,
 ///                   or -1 to highlight to end of line
 /// @param[out] err   Error details, if any
 /// @return The ns_id that was used
-Integer nvim_buf_add_highlight(Buffer buffer,
-                               Integer ns_id,
-                               String hl_group,
-                               Integer line,
-                               Integer col_start,
-                               Integer col_end,
-                               Error *err)
+Integer nvim_buf_add_highlight(Buffer buffer, Integer ns_id, String hl_group, Integer line,
+                               Integer col_start, Integer col_end, Error *err)
   FUNC_API_SINCE(1)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -1856,7 +1832,7 @@ Integer nvim_buf_add_highlight(Buffer buffer,
     end_line++;
   }
 
-  extmark_set(buf, ns, 0,
+  extmark_set(buf, ns, NULL,
               (int)line, (colnr_T)col_start,
               end_line, (colnr_T)col_end,
               decor_hl(hl_id), true, false, kExtmarkNoUndo);
@@ -1875,10 +1851,7 @@ Integer nvim_buf_add_highlight(Buffer buffer,
 /// @param line_end   End of range of lines to clear (exclusive) or -1 to clear
 ///                   to end of buffer.
 /// @param[out] err   Error details, if any
-void nvim_buf_clear_namespace(Buffer buffer,
-                              Integer ns_id,
-                              Integer line_start,
-                              Integer line_end,
+void nvim_buf_clear_namespace(Buffer buffer, Integer ns_id, Integer line_start, Integer line_end,
                               Error *err)
   FUNC_API_SINCE(5)
 {

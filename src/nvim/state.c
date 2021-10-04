@@ -3,19 +3,18 @@
 
 #include <assert.h>
 
-#include "nvim/lib/kvec.h"
-
 #include "nvim/ascii.h"
-#include "nvim/log.h"
-#include "nvim/state.h"
-#include "nvim/vim.h"
-#include "nvim/main.h"
-#include "nvim/getchar.h"
-#include "nvim/option_defs.h"
-#include "nvim/ui.h"
-#include "nvim/os/input.h"
-#include "nvim/ex_docmd.h"
 #include "nvim/edit.h"
+#include "nvim/ex_docmd.h"
+#include "nvim/getchar.h"
+#include "nvim/lib/kvec.h"
+#include "nvim/log.h"
+#include "nvim/main.h"
+#include "nvim/option_defs.h"
+#include "nvim/os/input.h"
+#include "nvim/state.h"
+#include "nvim/ui.h"
+#include "nvim/vim.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "state.c.generated.h"
@@ -162,6 +161,11 @@ char *get_mode(void)
     if (State & VREPLACE_FLAG) {
       buf[0] = 'R';
       buf[1] = 'v';
+      if (ins_compl_active()) {
+        buf[2] = 'c';
+      } else if (ctrl_x_mode_not_defined_yet()) {
+        buf[2] = 'x';
+      }
     } else {
       if (State & REPLACE_FLAG) {
         buf[0] = 'R';

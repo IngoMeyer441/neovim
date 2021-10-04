@@ -12,10 +12,12 @@ local funcs = helpers.funcs
 local iswin = helpers.iswin
 local meths = helpers.meths
 local matches = helpers.matches
+local mkdir_p = helpers.mkdir_p
 local ok, nvim_async, feed = helpers.ok, helpers.nvim_async, helpers.feed
 local is_os = helpers.is_os
 local parse_context = helpers.parse_context
 local request = helpers.request
+local rmdir = helpers.rmdir
 local source = helpers.source
 local next_msg = helpers.next_msg
 local tmpname = helpers.tmpname
@@ -117,6 +119,19 @@ describe('API', function()
       nvim('exec','autocmd BufAdd * :let x1 = "Hello"', false)
       nvim('command', 'new foo')
       eq('Hello', request('nvim_eval', 'g:x1'))
+
+      -- Line continuations
+      nvim('exec', [[
+        let abc = #{
+          \ a: 1,
+         "\ b: 2,
+          \ c: 3
+          \ }]], false)
+      eq({a = 1, c = 3}, request('nvim_eval', 'g:abc'))
+
+      -- try no spaces before continuations to catch off-by-one error
+      nvim('exec', 'let ab = #{\n\\a: 98,\n"\\ b: 2\n\\}', false)
+      eq({a = 98}, request('nvim_eval', 'g:ab'))
     end)
 
     it('non-ASCII input', function()
@@ -520,7 +535,7 @@ describe('API', function()
       nvim("notify", "hello world", 2, {})
     end)
 
-    it('can be overriden', function()
+    it('can be overridden', function()
       command("lua vim.notify = function(...) return 42 end")
       eq(42, meths.exec_lua("return vim.notify('Hello world')", {}))
       nvim("notify", "hello world", 4, {})
@@ -1104,7 +1119,7 @@ describe('API', function()
 
   describe('nvim_get_context', function()
     it('validates args', function()
-      eq('unexpected key: blah',
+      eq("Invalid key: 'blah'",
         pcall_err(nvim, 'get_context', {blah={}}))
       eq('invalid value for key: types',
         pcall_err(nvim, 'get_context', {types=42}))
@@ -1561,6 +1576,18 @@ describe('API', function()
   end)
 
   describe('nvim_list_runtime_paths', function()
+    setup(function()
+      local pathsep = helpers.get_pathsep()
+      mkdir_p('Xtest'..pathsep..'a')
+      mkdir_p('Xtest'..pathsep..'b')
+    end)
+    teardown(function()
+      rmdir 'Xtest'
+    end)
+    before_each(function()
+      meths.set_current_dir 'Xtest'
+    end)
+
     it('returns nothing with empty &runtimepath', function()
       meths.set_option('runtimepath', '')
       eq({}, meths.list_runtime_paths())
@@ -1578,15 +1605,17 @@ describe('API', function()
       eq({'a', '', 'b'}, meths.list_runtime_paths())
       meths.set_option('runtimepath', ',a,b')
       eq({'', 'a', 'b'}, meths.list_runtime_paths())
+      -- trailing , is ignored, use ,, if you really really want $CWD
       meths.set_option('runtimepath', 'a,b,')
+      eq({'a', 'b'}, meths.list_runtime_paths())
+      meths.set_option('runtimepath', 'a,b,,')
       eq({'a', 'b', ''}, meths.list_runtime_paths())
     end)
     it('truncates too long paths', function()
       local long_path = ('/a'):rep(8192)
       meths.set_option('runtimepath', long_path)
       local paths_list = meths.list_runtime_paths()
-      neq({long_path}, paths_list)
-      eq({long_path:sub(1, #(paths_list[1]))}, paths_list)
+      eq({}, paths_list)
     end)
   end)
 
@@ -1999,8 +2028,13 @@ describe('API', function()
       ok(endswith(val[1], p"autoload/remote/define.vim")
          or endswith(val[1], p"autoload/remote/host.vim"))
 
-      eq({}, meths.get_runtime_file("lua", true))
-      eq({}, meths.get_runtime_file("lua/vim", true))
+      val = meths.get_runtime_file("lua", true)
+      eq(1, #val)
+      ok(endswith(val[1], p"lua"))
+
+      val = meths.get_runtime_file("lua/vim", true)
+      eq(1, #val)
+      ok(endswith(val[1], p"lua/vim"))
     end)
 
     it('can find directories', function()

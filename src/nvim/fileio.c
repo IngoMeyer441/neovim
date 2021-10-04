@@ -65,7 +65,7 @@
 
 // For compatibility with libuv < 1.20.0 (tested on 1.18.0)
 #ifndef UV_FS_COPYFILE_FICLONE
-#define UV_FS_COPYFILE_FICLONE 0
+# define UV_FS_COPYFILE_FICLONE 0
 #endif
 
 #define HAS_BW_FLAGS
@@ -105,9 +105,9 @@ struct bw_info {
   int bw_conv_error;             // set for conversion error
   linenr_T bw_conv_error_lnum;   // first line with error or zero
   linenr_T bw_start_lnum;        // line number at start of buffer
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   iconv_t bw_iconv_fd;           // descriptor for iconv() or -1
-# endif
+#endif
 };
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -134,16 +134,16 @@ void filemess(buf_T *buf, char_u *name, char_u *s, int attr)
     msg_scroll = FALSE;
   }
   if (!msg_scroll) {    // wait a bit when overwriting an error msg
-    check_for_delay(FALSE);
+    check_for_delay(false);
   }
   msg_start();
   msg_scroll = msg_scroll_save;
-  msg_scrolled_ign = TRUE;
+  msg_scrolled_ign = true;
   // may truncate the message to avoid a hit-return prompt
   msg_outtrans_attr(msg_may_trunc(FALSE, IObuff), attr);
   msg_clr_eos();
   ui_flush();
-  msg_scrolled_ign = FALSE;
+  msg_scrolled_ign = false;
 }
 
 
@@ -197,12 +197,12 @@ int readfile(char_u *fname, char_u *sfname, linenr_T from, linenr_T lines_to_ski
   long size = 0;
   uint8_t *p = NULL;
   off_T filesize = 0;
-  int skip_read = false;
+  bool skip_read = false;
   context_sha256_T sha_ctx;
   int read_undo_file = false;
   int split = 0;  // number of split lines
   linenr_T linecnt;
-  int error = FALSE;                    // errors encountered
+  bool error = false;                   // errors encountered
   int ff_error = EOL_UNKNOWN;           // file format with errors
   long linerest = 0;                    // remaining chars in line
   int perm = 0;
@@ -212,7 +212,6 @@ int readfile(char_u *fname, char_u *sfname, linenr_T from, linenr_T lines_to_ski
   int fileformat = 0;                   // end-of-line format
   bool keep_fileformat = false;
   FileInfo file_info;
-  int file_readonly;
   linenr_T skip_count = 0;
   linenr_T read_count = 0;
   int msg_save = msg_scroll;
@@ -234,14 +233,13 @@ int readfile(char_u *fname, char_u *sfname, linenr_T from, linenr_T lines_to_ski
   char_u *fenc_next = NULL;        // next item in 'fencs' or NULL
   bool advance_fenc = false;
   long real_size = 0;
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   iconv_t iconv_fd = (iconv_t)-1;       // descriptor for iconv() or -1
-  int did_iconv = false;                // TRUE when iconv() failed and trying
+  bool did_iconv = false;               // true when iconv() failed and trying
                                         // 'charconvert' next
-# endif
-  int converted = FALSE;                // TRUE if conversion done
-  int notconverted = FALSE;             /* TRUE if conversion wanted but it
-                                           wasn't possible */
+#endif
+  bool converted = false;                // true if conversion done
+  bool notconverted = false;             // true if conversion wanted but it wasn't possible
   char_u conv_rest[CONV_RESTLEN];
   int conv_restlen = 0;                 // nr of bytes in conv_rest[]
   buf_T *old_curbuf;
@@ -375,10 +373,10 @@ int readfile(char_u *fname, char_u *sfname, linenr_T from, linenr_T lines_to_ski
     if (perm >= 0 && !S_ISREG(perm)                 // not a regular file ...
         && !S_ISFIFO(perm)                          // ... or fifo
         && !S_ISSOCK(perm)                          // ... or socket
-# ifdef OPEN_CHR_FILES
+#ifdef OPEN_CHR_FILES
         && !(S_ISCHR(perm) && is_dev_fd_file(fname))
         // ... or a character special file named /dev/fd/<n>
-# endif
+#endif
         ) {
       if (S_ISDIR(perm)) {
         filemess(curbuf, fname, (char_u *)_(msg_is_a_directory), 0);
@@ -437,7 +435,7 @@ int readfile(char_u *fname, char_u *sfname, linenr_T from, linenr_T lines_to_ski
   }
 
   // Check readonly.
-  file_readonly = false;
+  bool file_readonly = false;
   if (!read_buffer && !read_stdin) {
     if (!newfile || readonlymode || !(perm & 0222)
         || !os_file_is_writable((char *)fname)) {
@@ -495,11 +493,11 @@ int readfile(char_u *fname, char_u *sfname, linenr_T from, linenr_T lines_to_ski
     } else {
       filemess(curbuf, sfname, (char_u *)(
                                           (fd == UV_EFBIG) ? _("[File too big]") :
-# if defined(UNIX) && defined(EOVERFLOW)
+#if defined(UNIX) && defined(EOVERFLOW)
                                           // libuv only returns -errno in Unix and in Windows open() does not
                                           // set EOVERFLOW
                                           (fd == -EOVERFLOW) ? _("[File too big]") :
-# endif
+#endif
                                           _("[Permission Denied]")), 0);
       curbuf->b_p_ro = TRUE;                  // must use "w!" now
     }
@@ -770,13 +768,13 @@ retry:
     }
   }
 
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   if (iconv_fd != (iconv_t)-1) {
     // aborted conversion with iconv(), close the descriptor
     iconv_close(iconv_fd);
     iconv_fd = (iconv_t)-1;
   }
-# endif
+#endif
 
   if (advance_fenc) {
     /*
@@ -785,9 +783,9 @@ retry:
     advance_fenc = false;
 
     if (eap != NULL && eap->force_enc != 0) {
-      /* Conversion given with "++cc=" wasn't possible, read
-       * without conversion. */
-      notconverted = TRUE;
+      // Conversion given with "++cc=" wasn't possible, read
+      // without conversion.
+      notconverted = true;
       conv_error = 0;
       if (fenc_alloced) {
         xfree(fenc);
@@ -835,13 +833,13 @@ retry:
 
 
 
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
     // Try using iconv() if we can't convert internally.
     if (fio_flags == 0
         && !did_iconv) {
       iconv_fd = (iconv_t)my_iconv_open((char_u *)"utf-8", fenc);
     }
-# endif
+#endif
 
     /*
      * Use the 'charconvert' expression when conversion is required
@@ -849,13 +847,13 @@ retry:
      */
     if (fio_flags == 0 && !read_stdin && !read_buffer && *p_ccv != NUL
         && !read_fifo
-#  ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
         && iconv_fd == (iconv_t)-1
-#  endif
+#endif
         ) {
-#  ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
       did_iconv = false;
-#  endif
+#endif
       /* Skip conversion when it's already done (retry for wrong
        * "fileformat"). */
       if (tmpname == NULL) {
@@ -866,7 +864,7 @@ retry:
           if (fd < 0) {
             // Re-opening the original file failed!
             EMSG(_("E202: Conversion made file unreadable!"));
-            error = TRUE;
+            error = true;
             goto failed;
           }
           goto retry;
@@ -874,9 +872,9 @@ retry:
       }
     } else {
       if (fio_flags == 0
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
           && iconv_fd == (iconv_t)-1
-# endif
+#endif
           ) {
         /* Conversion wanted but we can't.
          * Try the next conversion in 'fileencodings' */
@@ -940,7 +938,7 @@ retry:
           }
         }
         if (new_buffer == NULL) {
-          error = TRUE;
+          error = true;
           break;
         }
         if (linerest) {         // copy characters from the previous buffer
@@ -962,11 +960,11 @@ retry:
          * ucs-4 to utf-8: 4 bytes become up to 6 bytes, size must be
          * multiple of 4 */
         real_size = (int)size;
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
         if (iconv_fd != (iconv_t)-1) {
           size = size / ICONV_MULT;
         } else {
-# endif
+#endif
         if (fio_flags & FIO_LATIN1) {
           size = size / 2;
         } else if (fio_flags & (FIO_UCS2 | FIO_UTF16)) {
@@ -976,9 +974,9 @@ retry:
         } else if (fio_flags == FIO_UCSBOM) {
           size = size / ICONV_MULT;  // worst case
         }
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
       }
-# endif
+#endif
         if (conv_restlen > 0) {
           // Insert unconverted bytes from previous line.
           memmove(ptr, conv_rest, conv_restlen);  // -V614
@@ -1048,7 +1046,7 @@ retry:
 
         if (size <= 0) {
           if (size < 0) {                           // read error
-            error = TRUE;
+            error = true;
           } else if (conv_restlen > 0) {
             /*
              * Reached end-of-file but some trailing bytes could
@@ -1057,9 +1055,9 @@ retry:
 
             // When we did a conversion report an error.
             if (fio_flags != 0
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
                 || iconv_fd != (iconv_t)-1
-# endif
+#endif
                 ) {
               if (can_retry) {
                 goto rewind_retry;
@@ -1083,9 +1081,9 @@ retry:
                * leave the UTF8 checking code to do it, as it
                * works slightly differently. */
               if (bad_char_behavior != BAD_KEEP && (fio_flags != 0
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
                                                     || iconv_fd != (iconv_t)-1
-# endif
+#endif
                                                     )) {
                 while (conv_restlen > 0) {
                   *(--ptr) = bad_char_behavior;
@@ -1093,18 +1091,18 @@ retry:
                 }
               }
               fio_flags = 0;  // don't convert this
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
               if (iconv_fd != (iconv_t)-1) {
                 iconv_close(iconv_fd);
                 iconv_fd = (iconv_t)-1;
               }
-# endif
+#endif
             }
           }
         }
       }
 
-      skip_read = FALSE;
+      skip_read = false;
 
       /*
        * At start of file: Check for BOM.
@@ -1151,7 +1149,7 @@ retry:
             fenc_alloced = false;
           }
           // retry reading without getting new bytes or rewinding
-          skip_read = TRUE;
+          skip_read = true;
           goto retry;
         }
       }
@@ -1167,7 +1165,7 @@ retry:
         break;
       }
 
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
       if (iconv_fd != (iconv_t)-1) {
         /*
          * Attempt conversion of the read bytes to 'encoding' using
@@ -1223,9 +1221,9 @@ retry:
         // move the linerest to before the converted characters
         line_start = ptr - linerest;
         memmove(line_start, buffer, (size_t)linerest);
-        size = (long)((char_u *)top - ptr);
+        size = ((char_u *)top - ptr);
       }
-# endif
+#endif
 
       if (fio_flags != 0) {
         unsigned int u8c;
@@ -1399,7 +1397,7 @@ retry:
         // move the linerest to before the converted characters
         line_start = dest - linerest;
         memmove(line_start, buffer, (size_t)linerest);
-        size = (long)((ptr + real_size) - dest);
+        size = ((ptr + real_size) - dest);
         ptr = dest;
       } else if (!curbuf->b_p_bin) {
         bool incomplete_tail = false;
@@ -1443,12 +1441,12 @@ retry:
               if (can_retry && !incomplete_tail) {
                 break;
               }
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
               // When we did a conversion report an error.
               if (iconv_fd != (iconv_t)-1 && conv_error == 0) {
                 conv_error = readfile_linenr(linecnt, ptr, p);
               }
-# endif
+#endif
               // Remember the first linenr with an illegal byte
               if (conv_error == 0 && illegal_byte == 0) {
                 illegal_byte = readfile_linenr(linecnt, ptr, p);
@@ -1471,17 +1469,17 @@ retry:
           // Detected a UTF-8 error.
 rewind_retry:
           // Retry reading with another conversion.
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
           if (*p_ccv != NUL && iconv_fd != (iconv_t)-1) {
             // iconv() failed, try 'charconvert'
             did_iconv = true;
           } else {
-# endif
+#endif
           // use next item from 'fileencodings'
           advance_fenc = true;
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
         }
-# endif
+#endif
           file_rewind = true;
           goto retry;
         }
@@ -1579,7 +1577,7 @@ rewind_retry:
             *ptr = NUL;                     // end of line
             len = (colnr_T)(ptr - line_start + 1);
             if (ml_append(lnum, line_start, len, newfile) == FAIL) {
-              error = TRUE;
+              error = true;
               break;
             }
             if (read_undo_file) {
@@ -1587,7 +1585,7 @@ rewind_retry:
             }
             ++lnum;
             if (--read_count == 0) {
-              error = TRUE;                     // break loop
+              error = true;                     // break loop
               line_start = ptr;                 // nothing left to write
               break;
             }
@@ -1635,7 +1633,7 @@ rewind_retry:
               }
             }
             if (ml_append(lnum, line_start, len, newfile) == FAIL) {
-              error = TRUE;
+              error = true;
               break;
             }
             if (read_undo_file) {
@@ -1643,7 +1641,7 @@ rewind_retry:
             }
             ++lnum;
             if (--read_count == 0) {
-              error = TRUE;                         // break loop
+              error = true;                         // break loop
               line_start = ptr;                 // nothing left to write
               break;
             }
@@ -1654,14 +1652,14 @@ rewind_retry:
         }
       }
     }
-    linerest = (long)(ptr - line_start);
+    linerest = (ptr - line_start);
     os_breakcheck();
   }
 
 failed:
   // not an error, max. number of lines reached
   if (error && read_count == 0) {
-    error = FALSE;
+    error = false;
   }
 
   /*
@@ -1683,7 +1681,7 @@ failed:
     *ptr = NUL;
     len = (colnr_T)(ptr - line_start + 1);
     if (ml_append(lnum, line_start, len, newfile) == FAIL) {
-      error = TRUE;
+      error = true;
     } else {
       if (read_undo_file) {
         sha256_update(&sha_ctx, line_start, len);
@@ -1702,11 +1700,11 @@ failed:
   if (fenc_alloced) {
     xfree(fenc);
   }
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   if (iconv_fd != (iconv_t)-1) {
     iconv_close(iconv_fd);
   }
-# endif
+#endif
 
   if (!read_buffer && !read_stdin) {
     close(fd);  // errors are ignored
@@ -1848,7 +1846,7 @@ failed:
 
       XFREE_CLEAR(keep_msg);
       p = NULL;
-      msg_scrolled_ign = TRUE;
+      msg_scrolled_ign = true;
 
       if (!read_stdin && !read_buffer) {
         p = msg_trunc_attr(IObuff, FALSE, 0);
@@ -1863,7 +1861,7 @@ failed:
         // - When the screen was scrolled but there is no wait-return prompt.
         set_keep_msg(p, 0);
       }
-      msg_scrolled_ign = FALSE;
+      msg_scrolled_ign = false;
     }
 
     // with errors writing the file requires ":w!"
@@ -2282,9 +2280,9 @@ int buf_write(buf_T *buf, char_u *fname, char_u *sfname, linenr_T start, linenr_
   write_info.bw_conv_error = FALSE;
   write_info.bw_conv_error_lnum = 0;
   write_info.bw_restlen = 0;
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   write_info.bw_iconv_fd = (iconv_t)-1;
-# endif
+#endif
 
   /* After writing a file changedtick changes but we don't want to display
    * the line. */
@@ -2692,7 +2690,7 @@ int buf_write(buf_T *buf, char_u *fname, char_u *sfname, linenr_T start, linenr_
         if (fd < 0) {           // can't write in directory
           backup_copy = TRUE;
         } else {
-# ifdef UNIX
+#ifdef UNIX
           os_fchown(fd, file_info_old.stat.st_uid, file_info_old.stat.st_gid);
           if (!os_fileinfo((char *)IObuff, &file_info)
               || file_info.stat.st_uid != file_info_old.stat.st_uid
@@ -2700,7 +2698,7 @@ int buf_write(buf_T *buf, char_u *fname, char_u *sfname, linenr_T start, linenr_
               || (long)file_info.stat.st_mode != perm) {
             backup_copy = TRUE;
           }
-# endif
+#endif
           /* Close the file before removing it, on MS-Windows we
            * can't delete an open file. */
           close(fd);
@@ -2713,7 +2711,7 @@ int buf_write(buf_T *buf, char_u *fname, char_u *sfname, linenr_T start, linenr_
      * Break symlinks and/or hardlinks if we've been asked to.
      */
     if ((bkc & BKC_BREAKSYMLINK) || (bkc & BKC_BREAKHARDLINK)) {
-# ifdef UNIX
+#ifdef UNIX
       bool file_info_link_ok = os_fileinfo_link((char *)fname, &file_info);
 
       // Symlinks.
@@ -2730,7 +2728,7 @@ int buf_write(buf_T *buf, char_u *fname, char_u *sfname, linenr_T start, linenr_
               || os_fileinfo_id_equal(&file_info, &file_info_old))) {
         backup_copy = FALSE;
       }
-# endif
+#endif
     }
 
     // make sure we have a valid backup extension to use
@@ -3087,7 +3085,7 @@ nobackup:
 
 
   if (converted && wb_flags == 0) {
-#  ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
     // Use iconv() conversion when conversion is needed and it's not done
     // internally.
     write_info.bw_iconv_fd = (iconv_t)my_iconv_open(fenc, (char_u *)"utf-8");
@@ -3100,7 +3098,7 @@ nobackup:
       }
       write_info.bw_first = TRUE;
     } else
-#  endif
+#endif
 
     /*
      * When the file needs to be converted with 'charconvert' after
@@ -3116,9 +3114,9 @@ nobackup:
     }
   }
   if (converted && wb_flags == 0
-#  ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
       && write_info.bw_iconv_fd == (iconv_t)-1
-#  endif
+#endif
       && wfname == fname) {
     if (!forceit) {
       SET_ERRMSG(_("E213: Cannot convert (add ! to write without conversion)"));
@@ -3646,12 +3644,12 @@ nofail:
   }
   xfree(fenc_tofree);
   xfree(write_info.bw_conv_buf);
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   if (write_info.bw_iconv_fd != (iconv_t)-1) {
     iconv_close(write_info.bw_iconv_fd);
     write_info.bw_iconv_fd = (iconv_t)-1;
   }
-# endif
+#endif
 #ifdef HAVE_ACL
   mch_free_acl(acl);
 #endif
@@ -3758,9 +3756,9 @@ static int set_rw_fname(char_u *fname, char_u *sfname)
 
   // It's like the unnamed buffer is deleted....
   if (curbuf->b_p_bl) {
-    apply_autocmds(EVENT_BUFDELETE, NULL, NULL, FALSE, curbuf);
+    apply_autocmds(EVENT_BUFDELETE, NULL, NULL, false, curbuf);
   }
-  apply_autocmds(EVENT_BUFWIPEOUT, NULL, NULL, FALSE, curbuf);
+  apply_autocmds(EVENT_BUFWIPEOUT, NULL, NULL, false, curbuf);
   if (aborting()) {         // autocmds may abort script processing
     return FAIL;
   }
@@ -3775,9 +3773,9 @@ static int set_rw_fname(char_u *fname, char_u *sfname)
   }
 
   // ....and a new named one is created
-  apply_autocmds(EVENT_BUFNEW, NULL, NULL, FALSE, curbuf);
+  apply_autocmds(EVENT_BUFNEW, NULL, NULL, false, curbuf);
   if (curbuf->b_p_bl) {
-    apply_autocmds(EVENT_BUFADD, NULL, NULL, FALSE, curbuf);
+    apply_autocmds(EVENT_BUFADD, NULL, NULL, false, curbuf);
   }
   if (aborting()) {         // autocmds may abort script processing
     return FAIL;
@@ -4036,7 +4034,7 @@ static int buf_write_bytes(struct bw_info *ip)
       }
     }
 
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
     if (ip->bw_iconv_fd != (iconv_t)-1) {
       const char *from;
       size_t fromlen;
@@ -4098,7 +4096,7 @@ static int buf_write_bytes(struct bw_info *ip)
       buf = ip->bw_conv_buf;
       len = (int)((char_u *)to - ip->bw_conv_buf);
     }
-# endif
+#endif
   }
 
   if (ip->bw_fd < 0) {
@@ -5540,15 +5538,15 @@ bool match_file_list(char_u *list, char_u *sfname, char_u *ffname)
 /// @param no_bslash   Don't use a backward slash as pathsep
 ///
 /// @return            NULL on failure.
-char_u * file_pat_to_reg_pat(const char_u *pat, const char_u *pat_end, char *allow_dirs,
-                             int no_bslash)
+char_u *file_pat_to_reg_pat(const char_u *pat, const char_u *pat_end, char *allow_dirs,
+                            int no_bslash)
   FUNC_ATTR_NONNULL_ARG(1)
 {
   const char_u *endp;
   char_u *reg_pat;
   const char_u *p;
   int nested = 0;
-  int add_dollar = TRUE;
+  bool add_dollar = true;
 
   if (allow_dirs != NULL) {
     *allow_dirs = FALSE;

@@ -744,6 +744,8 @@ Cursor and mark position:		*cursor-functions* *mark-functions*
 	diff_filler()		get the number of filler lines above a line
 	screenattr()		get attribute at a screen line/row
 	screenchar()		get character code at a screen line/row
+	screenchars()		get character codes at a screen line/row
+	screenstring()		get string of characters at a screen line/row
 
 Working with text in the current buffer:		*text-functions*
 	getline()		get a line or list of lines from the buffer
@@ -1023,6 +1025,7 @@ Various:					*various-functions*
 	undotree()		return the state of the undo tree
 
 	getreg()		get contents of a register
+	getreginfo()		get information about a register
 	getregtype()		get type of a register
 	setreg()		set contents and type of a register
 	reg_executing()		return the name of the register being executed

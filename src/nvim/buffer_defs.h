@@ -868,6 +868,12 @@ struct file_buffer {
   Map(uint64_t, ExtmarkItem) b_extmark_index[1];
   Map(uint64_t, ExtmarkNs) b_extmark_ns[1];         // extmark namespaces
 
+  VirtLines b_virt_lines;
+  uint64_t b_virt_line_mark;
+  int b_virt_line_pos;
+  bool b_virt_line_above;
+  bool b_virt_line_leftcol;
+
   // array of channel_id:s which have asked to receive updates for this
   // buffer.
   kvec_t(uint64_t) update_channels;
@@ -1214,6 +1220,7 @@ struct window_S {
     int tab3;                       ///< third tab character
     int lead;
     int trail;
+    int *multispace;
     int conceal;
   } w_p_lcs_chars;
 

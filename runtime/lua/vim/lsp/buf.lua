@@ -289,7 +289,6 @@ function M.references(context)
   params.context = context or {
     includeDeclaration = true;
   }
-  params[vim.type_idx] = vim.types.dictionary
   request('textDocument/references', params)
 end
 
@@ -321,13 +320,21 @@ end
 ---@private
 local function call_hierarchy(method)
   local params = util.make_position_params()
-  request('textDocument/prepareCallHierarchy', params, function(err, _, result)
+  request('textDocument/prepareCallHierarchy', params, function(err, result, ctx)
     if err then
       vim.notify(err.message, vim.log.levels.WARN)
       return
     end
     local call_hierarchy_item = pick_call_hierarchy_item(result)
-    vim.lsp.buf_request(0, method, { item = call_hierarchy_item })
+    local client = vim.lsp.get_client_by_id(ctx.client_id)
+    if client then
+      client.request(method, { item = call_hierarchy_item }, nil, ctx.bufnr)
+    else
+      vim.notify(string.format(
+        'Client with id=%d disappeared during call hierarchy request', ctx.client_id),
+        vim.log.levels.WARN
+      )
+    end
   end)
 end
 
@@ -443,6 +450,93 @@ function M.clear_references()
   util.buf_clear_references()
 end
 
+
+---@private
+--
+--- This is not public because the main extension point is
+--- vim.ui.select which can be overridden independently.
+---
+--- Can't call/use vim.lsp.handlers['textDocument/codeAction'] because it expects
+--- `(err, CodeAction[] | Command[], ctx)`, but we want to aggregate the results
+--- from multiple clients to have 1 single UI prompt for the user, yet we still
+--- need to be able to link a `CodeAction|Command` to the right client for
+--- `codeAction/resolve`
+local function on_code_action_results(results, ctx)
+  local action_tuples = {}
+  for client_id, result in pairs(results) do
+    for _, action in pairs(result.result or {}) do
+      table.insert(action_tuples, { client_id, action })
+    end
+  end
+  if #action_tuples == 0 then
+    vim.notify('No code actions available', vim.log.levels.INFO)
+    return
+  end
+
+  ---@private
+  local function apply_action(action, client)
+    if action.edit then
+      util.apply_workspace_edit(action.edit)
+    end
+    if action.command then
+      local command = type(action.command) == 'table' and action.command or action
+      local fn = vim.lsp.commands[command.command]
+      if fn then
+        local enriched_ctx = vim.deepcopy(ctx)
+        enriched_ctx.client_id = client.id
+        fn(command, ctx)
+      else
+        M.execute_command(command)
+      end
+    end
+  end
+
+  ---@private
+  local function on_user_choice(action_tuple)
+    if not action_tuple then
+      return
+    end
+    -- textDocument/codeAction can return either Command[] or CodeAction[]
+    --
+    -- CodeAction
+    --  ...
+    --  edit?: WorkspaceEdit    -- <- must be applied before command
+    --  command?: Command
+    --
+    -- Command:
+    --  title: string
+    --  command: string
+    --  arguments?: any[]
+    --
+    local client = vim.lsp.get_client_by_id(action_tuple[1])
+    local action = action_tuple[2]
+    if not action.edit
+        and client
+        and type(client.resolved_capabilities.code_action) == 'table'
+        and client.resolved_capabilities.code_action.resolveProvider then
+
+      client.request('codeAction/resolve', action, function(err, resolved_action)
+        if err then
+          vim.notify(err.code .. ': ' .. err.message, vim.log.levels.ERROR)
+          return
+        end
+        apply_action(resolved_action, client)
+      end)
+    else
+      apply_action(action, client)
+    end
+  end
+
+  vim.ui.select(action_tuples, {
+    prompt = 'Code actions:',
+    format_item = function(action_tuple)
+      local title = action_tuple[2].title:gsub('\r\n', '\\r\\n')
+      return title:gsub('\n', '\\n')
+    end,
+  }, on_user_choice)
+end
+
+
 --- Requests code actions from all clients and calls the handler exactly once
 --- with all aggregated results
 ---@private
@@ -450,22 +544,28 @@ local function code_action_request(params)
   local bufnr = vim.api.nvim_get_current_buf()
   local method = 'textDocument/codeAction'
   vim.lsp.buf_request_all(bufnr, method, params, function(results)
-    local actions = {}
-    for _, r in pairs(results) do
-      vim.list_extend(actions, r.result or {})
-    end
-    vim.lsp.handlers[method](nil, actions, {bufnr=bufnr, method=method})
+    on_code_action_results(results, { bufnr = bufnr, method = method, params = params })
   end)
 end
 
---- Selects a code action from the input list that is available at the current
+--- Selects a code action available at the current
 --- cursor position.
 ---
----@param context: (table, optional) Valid `CodeActionContext` object
+---@param context table|nil `CodeActionContext` of the LSP specification:
+---               - diagnostics: (table|nil)
+---                             LSP `Diagnostic[]`. Inferred from the current
+---                             position if not provided.
+---               - only: (string|nil)
+---                      LSP `CodeActionKind` used to filter the code actions.
+---                      Most language servers support values like `refactor`
+---                      or `quickfix`.
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
 function M.code_action(context)
   validate { context = { context, 't', true } }
-  context = context or { diagnostics = vim.lsp.diagnostic.get_line_diagnostics() }
+  context = context or {}
+  if not context.diagnostics then
+    context.diagnostics = vim.lsp.diagnostic.get_line_diagnostics()
+  end
   local params = util.make_range_params()
   params.context = context
   code_action_request(params)
@@ -473,14 +573,25 @@ end
 
 --- Performs |vim.lsp.buf.code_action()| for a given range.
 ---
----@param context: (table, optional) Valid `CodeActionContext` object
+---
+---@param context table|nil `CodeActionContext` of the LSP specification:
+---               - diagnostics: (table|nil)
+---                             LSP `Diagnostic[]`. Inferred from the current
+---                             position if not provided.
+---               - only: (string|nil)
+---                      LSP `CodeActionKind` used to filter the code actions.
+---                      Most language servers support values like `refactor`
+---                      or `quickfix`.
 ---@param start_pos ({number, number}, optional) mark-indexed position.
 ---Defaults to the start of the last visual selection.
 ---@param end_pos ({number, number}, optional) mark-indexed position.
 ---Defaults to the end of the last visual selection.
 function M.range_code_action(context, start_pos, end_pos)
   validate { context = { context, 't', true } }
-  context = context or { diagnostics = vim.lsp.diagnostic.get_line_diagnostics() }
+  context = context or {}
+  if not context.diagnostics then
+    context.diagnostics = vim.lsp.diagnostic.get_line_diagnostics()
+  end
   local params = util.make_given_range_params(start_pos, end_pos)
   params.context = context
   code_action_request(params)

@@ -259,7 +259,7 @@ let s:filename_checks = {
     \ 'jgraph': ['file.jgr'],
     \ 'jovial': ['file.jov', 'file.j73', 'file.jovial'],
     \ 'jproperties': ['file.properties', 'file.properties_xx', 'file.properties_xx_xx', 'some.properties_xx_xx_file'],
-    \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb'],
+    \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', '.babelrc', '.eslintrc', '.prettierrc', '.firebaserc'],
     \ 'jsonc': ['file.jsonc'],
     \ 'jsp': ['file.jsp'],
     \ 'julia': ['file.jl'],
@@ -344,6 +344,7 @@ let s:filename_checks = {
     \ 'nanorc': ['/etc/nanorc', 'file.nanorc', 'any/etc/nanorc'],
     \ 'ncf': ['file.ncf'],
     \ 'netrc': ['.netrc'],
+    \ 'nginx': ['file.nginx', 'nginxfile.conf', 'filenginx.conf', 'any/etc/nginx/file', 'any/usr/local/nginx/conf/file', 'any/nginx/file.conf'],
     \ 'ninja': ['file.ninja'],
     \ 'nqc': ['file.nqc'],
     \ 'nroff': ['file.tr', 'file.nr', 'file.roff', 'file.tmac', 'file.mom', 'tmac.file'],
@@ -868,16 +869,6 @@ func Test_m_file()
   call assert_equal('octave', &filetype)
   bwipe!
 
-  call writefile(['#{', 'Octave block comment',  '#}'], 'Xfile.m')
-  split Xfile.m
-  call assert_equal('octave', &filetype)
-  bwipe!
-
-  call writefile(['%{', 'Octave block comment', '%}'], 'Xfile.m')
-  split Xfile.m
-  call assert_equal('octave', &filetype)
-  bwipe!
-
   call writefile(['%!test "Octave test"'], 'Xfile.m')
   split Xfile.m
   call assert_equal('octave', &filetype)
@@ -888,7 +879,7 @@ func Test_m_file()
   call assert_equal('octave', &filetype)
   bwipe!
 
-  call writefile(['function test(); 42; endfunction'], 'Xfile.m')
+  call writefile(['try; 42; end_try_catch'], 'Xfile.m')
   split Xfile.m
   call assert_equal('octave', &filetype)
   bwipe!
@@ -898,6 +889,13 @@ func Test_m_file()
   call writefile(['(* Mathematica comment'], 'Xfile.m')
   split Xfile.m
   call assert_equal('mma', &filetype)
+  bwipe!
+
+  " MATLAB
+
+  call writefile(['% MATLAB line comment'], 'Xfile.m')
+  split Xfile.m
+  call assert_equal('matlab', &filetype)
   bwipe!
 
   " Murphi

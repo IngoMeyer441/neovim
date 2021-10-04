@@ -1395,9 +1395,9 @@ static int utf_strnicmp(const char_u *s1, const char_u *s2, size_t n1, size_t n2
 }
 
 #ifdef WIN32
-#ifndef CP_UTF8
-# define CP_UTF8 65001  // magic number from winnls.h
-#endif
+# ifndef CP_UTF8
+#  define CP_UTF8 65001  // magic number from winnls.h
+# endif
 
 /// Converts string from UTF-8 to UTF-16.
 ///
@@ -1999,7 +1999,7 @@ void mb_check_adjust_col(void *win_)
 /// @param line  start of the string
 ///
 /// @return      a pointer to the character before "*p", if there is one.
-char_u * mb_prevptr(char_u *line, char_u *p)
+char_u *mb_prevptr(char_u *line, char_u *p)
 {
   if (p > line) {
     MB_PTR_BACK(line, p);
@@ -2099,7 +2099,7 @@ const char *mb_unescape(const char **const pp)
 /*
  * Skip the Vim specific head of a 'encoding' name.
  */
-char_u * enc_skip(char_u *p)
+char_u *enc_skip(char_u *p)
 {
   if (STRNCMP(p, "2byte-", 6) == 0) {
     return p + 6;
@@ -2202,19 +2202,19 @@ static int enc_alias_search(char_u *name)
  * Get the canonicalized encoding of the current locale.
  * Returns an allocated string when successful, NULL when not.
  */
-char_u * enc_locale(void)
+char_u *enc_locale(void)
 {
   int i;
   char buf[50];
 
   const char *s;
-# ifdef HAVE_NL_LANGINFO_CODESET
+#ifdef HAVE_NL_LANGINFO_CODESET
   if (!(s = nl_langinfo(CODESET)) || *s == NUL)
-# endif
+#endif
   {
-#  if defined(HAVE_LOCALE_H)
+#if defined(HAVE_LOCALE_H)
     if (!(s = setlocale(LC_CTYPE, NULL)) || *s == NUL)
-#  endif
+#endif
     {
       if ((s = os_getenv("LC_ALL"))) {
         if ((s = os_getenv("LC_CTYPE"))) {
@@ -2265,7 +2265,7 @@ enc_locale_copy_enc:
   return enc_canonize((char_u *)buf);
 }
 
-# if defined(HAVE_ICONV)
+#if defined(HAVE_ICONV)
 
 
 /*
@@ -2274,10 +2274,10 @@ enc_locale_copy_enc:
  * Returns (void *)-1 if failed.
  * (should return iconv_t, but that causes problems with prototypes).
  */
-void * my_iconv_open(char_u *to, char_u *from)
+void *my_iconv_open(char_u *to, char_u *from)
 {
   iconv_t fd;
-#define ICONV_TESTLEN 400
+# define ICONV_TESTLEN 400
   char_u tobuf[ICONV_TESTLEN];
   char *p;
   size_t tolen;
@@ -2395,7 +2395,7 @@ static char_u *iconv_string(const vimconv_T *const vcp, char_u *str, size_t slen
   return result;
 }
 
-# endif  // HAVE_ICONV
+#endif  // HAVE_ICONV
 
 
 
@@ -2425,11 +2425,11 @@ int convert_setup_ext(vimconv_T *vcp, char_u *from, bool from_unicode_is_utf8, c
   int to_is_utf8;
 
   // Reset to no conversion.
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   if (vcp->vc_type == CONV_ICONV && vcp->vc_fd != (iconv_t)-1) {
     iconv_close(vcp->vc_fd);
   }
-# endif
+#endif
   *vcp = (vimconv_T)MBYTE_NONE_CONV;
 
   // No conversion when one of the names is empty or they are equal.
@@ -2466,7 +2466,7 @@ int convert_setup_ext(vimconv_T *vcp, char_u *from, bool from_unicode_is_utf8, c
     // Internal utf-8 -> latin9 conversion.
     vcp->vc_type = CONV_TO_LATIN9;
   }
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   else {  // NOLINT(readability/braces)
     // Use iconv() for conversion.
     vcp->vc_fd = (iconv_t)my_iconv_open(to_is_utf8 ? (char_u *)"utf-8" : to,
@@ -2476,7 +2476,7 @@ int convert_setup_ext(vimconv_T *vcp, char_u *from, bool from_unicode_is_utf8, c
       vcp->vc_factor = 4;       // could be longer too...
     }
   }
-# endif
+#endif
   if (vcp->vc_type == CONV_NONE) {
     return FAIL;
   }
@@ -2501,8 +2501,8 @@ char_u *string_convert(const vimconv_T *const vcp, char_u *ptr, size_t *lenp)
  * an incomplete sequence at the end it is not converted and "*unconvlenp" is
  * set to the number of remaining bytes.
  */
-char_u * string_convert_ext(const vimconv_T *const vcp, char_u *ptr, size_t *lenp,
-                            size_t *unconvlenp)
+char_u *string_convert_ext(const vimconv_T *const vcp, char_u *ptr, size_t *lenp,
+                           size_t *unconvlenp)
 {
   char_u *retval = NULL;
   char_u *d;
@@ -2644,11 +2644,11 @@ char_u * string_convert_ext(const vimconv_T *const vcp, char_u *ptr, size_t *len
     }
     break;
 
-# ifdef HAVE_ICONV
+#ifdef HAVE_ICONV
   case CONV_ICONV:  // conversion with vcp->vc_fd
     retval = iconv_string(vcp, ptr, len, unconvlenp, lenp);
     break;
-# endif
+#endif
   }
 
   return retval;

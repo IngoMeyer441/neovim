@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2021 Jul 03
+" Last Change:	2021 Sep 21
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -872,6 +872,9 @@ au BufNewFile,BufRead *.json-patch			setf json
 " Jupyter Notebook is also json
 au BufNewFile,BufRead *.ipynb				setf json
 
+" Other files that look like json
+au BufNewFile,BufRead .babelrc,.eslintrc,.prettierrc,.firebaserc  setf json
+
 " JSONC
 au BufNewFile,BufRead *.jsonc			setf jsonc
 
@@ -1136,6 +1139,9 @@ au BufNewFile,BufRead Neomuttrc			setf neomuttrc
 " Netrc
 au BufNewFile,BufRead .netrc			setf netrc
 
+" Nginx
+au BufNewFile,BufRead *.nginx,nginx*.conf,*nginx.conf,*/etc/nginx/*,*/usr/local/nginx/conf/*,*/nginx/*.conf			setf nginx
+
 " Ninja file
 au BufNewFile,BufRead *.ninja			setf ninja
 
@@ -1396,7 +1402,7 @@ au BufNewFile,BufRead *.ptl,*.pyi,SConstruct		   setf python
 " Radiance
 au BufNewFile,BufRead *.rad,*.mat		setf radiance
 
-" Raku (formelly Perl6)
+" Raku (formerly Perl6)
 au BufNewFile,BufRead *.pm6,*.p6,*.t6,*.pod6,*.raku,*.rakumod,*.rakudoc,*.rakutest  setf raku
 
 " Ratpoison config/command files

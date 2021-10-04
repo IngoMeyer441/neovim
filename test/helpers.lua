@@ -70,7 +70,7 @@ local function dumplog(logfile, fn, ...)
   if status == false then
     logfile = logfile or os.getenv('NVIM_LOG_FILE') or '.nvimlog'
     local logtail = module.read_nvim_log(logfile)
-    error(string.format('%s\n%s', rv, logtail))
+    error(string.format('%s\n%s', tostring(rv), logtail))
   end
 end
 function module.eq(expected, actual, context, logfile)
@@ -810,6 +810,6 @@ function module.read_nvim_log(logfile, ci_rename)
   return log
 end
 
-module = shared.tbl_extend('error', module, Paths, shared)
+module = shared.tbl_extend('error', module, Paths, shared, require('test.deprecated'))
 
 return module

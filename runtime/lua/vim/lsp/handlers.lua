@@ -3,7 +3,6 @@ local protocol = require 'vim.lsp.protocol'
 local util = require 'vim.lsp.util'
 local vim = vim
 local api = vim.api
-local buf = require 'vim.lsp.buf'
 
 local M = {}
 
@@ -109,40 +108,6 @@ M['client/registerCapability'] = function(_, _, ctx)
   return vim.NIL
 end
 
---see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
-M['textDocument/codeAction'] = function(_, result)
-  if result == nil or vim.tbl_isempty(result) then
-    print("No code actions available")
-    return
-  end
-
-  local option_strings = {"Code actions:"}
-  for i, action in ipairs(result) do
-    local title = action.title:gsub('\r\n', '\\r\\n')
-    title = title:gsub('\n', '\\n')
-    table.insert(option_strings, string.format("%d. %s", i, title))
-  end
-
-  local choice = vim.fn.inputlist(option_strings)
-  if choice < 1 or choice > #result then
-    return
-  end
-  local action_chosen = result[choice]
-  -- textDocument/codeAction can return either Command[] or CodeAction[].
-  -- If it is a CodeAction, it can have either an edit, a command or both.
-  -- Edits should be executed first
-  if action_chosen.edit or type(action_chosen.command) == "table" then
-    if action_chosen.edit then
-      util.apply_workspace_edit(action_chosen.edit)
-    end
-    if type(action_chosen.command) == "table" then
-      buf.execute_command(action_chosen.command)
-    end
-  else
-    buf.execute_command(action_chosen)
-  end
-end
-
 --see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#workspace_applyEdit
 M['workspace/applyEdit'] = function(_, workspace_edit)
   if not workspace_edit then return end
@@ -210,10 +175,16 @@ local function response_to_list(map_result, entity)
     else
       config = config or {}
       if config.loclist then
-        util.set_loclist(map_result(result, ctx.bufnr))
+        vim.fn.setloclist(0, {}, ' ', {
+          title = 'Language Server';
+          items = map_result(result, ctx.bufnr);
+        })
         api.nvim_command("lopen")
       else
-        util.set_qflist(map_result(result, ctx.bufnr))
+        vim.fn.setqflist({}, ' ', {
+          title = 'Language Server';
+          items = map_result(result, ctx.bufnr);
+        })
         api.nvim_command("copen")
       end
     end
@@ -428,7 +399,7 @@ M['window/logMessage'] = function(_, result, ctx, _)
     log.error(message)
   elseif message_type == protocol.MessageType.Warning then
     log.warn(message)
-  elseif message_type == protocol.MessageType.Info then
+  elseif message_type == protocol.MessageType.Info or  message_type == protocol.MessageType.Log then
     log.info(message)
   else
     log.debug(message)
@@ -458,7 +429,7 @@ end
 -- Add boilerplate error validation and logging for all of these.
 for k, fn in pairs(M) do
   M[k] = function(err, result, ctx, config)
-    local _ = log.debug() and log.debug('default_handler', ctx.method, {
+    local _ = log.trace() and log.trace('default_handler', ctx.method, {
       err = err, result = result, ctx=vim.inspect(ctx), config = config
     })
 

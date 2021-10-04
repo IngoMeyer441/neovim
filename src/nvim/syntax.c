@@ -93,7 +93,7 @@ typedef struct hl_group {
 static garray_T highlight_ga = GA_EMPTY_INIT_VALUE;
 Map(cstr_t, int) highlight_unames = MAP_INIT;
 
-static inline struct hl_group * HL_TABLE(void)
+static inline struct hl_group *HL_TABLE(void)
 {
   return ((struct hl_group *)((highlight_ga.ga_data)));
 }
@@ -383,7 +383,7 @@ static int current_line_id = 0;            // unique number for current line
 #define CUR_STATE(idx)  ((stateitem_T *)(current_state.ga_data))[idx]
 
 static bool syn_time_on = false;
-# define IF_SYN_TIME(p) (p)
+#define IF_SYN_TIME(p) (p)
 
 // Set the timeout used for syntax highlighting.
 // Use NULL to reset, no timeout.
@@ -578,7 +578,7 @@ void syntax_start(win_T *wp, linenr_T lnum)
 static void clear_syn_state(synstate_T *p)
 {
   if (p->sst_stacksize > SST_FIX_STATES) {
-#   define UNREF_BUFSTATE_EXTMATCH(bs) unref_extmatch((bs)->bs_extmatch)
+#define UNREF_BUFSTATE_EXTMATCH(bs) unref_extmatch((bs)->bs_extmatch)
     GA_DEEP_CLEAR(&(p->sst_union.sst_ga), bufstate_T, UNREF_BUFSTATE_EXTMATCH);
   } else {
     for (int i = 0; i < p->sst_stacksize; i++) {
@@ -592,7 +592,7 @@ static void clear_syn_state(synstate_T *p)
  */
 static void clear_current_state(void)
 {
-# define UNREF_STATEITEM_EXTMATCH(si) unref_extmatch((si)->si_extmatch)
+#define UNREF_STATEITEM_EXTMATCH(si) unref_extmatch((si)->si_extmatch)
   GA_DEEP_CLEAR(&current_state, stateitem_T, UNREF_STATEITEM_EXTMATCH);
 }
 
@@ -1703,7 +1703,7 @@ static int syn_current_attr(const bool syncing, const bool displaying, bool *con
   regmmatch_T regmatch;
   lpos_T pos;
   reg_extmatch_T *cur_extmatch = NULL;
-  char_u      buf_chartab[32];  // chartab array for syn iskeyword
+  char_u buf_chartab[32];  // chartab array for syn iskeyword
   char_u *line;            // current line.  NOTE: becomes invalid after
                            // looking for a pattern match!
 
@@ -4394,7 +4394,7 @@ static void syn_cmd_include(exarg_T *eap, int syncing)
   curwin->w_s->b_syn_topgrp = sgl_id;
   if (source
       ? do_source(eap->arg, false, DOSO_NONE) == FAIL
-      : source_in_path(p_rtp, eap->arg, DIP_ALL) == FAIL) {
+      : source_runtime(eap->arg, DIP_ALL) == FAIL) {
     EMSG2(_(e_notopen), eap->arg);
   }
   curwin->w_s->b_syn_topgrp = prev_toplvl_grp;
@@ -5654,7 +5654,7 @@ static int in_id_list(stateitem_T *cur_si, int16_t *list, struct sp_syn *ssp, in
 
 struct subcommand {
   char *name;                                // subcommand name
-  void    (*func)(exarg_T *, int);              // function to call
+  void (*func)(exarg_T *, int);              // function to call
 };
 
 static struct subcommand subcommands[] =
@@ -5743,9 +5743,8 @@ void ex_ownsyntax(exarg_T *eap)
     old_value = vim_strsave(old_value);
   }
 
-  /* Apply the "syntax" autocommand event, this finds and loads the syntax
-   * file. */
-  apply_autocmds(EVENT_SYNTAX, eap->arg, curbuf->b_fname, TRUE, curbuf);
+  // Apply the "syntax" autocommand event, this finds and loads the syntax file.
+  apply_autocmds(EVENT_SYNTAX, eap->arg, curbuf->b_fname, true, curbuf);
 
   // Move value of b:current_syntax to w:current_syntax.
   new_value = get_var_value("b:current_syntax");
@@ -5845,21 +5844,21 @@ char_u *get_syntax_name(expand_T *xp, int idx)
   case EXP_SUBCMD:
     return (char_u *)subcommands[idx].name;
   case EXP_CASE: {
-      static char *case_args[] = { "match", "ignore", NULL };
-      return (char_u *)case_args[idx];
-    }
+    static char *case_args[] = { "match", "ignore", NULL };
+    return (char_u *)case_args[idx];
+  }
   case EXP_SPELL: {
-      static char *spell_args[] =
-      { "toplevel", "notoplevel", "default", NULL };
-      return (char_u *)spell_args[idx];
-    }
+    static char *spell_args[] =
+    { "toplevel", "notoplevel", "default", NULL };
+    return (char_u *)spell_args[idx];
+  }
   case EXP_SYNC: {
-      static char *sync_args[] =
-      { "ccomment", "clear", "fromstart",
-        "linebreaks=", "linecont", "lines=", "match",
-        "maxlines=", "minlines=", "region", NULL };
-      return (char_u *)sync_args[idx];
-    }
+    static char *sync_args[] =
+    { "ccomment", "clear", "fromstart",
+      "linebreaks=", "linecont", "lines=", "match",
+      "maxlines=", "minlines=", "region", NULL };
+    return (char_u *)sync_args[idx];
+  }
   }
   return NULL;
 }
@@ -6218,6 +6217,26 @@ static const char *highlight_init_both[] = {
   "default link Delimiter Special",
   "default link SpecialComment Special",
   "default link Debug Special",
+  "default DiagnosticError ctermfg=1 guifg=Red",
+  "default DiagnosticWarn ctermfg=3 guifg=Orange",
+  "default DiagnosticInfo ctermfg=4 guifg=LightBlue",
+  "default DiagnosticHint ctermfg=7 guifg=LightGrey",
+  "default DiagnosticUnderlineError cterm=underline gui=underline guisp=Red",
+  "default DiagnosticUnderlineWarn cterm=underline gui=underline guisp=Orange",
+  "default DiagnosticUnderlineInfo cterm=underline gui=underline guisp=LightBlue",
+  "default DiagnosticUnderlineHint cterm=underline gui=underline guisp=LightGrey",
+  "default link DiagnosticVirtualTextError DiagnosticError",
+  "default link DiagnosticVirtualTextWarn DiagnosticWarn",
+  "default link DiagnosticVirtualTextInfo DiagnosticInfo",
+  "default link DiagnosticVirtualTextHint DiagnosticHint",
+  "default link DiagnosticFloatingError DiagnosticError",
+  "default link DiagnosticFloatingWarn DiagnosticWarn",
+  "default link DiagnosticFloatingInfo DiagnosticInfo",
+  "default link DiagnosticFloatingHint DiagnosticHint",
+  "default link DiagnosticSignError DiagnosticError",
+  "default link DiagnosticSignWarn DiagnosticWarn",
+  "default link DiagnosticSignInfo DiagnosticInfo",
+  "default link DiagnosticSignHint DiagnosticHint",
   NULL
 };
 
@@ -6604,7 +6623,7 @@ int load_colors(char_u *name)
     retval = source_runtime(buf, DIP_START + DIP_OPT);
   }
   xfree(buf);
-  apply_autocmds(EVENT_COLORSCHEME, name, curbuf->b_fname, FALSE, curbuf);
+  apply_autocmds(EVENT_COLORSCHEME, name, curbuf->b_fname, false, curbuf);
 
   recursive = false;
 
@@ -7008,7 +7027,7 @@ void do_highlight(const char *line, const bool forceit, const bool init)
           }
 
           if (ascii_isdigit(*arg)) {
-            color = atoi((char *)arg);
+            color = atoi(arg);
           } else if (STRICMP(arg, "fg") == 0) {
             if (cterm_normal_fg_color) {
               color = cterm_normal_fg_color - 1;
@@ -7868,20 +7887,20 @@ void highlight_changed(void)
   need_highlight_changed = false;
 
   /// Translate builtin highlight groups into attributes for quick lookup.
-  for (int hlf = 0; hlf < (int)HLF_COUNT; hlf++) {
+  for (int hlf = 0; hlf < HLF_COUNT; hlf++) {
     id = syn_check_group((char_u *)hlf_names[hlf], STRLEN(hlf_names[hlf]));
     if (id == 0) {
       abort();
     }
     int final_id = syn_get_final_id(id);
-    if (hlf == (int)HLF_SNC) {
+    if (hlf == HLF_SNC) {
       id_SNC = final_id;
-    } else if (hlf == (int)HLF_S) {
+    } else if (hlf == HLF_S) {
       id_S = final_id;
     }
 
     highlight_attr[hlf] = hl_get_ui_attr(hlf, final_id,
-                                         hlf == (int)HLF_INACTIVE);
+                                         hlf == HLF_INACTIVE);
 
     if (highlight_attr[hlf] != highlight_attr_last[hlf]) {
       if (hlf == HLF_MSG) {

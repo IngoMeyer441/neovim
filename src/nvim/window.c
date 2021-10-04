@@ -62,8 +62,16 @@
 
 #define NOWIN           (win_T *)-1     // non-existing window
 
-# define ROWS_AVAIL (Rows - p_ch - tabline_height())
+#define ROWS_AVAIL (Rows - p_ch - tabline_height())
 
+/// flags for win_enter_ext()
+typedef enum {
+  WEE_UNDO_SYNC = 0x01,
+  WEE_CURWIN_INVALID = 0x02,
+  WEE_TRIGGER_NEW_AUTOCMDS = 0x04,
+  WEE_TRIGGER_ENTER_AUTOCMDS = 0x08,
+  WEE_TRIGGER_LEAVE_AUTOCMDS = 0x10,
+} wee_flags_T;
 
 static char *m_onlyone = N_("Already only one window");
 
@@ -82,7 +90,7 @@ void do_window(int nchar, long Prenum, int xchar)
 
   Prenum1 = Prenum == 0 ? 1 : Prenum;
 
-# define CHECK_CMDWIN \
+#define CHECK_CMDWIN \
   do { \
     if (cmdwin_type != 0) { \
       EMSG(_(e_cmdwin)); \
@@ -755,7 +763,7 @@ void win_config_float(win_T *wp, FloatConfig fconfig)
     api_clear_error(&dummy);
     if (wp->w_float_config.bufpos.lnum >= 0) {
       pos_T pos = { wp->w_float_config.bufpos.lnum + 1,
-        wp->w_float_config.bufpos.col, 0 };
+                    wp->w_float_config.bufpos.col, 0 };
       int trow, tcol, tcolc, tcole;
       textpos2screenpos(wp, &pos, &trow, &tcol, &tcolc, &tcole, true);
       row += trow - 1;
@@ -845,12 +853,12 @@ void ui_ext_win_position(win_T *wp)
       bool east = c.anchor & kFloatAnchorEast;
       bool south = c.anchor & kFloatAnchorSouth;
 
-      int comp_row = (int)row - (south ? wp->w_height : 0);
-      int comp_col = (int)col - (east ? wp->w_width : 0);
+      int comp_row = (int)row - (south ? wp->w_height_outer : 0);
+      int comp_col = (int)col - (east ? wp->w_width_outer : 0);
       comp_row += grid->comp_row;
       comp_col += grid->comp_col;
-      comp_row = MAX(MIN(comp_row, Rows-wp->w_height_outer-1), 0);
-      comp_col = MAX(MIN(comp_col, Columns-wp->w_width_outer), 0);
+      comp_row = MAX(MIN(comp_row, Rows - wp->w_height_outer - 1), 0);
+      comp_col = MAX(MIN(comp_col, Columns - wp->w_width_outer), 0);
       wp->w_winrow = comp_row;
       wp->w_wincol = comp_col;
       bool valid = (wp->w_redr_type == 0);
@@ -1397,10 +1405,9 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
   // Keep same changelist position in new window.
   wp->w_changelistidx = oldwin->w_changelistidx;
 
-  /*
-   * make the new window the current window
-   */
-  win_enter_ext(wp, false, false, true, true, true);
+  // make the new window the current window
+  win_enter_ext(wp, WEE_TRIGGER_NEW_AUTOCMDS | WEE_TRIGGER_ENTER_AUTOCMDS
+                | WEE_TRIGGER_LEAVE_AUTOCMDS);
   if (flags & WSP_VERT) {
     p_wiw = i;
   } else {
@@ -1712,21 +1719,10 @@ static void win_exchange(long Prenum)
   curwin->w_vsep_width = wp->w_vsep_width;
   wp->w_vsep_width = temp;
 
-  /* If the windows are not in the same frame, exchange the sizes to avoid
-   * messing up the window layout.  Otherwise fix the frame sizes. */
-  if (curwin->w_frame->fr_parent != wp->w_frame->fr_parent) {
-    temp = curwin->w_height;
-    curwin->w_height = wp->w_height;
-    wp->w_height = temp;
-    temp = curwin->w_width;
-    curwin->w_width = wp->w_width;
-    wp->w_width = temp;
-  } else {
-    frame_fix_height(curwin);
-    frame_fix_height(wp);
-    frame_fix_width(curwin);
-    frame_fix_width(wp);
-  }
+  frame_fix_height(curwin);
+  frame_fix_height(wp);
+  frame_fix_width(curwin);
+  frame_fix_width(wp);
 
   (void)win_comp_pos();                 // recompute window positions
 
@@ -2459,7 +2455,7 @@ int win_close(win_T *win, bool free_buf)
     if (wp->w_buffer != curbuf) {
       other_buffer = true;
       win->w_closing = true;
-      apply_autocmds(EVENT_BUFLEAVE, NULL, NULL, FALSE, curbuf);
+      apply_autocmds(EVENT_BUFLEAVE, NULL, NULL, false, curbuf);
       if (!win_valid(win)) {
         return FAIL;
       }
@@ -2620,7 +2616,8 @@ int win_close(win_T *win, bool free_buf)
   }
 
   if (close_curwin) {
-    win_enter_ext(wp, false, true, false, true, true);
+    win_enter_ext(wp, WEE_CURWIN_INVALID | WEE_TRIGGER_ENTER_AUTOCMDS
+                  | WEE_TRIGGER_LEAVE_AUTOCMDS);
     if (other_buffer) {
       // careful: after this wp and win may be invalid!
       apply_autocmds(EVENT_BUFENTER, NULL, NULL, false, curbuf);
@@ -3959,16 +3956,16 @@ static int leave_tabpage(buf_T *new_curbuf, bool trigger_leave_autocmds)
   reset_VIsual_and_resel();     // stop Visual mode
   if (trigger_leave_autocmds) {
     if (new_curbuf != curbuf) {
-      apply_autocmds(EVENT_BUFLEAVE, NULL, NULL, FALSE, curbuf);
+      apply_autocmds(EVENT_BUFLEAVE, NULL, NULL, false, curbuf);
       if (curtab != tp) {
         return FAIL;
       }
     }
-    apply_autocmds(EVENT_WINLEAVE, NULL, NULL, FALSE, curbuf);
+    apply_autocmds(EVENT_WINLEAVE, NULL, NULL, false, curbuf);
     if (curtab != tp) {
       return FAIL;
     }
-    apply_autocmds(EVENT_TABLEAVE, NULL, NULL, FALSE, curbuf);
+    apply_autocmds(EVENT_TABLEAVE, NULL, NULL, false, curbuf);
     if (curtab != tp) {
       return FAIL;
     }
@@ -4005,11 +4002,12 @@ static void enter_tabpage(tabpage_T *tp, buf_T *old_curbuf, bool trigger_enter_a
     tabpage_check_windows(old_curtab);
   }
 
-  /* We would like doing the TabEnter event first, but we don't have a
-   * valid current window yet, which may break some commands.
-   * This triggers autocommands, thus may make "tp" invalid. */
-  win_enter_ext(tp->tp_curwin, false, true, false,
-                trigger_enter_autocmds, trigger_leave_autocmds);
+  // We would like doing the TabEnter event first, but we don't have a
+  // valid current window yet, which may break some commands.
+  // This triggers autocommands, thus may make "tp" invalid.
+  win_enter_ext(tp->tp_curwin, WEE_CURWIN_INVALID
+                | (trigger_enter_autocmds ? WEE_TRIGGER_ENTER_AUTOCMDS : 0)
+                | (trigger_leave_autocmds ? WEE_TRIGGER_LEAVE_AUTOCMDS : 0));
   prevwin = next_prevwin;
 
   last_status(false);  // status line may appear or disappear
@@ -4044,9 +4042,9 @@ static void enter_tabpage(tabpage_T *tp, buf_T *old_curbuf, bool trigger_enter_a
   /* Apply autocommands after updating the display, when 'rows' and
    * 'columns' have been set correctly. */
   if (trigger_enter_autocmds) {
-    apply_autocmds(EVENT_TABENTER, NULL, NULL, FALSE, curbuf);
+    apply_autocmds(EVENT_TABENTER, NULL, NULL, false, curbuf);
     if (old_curbuf != curbuf) {
-      apply_autocmds(EVENT_BUFENTER, NULL, NULL, FALSE, curbuf);
+      apply_autocmds(EVENT_BUFENTER, NULL, NULL, false, curbuf);
     }
   }
 
@@ -4462,34 +4460,33 @@ static void win_goto_hor(bool left, long count)
 ///          win_valid(wp).
 void win_enter(win_T *wp, bool undo_sync)
 {
-  win_enter_ext(wp, undo_sync, false, false, true, true);
+  win_enter_ext(wp, (undo_sync ? WEE_UNDO_SYNC : 0)
+                | WEE_TRIGGER_ENTER_AUTOCMDS | WEE_TRIGGER_LEAVE_AUTOCMDS);
 }
 
-/// Make window wp the current window.
+/// Make window "wp" the current window.
 ///
-/// @param curwin_invalid  curwin has just been closed and
-///                        isn't valid when true.
-static void win_enter_ext(win_T *wp, bool undo_sync, bool curwin_invalid, bool trigger_new_autocmds,
-                          bool trigger_enter_autocmds, bool trigger_leave_autocmds)
+/// @param flags  if contains WEE_CURWIN_INVALID, it means curwin has just been
+///               closed and isn't valid.
+static void win_enter_ext(win_T *const wp, const int flags)
 {
-  int other_buffer = FALSE;
+  bool other_buffer = false;
+  const bool curwin_invalid = (flags & WEE_CURWIN_INVALID);
 
   if (wp == curwin && !curwin_invalid) {        // nothing to do
     return;
   }
 
-  if (!curwin_invalid && trigger_leave_autocmds) {
-    /*
-     * Be careful: If autocommands delete the window, return now.
-     */
+  if (!curwin_invalid && (flags & WEE_TRIGGER_LEAVE_AUTOCMDS)) {
+    // Be careful: If autocommands delete the window, return now.
     if (wp->w_buffer != curbuf) {
-      apply_autocmds(EVENT_BUFLEAVE, NULL, NULL, FALSE, curbuf);
-      other_buffer = TRUE;
+      apply_autocmds(EVENT_BUFLEAVE, NULL, NULL, false, curbuf);
+      other_buffer = true;
       if (!win_valid(wp)) {
         return;
       }
     }
-    apply_autocmds(EVENT_WINLEAVE, NULL, NULL, FALSE, curbuf);
+    apply_autocmds(EVENT_WINLEAVE, NULL, NULL, false, curbuf);
     if (!win_valid(wp)) {
       return;
     }
@@ -4500,7 +4497,7 @@ static void win_enter_ext(win_T *wp, bool undo_sync, bool curwin_invalid, bool t
   }
 
   // sync undo before leaving the current buffer
-  if (undo_sync && curbuf != wp->w_buffer) {
+  if ((flags & WEE_UNDO_SYNC) && curbuf != wp->w_buffer) {
     u_sync(false);
   }
 
@@ -4561,10 +4558,10 @@ static void win_enter_ext(win_T *wp, bool undo_sync, bool curwin_invalid, bool t
     shorten_fnames(true);
   }
 
-  if (trigger_new_autocmds) {
+  if (flags & WEE_TRIGGER_NEW_AUTOCMDS) {
     apply_autocmds(EVENT_WINNEW, NULL, NULL, false, curbuf);
   }
-  if (trigger_enter_autocmds) {
+  if (flags & WEE_TRIGGER_ENTER_AUTOCMDS) {
     apply_autocmds(EVENT_WINENTER, NULL, NULL, false, curbuf);
     if (other_buffer) {
       apply_autocmds(EVENT_BUFENTER, NULL, NULL, false, curbuf);
@@ -4926,10 +4923,6 @@ static void frame_remove(frame_T *frp)
     frp->fr_prev->fr_next = frp->fr_next;
   } else {
     frp->fr_parent->fr_child = frp->fr_next;
-    // special case: topframe->fr_child == frp
-    if (topframe->fr_child == frp) {
-      topframe->fr_child = frp->fr_next;
-    }
   }
   if (frp->fr_next != NULL) {
     frp->fr_next->fr_prev = frp->fr_prev;
@@ -7065,13 +7058,13 @@ void win_id2tabwin(typval_T *const argvars, typval_T *const rettv)
   tv_list_append_number(list, winnr);
 }
 
-win_T * win_id2wp(typval_T *argvars)
+win_T *win_id2wp(typval_T *argvars)
 {
   return win_id2wp_tp(argvars, NULL);
 }
 
 // Return the window and tab pointer of window "id".
-win_T * win_id2wp_tp(typval_T *argvars, tabpage_T **tpp)
+win_T *win_id2wp_tp(typval_T *argvars, tabpage_T **tpp)
 {
   int id = tv_get_number(&argvars[0]);
 
