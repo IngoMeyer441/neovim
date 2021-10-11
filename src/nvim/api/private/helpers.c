@@ -25,6 +25,7 @@
 #include "nvim/lua/executor.h"
 #include "nvim/map.h"
 #include "nvim/map_defs.h"
+#include "nvim/mark.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/msgpack_rpc/helpers.h"
@@ -817,13 +818,6 @@ Array string_to_array(const String input, bool crlf)
 void modify_keymap(Buffer buffer, bool is_unmap, String mode, String lhs, String rhs,
                    Dict(keymap) *opts, Error *err)
 {
-  char *err_msg = NULL;  // the error message to report, if any
-  char *err_arg = NULL;  // argument for the error message format string
-  ErrorType err_type = kErrorTypeNone;
-
-  char_u *lhs_buf = NULL;
-  char_u *rhs_buf = NULL;
-
   bool global = (buffer == -1);
   if (global) {
     buffer = 0;
@@ -857,17 +851,13 @@ void modify_keymap(Buffer buffer, bool is_unmap, String mode, String lhs, String
                      CPO_TO_CPO_FLAGS, &parsed_args);
 
   if (parsed_args.lhs_len > MAXMAPLEN) {
-    err_msg = "LHS exceeds maximum map length: %s";
-    err_arg = lhs.data;
-    err_type = kErrorTypeValidation;
-    goto fail_with_message;
+    api_set_error(err, kErrorTypeValidation,  "LHS exceeds maximum map length: %s", lhs.data);
+    goto fail_and_free;
   }
 
   if (mode.size > 1) {
-    err_msg = "Shortname is too long: %s";
-    err_arg = mode.data;
-    err_type = kErrorTypeValidation;
-    goto fail_with_message;
+    api_set_error(err, kErrorTypeValidation, "Shortname is too long: %s", mode.data);
+    goto fail_and_free;
   }
   int mode_val;  // integer value of the mapping mode, to be passed to do_map()
   char_u *p = (char_u *)((mode.size) ? mode.data : "m");
@@ -879,18 +869,14 @@ void modify_keymap(Buffer buffer, bool is_unmap, String mode, String lhs, String
         && mode.size > 0) {
       // get_map_mode() treats unrecognized mode shortnames as ":map".
       // This is an error unless the given shortname was empty string "".
-      err_msg = "Invalid mode shortname: \"%s\"";
-      err_arg = (char *)p;
-      err_type = kErrorTypeValidation;
-      goto fail_with_message;
+      api_set_error(err, kErrorTypeValidation, "Invalid mode shortname: \"%s\"", (char *)p);
+      goto fail_and_free;
     }
   }
 
   if (parsed_args.lhs_len == 0) {
-    err_msg = "Invalid (empty) LHS";
-    err_arg = "";
-    err_type = kErrorTypeValidation;
-    goto fail_with_message;
+    api_set_error(err, kErrorTypeValidation, "Invalid (empty) LHS");
+    goto fail_and_free;
   }
 
   bool is_noremap = parsed_args.noremap;
@@ -903,16 +889,13 @@ void modify_keymap(Buffer buffer, bool is_unmap, String mode, String lhs, String
       // the given RHS was nonempty and not a <Nop>, but was parsed as if it
       // were empty?
       assert(false && "Failed to parse nonempty RHS!");
-      err_msg = "Parsing of nonempty RHS failed: %s";
-      err_arg = rhs.data;
-      err_type = kErrorTypeException;
-      goto fail_with_message;
+      api_set_error(err, kErrorTypeValidation, "Parsing of nonempty RHS failed: %s", rhs.data);
+      goto fail_and_free;
     }
   } else if (is_unmap && parsed_args.rhs_len) {
-    err_msg = "Gave nonempty RHS in unmap command: %s";
-    err_arg = (char *)parsed_args.rhs;
-    err_type = kErrorTypeValidation;
-    goto fail_with_message;
+    api_set_error(err, kErrorTypeValidation,
+                  "Gave nonempty RHS in unmap command: %s", parsed_args.rhs);
+    goto fail_and_free;
   }
 
   // buf_do_map() reads noremap/unmap as its own argument.
@@ -941,19 +924,7 @@ void modify_keymap(Buffer buffer, bool is_unmap, String mode, String lhs, String
     goto fail_and_free;
   }  // switch
 
-  xfree(lhs_buf);
-  xfree(rhs_buf);
-  xfree(parsed_args.rhs);
-  xfree(parsed_args.orig_rhs);
-
-  return;
-
-fail_with_message:
-  api_set_error(err, err_type, err_msg, err_arg);
-
 fail_and_free:
-  xfree(lhs_buf);
-  xfree(rhs_buf);
   xfree(parsed_args.rhs);
   xfree(parsed_args.orig_rhs);
   return;
@@ -1648,361 +1619,6 @@ const char *describe_ns(NS ns_id)
   return "(UNKNOWN PLUGIN)";
 }
 
-static bool parse_float_anchor(String anchor, FloatAnchor *out)
-{
-  if (anchor.size == 0) {
-    *out = (FloatAnchor)0;
-  }
-  char *str = anchor.data;
-  if (striequal(str, "NW")) {
-    *out = 0;  //  NW is the default
-  } else if (striequal(str, "NE")) {
-    *out = kFloatAnchorEast;
-  } else if (striequal(str, "SW")) {
-    *out = kFloatAnchorSouth;
-  } else if (striequal(str, "SE")) {
-    *out = kFloatAnchorSouth | kFloatAnchorEast;
-  } else {
-    return false;
-  }
-  return true;
-}
-
-static bool parse_float_relative(String relative, FloatRelative *out)
-{
-  char *str = relative.data;
-  if (striequal(str, "editor")) {
-    *out = kFloatRelativeEditor;
-  } else if (striequal(str, "win")) {
-    *out = kFloatRelativeWindow;
-  } else if (striequal(str, "cursor")) {
-    *out = kFloatRelativeCursor;
-  } else {
-    return false;
-  }
-  return true;
-}
-
-static bool parse_float_bufpos(Array bufpos, lpos_T *out)
-{
-  if (bufpos.size != 2
-      || bufpos.items[0].type != kObjectTypeInteger
-      || bufpos.items[1].type != kObjectTypeInteger) {
-    return false;
-  }
-  out->lnum = bufpos.items[0].data.integer;
-  out->col = (colnr_T)bufpos.items[1].data.integer;
-  return true;
-}
-
-static void parse_border_style(Object style, FloatConfig *fconfig, Error *err)
-{
-  struct {
-    const char *name;
-    schar_T chars[8];
-    bool shadow_color;
-  } defaults[] = {
-    { "double", { "╔", "═", "╗", "║", "╝", "═", "╚", "║" }, false },
-    { "single", { "┌", "─", "┐", "│", "┘", "─", "└", "│" }, false },
-    { "shadow", { "", "", " ", " ", " ", " ", " ", "" }, true },
-    { "rounded", { "╭", "─", "╮", "│", "╯", "─", "╰", "│" }, false },
-    { "solid", { " ", " ", " ", " ", " ", " ", " ", " " }, false },
-    { NULL, { { NUL } }, false },
-  };
-
-  schar_T *chars = fconfig->border_chars;
-  int *hl_ids = fconfig->border_hl_ids;
-
-  fconfig->border = true;
-
-  if (style.type == kObjectTypeArray) {
-    Array arr = style.data.array;
-    size_t size = arr.size;
-    if (!size || size > 8 || (size & (size-1))) {
-      api_set_error(err, kErrorTypeValidation,
-                    "invalid number of border chars");
-      return;
-    }
-    for (size_t i = 0; i < size; i++) {
-      Object iytem = arr.items[i];
-      String string;
-      int hl_id = 0;
-      if (iytem.type == kObjectTypeArray) {
-        Array iarr = iytem.data.array;
-        if (!iarr.size || iarr.size > 2) {
-          api_set_error(err, kErrorTypeValidation, "invalid border char");
-          return;
-        }
-        if (iarr.items[0].type != kObjectTypeString) {
-          api_set_error(err, kErrorTypeValidation, "invalid border char");
-          return;
-        }
-        string = iarr.items[0].data.string;
-        if (iarr.size == 2) {
-          hl_id = object_to_hl_id(iarr.items[1], "border char highlight", err);
-          if (ERROR_SET(err)) {
-            return;
-          }
-        }
-      } else if (iytem.type == kObjectTypeString) {
-        string = iytem.data.string;
-      } else {
-        api_set_error(err, kErrorTypeValidation, "invalid border char");
-        return;
-      }
-      if (string.size
-          && mb_string2cells_len((char_u *)string.data, string.size) > 1) {
-        api_set_error(err, kErrorTypeValidation,
-                      "border chars must be one cell");
-        return;
-      }
-      size_t len = MIN(string.size, sizeof(*chars)-1);
-      if (len) {
-        memcpy(chars[i], string.data, len);
-      }
-      chars[i][len] = NUL;
-      hl_ids[i] = hl_id;
-    }
-    while (size < 8) {
-      memcpy(chars+size, chars, sizeof(*chars) * size);
-      memcpy(hl_ids+size, hl_ids, sizeof(*hl_ids) * size);
-      size <<= 1;
-    }
-    if ((chars[7][0] && chars[1][0] && !chars[0][0])
-        || (chars[1][0] && chars[3][0] && !chars[2][0])
-        || (chars[3][0] && chars[5][0] && !chars[4][0])
-        || (chars[5][0] && chars[7][0] && !chars[6][0])) {
-      api_set_error(err, kErrorTypeValidation,
-                    "corner between used edges must be specified");
-    }
-  } else if (style.type == kObjectTypeString) {
-    String str = style.data.string;
-    if (str.size == 0 || strequal(str.data, "none")) {
-      fconfig->border = false;
-      return;
-    }
-    for (size_t i = 0; defaults[i].name; i++) {
-      if (strequal(str.data, defaults[i].name)) {
-        memcpy(chars, defaults[i].chars, sizeof(defaults[i].chars));
-        memset(hl_ids, 0, 8 * sizeof(*hl_ids));
-        if (defaults[i].shadow_color) {
-          int hl_blend = SYN_GROUP_STATIC("FloatShadow");
-          int hl_through = SYN_GROUP_STATIC("FloatShadowThrough");
-          hl_ids[2] = hl_through;
-          hl_ids[3] = hl_blend;
-          hl_ids[4] = hl_blend;
-          hl_ids[5] = hl_blend;
-          hl_ids[6] = hl_through;
-        }
-        return;
-      }
-    }
-    api_set_error(err, kErrorTypeValidation,
-                  "invalid border style \"%s\"", str.data);
-  }
-}
-
-bool parse_float_config(Dict(float_config) *config, FloatConfig *fconfig, bool reconf, bool new_win,
-                        Error *err)
-{
-  bool has_relative = false, relative_is_win = false;
-  if (config->relative.type == kObjectTypeString) {
-    // ignore empty string, to match nvim_win_get_config
-    if (config->relative.data.string.size > 0) {
-      if (!parse_float_relative(config->relative.data.string, &fconfig->relative)) {
-        api_set_error(err, kErrorTypeValidation, "Invalid value of 'relative' key");
-        return false;
-      }
-
-      if (!(HAS_KEY(config->row) && HAS_KEY(config->col)) && !HAS_KEY(config->bufpos)) {
-        api_set_error(err, kErrorTypeValidation,
-                      "'relative' requires 'row'/'col' or 'bufpos'");
-        return false;
-      }
-
-      has_relative = true;
-      fconfig->external = false;
-      if (fconfig->relative == kFloatRelativeWindow) {
-        relative_is_win = true;
-        fconfig->bufpos.lnum = -1;
-      }
-    }
-  } else if (HAS_KEY(config->relative)) {
-    api_set_error(err, kErrorTypeValidation, "'relative' key must be String");
-    return false;
-  }
-
-  if (config->anchor.type == kObjectTypeString) {
-    if (!parse_float_anchor(config->anchor.data.string, &fconfig->anchor)) {
-      api_set_error(err, kErrorTypeValidation, "Invalid value of 'anchor' key");
-      return false;
-    }
-  } else if (HAS_KEY(config->anchor)) {
-    api_set_error(err, kErrorTypeValidation, "'anchor' key must be String");
-    return false;
-  }
-
-  if (HAS_KEY(config->row)) {
-    if (!has_relative) {
-      api_set_error(err, kErrorTypeValidation, "non-float cannot have 'row'");
-      return false;
-    } else if (config->row.type == kObjectTypeInteger) {
-      fconfig->row = (double)config->row.data.integer;
-    } else if (config->row.type == kObjectTypeFloat) {
-      fconfig->row = config->row.data.floating;
-    } else {
-      api_set_error(err, kErrorTypeValidation,
-                    "'row' key must be Integer or Float");
-      return false;
-    }
-  }
-
-  if (HAS_KEY(config->col)) {
-    if (!has_relative) {
-      api_set_error(err, kErrorTypeValidation, "non-float cannot have 'col'");
-      return false;
-    } else if (config->col.type == kObjectTypeInteger) {
-      fconfig->col = (double)config->col.data.integer;
-    } else if (config->col.type == kObjectTypeFloat) {
-      fconfig->col = config->col.data.floating;
-    } else {
-      api_set_error(err, kErrorTypeValidation,
-                    "'col' key must be Integer or Float");
-      return false;
-    }
-  }
-
-  if (HAS_KEY(config->bufpos)) {
-    if (!has_relative) {
-      api_set_error(err, kErrorTypeValidation, "non-float cannot have 'bufpos'");
-      return false;
-    } else if (config->bufpos.type == kObjectTypeArray) {
-      if (!parse_float_bufpos(config->bufpos.data.array, &fconfig->bufpos)) {
-        api_set_error(err, kErrorTypeValidation, "Invalid value of 'bufpos' key");
-        return false;
-      }
-
-      if (!HAS_KEY(config->row)) {
-        fconfig->row = (fconfig->anchor & kFloatAnchorSouth) ? 0 : 1;
-      }
-      if (!HAS_KEY(config->col)) {
-        fconfig->col = 0;
-      }
-    } else {
-      api_set_error(err, kErrorTypeValidation, "'bufpos' key must be Array");
-      return false;
-    }
-  }
-
-  if (config->width.type == kObjectTypeInteger && config->width.data.integer > 0) {
-    fconfig->width = (int)config->width.data.integer;
-  } else if (HAS_KEY(config->width)) {
-    api_set_error(err, kErrorTypeValidation, "'width' key must be a positive Integer");
-    return false;
-  } else if (!reconf) {
-    api_set_error(err, kErrorTypeValidation, "Must specify 'width'");
-    return false;
-  }
-
-  if (config->height.type == kObjectTypeInteger && config->height.data.integer > 0) {
-    fconfig->height = (int)config->height.data.integer;
-  } else if (HAS_KEY(config->height)) {
-    api_set_error(err, kErrorTypeValidation, "'height' key must be a positive Integer");
-    return false;
-  } else if (!reconf) {
-    api_set_error(err, kErrorTypeValidation, "Must specify 'height'");
-    return false;
-  }
-
-  if (relative_is_win) {
-    fconfig->window = curwin->handle;
-    if (config->win.type == kObjectTypeInteger || config->win.type == kObjectTypeWindow) {
-      if (config->win.data.integer > 0) {
-        fconfig->window = (Window)config->win.data.integer;
-      }
-    } else if (HAS_KEY(config->win)) {
-      api_set_error(err, kErrorTypeValidation, "'win' key must be Integer or Window");
-      return false;
-    }
-  } else {
-    if (HAS_KEY(config->win)) {
-      api_set_error(err, kErrorTypeValidation, "'win' key is only valid with relative='win'");
-      return false;
-    }
-  }
-
-  if (HAS_KEY(config->external)) {
-    fconfig->external = api_object_to_bool(config->external, "'external' key", false, err);
-    if (ERROR_SET(err)) {
-      return false;
-    }
-    if (has_relative && fconfig->external) {
-      api_set_error(err, kErrorTypeValidation,
-                    "Only one of 'relative' and 'external' must be used");
-      return false;
-    }
-    if (fconfig->external && !ui_has(kUIMultigrid)) {
-      api_set_error(err, kErrorTypeValidation,
-                    "UI doesn't support external windows");
-      return false;
-    }
-  }
-
-  if (!reconf && (!has_relative && !fconfig->external)) {
-    api_set_error(err, kErrorTypeValidation,
-                  "One of 'relative' and 'external' must be used");
-    return false;
-  }
-
-
-  if (HAS_KEY(config->focusable)) {
-    fconfig->focusable = api_object_to_bool(config->focusable, "'focusable' key", false, err);
-    if (ERROR_SET(err)) {
-      return false;
-    }
-  }
-
-  if (config->zindex.type == kObjectTypeInteger && config->zindex.data.integer > 0) {
-    fconfig->zindex = (int)config->zindex.data.integer;
-  } else if (HAS_KEY(config->zindex)) {
-    api_set_error(err, kErrorTypeValidation, "'zindex' key must be a positive Integer");
-    return false;
-  }
-
-  if (HAS_KEY(config->border)) {
-    parse_border_style(config->border, fconfig, err);
-    if (ERROR_SET(err)) {
-      return false;
-    }
-  }
-
-  if (config->style.type == kObjectTypeString) {
-    if (config->style.data.string.data[0] == NUL) {
-      fconfig->style = kWinStyleUnused;
-    } else if (striequal(config->style.data.string.data, "minimal")) {
-      fconfig->style = kWinStyleMinimal;
-    }  else {
-      api_set_error(err, kErrorTypeValidation, "Invalid value of 'style' key");
-    }
-  } else if (HAS_KEY(config->style)) {
-    api_set_error(err, kErrorTypeValidation, "'style' key must be String");
-    return false;
-  }
-
-  if (HAS_KEY(config->noautocmd)) {
-    if (!new_win) {
-      api_set_error(err, kErrorTypeValidation, "Invalid key: 'noautocmd'");
-      return false;
-    }
-    fconfig->noautocmd = api_object_to_bool(config->noautocmd, "'noautocmd' key", false, err);
-    if (ERROR_SET(err)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 bool api_dict_to_keydict(void *rv, field_hash hashy, Dictionary dict, Error *err)
 {
   for (size_t i = 0; i < dict.size; i++) {
@@ -2026,3 +1642,42 @@ void api_free_keydict(void *dict, KeySetLink *table)
   }
 }
 
+/// Set a named mark
+/// buffer and mark name must be validated already
+/// @param buffer     Buffer to set the mark on
+/// @param name       Mark name
+/// @param line       Line number
+/// @param col        Column/row number
+/// @return true if the mark was set, else false
+bool set_mark(buf_T *buf, String name, Integer line, Integer col, Error *err)
+{
+  buf = buf == NULL ? curbuf : buf;
+  // If line == 0 the marks is being deleted
+  bool res = false;
+  bool deleting = false;
+  if (line == 0) {
+    col = 0;
+    deleting = true;
+  } else {
+    if (col > MAXCOL) {
+      api_set_error(err, kErrorTypeValidation, "Column value outside range");
+      return res;
+    }
+    if (line < 1 || line > buf->b_ml.ml_line_count) {
+      api_set_error(err, kErrorTypeValidation, "Line value outside range");
+      return res;
+    }
+  }
+  pos_T pos = { line, (int)col, (int)col };
+  res = setmark_pos(*name.data, &pos, buf->handle);
+  if (!res) {
+    if (deleting) {
+      api_set_error(err, kErrorTypeException,
+                    "Failed to delete named mark: %c", *name.data);
+    } else {
+      api_set_error(err, kErrorTypeException,
+                    "Failed to set named mark: %c", *name.data);
+    }
+  }
+  return res;
+}

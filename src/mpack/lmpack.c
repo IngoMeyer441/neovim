@@ -204,14 +204,14 @@ static void lmpack_pushnil(lua_State *L)
 static mpack_uint32_t lmpack_objlen(lua_State *L, int *is_array)
 {
   size_t len, max;
-  int isarr, type;
+  int isarr;
   lua_Number n;
 #ifndef NDEBUG
   int top = lua_gettop(L);
   assert(top);
 #endif
 
-  if ((type = lua_type(L, -1)) != LUA_TTABLE) {
+  if ((lua_type(L, -1)) != LUA_TTABLE) {
 #if LUA_VERSION_NUM >= 502
     len = lua_rawlen(L, -1);
 #elif LUA_VERSION_NUM == 501
@@ -445,7 +445,6 @@ static int lmpack_unpacker_unpack_str(lua_State *L, Unpacker *unpacker,
     if (rv == MPACK_NOMEM) {
       unpacker->parser = lmpack_grow_parser(unpacker->parser);
       if (!unpacker->parser) {
-        unpacker->unpacking = 0;
         return luaL_error(L, "failed to grow Unpacker capacity");
       }
     }
@@ -799,7 +798,6 @@ static int lmpack_packer_pack(lua_State *L)
     if (result == MPACK_NOMEM) {
       packer->parser = lmpack_grow_parser(packer->parser);
       if (!packer->parser) {
-        packer->packing = 0;
         return luaL_error(L, "Failed to grow Packer capacity");
       }
     }

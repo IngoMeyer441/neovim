@@ -3899,7 +3899,7 @@ static char *set_bool_option(const int opt_idx, char_u *const varp, const int va
     // when 'buflisted' changes, trigger autocommands
     apply_autocmds(curbuf->b_p_bl ? EVENT_BUFADD : EVENT_BUFDELETE,
                    NULL, NULL, true, curbuf);
-  } else if ((int *)varp == (int *)&curbuf->b_p_swf) {
+  } else if ((int *)varp == &curbuf->b_p_swf) {
     // when 'swf' is set, create swapfile, when reset remove swapfile
     if (curbuf->b_p_swf && p_uc) {
       ml_open_file(curbuf);                     // create the swap file
@@ -6509,8 +6509,6 @@ void set_context_in_set_cmd(expand_T *xp, char_u *arg, int opt_flags)
       break;
     }
   }
-
-  return;
 }
 
 int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char_u ***file)

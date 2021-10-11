@@ -3088,10 +3088,16 @@ f_getbufvar_end:
 static void f_getchangelist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   tv_list_alloc_ret(rettv, 2);
-  vim_ignored = tv_get_number(&argvars[0]);  // issue errmsg if type error
-  emsg_off++;
-  const buf_T *const buf = tv_get_buf(&argvars[0], false);
-  emsg_off--;
+
+  const buf_T *buf;
+  if (argvars[0].v_type == VAR_UNKNOWN) {
+    buf = curbuf;
+  } else {
+    vim_ignored = tv_get_number(&argvars[0]);  // issue errmsg if type error
+    emsg_off++;
+    buf = tv_get_buf(&argvars[0], false);
+    emsg_off--;
+  }
   if (buf == NULL) {
     return;
   }
@@ -3741,7 +3747,7 @@ static void f_getmatches(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     if (cur->conceal_char) {
       char buf[MB_MAXBYTES + 1];
 
-      buf[utf_char2bytes((int)cur->conceal_char, (char_u *)buf)] = NUL;
+      buf[utf_char2bytes(cur->conceal_char, (char_u *)buf)] = NUL;
       tv_dict_add_str(dict, S_LEN("conceal"), buf);
     }
 
@@ -5230,7 +5236,7 @@ static void f_jobpid(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     return;
   }
 
-  Process *proc = (Process *)&data->stream.proc;
+  Process *proc = &data->stream.proc;
   rettv->vval.v_number = proc->pid;
 }
 
@@ -5528,7 +5534,7 @@ static void f_jobstop(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     // Ignore return code, but show error later.
     (void)channel_close(data->id, kChannelPartRpc, &error);
   }
-  process_stop((Process *)&data->stream.proc);
+  process_stop(&data->stream.proc);
   rettv->vval.v_number = 1;
   if (error) {
     EMSG(error);
@@ -6135,7 +6141,7 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
         }
       }
 
-      match = vim_regexec_nl(&regmatch, str, (colnr_T)startcol);
+      match = vim_regexec_nl(&regmatch, str, startcol);
 
       if (match && --nth <= 0) {
         break;
@@ -6346,7 +6352,7 @@ static void f_matcharg(typval_T *argvars, typval_T *rettv, FunPtr fptr)
                             : 0));
 
   if (id >= 1 && id <= 3) {
-    matchitem_T *const m = (matchitem_T *)get_match(curwin, id);
+    matchitem_T *const m = get_match(curwin, id);
 
     if (m != NULL) {
       tv_list_append_string(rettv->vval.v_list,
@@ -6993,7 +6999,7 @@ static void f_range(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   } else {
     tv_list_alloc_ret(rettv, (end - start) / stride);
     for (i = start; stride > 0 ? i <= end : i >= end; i += stride) {
-      tv_list_append_number(rettv->vval.v_list, (varnumber_T)i);
+      tv_list_append_number(rettv->vval.v_list, i);
     }
   }
 }
@@ -7296,7 +7302,7 @@ static void f_getreginfo(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   if (list == NULL) {
     return;
   }
-  tv_dict_add_list(dict, S_LEN("regcontents"), list);
+  (void)tv_dict_add_list(dict, S_LEN("regcontents"), list);
 
   char buf[NUMBUFLEN + 2];
   buf[0] = NUL;
@@ -7315,14 +7321,15 @@ static void f_getreginfo(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   case kMTUnknown:
     abort();
   }
-  tv_dict_add_str(dict, S_LEN("regtype"), buf);
+  (void)tv_dict_add_str(dict, S_LEN("regtype"), buf);
 
   buf[0] = get_register_name(get_unname_register());
   buf[1] = NUL;
   if (regname == '"') {
-    tv_dict_add_str(dict, S_LEN("points_to"), buf);
+    (void)tv_dict_add_str(dict, S_LEN("points_to"), buf);
   } else {
-    tv_dict_add_bool(dict, S_LEN("isunnamed"), regname == buf[0] ? kBoolVarTrue : kBoolVarFalse);
+    (void)tv_dict_add_bool(dict, S_LEN("isunnamed"),
+                           regname == buf[0] ? kBoolVarTrue : kBoolVarFalse);
   }
 }
 

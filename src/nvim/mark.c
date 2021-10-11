@@ -1036,9 +1036,10 @@ static void mark_adjust_internal(linenr_T line1, linenr_T line2, long amount, lo
     }
 
     sign_mark_adjust(line1, line2, amount, amount_after);
-    if (op != kExtmarkNOOP) {
-      extmark_adjust(curbuf, line1, line2, amount, amount_after, op);
-    }
+  }
+
+  if (op != kExtmarkNOOP) {
+    extmark_adjust(curbuf, line1, line2, amount, amount_after, op);
   }
 
   // previous context mark
@@ -1635,6 +1636,15 @@ void get_buf_local_marks(const buf_T *buf, list_T *l)
   add_mark(l, "'.", &buf->b_last_change.mark, buf->b_fnum, NULL);
   add_mark(l, "'<", &buf->b_visual.vi_start, buf->b_fnum, NULL);
   add_mark(l, "'>", &buf->b_visual.vi_end, buf->b_fnum, NULL);
+}
+
+/// Get a global mark
+///
+/// @param[in]  Name of named mark
+/// @param[out] Global/file mark
+xfmark_T get_global_mark(char name)
+{
+  return namedfm[mark_global_index(name)];
 }
 
 /// Get information about global marks ('A' to 'Z' and '0' to '9')
