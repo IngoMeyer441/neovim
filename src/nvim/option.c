@@ -615,8 +615,8 @@ static void set_option_default(int opt_idx, int opt_flags)
   uint32_t flags = options[opt_idx].flags;
   if (varp != NULL) {       // skip hidden option, nothing to do for it
     if (flags & P_STRING) {
-      /* Use set_string_option_direct() for local options to handle
-       * freeing and allocating the value. */
+      // Use set_string_option_direct() for local options to handle
+      // freeing and allocating the value.
       if (options[opt_idx].indir != PV_NONE) {
         set_string_option_direct(NULL, opt_idx,
                                  options[opt_idx].def_val, opt_flags, 0);
@@ -1094,8 +1094,8 @@ int do_set(char_u *arg, int opt_flags)
         flags = P_STRING;
       }
 
-      /* Skip all options that are not window-local (used when showing
-       * an already loaded buffer in a window). */
+      // Skip all options that are not window-local (used when showing
+      // an already loaded buffer in a window).
       if ((opt_flags & OPT_WINONLY)
           && (opt_idx < 0 || options[opt_idx].var != VAR_WIN)) {
         goto skip;
@@ -1514,8 +1514,8 @@ int do_set(char_u *arg, int opt_flags)
                 }
               }
 
-              /* concatenate the two strings; add a ',' if
-               * needed */
+              // concatenate the two strings; add a ',' if
+              // needed
               if (adding || prepending) {
                 comma = ((flags & P_COMMA) && *origval != NUL
                          && *newval != NUL);
@@ -1540,8 +1540,8 @@ int do_set(char_u *arg, int opt_flags)
                 }
               }
 
-              /* Remove newval[] from origval[]. (Note: "i" has
-               * been set above and is used here). */
+              // Remove newval[] from origval[]. (Note: "i" has
+              // been set above and is used here).
               if (removing) {
                 STRCPY(newval, origval);
                 if (*s) {
@@ -2072,9 +2072,9 @@ static void check_string_option(char_u **pp)
 /// Return true when option "opt" was set from a modeline or in secure mode.
 /// Return false when it wasn't.
 /// Return -1 for an unknown option.
-int was_set_insecurely(win_T *const wp, char_u *opt, int opt_flags)
+int was_set_insecurely(win_T *const wp, char *opt, int opt_flags)
 {
-  int idx = findoption((const char *)opt);
+  int idx = findoption(opt);
 
   if (idx >= 0) {
     uint32_t *flagp = insecure_flag(wp, idx, opt_flags);
@@ -3288,7 +3288,7 @@ ambw_end:
       if (p > q) {
         vim_snprintf((char *)fname, sizeof(fname), "spell/%.*s.vim",
                      (int)(p - q), q);
-        source_runtime(fname, DIP_ALL);
+        source_runtime((char *)fname, DIP_ALL);
       }
     }
   }
@@ -3510,7 +3510,7 @@ static char_u *set_chars_option(win_T *wp, char_u **varp, bool set)
           xfree(wp->w_p_lcs_chars.multispace);
         }
         if (multispace_len > 0) {
-          wp->w_p_lcs_chars.multispace = xmalloc((size_t)(multispace_len + 1) * sizeof(int));
+          wp->w_p_lcs_chars.multispace = xmalloc(((size_t)multispace_len + 1) * sizeof(int));
           wp->w_p_lcs_chars.multispace[multispace_len] = NUL;
         } else {
           wp->w_p_lcs_chars.multispace = NULL;
@@ -3745,7 +3745,7 @@ static bool parse_winhl_opt(win_T *wp)
     char *hi = colon+1;
     char *commap = xstrchrnul(hi, ',');
     int len = (int)(commap-hi);
-    int hl_id = len ? syn_check_group((char_u *)hi, len) : -1;
+    int hl_id = len ? syn_check_group(hi, len) : -1;
 
     if (strncmp("Normal", p, nlen) == 0) {
       w_hl_id_normal = hl_id;
@@ -4044,8 +4044,8 @@ static char *set_bool_option(const int opt_idx, char_u *const varp, const int va
         }
       }
 
-      /* Arabic requires a utf-8 encoding, inform the user if its not
-       * set. */
+      // Arabic requires a utf-8 encoding, inform the user if its not
+      // set.
       if (STRCMP(p_enc, "utf-8") != 0) {
         static char *w_arabic = N_("W17: Arabic requires UTF-8, do ':set encoding=utf-8'");
 
@@ -4070,12 +4070,12 @@ static char *set_bool_option(const int opt_idx, char_u *const varp, const int va
           changed_window_setting();
         }
 
-        /* 'arabicshape' isn't reset, it is a global option and
-         * another window may still need it "on". */
+        // 'arabicshape' isn't reset, it is a global option and
+        // another window may still need it "on".
       }
 
-      /* 'delcombine' isn't reset, it is a global option and another
-       * window may still want it "on". */
+      // 'delcombine' isn't reset, it is a global option and another
+      // window may still want it "on".
 
       // Revert to the default keymap
       curbuf->b_p_iminsert = B_IMODE_NONE;
@@ -5218,8 +5218,8 @@ int makeset(FILE *fd, int opt_flags, int local_only)
           continue;
         }
 
-        /* Do not store options like 'bufhidden' and 'syntax' in a vimrc
-         * file, they are always buffer-specific. */
+        // Do not store options like 'bufhidden' and 'syntax' in a vimrc
+        // file, they are always buffer-specific.
         if ((opt_flags & OPT_GLOBAL) && (p->flags & P_NOGLOB)) {
           continue;
         }
@@ -5339,9 +5339,9 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char_u **valuep, uint6
     return FAIL;
   }
   if (*valuep != NULL) {
-    /* Output 'pastetoggle' as key names.  For other
-     * options some characters have to be escaped with
-     * CTRL-V or backslash */
+    // Output 'pastetoggle' as key names.  For other
+    // options some characters have to be escaped with
+    // CTRL-V or backslash
     if (valuep == &p_pt) {
       s = *valuep;
       while (*s != NUL) {
@@ -6605,8 +6605,8 @@ void ExpandOldSetting(int *num_file, char_u ***file)
   char_u *buf = vim_strsave_escaped(var, escape_chars);
 
 #ifdef BACKSLASH_IN_FILENAME
-  /* For MS-Windows et al. we don't double backslashes at the start and
-   * before a file name character. */
+  // For MS-Windows et al. we don't double backslashes at the start and
+  // before a file name character.
   for (var = buf; *var != NUL; MB_PTR_ADV(var)) {
     if (var[0] == '\\' && var[1] == '\\'
         && expand_option_idx >= 0

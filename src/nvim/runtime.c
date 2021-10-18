@@ -11,6 +11,7 @@
 #include "nvim/eval.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
+#include "nvim/lua/executor.h"
 #include "nvim/misc1.h"
 #include "nvim/option.h"
 #include "nvim/os/os.h"
@@ -47,13 +48,13 @@ void ex_runtime(exarg_T *eap)
     arg = skipwhite(arg + len);
   }
 
-  source_runtime(arg, flags);
+  source_runtime((char *)arg, flags);
 }
 
 
 static void source_callback(char_u *fname, void *cookie)
 {
-  (void)do_source(fname, false, DOSO_NONE);
+  (void)do_source((char *)fname, false, DOSO_NONE);
 }
 
 /// Find the file "name" in all directories in "path" and invoke
@@ -64,7 +65,7 @@ static void source_callback(char_u *fname, void *cookie)
 /// When "flags" has DIP_ERR: give an error message if there is no match.
 ///
 /// return FAIL when no file could be sourced, OK otherwise.
-int do_in_path(char_u *path, char_u *name, int flags, DoInRuntimepathCB callback, void *cookie)
+int do_in_path(char_u *path, char *name, int flags, DoInRuntimepathCB callback, void *cookie)
 {
   char_u *tail;
   int num_files;
@@ -79,8 +80,7 @@ int do_in_path(char_u *path, char_u *name, int flags, DoInRuntimepathCB callback
   {
     if (p_verbose > 10 && name != NULL) {
       verbose_enter();
-      smsg(_("Searching for \"%s\" in \"%s\""),
-           (char *)name, (char *)path);
+      smsg(_("Searching for \"%s\" in \"%s\""), name, (char *)path);
       verbose_leave();
     }
 
@@ -109,7 +109,7 @@ int do_in_path(char_u *path, char_u *name, int flags, DoInRuntimepathCB callback
         tail = buf + STRLEN(buf);
 
         // Loop over all patterns in "name"
-        char_u *np = name;
+        char_u *np = (char_u *)name;
         while (*np != NUL && ((flags & DIP_ALL) || !did_one)) {
           // Append the pattern from "name" to buf[].
           assert(MAXPATHL >= (tail - buf));
@@ -158,6 +158,34 @@ int do_in_path(char_u *path, char_u *name, int flags, DoInRuntimepathCB callback
   return did_one ? OK : FAIL;
 }
 
+RuntimeSearchPath runtime_search_path_get_cached(int *ref)
+  FUNC_ATTR_NONNULL_ALL
+{
+  runtime_search_path_validate();
+
+  *ref = 0;
+  if (runtime_search_path_ref == NULL) {
+    // cached path was unreferenced. keep a ref to
+    // prevent runtime_search_path() to freeing it too early
+    (*ref)++;
+    runtime_search_path_ref = ref;
+  }
+  return runtime_search_path;
+}
+
+void runtime_search_path_unref(RuntimeSearchPath path, int *ref)
+  FUNC_ATTR_NONNULL_ALL
+{
+  if (*ref) {
+    if (runtime_search_path_ref == ref) {
+      runtime_search_path_ref = NULL;
+    } else {
+      runtime_search_path_free(path);
+    }
+  }
+}
+
+
 /// Find the file "name" in all directories in "path" and invoke
 /// "callback(fname, cookie)".
 /// "name" can contain wildcards.
@@ -168,7 +196,6 @@ int do_in_path(char_u *path, char_u *name, int flags, DoInRuntimepathCB callback
 /// return FAIL when no file could be sourced, OK otherwise.
 int do_in_cached_path(char_u *name, int flags, DoInRuntimepathCB callback, void *cookie)
 {
-  runtime_search_path_validate();
   char_u *tail;
   int num_files;
   char_u **files;
@@ -183,14 +210,8 @@ int do_in_cached_path(char_u *name, int flags, DoInRuntimepathCB callback, void 
     verbose_leave();
   }
 
-  RuntimeSearchPath path = runtime_search_path;
-  int ref = 0;
-  if (runtime_search_path_ref == NULL) {
-    // cached path was unreferenced. keep a ref to
-    // prevent runtime_search_path() to freeing it too early
-    ref++;
-    runtime_search_path_ref = &ref;
-  }
+  int ref;
+  RuntimeSearchPath path = runtime_search_path_get_cached(&ref);
 
   // Loop over all entries in cached path
   for (size_t j = 0; j < kv_size(path); j++) {
@@ -207,7 +228,6 @@ int do_in_cached_path(char_u *name, int flags, DoInRuntimepathCB callback, void 
 
     if (name == NULL) {
       (*callback)((char_u *)item.path, cookie);
-      did_one = true;
     } else if (buflen + STRLEN(name) + 2 < MAXPATHL) {
       STRCPY(buf, item.path);
       add_pathsep((char *)buf);
@@ -256,17 +276,70 @@ int do_in_cached_path(char_u *name, int flags, DoInRuntimepathCB callback, void 
     }
   }
 
-  if (ref) {
-    if (runtime_search_path_ref == &ref) {
-      runtime_search_path_ref = NULL;
-    } else {
-      runtime_search_path_free(path);
-    }
-  }
-
+  runtime_search_path_unref(path, &ref);
 
   return did_one ? OK : FAIL;
 }
+
+Array runtime_inspect(void)
+{
+  RuntimeSearchPath path = runtime_search_path;
+  Array rv = ARRAY_DICT_INIT;
+
+  for (size_t i = 0; i < kv_size(path); i++) {
+    SearchPathItem *item = &kv_A(path, i);
+    Array entry = ARRAY_DICT_INIT;
+    ADD(entry, STRING_OBJ(cstr_to_string(item->path)));
+    ADD(entry, BOOLEAN_OBJ(item->after));
+    if (item->has_lua != kNone) {
+      ADD(entry, BOOLEAN_OBJ(item->has_lua == kTrue));
+    }
+    ADD(rv, ARRAY_OBJ(entry));
+  }
+  return rv;
+}
+
+ArrayOf(String) runtime_get_named(bool lua, Array pat, bool all)
+{
+  int ref;
+  RuntimeSearchPath path = runtime_search_path_get_cached(&ref);
+  ArrayOf(String) rv = ARRAY_DICT_INIT;
+  static char buf[MAXPATHL];
+
+  for (size_t i = 0; i < kv_size(path); i++) {
+    SearchPathItem *item = &kv_A(path, i);
+    if (lua) {
+      if (item->has_lua == kNone) {
+        size_t size = (size_t)snprintf(buf, sizeof buf, "%s/lua/", item->path);
+        item->has_lua = (size < sizeof buf && os_isdir((char_u *)buf)) ? kTrue : kFalse;
+      }
+      if (item->has_lua == kFalse) {
+        continue;
+      }
+    }
+
+    for (size_t j = 0; j < pat.size; j++) {
+      Object pat_item = pat.items[j];
+      if (pat_item.type == kObjectTypeString) {
+        size_t size = (size_t)snprintf(buf, sizeof buf, "%s/%s",
+                                       item->path, pat_item.data.string.data);
+        if (size < sizeof buf) {
+          if (os_file_is_readable(buf)) {
+            ADD(rv, STRING_OBJ(cstr_to_string(buf)));
+            if (!all) {
+              goto done;
+            }
+          }
+        }
+      }
+    }
+  }
+
+done:
+  runtime_search_path_unref(path, &ref);
+  return rv;
+}
+
 /// Find "name" in "path".  When found, invoke the callback function for
 /// it: callback(fname, "cookie")
 /// When "flags" has DIP_ALL repeat for all matches, otherwise only the first
@@ -281,16 +354,16 @@ int do_in_path_and_pp(char_u *path, char_u *name, int flags, DoInRuntimepathCB c
   int done = FAIL;
 
   if ((flags & DIP_NORTP) == 0) {
-    done |= do_in_path(path, (name && !*name) ? NULL : name, flags, callback, cookie);
+    done |= do_in_path(path, (char *)((name && !*name) ? NULL : name), flags, callback, cookie);
   }
 
   if ((done == FAIL || (flags & DIP_ALL)) && (flags & DIP_START)) {
     char *start_dir = "pack/*/start/*/%s%s";  // NOLINT
     size_t len = STRLEN(start_dir) + STRLEN(name) + 6;
-    char_u *s = xmallocz(len);  // TODO(bfredl): get rid of random allocations
+    char *s = xmallocz(len);  // TODO(bfredl): get rid of random allocations
     char *suffix = (flags & DIP_AFTER) ? "after/" : "";
 
-    vim_snprintf((char *)s, len, start_dir, suffix, name);
+    vim_snprintf(s, len, start_dir, suffix, name);
     done |= do_in_path(p_pp, s, flags & ~DIP_AFTER, callback, cookie);
 
     xfree(s);
@@ -300,7 +373,7 @@ int do_in_path_and_pp(char_u *path, char_u *name, int flags, DoInRuntimepathCB c
       len = STRLEN(start_dir) + STRLEN(name) + 6;
       s = xmallocz(len);
 
-      vim_snprintf((char *)s, len, start_dir, suffix, name);
+      vim_snprintf(s, len, start_dir, suffix, name);
       done |= do_in_path(p_pp, s, flags & ~DIP_AFTER, callback, cookie);
 
       xfree(s);
@@ -310,9 +383,9 @@ int do_in_path_and_pp(char_u *path, char_u *name, int flags, DoInRuntimepathCB c
   if ((done == FAIL || (flags & DIP_ALL)) && (flags & DIP_OPT)) {
     char *opt_dir = "pack/*/opt/*/%s";  // NOLINT
     size_t len = STRLEN(opt_dir) + STRLEN(name);
-    char_u *s = xmallocz(len);
+    char *s = xmallocz(len);
 
-    vim_snprintf((char *)s, len, opt_dir, name);
+    vim_snprintf(s, len, opt_dir, name);
     done |= do_in_path(p_pp, s, flags, callback, cookie);
 
     xfree(s);
@@ -322,7 +395,7 @@ int do_in_path_and_pp(char_u *path, char_u *name, int flags, DoInRuntimepathCB c
       len = STRLEN(opt_dir) + STRLEN(name);
       s = xmallocz(len);
 
-      vim_snprintf((char *)s, len, opt_dir, name);
+      vim_snprintf(s, len, opt_dir, name);
       done |= do_in_path(p_pp, s, flags, callback, cookie);
 
       xfree(s);
@@ -339,7 +412,7 @@ static void push_path(RuntimeSearchPath *search_path, Map(String, handle_T) *rtp
   if (h == 0) {
     char *allocated = xstrdup(entry);
     map_put(String, handle_T)(rtp_used, cstr_as_string(allocated), 1);
-    kv_push(*search_path, ((SearchPathItem){ allocated, after }));
+    kv_push(*search_path, ((SearchPathItem){ allocated, after, kNone }));
   }
 }
 
@@ -374,7 +447,7 @@ static void expand_pack_entry(RuntimeSearchPath *search_path, Map(String, handle
     if (STRLEN(pack_entry) + STRLEN(start_pat[i]) + 1 > MAXPATHL) {
       continue;
     }
-    xstrlcpy(buf, (char *)pack_entry, MAXPATHL);
+    STRLCPY(buf, pack_entry, MAXPATHL);
     xstrlcat(buf, start_pat[i], sizeof buf);
     expand_rtp_entry(search_path, rtp_used, buf, false);
     size_t after_size = STRLEN(buf)+7;
@@ -482,6 +555,13 @@ void runtime_search_path_free(RuntimeSearchPath path)
 
 void runtime_search_path_validate(void)
 {
+  if (!nlua_is_deferred_safe()) {
+    // Cannot rebuild search path in an async context. As a plugin will invoke
+    // itself asynchronously from sync code in the same plugin, the sought
+    // after lua/autoload module will most likely already be in the cached path.
+    // Thus prefer using the stale cache over erroring out in this situation.
+    return;
+  }
   if (!runtime_search_path_valid) {
     if (!runtime_search_path_ref) {
       runtime_search_path_free(runtime_search_path);
@@ -515,9 +595,9 @@ int do_in_runtimepath(char_u *name, int flags, DoInRuntimepathCB callback, void 
 /// When "flags" has DIP_ALL: source all files, otherwise only the first one.
 ///
 /// return FAIL when no file could be sourced, OK otherwise.
-int source_runtime(char_u *name, int flags)
+int source_runtime(char *name, int flags)
 {
-  return do_in_runtimepath(name, flags, source_callback, NULL);
+  return do_in_runtimepath((char_u *)name, flags, source_callback, NULL);
 }
 
 /// Just like source_runtime(), but use "path" instead of 'runtimepath'.
@@ -535,7 +615,7 @@ static void source_all_matches(char_u *pat)
 
   if (gen_expand_wildcards(1, &pat, &num_files, &files, EW_FILE) == OK) {
     for (int i = 0; i < num_files; i++) {
-      (void)do_source(files[i], false, DOSO_NONE);
+      (void)do_source((char *)files[i], false, DOSO_NONE);
     }
     FreeWild(num_files, files);
   }
@@ -791,7 +871,7 @@ static void add_pack_start_dir(char_u *fname, void *cookie)
     if (STRLEN(fname) + STRLEN(start_pat[i]) + 1 > MAXPATHL) {
       continue;
     }
-    xstrlcpy((char *)buf, (char *)fname, MAXPATHL);
+    STRLCPY(buf, fname, MAXPATHL);
     xstrlcat((char *)buf, start_pat[i], sizeof buf);
     if (pack_has_entries(buf)) {
       add_pack_dir_to_rtp(buf, true);
@@ -804,9 +884,9 @@ static void add_pack_start_dir(char_u *fname, void *cookie)
 void load_start_packages(void)
 {
   did_source_packages = true;
-  do_in_path(p_pp, (char_u *)"pack/*/start/*", DIP_ALL + DIP_DIR,  // NOLINT
+  do_in_path(p_pp, "pack/*/start/*", DIP_ALL + DIP_DIR,  // NOLINT
              add_start_pack_plugin, &APP_LOAD);
-  do_in_path(p_pp, (char_u *)"start/*", DIP_ALL + DIP_DIR,  // NOLINT
+  do_in_path(p_pp, "start/*", DIP_ALL + DIP_DIR,  // NOLINT
              add_start_pack_plugin, &APP_LOAD);
 }
 
@@ -849,8 +929,8 @@ void load_plugins(void)
     }
     TIME_MSG("loading packages");
 
-    source_runtime(plugin_pattern_vim, DIP_ALL | DIP_AFTER);
-    source_runtime(plugin_pattern_lua, DIP_ALL | DIP_AFTER);
+    source_runtime((char *)plugin_pattern_vim, DIP_ALL | DIP_AFTER);
+    source_runtime((char *)plugin_pattern_lua, DIP_ALL | DIP_AFTER);
     TIME_MSG("loading after plugins");
   }
 }
@@ -873,9 +953,7 @@ void ex_packadd(exarg_T *eap)
     vim_snprintf(pat, len, plugpat, round == 1 ? "start" : "opt", eap->arg);
     // The first round don't give a "not found" error, in the second round
     // only when nothing was found in the first round.
-    res = do_in_path(p_pp, (char_u *)pat,
-                     DIP_ALL + DIP_DIR
-                     + (round == 2 && res == FAIL ? DIP_ERR : 0),
+    res = do_in_path(p_pp, pat, DIP_ALL + DIP_DIR + (round == 2 && res == FAIL ? DIP_ERR : 0),
                      round == 1 ? add_start_pack_plugin : add_opt_pack_plugin,
                      eap->forceit ? &APP_ADD_DIR : &APP_BOTH);
     xfree(pat);

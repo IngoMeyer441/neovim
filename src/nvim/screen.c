@@ -2208,7 +2208,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
 
     if (provider_err) {
       Decoration err_decor = DECORATION_INIT;
-      int hl_err = syn_check_group((char_u *)S_LEN("ErrorMsg"));
+      int hl_err = syn_check_group(S_LEN("ErrorMsg"));
       kv_push(err_decor.virt_text,
               ((VirtTextChunk){ .text = provider_err,
                                 .hl_id = hl_err }));
@@ -5164,8 +5164,8 @@ void win_redr_status_matches(expand_T *xp, int num_matches, char_u **matches, in
   if (row >= 0) {
     if (wild_menu_showing == 0 || wild_menu_showing == WM_LIST) {
       if (msg_scrolled > 0) {
-        /* Put the wildmenu just above the command line.  If there is
-         * no room, scroll the screen one line up. */
+        // Put the wildmenu just above the command line.  If there is
+        // no room, scroll the screen one line up.
         if (cmdline_row == Rows - 1) {
           msg_scroll_up(false);
           msg_scrolled++;
@@ -5465,7 +5465,7 @@ static void win_redr_custom(win_T *wp, bool draw_ruler)
     fillchar = ' ';
     attr = HL_ATTR(HLF_TPF);
     maxwidth = Columns;
-    use_sandbox = was_set_insecurely(wp, (char_u *)"tabline", 0);
+    use_sandbox = was_set_insecurely(wp, "tabline", 0);
   } else {
     row = W_ENDROW(wp);
     fillchar = fillchar_status(&attr, wp);
@@ -5500,15 +5500,14 @@ static void win_redr_custom(win_T *wp, bool draw_ruler)
         attr = HL_ATTR(HLF_MSG);
       }
 
-      use_sandbox = was_set_insecurely(wp, (char_u *)"rulerformat", 0);
+      use_sandbox = was_set_insecurely(wp, "rulerformat", 0);
     } else {
       if (*wp->w_p_stl != NUL) {
         stl = wp->w_p_stl;
       } else {
         stl = p_stl;
       }
-      use_sandbox = was_set_insecurely(wp, (char_u *)"statusline",
-                                       *wp->w_p_stl == NUL ? 0 : OPT_LOCAL);
+      use_sandbox = was_set_insecurely(wp, "statusline", *wp->w_p_stl == NUL ? 0 : OPT_LOCAL);
     }
 
     col += wp->w_wincol;
@@ -7032,8 +7031,8 @@ int showmode(void)
         if (VIsual_active) {
           char *p;
 
-          /* Don't concatenate separate words to avoid translation
-           * problems. */
+          // Don't concatenate separate words to avoid translation
+          // problems.
           switch ((VIsual_select ? 4 : 0)
                   + (VIsual_mode == Ctrl_V) * 2
                   + (VIsual_mode == 'V')) {

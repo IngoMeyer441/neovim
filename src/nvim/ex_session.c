@@ -859,7 +859,7 @@ void ex_loadview(exarg_T *eap)
 {
   char *fname = get_view_file(*eap->arg);
   if (fname != NULL) {
-    if (do_source((char_u *)fname, false, DOSO_NONE) == FAIL) {
+    if (do_source(fname, false, DOSO_NONE) == FAIL) {
       EMSG2(_(e_notopen), fname);
     }
     xfree(fname);
@@ -963,7 +963,7 @@ void ex_mkrc(exarg_T *eap)
           *dirnow = NUL;
         }
         if (*dirnow != NUL && (ssop_flags & SSOP_SESDIR)) {
-          if (vim_chdirfile((char_u *)fname) == OK) {
+          if (vim_chdirfile((char_u *)fname, kCdCauseOther) == OK) {
             shorten_fnames(true);
           }
         } else if (*dirnow != NUL

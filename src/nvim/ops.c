@@ -435,9 +435,9 @@ static void shift_block(oparg_T *oap, int amount)
      * non-whitespace character.
      */
 
-    /* If "bd.startspaces" is set, "bd.textstart" points to the character,
-     * the part of which is displayed at the block's beginning. Let's start
-     * searching from the next character. */
+    // If "bd.startspaces" is set, "bd.textstart" points to the character,
+    // the part of which is displayed at the block's beginning. Let's start
+    // searching from the next character.
     if (bd.startspaces) {
       MB_PTR_ADV(non_white);
     }
@@ -614,8 +614,8 @@ static void block_insert(oparg_T *oap, char_u *s, int b_insert, struct block_def
                         skipped, offset-startcol, kExtmarkUndo);
 
     if (lnum == oap->end.lnum) {
-      /* Set "']" mark to the end of the block instead of the end of
-       * the insert in the first line.  */
+      // Set "']" mark to the end of the block instead of the end of
+      // the insert in the first line.
       curbuf->b_op_end.lnum = oap->end.lnum;
       curbuf->b_op_end.col = offset;
     }
@@ -1846,8 +1846,8 @@ int op_replace(oparg_T *oap, int c)
         numc -= (oap->end_vcol - bd.end_vcol) + 1;
       }
 
-      /* A double-wide character can be replaced only up to half the
-       * times. */
+      // A double-wide character can be replaced only up to half the
+      // times.
       if ((*mb_char2cells)(c) > 1) {
         if ((numc & 1) && !bd.is_short) {
           ++bd.endspaces;
@@ -1938,8 +1938,8 @@ int op_replace(oparg_T *oap, int c)
       n = gchar_cursor();
       if (n != NUL) {
         if ((*mb_char2len)(c) > 1 || (*mb_char2len)(n) > 1) {
-          /* This is slow, but it handles replacing a single-byte
-           * with a multi-byte and the other way around. */
+          // This is slow, but it handles replacing a single-byte
+          // with a multi-byte and the other way around.
           if (curwin->w_cursor.lnum == oap->end.lnum) {
             oap->end.col += (*mb_char2len)(c) - (*mb_char2len)(n);
           }
@@ -1949,8 +1949,8 @@ int op_replace(oparg_T *oap, int c)
             int end_vcol = 0;
 
             if (curwin->w_cursor.lnum == oap->end.lnum) {
-              /* oap->end has to be recalculated when
-               * the tab breaks */
+              // oap->end has to be recalculated when
+              // the tab breaks
               end_vcol = getviscol2(oap->end.col,
                                     oap->end.coladd);
             }
@@ -1969,9 +1969,9 @@ int op_replace(oparg_T *oap, int c)
           virtcols -= oap->start.coladd;
         }
 
-        /* oap->end has been trimmed so it's effectively inclusive;
-         * as a result an extra +1 must be counted so we don't
-         * trample the NUL byte. */
+        // oap->end has been trimmed so it's effectively inclusive;
+        // as a result an extra +1 must be counted so we don't
+        // trample the NUL byte.
         coladvance_force(getviscol2(oap->end.col, oap->end.coladd) + 1);
         curwin->w_cursor.col -= (virtcols + 1);
         for (; virtcols >= 0; virtcols--) {
@@ -2228,8 +2228,8 @@ void op_insert(oparg_T *oap, long count1)
         ++curwin->w_cursor.col;
       }
       if (bd.is_short && !bd.is_MAX) {
-        /* First line was too short, make it longer and adjust the
-         * values in "bd". */
+        // First line was too short, make it longer and adjust the
+        // values in "bd".
         if (u_save_cursor() == FAIL) {
           return;
         }
@@ -2386,8 +2386,8 @@ int op_change(oparg_T *oap)
     }
   }
 
-  /* First delete the text in the region.  In an empty buffer only need to
-   * save for undo */
+  // First delete the text in the region.  In an empty buffer only need to
+  // save for undo
   if (curbuf->b_ml.ml_flags & ML_EMPTY) {
     if (u_save_cursor() == FAIL) {
       return FALSE;
@@ -3872,10 +3872,9 @@ char_u *skip_comment(char_u *line, bool process, bool include_space, bool *is_co
     ++comment_flags;
   }
 
-  /* If we found a colon, it means that we are not processing a line
-   * starting with a closing part of a three-part comment. That's good,
-   * because we don't want to remove those as this would be annoying.
-   */
+  // If we found a colon, it means that we are not processing a line
+  // starting with a closing part of a three-part comment. That's good,
+  // because we don't want to remove those as this would be annoying.
   if (*comment_flags == ':' || *comment_flags == NUL) {
     line += lead_len;
   }
@@ -4054,8 +4053,8 @@ int do_join(size_t count, int insert_space, int save_undo, int use_formatoptions
     curwin->w_buffer->b_op_end.col = sumsize;
   }
 
-  /* Only report the change in the first line here, del_lines() will report
-   * the deleted line. */
+  // Only report the change in the first line here, del_lines() will report
+  // the deleted line.
   changed_lines(curwin->w_cursor.lnum, currsize,
                 curwin->w_cursor.lnum + 1, 0L, true);
 
@@ -4172,8 +4171,8 @@ void op_format(oparg_T *oap, int keep_cursor)
 {
   long old_line_count = curbuf->b_ml.ml_line_count;
 
-  /* Place the cursor where the "gq" or "gw" command was given, so that "u"
-   * can put it back there. */
+  // Place the cursor where the "gq" or "gw" command was given, so that "u"
+  // can put it back there.
   curwin->w_cursor = oap->cursor_start;
 
   if (u_save((linenr_T)(oap->start.lnum - 1),
@@ -4190,8 +4189,8 @@ void op_format(oparg_T *oap, int keep_cursor)
   // Set '[ mark at the start of the formatted area
   curbuf->b_op_start = oap->start;
 
-  /* For "gw" remember the cursor position and put it back below (adjusted
-   * for joined and split lines). */
+  // For "gw" remember the cursor position and put it back below (adjusted
+  // for joined and split lines).
   if (keep_cursor) {
     saved_cursor = oap->cursor_start;
   }
@@ -4221,8 +4220,8 @@ void op_format(oparg_T *oap, int keep_cursor)
   if (oap->is_VIsual) {
     FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
       if (wp->w_old_cursor_lnum != 0) {
-        /* When lines have been inserted or deleted, adjust the end of
-         * the Visual area to be redrawn. */
+        // When lines have been inserted or deleted, adjust the end of
+        // the Visual area to be redrawn.
         if (wp->w_old_cursor_lnum > wp->w_old_visual_lnum) {
           wp->w_old_cursor_lnum += old_line_count;
         } else {
@@ -4244,16 +4243,16 @@ void op_formatexpr(oparg_T *oap)
   }
 
   if (fex_format(oap->start.lnum, oap->line_count, NUL) != 0) {
-    /* As documented: when 'formatexpr' returns non-zero fall back to
-     * internal formatting. */
-    op_format(oap, FALSE);
+    // As documented: when 'formatexpr' returns non-zero fall back to
+    // internal formatting.
+    op_format(oap, false);
   }
 }
 
 /// @param c  character to be inserted
 int fex_format(linenr_T lnum, long count, int c)
 {
-  int use_sandbox = was_set_insecurely(curwin, (char_u *)"formatexpr", OPT_LOCAL);
+  int use_sandbox = was_set_insecurely(curwin, "formatexpr", OPT_LOCAL);
   int r;
   char_u *fex;
 
@@ -4424,8 +4423,8 @@ void format_lines(linenr_T line_count, int avoid_fex)
        */
       if (is_end_par || force_format) {
         if (need_set_indent) {
-          /* replace indent in first line with minimal number of
-           * tabs and spaces, according to current options */
+          // replace indent in first line with minimal number of
+          // tabs and spaces, according to current options
           (void)set_indent(get_indent(), SIN_CHANGED);
         }
 
@@ -4451,8 +4450,8 @@ void format_lines(linenr_T line_count, int avoid_fex)
         // at end of par.: need to set indent of next par.
         need_set_indent = is_end_par;
         if (is_end_par) {
-          /* When called with a negative line count, break at the
-           * end of the paragraph. */
+          // When called with a negative line count, break at the
+          // end of the paragraph.
           if (line_count < 0) {
             break;
           }
@@ -4674,9 +4673,9 @@ static void block_prep(oparg_T *oap, struct block_def *bdp, linenr_T lnum, bool 
       } else {
         bdp->startspaces = oap->end_vcol - oap->start_vcol + 1;
         if (is_del && oap->op_type != OP_LSHIFT) {
-          /* just putting the sum of those two into
-           * bdp->startspaces doesn't work for Visual replace,
-           * so we have to split the tab in two */
+          // just putting the sum of those two into
+          // bdp->startspaces doesn't work for Visual replace,
+          // so we have to split the tab in two
           bdp->startspaces = bdp->start_char_vcols
                              - (bdp->start_vcol - oap->start_vcol);
           bdp->endspaces = bdp->end_vcol - oap->end_vcol - 1;
@@ -4817,7 +4816,7 @@ void op_addsub(oparg_T *oap, linenr_T Prenum1, bool g_cmd)
       if (change_cnt == 1) {
         MSG(_("1 line changed"));
       } else {
-        smsg((char *)_("%" PRId64 " lines changed"), (int64_t)change_cnt);
+        smsg(_("%" PRId64 " lines changed"), (int64_t)change_cnt);
       }
     }
   }
@@ -6056,7 +6055,7 @@ bool prepare_yankreg_from_object(yankreg_T *reg, String regtype, size_t lines)
 
 void finish_yankreg_from_object(yankreg_T *reg, bool clipboard_adjust)
 {
-  if (reg->y_size > 0 && strlen((char *)reg->y_array[reg->y_size-1]) == 0) {
+  if (reg->y_size > 0 && STRLEN(reg->y_array[reg->y_size-1]) == 0) {
     // a known-to-be charwise yank might have a final linebreak
     // but otherwise there is no line after the final newline
     if (reg->y_type != kMTCharWise) {
@@ -6121,7 +6120,7 @@ static bool get_clipboard(int name, yankreg_T **target, bool quiet)
       goto err;
     }
     char_u *regtype = TV_LIST_ITEM_TV(tv_list_last(res))->vval.v_string;
-    if (regtype == NULL || strlen((char *)regtype) > 1) {
+    if (regtype == NULL || STRLEN(regtype) > 1) {
       goto err;
     }
     switch (regtype[0]) {
@@ -6164,7 +6163,7 @@ static bool get_clipboard(int name, yankreg_T **target, bool quiet)
     reg->y_array[tv_idx++] = (char_u *)xstrdupnul((const char *)TV_LIST_ITEM_TV(li)->vval.v_string);
   });
 
-  if (reg->y_size > 0 && strlen((char *)reg->y_array[reg->y_size-1]) == 0) {
+  if (reg->y_size > 0 && STRLEN(reg->y_array[reg->y_size-1]) == 0) {
     // a known-to-be charwise yank might have a final linebreak
     // but otherwise there is no line after the final newline
     if (reg->y_type != kMTCharWise) {

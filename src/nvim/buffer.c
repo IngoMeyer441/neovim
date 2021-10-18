@@ -526,8 +526,8 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last)
     diff_buf_delete(buf);   // Clear 'diff' for hidden buffer.
   }
 
-  /* Return when a window is displaying the buffer or when it's not
-   * unloaded. */
+  // Return when a window is displaying the buffer or when it's not
+  // unloaded.
   if (buf->b_nwindows > 0 || !unload_buf) {
     return false;
   }
@@ -592,9 +592,6 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last)
   if (buf->b_nwindows > 0) {
     buf->b_nwindows--;
   }
-
-  // Change directories when the 'acd' option is set.
-  do_autochdir();
 
   // Disable buffer-updates for the current buffer.
   // No need to check `unload_buf`: in that case the function returned above.
@@ -1591,8 +1588,8 @@ void enter_buffer(buf_T *buf)
     apply_autocmds(EVENT_BUFWINENTER, NULL, NULL, false, curbuf);
   }
 
-  /* If autocommands did not change the cursor position, restore cursor lnum
-   * and possibly cursor col. */
+  // If autocommands did not change the cursor position, restore cursor lnum
+  // and possibly cursor col.
   if (curwin->w_cursor.lnum == 1 && inindent(0)) {
     buflist_getfpos();
   }
@@ -1628,7 +1625,7 @@ void do_autochdir(void)
   if (p_acd) {
     if (starting == 0
         && curbuf->b_ffname != NULL
-        && vim_chdirfile(curbuf->b_ffname) == OK) {
+        && vim_chdirfile(curbuf->b_ffname, kCdCauseAuto) == OK) {
       post_chdir(kCdScopeGlobal, false);
       shorten_fnames(true);
     }
@@ -1754,8 +1751,8 @@ buf_T *buflist_new(char_u *ffname_arg, char_u *sfname_arg, linenr_T lnum, int fl
   if ((flags & BLN_CURBUF) && curbuf_reusable()) {
     assert(curbuf != NULL);
     buf = curbuf;
-    /* It's like this buffer is deleted.  Watch out for autocommands that
-     * change curbuf!  If that happens, allocate a new buffer anyway. */
+    // It's like this buffer is deleted.  Watch out for autocommands that
+    // change curbuf!  If that happens, allocate a new buffer anyway.
     if (curbuf->b_p_bl) {
       apply_autocmds(EVENT_BUFDELETE, NULL, NULL, false, curbuf);
     }
@@ -2257,8 +2254,8 @@ int buflist_findpat(const char_u *pattern, const char_u *pattern_end, bool unlis
         }
       }
 
-      /* Only search for unlisted buffers if there was no match with
-       * a listed buffer. */
+      // Only search for unlisted buffers if there was no match with
+      // a listed buffer.
       if (!unlisted || !find_listed || match != -1) {
         break;
       }
@@ -2711,21 +2708,21 @@ void buflist_list(exarg_T *eap)
     const bool job_running = buf->terminal && terminal_running(buf->terminal);
 
     // skip unspecified buffers
-    if ((!buf->b_p_bl && !eap->forceit && !strchr((char *)eap->arg, 'u'))
-        || (strchr((char *)eap->arg, 'u') && buf->b_p_bl)
-        || (strchr((char *)eap->arg, '+')
+    if ((!buf->b_p_bl && !eap->forceit && !vim_strchr(eap->arg, 'u'))
+        || (vim_strchr(eap->arg, 'u') && buf->b_p_bl)
+        || (vim_strchr(eap->arg, '+')
             && ((buf->b_flags & BF_READERR) || !bufIsChanged(buf)))
-        || (strchr((char *)eap->arg, 'a')
+        || (vim_strchr(eap->arg, 'a')
             && (buf->b_ml.ml_mfp == NULL || buf->b_nwindows == 0))
-        || (strchr((char *)eap->arg, 'h')
+        || (vim_strchr(eap->arg, 'h')
             && (buf->b_ml.ml_mfp == NULL || buf->b_nwindows != 0))
-        || (strchr((char *)eap->arg, 'R') && (!is_terminal || !job_running))
-        || (strchr((char *)eap->arg, 'F') && (!is_terminal || job_running))
-        || (strchr((char *)eap->arg, '-') && buf->b_p_ma)
-        || (strchr((char *)eap->arg, '=') && !buf->b_p_ro)
-        || (strchr((char *)eap->arg, 'x') && !(buf->b_flags & BF_READERR))
-        || (strchr((char *)eap->arg, '%') && buf != curbuf)
-        || (strchr((char *)eap->arg, '#')
+        || (vim_strchr(eap->arg, 'R') && (!is_terminal || !job_running))
+        || (vim_strchr(eap->arg, 'F') && (!is_terminal || job_running))
+        || (vim_strchr(eap->arg, '-') && buf->b_p_ma)
+        || (vim_strchr(eap->arg, '=') && !buf->b_p_ro)
+        || (vim_strchr(eap->arg, 'x') && !(buf->b_flags & BF_READERR))
+        || (vim_strchr(eap->arg, '%') && buf != curbuf)
+        || (vim_strchr(eap->arg, '#')
             && (buf == curbuf || curwin->w_alt_fnum != buf->b_fnum))) {
       continue;
     }
@@ -2893,8 +2890,8 @@ void buf_set_name(int fnum, char_u *name)
     xfree(buf->b_ffname);
     buf->b_ffname = vim_strsave(name);
     buf->b_sfname = NULL;
-    /* Allocate ffname and expand into full path.  Also resolves .lnk
-     * files on Win32. */
+    // Allocate ffname and expand into full path.  Also resolves .lnk
+    // files on Win32.
     fname_expand(buf, &buf->b_ffname, &buf->b_sfname);
     buf->b_fname = buf->b_sfname;
   }
@@ -3166,8 +3163,8 @@ void fileinfo(int fullname, int shorthelp, int dont_truncate)
   (void)append_arg_number(curwin, buffer, IOSIZE, !shortmess(SHM_FILE));
 
   if (dont_truncate) {
-    /* Temporarily set msg_scroll to avoid the message being truncated.
-     * First call msg_start() to get the message in the right place. */
+    // Temporarily set msg_scroll to avoid the message being truncated.
+    // First call msg_start() to get the message in the right place.
     msg_start();
     n = msg_scroll;
     msg_scroll = true;
@@ -3235,7 +3232,7 @@ void maketitle(void)
         int use_sandbox = false;
         int save_called_emsg = called_emsg;
 
-        use_sandbox = was_set_insecurely(curwin, (char_u *)"titlestring", 0);
+        use_sandbox = was_set_insecurely(curwin, "titlestring", 0);
         called_emsg = false;
         build_stl_str_hl(curwin, (char_u *)buf, sizeof(buf),
                          p_titlestring, use_sandbox,
@@ -3353,7 +3350,7 @@ void maketitle(void)
         int use_sandbox = false;
         int save_called_emsg = called_emsg;
 
-        use_sandbox = was_set_insecurely(curwin, (char_u *)"iconstring", 0);
+        use_sandbox = was_set_insecurely(curwin, "iconstring", 0);
         called_emsg = false;
         build_stl_str_hl(curwin, icon_str, sizeof(buf),
                          p_iconstring, use_sandbox,
@@ -5233,8 +5230,8 @@ void do_modelines(int flags)
     return;
   }
 
-  /* Disallow recursive entry here.  Can happen when executing a modeline
-   * triggers an autocommand, which reloads modelines with a ":do". */
+  // Disallow recursive entry here.  Can happen when executing a modeline
+  // triggers an autocommand, which reloads modelines with a ":do".
   if (entered) {
     return;
   }

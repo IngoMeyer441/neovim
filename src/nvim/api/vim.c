@@ -195,7 +195,7 @@ Dictionary nvim_get_hl_by_id(Integer hl_id, Boolean rgb, Error *err)
 Integer nvim_get_hl_id_by_name(String name)
   FUNC_API_SINCE(7)
 {
-  return syn_check_group((const char_u *)name.data, (int)name.size);
+  return syn_check_group(name.data, (int)name.size);
 }
 
 Dictionary nvim__get_hl_defs(Integer ns_id, Error *err)
@@ -227,7 +227,7 @@ Dictionary nvim__get_hl_defs(Integer ns_id, Error *err)
 void nvim_set_hl(Integer ns_id, String name, Dictionary val, Error *err)
   FUNC_API_SINCE(7)
 {
-  int hl_id = syn_check_group( (char_u *)(name.data), (int)name.size);
+  int hl_id = syn_check_group(name.data, (int)name.size);
   int link_id = -1;
 
   HlAttrs attrs = dict2hlattrs(val, true, &link_id, err);
@@ -712,7 +712,7 @@ Object nvim_call_dict_function(Object dict, String fn, Array args, Error *err)
     }
     fn = (String) {
       .data = (char *)di->di_tv.vval.v_string,
-      .size = strlen((char *)di->di_tv.vval.v_string),
+      .size = STRLEN(di->di_tv.vval.v_string),
     };
   }
 
@@ -756,6 +756,11 @@ ArrayOf(String) nvim_list_runtime_paths(Error *err)
   return nvim_get_runtime_file(NULL_STRING, true, err);
 }
 
+Array nvim__runtime_inspect(void)
+{
+  return runtime_inspect();
+}
+
 /// Find files in runtime directories
 ///
 /// 'name' can contain wildcards. For example
@@ -793,6 +798,25 @@ String nvim__get_lib_dir(void)
 {
   return cstr_as_string(get_lib_dir());
 }
+
+/// Find files in runtime directories
+///
+/// @param pat pattern of files to search for
+/// @param all whether to return all matches or only the first
+/// @param options
+///          is_lua: only search lua subdirs
+/// @return list of absolute paths to the found files
+ArrayOf(String) nvim__get_runtime(Array pat, Boolean all, Dict(runtime) *opts, Error *err)
+  FUNC_API_SINCE(8)
+  FUNC_API_FAST
+{
+  bool is_lua = api_object_to_bool(opts->is_lua, "is_lua", false, err);
+  if (ERROR_SET(err)) {
+    return (Array)ARRAY_DICT_INIT;
+  }
+  return runtime_get_named(is_lua, pat, all);
+}
+
 
 /// Changes the global working directory.
 ///
@@ -2846,7 +2870,7 @@ Array nvim_get_mark(String name, Error *err)
     bufnr = mark.fmark.fnum;
     filename = (char *)buflist_nr2name(bufnr, true, true);
     allocated = true;
-  // Marks comes from shada
+    // Marks comes from shada
   } else {
     filename = (char *)mark.fname;
     bufnr = 0;
