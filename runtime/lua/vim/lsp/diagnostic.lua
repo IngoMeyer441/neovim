@@ -211,9 +211,14 @@ function M.on_publish_diagnostics(_, result, ctx, config)
         end
       end
     end
+
+    -- Persist configuration to ensure buffer reloads use the same
+    -- configuration. To make lsp.with configuration work (See :help
+    -- lsp-handler-configuration)
+    vim.diagnostic.config(config, namespace)
   end
 
-  vim.diagnostic.set(namespace, bufnr, diagnostic_lsp_to_vim(diagnostics, bufnr, client_id), config)
+  vim.diagnostic.set(namespace, bufnr, diagnostic_lsp_to_vim(diagnostics, bufnr, client_id))
 
   -- Keep old autocmd for back compat. This should eventually be removed.
   vim.api.nvim_command("doautocmd <nomodeline> User LspDiagnosticsChanged")
@@ -546,14 +551,15 @@ end
 ---@param position table|nil The (0,0)-indexed position
 ---@return table {popup_bufnr, win_id}
 function M.show_position_diagnostics(opts, buf_nr, position)
-  if opts then
-    if opts.severity then
-      opts.severity = severity_lsp_to_vim(opts.severity)
-    elseif opts.severity_limit then
-      opts.severity = {min=severity_lsp_to_vim(opts.severity_limit)}
-    end
+  opts = opts or {}
+  opts.scope = "cursor"
+  opts.pos = position
+  if opts.severity then
+    opts.severity = severity_lsp_to_vim(opts.severity)
+  elseif opts.severity_limit then
+    opts.severity = {min=severity_lsp_to_vim(opts.severity_limit)}
   end
-  return vim.diagnostic.show_position_diagnostics(opts, buf_nr, position)
+  return vim.diagnostic.open_float(buf_nr, opts)
 end
 
 --- Open a floating window with the diagnostics from {line_nr}
@@ -568,11 +574,13 @@ end
 ---@param client_id number|nil the client id
 ---@return table {popup_bufnr, win_id}
 function M.show_line_diagnostics(opts, buf_nr, line_nr, client_id)
+  opts = opts or {}
+  opts.scope = "line"
+  opts.pos = line_nr
   if client_id then
-    opts = opts or {}
     opts.namespace = M.get_namespace(client_id)
   end
-  return vim.diagnostic.show_line_diagnostics(opts, buf_nr, line_nr)
+  return vim.diagnostic.open_float(buf_nr, opts)
 end
 
 --- Redraw diagnostics for the given buffer and client

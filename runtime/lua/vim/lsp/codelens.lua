@@ -91,16 +91,16 @@ function M.run()
     local option = options[1]
     execute_lens(option.lens, bufnr, option.client)
   else
-    local options_strings = {"Code lenses:"}
-    for i, option in ipairs(options) do
-       table.insert(options_strings, string.format('%d. %s', i, option.lens.command.title))
-    end
-    local choice = vim.fn.inputlist(options_strings)
-    if choice < 1 or choice > #options then
-      return
-    end
-    local option = options[choice]
-    execute_lens(option.lens, bufnr, option.client)
+    vim.ui.select(options, {
+      prompt = 'Code lenses:',
+      format_item = function(option)
+        return option.lens.command.title
+      end,
+    }, function(option)
+      if option then
+        execute_lens(option.lens, bufnr, option.client)
+      end
+    end)
   end
 end
 
@@ -138,7 +138,8 @@ function M.display(lenses, bufnr, client_id)
       end
     end
     if #chunks > 0 then
-      api.nvim_buf_set_extmark(bufnr, ns, i, 0, { virt_text = chunks })
+      api.nvim_buf_set_extmark(bufnr, ns, i, 0, { virt_text = chunks,
+                                                  hl_mode="combine" })
     end
   end
 end
@@ -199,7 +200,8 @@ local function resolve_lenses(lenses, bufnr, client_id, callback)
             ns,
             lens.range.start.line,
             0,
-            { virt_text = {{ lens.command.title, 'LspCodeLens' }} }
+            { virt_text = {{ lens.command.title, 'LspCodeLens' }},
+                hl_mode="combine" }
           )
         end
         countdown()

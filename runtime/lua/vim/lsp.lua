@@ -122,9 +122,6 @@ local active_clients = {}
 local all_buffer_active_clients = {}
 local uninitialized_clients = {}
 
--- Tracks all buffers attached to a client.
-local all_client_active_buffers = {}
-
 ---@private
 --- Invokes a function for each LSP client attached to the buffer {bufnr}.
 ---
@@ -647,7 +644,9 @@ end
 --- - debounce_text_changes (number, default nil): Debounce didChange
 ---       notifications to the server by the given number in milliseconds. No debounce
 ---       occurs if nil
----
+--- - exit_timeout (number, default 500): Milliseconds to wait for server to
+--        exit cleanly after sending the 'shutdown' request before sending kill -15.
+--        If set to false, nvim exits immediately after sending the 'shutdown' request to the server.
 ---@returns Client id. |vim.lsp.get_client_by_id()| Note: client may not be
 --- fully initialized. Use `on_init` to do any actions once
 --- the client has been initialized.
@@ -742,7 +741,6 @@ function lsp.start_client(config)
 
     lsp.diagnostic.reset(client_id, all_buffer_active_clients)
     changetracking.reset(client_id)
-    all_client_active_buffers[client_id] = nil
     for _, client_ids in pairs(all_buffer_active_clients) do
       client_ids[client_id] = nil
     end
@@ -771,6 +769,7 @@ function lsp.start_client(config)
     rpc = rpc;
     offset_encoding = offset_encoding;
     config = config;
+    attached_buffers = {};
 
     handlers = handlers;
     -- for $/progress report
@@ -989,7 +988,6 @@ function lsp.start_client(config)
 
     lsp.diagnostic.reset(client_id, all_buffer_active_clients)
     changetracking.reset(client_id)
-    all_client_active_buffers[client_id] = nil
     for _, client_ids in pairs(all_buffer_active_clients) do
       client_ids[client_id] = nil
     end
@@ -1032,6 +1030,7 @@ function lsp.start_client(config)
       -- TODO(ashkan) handle errors.
       pcall(config.on_attach, client, bufnr)
     end
+    client.attached_buffers[bufnr] = true
   end
 
   initialize()
@@ -1142,12 +1141,6 @@ function lsp.buf_attach_client(bufnr, client_id)
     })
   end
 
-  if not all_client_active_buffers[client_id] then
-    all_client_active_buffers[client_id] = {}
-  end
-
-  table.insert(all_client_active_buffers[client_id], bufnr)
-
   if buffer_client_ids[client_id] then return end
   -- This is our first time attaching this client to this buffer.
   buffer_client_ids[client_id] = true
@@ -1172,7 +1165,7 @@ end
 --- Gets a client by id, or nil if the id is invalid.
 --- The returned client may not yet be fully initialized.
 --
----@param client_id client id number
+---@param client_id number client id
 ---
 ---@returns |vim.lsp.client| object, or nil
 function lsp.get_client_by_id(client_id)
@@ -1181,15 +1174,11 @@ end
 
 --- Returns list of buffers attached to client_id.
 --
----@param client_id client id
+---@param client_id number client id
 ---@returns list of buffer ids
 function lsp.get_buffers_by_client_id(client_id)
-  local active_client_buffers = all_client_active_buffers[client_id]
-  if active_client_buffers then
-    return active_client_buffers
-  else
-    return {}
-  end
+  local client = lsp.get_client_by_id(client_id)
+  return client and vim.tbl_keys(client.attached_buffers) or {}
 end
 
 --- Stops a client(s).
@@ -1239,9 +1228,38 @@ function lsp._vim_exit_handler()
     client.stop()
   end
 
-  if not vim.wait(500, function() return tbl_isempty(active_clients) end, 50) then
-    for _, client in pairs(active_clients) do
-      client.stop(true)
+  local timeouts = {}
+  local max_timeout = 0
+  local send_kill = false
+
+  for client_id, client in pairs(active_clients) do
+    local timeout = if_nil(client.config.flags.exit_timeout, 500)
+    if timeout then
+      send_kill = true
+      timeouts[client_id] = timeout
+      max_timeout = math.max(timeout, max_timeout)
+    else
+      active_clients[client_id] = nil
+    end
+  end
+
+  local poll_time = 50
+
+  local function check_clients_closed()
+    for client_id, _ in pairs(active_clients) do
+      timeouts[client_id] = timeouts[client_id] - poll_time
+      if timeouts[client_id] < 0 then
+        active_clients[client_id] = nil
+      end
+    end
+    return tbl_isempty(active_clients)
+  end
+
+  if send_kill then
+    if not vim.wait(max_timeout, check_clients_closed, poll_time) then
+      for _, client in pairs(active_clients) do
+        client.stop(true)
+      end
     end
   end
 end
@@ -1430,7 +1448,7 @@ end
 ---@param findstart 0 or 1, decides behavior
 ---@param base If findstart=0, text to match against
 ---
----@returns (number) Decided by `findstart`:
+---@returns (number) Decided by {findstart}:
 --- - findstart=0: column where the completion starts, or -2 or -3
 --- - findstart=1: list of matches (actually just calls |complete()|)
 function lsp.omnifunc(findstart, base)

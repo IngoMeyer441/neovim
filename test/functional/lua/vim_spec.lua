@@ -179,6 +179,12 @@ describe('lua stdlib', function()
     end
   end)
 
+  it("vim.str_utf_pos", function()
+    exec_lua([[_G.test_text = "xy åäö ɧ 汉语 ↥ 🤦x🦄 å بِيَّ"]])
+    local expected_positions = { 1,2,3,4,6,8,10,11,13,14,17,20,21,24,25,29,30,34,35,36,38,39,41,43,45,47 }
+    eq(expected_positions, exec_lua("return vim.str_utf_pos(_G.test_text)"))
+  end)
+
   it("vim.schedule", function()
     exec_lua([[
       test_table = {}
@@ -996,6 +1002,9 @@ describe('lua stdlib', function()
     vim.g.to_delete = nil
     ]]
     eq(NIL, funcs.luaeval "vim.g.to_delete")
+
+    matches([[^Error executing lua: .*: attempt to index .* nil value]],
+       pcall_err(exec_lua, 'return vim.g[0].testing'))
   end)
 
   it('vim.b', function()
@@ -1005,17 +1014,24 @@ describe('lua stdlib', function()
     vim.api.nvim_buf_set_var(0, "floaty", 5120.1)
     vim.api.nvim_buf_set_var(0, "nullvar", vim.NIL)
     vim.api.nvim_buf_set_var(0, "to_delete", {hello="world"})
+    BUF = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_var(BUF, "testing", "bye")
     ]]
 
     eq('hi', funcs.luaeval "vim.b.testing")
+    eq('bye', funcs.luaeval "vim.b[BUF].testing")
     eq(123, funcs.luaeval "vim.b.other")
     eq(5120.1, funcs.luaeval "vim.b.floaty")
     eq(NIL, funcs.luaeval "vim.b.nonexistant")
+    eq(NIL, funcs.luaeval "vim.b[BUF].nonexistant")
     eq(NIL, funcs.luaeval "vim.b.nullvar")
     -- lost over RPC, so test locally:
     eq({false, true}, exec_lua [[
       return {vim.b.nonexistant == vim.NIL, vim.b.nullvar == vim.NIL}
     ]])
+
+    matches([[^Error executing lua: .*: attempt to index .* nil value]],
+       pcall_err(exec_lua, 'return vim.b[BUF][0].testing'))
 
     eq({hello="world"}, funcs.luaeval "vim.b.to_delete")
     exec_lua [[
@@ -1037,11 +1053,22 @@ describe('lua stdlib', function()
     vim.api.nvim_win_set_var(0, "testing", "hi")
     vim.api.nvim_win_set_var(0, "other", 123)
     vim.api.nvim_win_set_var(0, "to_delete", {hello="world"})
+    BUF = vim.api.nvim_create_buf(false, true)
+    WIN = vim.api.nvim_open_win(BUF, false, {
+      width=10, height=10,
+      relative='win', row=0, col=0
+    })
+    vim.api.nvim_win_set_var(WIN, "testing", "bye")
     ]]
 
     eq('hi', funcs.luaeval "vim.w.testing")
+    eq('bye', funcs.luaeval "vim.w[WIN].testing")
     eq(123, funcs.luaeval "vim.w.other")
     eq(NIL, funcs.luaeval "vim.w.nonexistant")
+    eq(NIL, funcs.luaeval "vim.w[WIN].nonexistant")
+
+    matches([[^Error executing lua: .*: attempt to index .* nil value]],
+       pcall_err(exec_lua, 'return vim.w[WIN][0].testing'))
 
     eq({hello="world"}, funcs.luaeval "vim.w.to_delete")
     exec_lua [[
@@ -1068,6 +1095,12 @@ describe('lua stdlib', function()
     eq('hi', funcs.luaeval "vim.t.testing")
     eq(123, funcs.luaeval "vim.t.other")
     eq(NIL, funcs.luaeval "vim.t.nonexistant")
+    eq('hi', funcs.luaeval "vim.t[0].testing")
+    eq(123, funcs.luaeval "vim.t[0].other")
+    eq(NIL, funcs.luaeval "vim.t[0].nonexistant")
+
+    matches([[^Error executing lua: .*: attempt to index .* nil value]],
+       pcall_err(exec_lua, 'return vim.t[0][0].testing'))
 
     eq({hello="world"}, funcs.luaeval "vim.t.to_delete")
     exec_lua [[
@@ -1096,6 +1129,8 @@ describe('lua stdlib', function()
     eq(funcs.luaeval "vim.api.nvim_get_vvar('progpath')", funcs.luaeval "vim.v.progpath")
     eq(false, funcs.luaeval "vim.v['false']")
     eq(NIL, funcs.luaeval "vim.v.null")
+    matches([[^Error executing lua: .*: attempt to index .* nil value]],
+       pcall_err(exec_lua, 'return vim.v[0].progpath'))
   end)
 
   it('vim.bo', function()
@@ -2030,6 +2065,8 @@ describe('lua stdlib', function()
         -- Would wait ten seconds if results blocked.
         wait_result = vim.wait(10000, function() return vim.g.timer_result end)
 
+        timer:close()
+
         return {
           time = (start_time + 5) > get_time(),
           wait_result = wait_result,
@@ -2048,6 +2085,8 @@ describe('lua stdlib', function()
         end))
 
         wait_result = vim.wait(300, function() return vim.g.timer_result end, nil, true)
+
+        timer:close()
 
         return {
           wait_result = wait_result,

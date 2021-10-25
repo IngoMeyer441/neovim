@@ -226,9 +226,10 @@ function M.get_progress_messages()
       table.remove(client.messages, item.idx)
     end
 
-    for _, item in ipairs(progress_remove) do
-      client.messages.progress[item.token] = nil
-    end
+  end
+
+  for _, item in ipairs(progress_remove) do
+    item.client.messages.progress[item.token] = nil
   end
 
   return new_messages
@@ -335,10 +336,12 @@ function M.apply_text_edits(text_edits, bufnr)
   end
 
   if is_cursor_fixed then
-    vim.api.nvim_win_set_cursor(0, {
-      cursor.row + 1,
-      math.min(cursor.col, #(vim.api.nvim_buf_get_lines(bufnr, cursor.row, cursor.row + 1, false)[1] or ''))
-    })
+    local is_valid_cursor = true
+    is_valid_cursor = is_valid_cursor and cursor.row < vim.api.nvim_buf_line_count(bufnr)
+    is_valid_cursor = is_valid_cursor and cursor.col <= #(vim.api.nvim_buf_get_lines(bufnr, cursor.row, cursor.row + 1, false)[1] or '')
+    if is_valid_cursor then
+      vim.api.nvim_win_set_cursor(0, { cursor.row + 1, cursor.col })
+    end
   end
 
   -- Remove final line if needed

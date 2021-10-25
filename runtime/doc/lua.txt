@@ -393,6 +393,14 @@ where the args are converted to Lua values. The expression >
 is equivalent to the Lua chunk >
     return somemod.func(...)
 
+In addition, functions of packages can be accessed like >
+    v:lua.require'mypack'.func(arg1, arg2)
+    v:lua.require'mypack.submod'.func(arg1, arg2)
+Note: only single quote form without parens is allowed. Using
+`require"mypack"` or `require('mypack')` as prefixes do NOT work (the latter
+is still valid as a function call of itself, in case require returns a useful
+value).
+
 The `v:lua` prefix may be used to call Lua functions as |method|s. For
 example: >
     arg1->v:lua.somemod.func(arg2)
@@ -409,7 +417,8 @@ For example consider the following Lua omnifunc handler: >
     end
     vim.api.nvim_buf_set_option(0, 'omnifunc', 'v:lua.mymod.omnifunc')
 
-Note: the module ("mymod" in the above example) must be a Lua global.
+Note: the module ("mymod" in the above example) must either be a Lua global,
+or use the require syntax as specified above to access it from a package.
 
 Note: `v:lua` without a call is not allowed in a Vimscript expression:
 |Funcref|s cannot represent Lua functions. The following are errors: >
@@ -928,6 +937,7 @@ Example: >
     vim.g.foo = 5     -- Set the g:foo Vimscript variable.
     print(vim.g.foo)  -- Get and print the g:foo Vimscript variable.
     vim.g.foo = nil   -- Delete (:unlet) the Vimscript variable.
+    vim.b[2].foo = 6  -- Set b:foo for buffer 2
 
 vim.g                                                   *vim.g*
         Global (|g:|) editor variables.
@@ -935,15 +945,18 @@ vim.g                                                   *vim.g*
 
 vim.b                                                   *vim.b*
         Buffer-scoped (|b:|) variables for the current buffer.
-        Invalid or unset key returns `nil`.
+        Invalid or unset key returns `nil`. Can be indexed with
+        an integer to access variables for a specific buffer.
 
 vim.w                                                   *vim.w*
         Window-scoped (|w:|) variables for the current window.
-        Invalid or unset key returns `nil`.
+        Invalid or unset key returns `nil`. Can be indexed with
+        an integer to access variables for a specific window.
 
 vim.t                                                   *vim.t*
         Tabpage-scoped (|t:|) variables for the current tabpage.
-        Invalid or unset key returns `nil`.
+        Invalid or unset key returns `nil`. Can be indexed with
+        an integer to access variables for a specific tabpage.
 
 vim.v                                                   *vim.v*
         |v:| variables.
@@ -1518,7 +1531,7 @@ tbl_flatten({t})                                           *vim.tbl_flatten()*
                     Flattened copy of the given list-like table.
 
                 See also: ~
-                    Fromhttps://github.com/premake/premake-core/blob/master/src/base/table.lua
+                    From https://github.com/premake/premake-core/blob/master/src/base/table.lua
 
 tbl_isempty({t})                                           *vim.tbl_isempty()*
                 Checks if a table is empty.
@@ -1554,7 +1567,7 @@ tbl_keys({t})                                                 *vim.tbl_keys()*
                     list of keys
 
                 See also: ~
-                    Fromhttps://github.com/premake/premake-core/blob/master/src/base/table.lua
+                    From https://github.com/premake/premake-core/blob/master/src/base/table.lua
 
 tbl_map({func}, {t})                                           *vim.tbl_map()*
                 Apply a function to all values of a table.

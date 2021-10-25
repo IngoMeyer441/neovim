@@ -17,6 +17,7 @@
 #include "nvim/api/window.h"
 #include "nvim/ascii.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/context.h"
 #include "nvim/decoration.h"
 #include "nvim/edit.h"
@@ -1247,10 +1248,16 @@ fail:
 /// in a virtual terminal having the intended size.
 ///
 /// @param buffer the buffer to use (expected to be empty)
-/// @param opts   Optional parameters. Reserved for future use.
+/// @param opts   Optional parameters.
+///          - on_input: lua callback for input sent, i e keypresses in terminal
+///            mode. Note: keypresses are sent raw as they would be to the pty
+///            master end. For instance, a carriage return is sent
+///            as a "\r", not as a "\n". |textlock| applies. It is possible
+///            to call |nvim_chan_send| directly in the callback however.
+///                 ["input", term, bufnr, data]
 /// @param[out] err Error details, if any
 /// @return Channel id, or 0 on error
-Integer nvim_open_term(Buffer buffer, Dictionary opts, Error *err)
+Integer nvim_open_term(Buffer buffer, DictionaryOf(LuaRef) opts, Error *err)
   FUNC_API_SINCE(7)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -1258,13 +1265,27 @@ Integer nvim_open_term(Buffer buffer, Dictionary opts, Error *err)
     return 0;
   }
 
-  if (opts.size > 0) {
-    api_set_error(err, kErrorTypeValidation, "opts dict isn't empty");
-    return 0;
+  LuaRef cb = LUA_NOREF;
+  for (size_t i = 0; i < opts.size; i++) {
+    String k = opts.items[i].key;
+    Object *v = &opts.items[i].value;
+    if (strequal("on_input", k.data)) {
+      if (v->type != kObjectTypeLuaRef) {
+        api_set_error(err, kErrorTypeValidation,
+                      "%s is not a function", "on_input");
+        return 0;
+      }
+      cb = v->data.luaref;
+      v->data.luaref = LUA_NOREF;
+      break;
+    } else {
+      api_set_error(err, kErrorTypeValidation, "unexpected key: %s", k.data);
+    }
   }
 
   TerminalOptions topts;
   Channel *chan = channel_alloc(kChannelStreamInternal);
+  chan->stream.internal.cb = cb;
   topts.data = chan;
   // NB: overridden in terminal_check_size if a window is already
   // displaying the buffer
@@ -1282,7 +1303,18 @@ Integer nvim_open_term(Buffer buffer, Dictionary opts, Error *err)
 
 static void term_write(char *buf, size_t size, void *data)
 {
-  // TODO(bfredl): lua callback
+  Channel *chan = data;
+  LuaRef cb = chan->stream.internal.cb;
+  if (cb == LUA_NOREF) {
+    return;
+  }
+  FIXED_TEMP_ARRAY(args, 3);
+  args.items[0] = INTEGER_OBJ((Integer)chan->id);
+  args.items[1] = BUFFER_OBJ(terminal_buf(chan->term));
+  args.items[2] = STRING_OBJ(((String){ .data = buf, .size = size }));
+  textlock++;
+  nlua_call_ref(cb, "input", args, false, NULL);
+  textlock--;
 }
 
 static void term_resize(uint16_t width, uint16_t height, void *data)
@@ -2906,3 +2938,163 @@ Array nvim_get_mark(String name, Error *err)
   return rv;
 }
 
+/// Evaluates statusline string.
+///
+/// @param str Statusline string (see 'statusline').
+/// @param opts Optional parameters.
+///           - winid: (number) |window-ID| of the window to use as context for statusline.
+///           - maxwidth: (number) Maximum width of statusline.
+///           - fillchar: (string) Character to fill blank spaces in the statusline (see
+///                                'fillchars').
+///           - highlights: (boolean) Return highlight information.
+///           - use_tabline: (boolean) Evaluate tabline instead of statusline. When |TRUE|, {winid}
+///                                    is ignored.
+///
+/// @param[out] err Error details, if any.
+/// @return Dictionary containing statusline information, with these keys:
+///       - str: (string) Characters that will be displayed on the statusline.
+///       - width: (number) Display width of the statusline.
+///       - highlights: Array containing highlight information of the statusline. Only included when
+///                     the "highlights" key in {opts} is |TRUE|. Each element of the array is a
+///                     |Dictionary| with these keys:
+///           - start: (number) Byte index (0-based) of first character that uses the highlight.
+///           - group: (string) Name of highlight group.
+Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *err)
+  FUNC_API_SINCE(8) FUNC_API_FAST
+{
+  Dictionary result = ARRAY_DICT_INIT;
+
+  int maxwidth;
+  char fillchar = 0;
+  Window window = 0;
+  bool use_tabline = false;
+  bool highlights = false;
+
+  if (HAS_KEY(opts->winid)) {
+    if (opts->winid.type != kObjectTypeInteger) {
+      api_set_error(err, kErrorTypeValidation, "winid must be an integer");
+      return result;
+    }
+
+    window = (Window)opts->winid.data.integer;
+  }
+
+  if (HAS_KEY(opts->fillchar)) {
+    if (opts->fillchar.type != kObjectTypeString || opts->fillchar.data.string.size > 1) {
+      api_set_error(err, kErrorTypeValidation, "fillchar must be an ASCII character");
+      return result;
+    }
+
+    fillchar = opts->fillchar.data.string.data[0];
+  }
+
+  if (HAS_KEY(opts->highlights)) {
+    highlights = api_object_to_bool(opts->highlights, "highlights", false, err);
+
+    if (ERROR_SET(err)) {
+      return result;
+    }
+  }
+
+  if (HAS_KEY(opts->use_tabline)) {
+    use_tabline = api_object_to_bool(opts->use_tabline, "use_tabline", false, err);
+
+    if (ERROR_SET(err)) {
+      return result;
+    }
+  }
+
+  win_T *wp, *ewp;
+
+  if (use_tabline) {
+    wp = NULL;
+    ewp = curwin;
+    fillchar = ' ';
+  } else {
+    wp = find_window_by_handle(window, err);
+    ewp = wp;
+
+    if (fillchar == 0) {
+      int attr;
+      fillchar = (char)fillchar_status(&attr, wp);
+    }
+  }
+
+  if (HAS_KEY(opts->maxwidth)) {
+    if (opts->maxwidth.type != kObjectTypeInteger) {
+      api_set_error(err, kErrorTypeValidation, "maxwidth must be an integer");
+      return result;
+    }
+
+    maxwidth = (int)opts->maxwidth.data.integer;
+  } else {
+    maxwidth = use_tabline ? Columns : wp->w_width;
+  }
+
+  char buf[MAXPATHL];
+  stl_hlrec_t *hltab;
+  stl_hlrec_t **hltab_ptr = highlights ? &hltab : NULL;
+
+  // Temporarily reset 'cursorbind' to prevent side effects from moving the cursor away and back.
+  int p_crb_save = ewp->w_p_crb;
+  ewp->w_p_crb = false;
+
+  int width = build_stl_str_hl(
+      ewp,
+      (char_u *)buf,
+      sizeof(buf),
+      (char_u *)str.data,
+      false,
+      (char_u)fillchar,
+      maxwidth,
+      hltab_ptr,
+      NULL);
+
+  PUT(result, "width", INTEGER_OBJ(width));
+
+  // Restore original value of 'cursorbind'
+  ewp->w_p_crb = p_crb_save;
+
+  if (highlights) {
+    Array hl_values = ARRAY_DICT_INIT;
+    const char *grpname;
+    char user_group[6];
+
+    // If first character doesn't have a defined highlight,
+    // add the default highlight at the beginning of the highlight list
+    if (hltab->start == NULL || ((char *)hltab->start - buf) != 0) {
+      Dictionary hl_info = ARRAY_DICT_INIT;
+      grpname = get_default_stl_hl(wp);
+
+      PUT(hl_info, "start", INTEGER_OBJ(0));
+      PUT(hl_info, "group", CSTR_TO_OBJ(grpname));
+
+      ADD(hl_values, DICTIONARY_OBJ(hl_info));
+    }
+
+    for (stl_hlrec_t *sp = hltab; sp->start != NULL; sp++) {
+      Dictionary hl_info = ARRAY_DICT_INIT;
+
+      PUT(hl_info, "start", INTEGER_OBJ((char *)sp->start - buf));
+
+      if (sp->userhl == 0) {
+        grpname = get_default_stl_hl(wp);
+      } else if (sp->userhl < 0) {
+        grpname = (char *)syn_id2name(-sp->userhl);
+      } else {
+        snprintf(user_group, sizeof(user_group), "User%d", sp->userhl);
+        grpname = user_group;
+      }
+
+      PUT(hl_info, "group", CSTR_TO_OBJ(grpname));
+
+      ADD(hl_values, DICTIONARY_OBJ(hl_info));
+    }
+
+    PUT(result, "highlights", ARRAY_OBJ(hl_values));
+  }
+
+  PUT(result, "str", CSTR_TO_OBJ((char *)buf));
+
+  return result;
+}
