@@ -772,8 +772,10 @@ function lsp.start_client(config)
     attached_buffers = {};
 
     handlers = handlers;
+    requests = {};
+
     -- for $/progress report
-    messages = { name = name, messages = {}, progress = {}, status = {} }
+    messages = { name = name, messages = {}, progress = {}, status = {} };
   }
 
   -- Store the uninitialized_clients for cleanup in case we exit before initialize finishes.
@@ -906,11 +908,21 @@ function lsp.start_client(config)
     end
     -- Ensure pending didChange notifications are sent so that the server doesn't operate on a stale state
     changetracking.flush(client)
-
+    bufnr = resolve_bufnr(bufnr)
     local _ = log.debug() and log.debug(log_prefix, "client.request", client_id, method, params, handler, bufnr)
-    return rpc.request(method, params, function(err, result)
+    local success, request_id = rpc.request(method, params, function(err, result)
       handler(err, result, {method=method, client_id=client_id, bufnr=bufnr, params=params})
+    end, function(request_id)
+      client.requests[request_id] = nil
+      nvim_command("doautocmd <nomodeline> User LspRequest")
     end)
+
+    if success then
+      client.requests[request_id] = { type='pending', bufnr=bufnr, method=method }
+      nvim_command("doautocmd <nomodeline> User LspRequest")
+    end
+
+    return success, request_id
   end
 
   ---@private
@@ -970,6 +982,11 @@ function lsp.start_client(config)
   ---@see |vim.lsp.client.notify()|
   function client.cancel_request(id)
     validate{id = {id, 'n'}}
+    local request = client.requests[id]
+    if request and request.type == 'pending' then
+      request.type = 'cancel'
+      nvim_command("doautocmd <nomodeline> User LspRequest")
+    end
     return rpc.notify("$/cancelRequest", { id = id })
   end
 
@@ -1238,27 +1255,30 @@ function lsp._vim_exit_handler()
       send_kill = true
       timeouts[client_id] = timeout
       max_timeout = math.max(timeout, max_timeout)
-    else
-      active_clients[client_id] = nil
     end
   end
 
   local poll_time = 50
 
   local function check_clients_closed()
+    for client_id, timeout in pairs(timeouts) do
+      timeouts[client_id] = timeout - poll_time
+    end
+
     for client_id, _ in pairs(active_clients) do
-      timeouts[client_id] = timeouts[client_id] - poll_time
-      if timeouts[client_id] < 0 then
-        active_clients[client_id] = nil
+      if timeouts[client_id] ~= nil and timeouts[client_id] > 0 then
+        return false
       end
     end
-    return tbl_isempty(active_clients)
+    return true
   end
 
   if send_kill then
     if not vim.wait(max_timeout, check_clients_closed, poll_time) then
-      for _, client in pairs(active_clients) do
-        client.stop(true)
+      for client_id, client in pairs(active_clients) do
+        if timeouts[client_id] ~= nil then
+          client.stop(true)
+        end
       end
     end
   end
@@ -1300,7 +1320,7 @@ function lsp.buf_request(bufnr, method, params, handler)
   if not tbl_isempty(all_buffer_active_clients[resolve_bufnr(bufnr)] or {}) and not method_supported then
     vim.notify(lsp._unsupported_method(method), vim.log.levels.ERROR)
     vim.api.nvim_command("redraw")
-    return
+    return {}, function() end
   end
 
   local client_request_ids = {}
@@ -1510,6 +1530,54 @@ function lsp.omnifunc(findstart, base)
   -- Return -2 to signal that we should continue completion so that we can
   -- async complete.
   return -2
+end
+
+--- Provides an interface between the built-in client and a `formatexpr` function.
+---
+--- Currently only supports a single client. This can be set via
+--- `setlocal formatexpr=v:lua.vim.lsp.formatexpr()` but will typically or in `on_attach`
+--- via `vim.api.nvim_buf_set_option(bufnr, 'formatexpr', 'v:lua.vim.lsp.formatexpr()')`.
+---
+--- Can additionally be wrapped with a function that passes an optional table for customization.
+---
+---@param opts table options for customizing the formatting expression which takes the
+---                   following keys:
+---                   * timeout_ms (default 500ms). The timeout period for the formatting request.
+function lsp.formatexpr(opts)
+  opts = opts or {}
+  local timeout_ms = opts.timeout_ms or 500
+
+  if vim.tbl_contains({'i', 'R', 'ic', 'ix'}, vim.fn.mode()) then
+    -- `formatexpr` is also called when exceeding `textwidth` in insert mode
+    -- fall back to internal formatting
+    return 1
+  end
+
+  local start_line = vim.v.lnum
+  local end_line = start_line + vim.v.count - 1
+
+  if start_line > 0 and end_line > 0 then
+    local params = {
+      textDocument = util.make_text_document_params();
+      range = {
+        start = { line = start_line - 1; character = 0; };
+        ["end"] = { line = end_line - 1; character = 0; };
+      };
+    };
+    params.options = util.make_formatting_params().options
+    local client_results = vim.lsp.buf_request_sync(0, "textDocument/rangeFormatting", params, timeout_ms)
+
+    -- Apply the text edits from one and only one of the clients.
+    for _, response in pairs(client_results) do
+      if response.result then
+        vim.lsp.util.apply_text_edits(response.result, 0)
+        return 0
+      end
+    end
+  end
+
+  -- do not run builtin formatter.
+  return 0
 end
 
 ---Checks whether a client is stopped.

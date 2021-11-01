@@ -30,7 +30,7 @@ typedef uint64_t uvarnumber_T;
 typedef double float_T;
 
 /// Refcount for dict or list that should not be freed
-enum { DO_NOT_FREE_CNT = (INT_MAX / 2) };
+enum { DO_NOT_FREE_CNT = (INT_MAX / 2), };
 
 /// Additional values for tv_list_alloc() len argument
 enum ListLenSpecials {
@@ -831,7 +831,7 @@ extern bool tv_in_free_unref_items;
 /// @param  li  Name of the variable with current listitem_T entry.
 /// @param  code  Cycle body.
 #define TV_LIST_ITER(l, li, code) \
-  _TV_LIST_ITER_MOD(, l, li, code)
+  _TV_LIST_ITER_MOD( , l, li, code)
 
 /// Iterate over a list
 ///

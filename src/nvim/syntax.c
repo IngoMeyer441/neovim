@@ -1082,7 +1082,6 @@ static void syn_stack_alloc(void)
       // Make sure that all valid entries fit in the new array.
       while (syn_block->b_sst_len - syn_block->b_sst_freecount + 2 > len
              && syn_stack_cleanup()) {
-        ;
       }
       if (len < syn_block->b_sst_len - syn_block->b_sst_freecount + 2) {
         len = syn_block->b_sst_len - syn_block->b_sst_freecount + 2;
@@ -5770,7 +5769,7 @@ static enum {
   EXP_SUBCMD,       // expand ":syn" sub-commands
   EXP_CASE,         // expand ":syn case" arguments
   EXP_SPELL,        // expand ":syn spell" arguments
-  EXP_SYNC          // expand ":syn sync" arguments
+  EXP_SYNC,  // expand ":syn sync" arguments
 } expand_what;
 
 /*
@@ -7769,8 +7768,6 @@ int syn_id2attr(int hl_id)
   }
   return sgp->sg_attr;
 }
-
-
 
 
 /*

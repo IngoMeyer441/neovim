@@ -72,7 +72,7 @@ static enum {
   EXP_CSCOPE_SUBCMD,    // expand ":cscope" sub-commands
   EXP_SCSCOPE_SUBCMD,   // expand ":scscope" sub-commands
   EXP_CSCOPE_FIND,      // expand ":cscope find" arguments
-  EXP_CSCOPE_KILL       // expand ":cscope kill" arguments
+  EXP_CSCOPE_KILL,  // expand ":cscope kill" arguments
 } expand_what;
 
 /*
@@ -1463,7 +1463,6 @@ retry:
   // If the line's too long for the buffer, discard it.
   if ((p = strchr(buf, '\n')) == NULL) {
     while ((ch = getc(csinfo[cnumber].fr_fp)) != EOF && ch != '\n') {
-      ;
     }
     return NULL;
   }
@@ -1521,7 +1520,7 @@ static void cs_file_results(FILE *f, int *nummatches_a)
 
       context = xmalloc(strlen(cntx) + 5);
 
-      if (strcmp(cntx, "<global>")==0) {
+      if (strcmp(cntx, "<global>") == 0) {
         strcpy(context, "<<global>>");
       } else {
         sprintf(context, "<<%s>>", cntx);

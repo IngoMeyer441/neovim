@@ -81,7 +81,7 @@
 #ifndef WIN32
 # include "nvim/os/pty_process_unix.h"
 #endif
-#include "nvim/api/vim.h"
+#include "nvim/api/extmark.h"
 
 // values for "window_layout"
 #define WIN_HOR     1       // "-o" horizontally split windows
@@ -674,8 +674,7 @@ void getout(int exitval)
 
   profile_dump();
 
-  if (did_emsg
-      ) {
+  if (did_emsg) {
     // give the user a chance to read the (error) message
     no_wait_return = FALSE;
     wait_return(FALSE);

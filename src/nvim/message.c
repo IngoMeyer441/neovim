@@ -1199,11 +1199,11 @@ void wait_return(int redraw)
       }
     } while ((had_got_int && c == Ctrl_C)
              || c == K_IGNORE
-             || c == K_LEFTDRAG   || c == K_LEFTRELEASE
+             || c == K_LEFTDRAG || c == K_LEFTRELEASE
              || c == K_MIDDLEDRAG || c == K_MIDDLERELEASE
-             || c == K_RIGHTDRAG  || c == K_RIGHTRELEASE
-             || c == K_MOUSELEFT  || c == K_MOUSERIGHT
-             || c == K_MOUSEDOWN  || c == K_MOUSEUP
+             || c == K_RIGHTDRAG || c == K_RIGHTRELEASE
+             || c == K_MOUSELEFT || c == K_MOUSERIGHT
+             || c == K_MOUSEDOWN || c == K_MOUSEUP
              || c == K_MOUSEMOVE);
     os_breakcheck();
     /*
@@ -2408,7 +2408,7 @@ typedef enum {
   SB_CLEAR_NONE = 0,
   SB_CLEAR_ALL,
   SB_CLEAR_CMDLINE_BUSY,
-  SB_CLEAR_CMDLINE_DONE
+  SB_CLEAR_CMDLINE_DONE,
 } sb_clear_T;
 
 // When to clear text on next msg.

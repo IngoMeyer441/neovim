@@ -29,8 +29,8 @@
 
 // for ":version", ":intro", and "nvim --version"
 #ifndef NVIM_VERSION_MEDIUM
-# define NVIM_VERSION_MEDIUM "v" STR(NVIM_VERSION_MAJOR)\
-  "." STR(NVIM_VERSION_MINOR) "." STR(NVIM_VERSION_PATCH)\
+# define NVIM_VERSION_MEDIUM "v" STR(NVIM_VERSION_MAJOR) \
+  "." STR(NVIM_VERSION_MINOR) "." STR(NVIM_VERSION_PATCH) \
   NVIM_VERSION_PRERELEASE
 #endif
 #define NVIM_VERSION_LONG "NVIM " NVIM_VERSION_MEDIUM
@@ -1992,7 +1992,8 @@ bool has_vim_patch(int n)
   return false;
 }
 
-Dictionary version_dict(void) {
+Dictionary version_dict(void)
+{
   Dictionary d = ARRAY_DICT_INIT;
   PUT(d, "major", INTEGER_OBJ(NVIM_VERSION_MAJOR));
   PUT(d, "minor", INTEGER_OBJ(NVIM_VERSION_MINOR));

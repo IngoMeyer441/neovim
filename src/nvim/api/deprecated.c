@@ -8,9 +8,11 @@
 
 #include "nvim/api/buffer.h"
 #include "nvim/api/deprecated.h"
+#include "nvim/api/extmark.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
+#include "nvim/api/vimscript.h"
 #include "nvim/extmark.h"
 #include "nvim/lua/executor.h"
 

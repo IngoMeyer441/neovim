@@ -4,6 +4,7 @@
 #include <float.h>
 #include <math.h>
 
+#include "nvim/api/private/converter.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
 #include "nvim/ascii.h"
@@ -737,7 +738,8 @@ static void buf_win_common(typval_T *argvars, typval_T *rettv, bool get_nr)
 }
 
 /// "bufwinid(nr)" function
-static void f_bufwinid(typval_T *argvars, typval_T *rettv, FunPtr fptr) {
+static void f_bufwinid(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
   buf_win_common(argvars, rettv, false);
 }
 
@@ -1811,7 +1813,7 @@ static void f_deletebufline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       if (wp->w_buffer == buf) {
         if (wp->w_cursor.lnum > last) {
           wp->w_cursor.lnum -= count;
-        } else if (wp->w_cursor.lnum> first) {
+        } else if (wp->w_cursor.lnum > first) {
           wp->w_cursor.lnum = first;
         }
         if (wp->w_cursor.lnum > wp->w_buffer->b_ml.ml_line_count) {
@@ -2201,7 +2203,7 @@ static void f_win_execute(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 /// "exepath()" function
 static void f_exepath(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  if (tv_check_for_string(&argvars[0]) == FAIL) {
+  if (tv_check_for_nonempty_string(&argvars[0]) == FAIL) {
     return;
   }
 
@@ -2661,9 +2663,9 @@ static void f_fnamemodify(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   char buf[NUMBUFLEN];
   const char *fname = tv_get_string_chk(&argvars[0]);
   const char *const mods = tv_get_string_buf_chk(&argvars[1], buf);
-  if (fname == NULL || mods == NULL) {
+  if (fname == NULL) {
     fname = NULL;
-  } else {
+  } else if (mods != NULL && *mods != NUL) {
     len = strlen(fname);
     size_t usedlen = 0;
     if (*mods != NUL) {
@@ -4552,9 +4554,6 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     "windows",
     "winaltkeys",
     "writebackup",
-#if defined(HAVE_WSL)
-    "wsl",
-#endif
     "nvim",
   };
 
@@ -4601,6 +4600,8 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       n = syntax_present(curwin);
     } else if (STRICMP(name, "clipboard_working") == 0) {
       n = eval_has_provider("clipboard");
+    } else if (STRICMP(name, "wsl") == 0) {
+      n = has_wsl();
 #ifdef UNIX
     } else if (STRICMP(name, "unnamedplus") == 0) {
       n = eval_has_provider("clipboard");
@@ -4615,9 +4616,23 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->vval.v_number = n;
 }
 
-/*
- * "has_key()" function
- */
+static bool has_wsl(void)
+{
+  static TriState has_wsl = kNone;
+  if (has_wsl == kNone) {
+    Error err = ERROR_INIT;
+    Object o = nlua_exec(STATIC_CSTR_AS_STRING("return vim.loop.os_uname()['release']:lower()"
+                                               ":match('microsoft') and true or false"),
+                         (Array)ARRAY_DICT_INIT, &err);
+    assert(!ERROR_SET(&err));
+    assert(o.type == kObjectTypeBoolean);
+    has_wsl = o.data.boolean ? kTrue : kFalse;
+    api_free_object(o);
+  }
+  return has_wsl == kTrue;
+}
+
+/// "has_key()" function
 static void f_has_key(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   if (argvars[0].v_type != VAR_DICT) {
@@ -11228,7 +11243,6 @@ static void f_tabpagenr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
   rettv->vval.v_number = nr;
 }
-
 
 
 /*

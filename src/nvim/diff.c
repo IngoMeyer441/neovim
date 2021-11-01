@@ -638,7 +638,8 @@ static int diff_check_sanity(tabpage_T *tp, diff_T *dp)
 void diff_redraw(bool dofold)
 {
   win_T *wp_other = NULL;
-  bool used_max_fill = false;
+  bool used_max_fill_other = false;
+  bool used_max_fill_curwin = false;
 
   need_diff_redraw = false;
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
@@ -663,16 +664,24 @@ void diff_redraw(bool dofold)
       } else if ((n > 0) && (n > wp->w_topfill)) {
         wp->w_topfill = n;
         if (wp == curwin) {
-          used_max_fill = true;
+          used_max_fill_curwin = true;
+        } else if (wp_other != NULL) {
+          used_max_fill_other = true;
         }
       }
       check_topfill(wp, false);
     }
   }
-  if (wp_other != NULL && used_max_fill && curwin->w_p_scb) {
-    // The current window was set to used the maximum number of filler
-    // lines, may need to reduce them.
-    diff_set_topline(wp_other, curwin);
+  if (wp_other != NULL && curwin->w_p_scb) {
+    if (used_max_fill_curwin) {
+      // The current window was set to used the maximum number of filler
+      // lines, may need to reduce them.
+      diff_set_topline(wp_other, curwin);
+    } else if (used_max_fill_other) {
+      // The other window was set to used the maximum number of filler
+      // lines, may need to reduce them.
+      diff_set_topline(curwin, wp_other);
+    }
   }
 }
 
@@ -1527,7 +1536,7 @@ static void diff_read(int idx_orig, int idx_new, diffout_T *dout)
   enum {
     DIFF_ED,
     DIFF_UNIFIED,
-    DIFF_NONE
+    DIFF_NONE,
   } diffstyle = DIFF_NONE;
 
   if (dout->dout_fname == NULL) {
@@ -1591,7 +1600,7 @@ static void diff_read(int idx_orig, int idx_new, diffout_T *dout)
       }
     } else {
       assert(diffstyle == DIFF_UNIFIED);
-      if (STRNCMP(line, "@@ ", 3)  != 0) {
+      if (STRNCMP(line, "@@ ", 3) != 0) {
         continue;   // not the start of a diff block
       }
       if (parse_diff_unified(line, &lnum_orig, &count_orig,
@@ -1699,7 +1708,7 @@ static void diff_read(int idx_orig, int idx_new, diffout_T *dout)
     notset = false;  // "*dp" has been set
   }
 
-  // for remaining diff blocks orig and new are equal
+// for remaining diff blocks orig and new are equal
   while (dp != NULL) {
     if (notset) {
       diff_copy_entry(dprev, dp, idx_orig, idx_new);
@@ -3138,7 +3147,7 @@ static int xdiff_out(void *priv, mmbuffer_t *mb, int nbuf)
   }
 
   // sanity check
-  if (STRNCMP(mb[0].ptr, "@@ ", 3)  != 0) {
+  if (STRNCMP(mb[0].ptr, "@@ ", 3) != 0) {
     return 0;
   }
 
