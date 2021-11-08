@@ -1153,15 +1153,9 @@ describe('LSP', function()
     end)
 
     it('should invalid cmd argument', function()
-      eq(dedent([[
-          Error executing lua: .../lsp.lua:0: cmd: expected list, got nvim
-          stack traceback:
-              .../lsp.lua:0: in function <.../lsp.lua:0>]]),
+      eq('Error executing lua: .../lsp.lua:0: cmd: expected list, got nvim',
         pcall_err(_cmd_parts, 'nvim'))
-      eq(dedent([[
-          Error executing lua: .../lsp.lua:0: cmd argument: expected string, got number
-          stack traceback:
-              .../lsp.lua:0: in function <.../lsp.lua:0>]]),
+      eq('Error executing lua: .../lsp.lua:0: cmd argument: expected string, got number',
         pcall_err(_cmd_parts, {'nvim', 1}))
     end)
   end)
@@ -2441,9 +2435,9 @@ describe('LSP', function()
             local bufnr = vim.api.nvim_get_current_buf()
             lsp.buf_attach_client(bufnr, TEST_RPC_CLIENT_ID)
             vim.lsp._stubs = {}
-            vim.fn.input = function(prompt, text)
-              vim.lsp._stubs.input_prompt = prompt
-              vim.lsp._stubs.input_text = text
+            vim.fn.input = function(opts, on_confirm)
+              vim.lsp._stubs.input_prompt = opts.prompt
+              vim.lsp._stubs.input_text = opts.default
               return 'renameto' -- expect this value in fake lsp
             end
             vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {'', 'this is line two'})
@@ -2529,6 +2523,59 @@ describe('LSP', function()
         '.*Command added to `vim.lsp.commands` must be a function',
         pcall_err(exec_lua, 'vim.lsp.commands.dummy = 10')
       )
+    end)
+  end)
+  describe('vim.lsp.codelens', function()
+    it('uses client commands', function()
+      local client
+      local expected_handlers = {
+        {NIL, {}, {method="shutdown", client_id=1}};
+        {NIL, {}, {method="start", client_id=1}};
+      }
+      test_rpc_server {
+        test_name = 'clientside_commands',
+        on_init = function(client_)
+          client = client_
+        end,
+        on_setup = function()
+        end,
+        on_exit = function(code, signal)
+          eq(0, code, "exit code", fake_lsp_logfile)
+          eq(0, signal, "exit signal", fake_lsp_logfile)
+        end,
+        on_handler = function(err, result, ctx)
+          eq(table.remove(expected_handlers), {err, result, ctx})
+          if ctx.method == 'start' then
+            local fake_uri = "file:///fake/uri"
+            local cmd = exec_lua([[
+              fake_uri = ...
+              local bufnr = vim.uri_to_bufnr(fake_uri)
+              vim.fn.bufload(bufnr)
+              vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {'One line'})
+              local lenses = {
+                {
+                  range = {
+                    start = { line = 0, character = 0, },
+                    ['end'] = { line = 0, character = 8 }
+                  },
+                  command = { title = 'Lens1', command = 'Dummy' }
+                },
+              }
+              vim.lsp.codelens.on_codelens(nil, lenses, {method='textDocument/codeLens', client_id=1, bufnr=bufnr})
+              local cmd_called = nil
+              vim.lsp.commands['Dummy'] = function(command)
+                cmd_called = command
+              end
+              vim.api.nvim_set_current_buf(bufnr)
+              vim.lsp.codelens.run()
+              return cmd_called
+            ]], fake_uri)
+         eq({ command = 'Dummy', title = 'Lens1' }, cmd)
+         elseif ctx.method == 'shutdown' then
+           client.stop()
+          end
+        end
+      }
     end)
   end)
 end)

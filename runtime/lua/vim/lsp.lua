@@ -239,6 +239,7 @@ local function validate_client_config(config)
     on_exit         = { config.on_exit, "f", true };
     on_init         = { config.on_init, "f", true };
     settings        = { config.settings, "t", true };
+    commands        = { config.commands, 't', true };
     before_init     = { config.before_init, "f", true };
     offset_encoding = { config.offset_encoding, "s", true };
     flags           = { config.flags, "t", true };
@@ -590,6 +591,11 @@ end
 --- returned to the language server if requested via `workspace/configuration`.
 --- Keys are case-sensitive.
 ---
+---@param commands table Table that maps string of clientside commands to user-defined functions.
+--- Commands passed to start_client take precedence over the global command registry. Each key
+--- must be a unique comand name, and the value is a function which is called if any LSP action
+--- (code action, code lenses, ...) triggers the command.
+---
 ---@param init_options Values to pass in the initialization request
 --- as `initializationOptions`. See `initialize` in the LSP spec.
 ---
@@ -772,8 +778,9 @@ function lsp.start_client(config)
     attached_buffers = {};
 
     handlers = handlers;
-    requests = {};
+    commands = config.commands or {};
 
+    requests = {};
     -- for $/progress report
     messages = { name = name, messages = {}, progress = {}, status = {} };
   }
@@ -1536,12 +1543,10 @@ end
 ---
 --- Currently only supports a single client. This can be set via
 --- `setlocal formatexpr=v:lua.vim.lsp.formatexpr()` but will typically or in `on_attach`
---- via `vim.api.nvim_buf_set_option(bufnr, 'formatexpr', 'v:lua.vim.lsp.formatexpr()')`.
----
---- Can additionally be wrapped with a function that passes an optional table for customization.
+--- via `vim.api.nvim_buf_set_option(bufnr, 'formatexpr', 'v:lua.vim.lsp.formatexpr(#{timeout_ms:250})')`.
 ---
 ---@param opts table options for customizing the formatting expression which takes the
----                   following keys:
+---                   following optional keys:
 ---                   * timeout_ms (default 500ms). The timeout period for the formatting request.
 function lsp.formatexpr(opts)
   opts = opts or {}

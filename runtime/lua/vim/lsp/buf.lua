@@ -247,22 +247,35 @@ end
 --- Renames all references to the symbol under the cursor.
 ---
 ---@param new_name (string) If not provided, the user will be prompted for a new
----name using |input()|.
+---name using |vim.ui.input()|.
 function M.rename(new_name)
-  local params = util.make_position_params()
+  local opts = {
+    prompt = "New Name: "
+  }
+
+  ---@private
+  local function on_confirm(input)
+    if not (input and #input > 0) then return end
+    local params = util.make_position_params()
+    params.newName = input
+    request('textDocument/rename', params)
+  end
+
   local function prepare_rename(err, result)
     if err == nil and result == nil then
       vim.notify('nothing to rename', vim.log.levels.INFO)
       return
     end
     if result and result.placeholder then
-      new_name = new_name or npcall(vfn.input, "New Name: ", result.placeholder)
+      opts.default = result.placeholder
+      if not new_name then npcall(vim.ui.input, opts, on_confirm) end
     elseif result and result.start and result['end'] and
       result.start.line == result['end'].line then
       local line = vfn.getline(result.start.line+1)
       local start_char = result.start.character+1
       local end_char = result['end'].character
-      new_name = new_name or npcall(vfn.input, "New Name: ", string.sub(line, start_char, end_char))
+      opts.default = string.sub(line, start_char, end_char)
+      if not new_name then npcall(vim.ui.input, opts, on_confirm) end
     else
       -- fallback to guessing symbol using <cword>
       --
@@ -270,13 +283,12 @@ function M.rename(new_name)
       -- returns an unexpected response, or requests for "default behavior"
       --
       -- see https://microsoft.github.io/language-server-protocol/specification#textDocument_prepareRename
-      new_name = new_name or npcall(vfn.input, "New Name: ", vfn.expand('<cword>'))
+      opts.default = vfn.expand('<cword>')
+      if not new_name then npcall(vim.ui.input, opts, on_confirm) end
     end
-    if not (new_name and #new_name > 0) then return end
-    params.newName = new_name
-    request('textDocument/rename', params)
+    if new_name then on_confirm(new_name) end
   end
-  request('textDocument/prepareRename', params, prepare_rename)
+  request('textDocument/prepareRename', util.make_position_params(), prepare_rename)
 end
 
 --- Lists all the references to the symbol under the cursor in the quickfix window.
@@ -480,11 +492,11 @@ local function on_code_action_results(results, ctx)
     end
     if action.command then
       local command = type(action.command) == 'table' and action.command or action
-      local fn = vim.lsp.commands[command.command]
+      local fn = client.commands[command.command] or vim.lsp.commands[command.command]
       if fn then
         local enriched_ctx = vim.deepcopy(ctx)
         enriched_ctx.client_id = client.id
-        fn(command, ctx)
+        fn(command, enriched_ctx)
       else
         M.execute_command(command)
       end
