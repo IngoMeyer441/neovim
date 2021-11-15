@@ -1,3 +1,5 @@
+local if_nil = vim.F.if_nil
+
 local M = {}
 
 M.severity = {
@@ -65,7 +67,7 @@ end
 local function prefix_source(source, diagnostics)
   vim.validate { source = {source, function(v)
     return v == "always" or v == "if_many"
-  end, "Invalid value for option 'source'" } }
+  end, "'always' or 'if_many'" } }
 
   if source == "if_many" then
     local sources = {}
@@ -313,7 +315,7 @@ end
 
 ---@private
 local function save_extmarks(namespace, bufnr)
-  bufnr = bufnr == 0 and vim.api.nvim_get_current_buf() or bufnr
+  bufnr = get_bufnr(bufnr)
   if not diagnostic_attached_buffers[bufnr] then
     vim.api.nvim_buf_attach(bufnr, false, {
       on_lines = function(_, _, _, _, _, last)
@@ -537,6 +539,12 @@ end
 ---                            the message. One of "always" or "if_many".
 ---                  * format: (function) A function that takes a diagnostic as input and returns a
 ---                            string. The return value is the text used to display the diagnostic.
+---                  * prefix: (function or string) Prefix each diagnostic in the floating window. If
+---                            a function, it must have the signature (diagnostic, i, total) -> string,
+---                            where {i} is the index of the diagnostic being evaluated and {total} is
+---                            the total number of diagnostics displayed in the window. The returned
+---                            string is prepended to each diagnostic in the window. Otherwise,
+---                            if {prefix} is a string, it is prepended to each diagnostic.
 ---       - update_in_insert: (default false) Update diagnostics in Insert mode (if false,
 ---                           diagnostics are updated on InsertLeave)
 ---       - severity_sort: (default false) Sort diagnostics by severity. This affects the order in
@@ -606,7 +614,7 @@ function M.set(namespace, bufnr, diagnostics, opts)
       -- Clean up our data when the buffer unloads.
       vim.api.nvim_buf_attach(bufnr, false, {
         on_detach = function(_, b)
-          clear_diagnostic_cache(b, namespace)
+          clear_diagnostic_cache(namespace, b)
           diagnostic_cleanup[b][namespace] = nil
         end
       })
@@ -896,10 +904,12 @@ M.handlers.underline = {
         { diagnostic.end_lnum, diagnostic.end_col }
       )
     end
+    save_extmarks(underline_ns, bufnr)
   end,
   hide = function(namespace, bufnr)
     local ns = M.get_namespace(namespace)
     if ns.user_data.underline_ns then
+      diagnostic_cache_extmarks[bufnr][ns.user_data.underline_ns] = {}
       vim.api.nvim_buf_clear_namespace(bufnr, ns.user_data.underline_ns, 0, -1)
     end
   end
@@ -949,10 +959,12 @@ M.handlers.virtual_text = {
         })
       end
     end
+    save_extmarks(virt_text_ns, bufnr)
   end,
   hide = function(namespace, bufnr)
     local ns = M.get_namespace(namespace)
     if ns.user_data.virt_text_ns then
+      diagnostic_cache_extmarks[bufnr][ns.user_data.virt_text_ns] = {}
       vim.api.nvim_buf_clear_namespace(bufnr, ns.user_data.virt_text_ns, 0, -1)
     end
   end,
@@ -1025,43 +1037,54 @@ end
 --- To hide diagnostics and prevent them from re-displaying, use
 --- |vim.diagnostic.disable()|.
 ---
----@param namespace number The diagnostic namespace
+---@param namespace number|nil Diagnostic namespace. When omitted, hide
+---                            diagnostics from all namespaces.
 ---@param bufnr number|nil Buffer number. Defaults to the current buffer.
 function M.hide(namespace, bufnr)
   vim.validate {
-    namespace = { namespace, 'n' },
+    namespace = { namespace, 'n', true },
     bufnr = { bufnr, 'n', true },
   }
 
   bufnr = get_bufnr(bufnr)
-  diagnostic_cache_extmarks[bufnr][namespace] = {}
-
-  for _, handler in pairs(M.handlers) do
-    if handler.hide then
-      handler.hide(namespace, bufnr)
+  local namespaces = namespace and {namespace} or vim.tbl_keys(diagnostic_cache[bufnr])
+  for _, iter_namespace in ipairs(namespaces) do
+    for _, handler in pairs(M.handlers) do
+      if handler.hide then
+        handler.hide(iter_namespace, bufnr)
+      end
     end
   end
 end
 
 --- Display diagnostics for the given namespace and buffer.
 ---
----@param namespace number Diagnostic namespace.
+---@param namespace number|nil Diagnostic namespace. When omitted, show
+---                            diagnostics from all namespaces.
 ---@param bufnr number|nil Buffer number. Defaults to the current buffer.
 ---@param diagnostics table|nil The diagnostics to display. When omitted, use the
 ---                             saved diagnostics for the given namespace and
 ---                             buffer. This can be used to display a list of diagnostics
 ---                             without saving them or to display only a subset of
----                             diagnostics.
+---                             diagnostics. May not be used when {namespace} is nil.
 ---@param opts table|nil Display options. See |vim.diagnostic.config()|.
 function M.show(namespace, bufnr, diagnostics, opts)
   vim.validate {
-    namespace = { namespace, 'n' },
+    namespace = { namespace, 'n', true },
     bufnr = { bufnr, 'n', true },
     diagnostics = { diagnostics, 't', true },
     opts = { opts, 't', true },
   }
 
   bufnr = get_bufnr(bufnr)
+  if not namespace then
+    assert(not diagnostics, "Cannot show diagnostics without a namespace")
+    for iter_namespace in pairs(diagnostic_cache[bufnr]) do
+      M.show(iter_namespace, bufnr, nil, opts)
+    end
+    return
+  end
+
   if is_disabled(namespace, bufnr) then
     return
   end
@@ -1101,8 +1124,6 @@ function M.show(namespace, bufnr, diagnostics, opts)
       handler.show(namespace, bufnr, diagnostics, opts)
     end
   end
-
-  save_extmarks(namespace, bufnr)
 end
 
 --- Show diagnostics in a floating window.
@@ -1126,6 +1147,8 @@ end
 ---                      "if_many". Overrides the setting from |vim.diagnostic.config()|.
 ---            - format: (function) A function that takes a diagnostic as input and returns a
 ---                      string. The return value is the text used to display the diagnostic.
+---                      Overrides the setting from |vim.diagnostic.config()|.
+---            - prefix: (function or string) Prefix each diagnostic in the floating window.
 ---                      Overrides the setting from |vim.diagnostic.config()|.
 ---@return tuple ({float_bufnr}, {win_id})
 function M.open_float(bufnr, opts)
@@ -1211,8 +1234,17 @@ function M.open_float(bufnr, opts)
     diagnostics = prefix_source(opts.source, diagnostics)
   end
 
+  local prefix_opt = if_nil(opts.prefix, (scope == "cursor" and #diagnostics <= 1) and "" or function(_, i)
+      return string.format("%d. ", i)
+  end)
+  if prefix_opt then
+    vim.validate { prefix = { prefix_opt, function(v)
+      return type(v) == "string" or type(v) == "function"
+    end, "'string' or 'function'" } }
+  end
+
   for i, diagnostic in ipairs(diagnostics) do
-    local prefix = string.format("%d. ", i)
+    local prefix = type(prefix_opt) == "string" and prefix_opt or prefix_opt(diagnostic, i, #diagnostics)
     local hiname = floating_highlight_map[diagnostic.severity]
     local message_lines = vim.split(diagnostic.message, '\n')
     table.insert(lines, prefix..message_lines[1])
@@ -1244,19 +1276,23 @@ end
 --- simply remove diagnostic decorations in a way that they can be
 --- re-displayed, use |vim.diagnostic.hide()|.
 ---
----@param namespace number
+---@param namespace number|nil Diagnostic namespace. When omitted, remove
+---                            diagnostics from all namespaces.
 ---@param bufnr number|nil Remove diagnostics for the given buffer. When omitted,
 ---             diagnostics are removed for all buffers.
 function M.reset(namespace, bufnr)
-  if bufnr == nil then
-    for iter_bufnr, namespaces in pairs(diagnostic_cache) do
-      if namespaces[namespace] then
-        M.reset(namespace, iter_bufnr)
-      end
+  vim.validate {
+    namespace = {namespace, 'n', true},
+    bufnr = {bufnr, 'n', true},
+  }
+
+  local buffers = bufnr and {bufnr} or vim.tbl_keys(diagnostic_cache)
+  for _, iter_bufnr in ipairs(buffers) do
+    local namespaces = namespace and {namespace} or vim.tbl_keys(diagnostic_cache[iter_bufnr])
+    for _, iter_namespace in ipairs(namespaces) do
+      clear_diagnostic_cache(iter_namespace, iter_bufnr)
+      M.hide(iter_namespace, iter_bufnr)
     end
-  else
-    clear_diagnostic_cache(namespace, bufnr)
-    M.hide(namespace, bufnr)
   end
 
   vim.api.nvim_command("doautocmd <nomodeline> User DiagnosticsChanged")
