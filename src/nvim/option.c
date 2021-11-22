@@ -1233,7 +1233,7 @@ int do_set(char_u *arg, int opt_flags)
           }
 
           errmsg = set_bool_option(opt_idx, varp, (int)value,
-                                             opt_flags);
+                                   opt_flags);
         } else {  // Numeric or string.
           if (vim_strchr((const char_u *)"=:&<", nextchar) == NULL
               || prefix != 1) {
@@ -2315,8 +2315,8 @@ static bool valid_spellfile(const char_u *val)
 /// @param opt_flags  OPT_LOCAL and/or OPT_GLOBAL
 /// @param value_checked  value was checked to be safe, no need to set P_INSECURE
 static char *did_set_string_option(int opt_idx, char_u **varp, bool new_value_alloced,
-                                   char_u *oldval, char *errbuf, size_t errbuflen,
-                                   int opt_flags, int *value_checked)
+                                   char_u *oldval, char *errbuf, size_t errbuflen, int opt_flags,
+                                   int *value_checked)
 {
   char *errmsg = NULL;
   char_u *s, *p;
@@ -2419,7 +2419,7 @@ static char *did_set_string_option(int opt_idx, char_u **varp, bool new_value_al
     }
   } else if (varp == &p_hl) {
     // 'highlight'
-    if (strcmp((char *)(*varp), HIGHLIGHT_INIT) != 0) {
+    if (STRCMP(*varp, HIGHLIGHT_INIT) != 0) {
       errmsg = e_unsupportedoption;
     }
   } else if (varp == &p_jop) {  // 'jumpoptions'
@@ -2625,7 +2625,7 @@ ambw_end:
       }
     }
   } else if (gvarp == &p_com) {  // 'comments'
-    for (s = *varp; *s; ) {
+    for (s = *varp; *s;) {
       while (*s && *s != ':') {
         if (vim_strchr((char_u *)COM_ALL, *s) == NULL
             && !ascii_isdigit(*s) && *s != '-') {
@@ -2650,24 +2650,38 @@ ambw_end:
       }
       s = skip_to_option_part(s);
     }
-  } else if (varp == &p_lcs) {  // 'listchars'
+  } else if (varp == &p_lcs) {  // global 'listchars'
     errmsg = set_chars_option(curwin, varp, false);
-    if (!errmsg) {
-      FOR_ALL_TAB_WINDOWS(tp, wp) {
-        set_chars_option(wp, &wp->w_p_lcs, true);
+    if (errmsg == NULL) {
+      // The current window is set to use the global 'listchars' value.
+      // So clear the window-local value.
+      if (!(opt_flags & OPT_GLOBAL)) {
+        clear_string_option(&curwin->w_p_lcs);
       }
+      FOR_ALL_TAB_WINDOWS(tp, wp) {
+        // If no error was returned above, we don't expect an error
+        // here, so ignore the return value.
+        (void)set_chars_option(wp, &wp->w_p_lcs, true);
+      }
+      redraw_all_later(NOT_VALID);
     }
-    redraw_all_later(NOT_VALID);
   } else if (varp == &curwin->w_p_lcs) {  // local 'listchars'
     errmsg = set_chars_option(curwin, varp, true);
-  } else if (varp == &p_fcs) {  // 'fillchars'
+  } else if (varp == &p_fcs) {  // global 'fillchars'
     errmsg = set_chars_option(curwin, varp, false);
-    if (!errmsg) {
-      FOR_ALL_TAB_WINDOWS(tp, wp) {
-        set_chars_option(wp, &wp->w_p_fcs, true);
+    if (errmsg == NULL) {
+      // The current window is set to use the global 'fillchars' value.
+      // So clear the window-local value.
+      if (!(opt_flags & OPT_GLOBAL)) {
+        clear_string_option(&curwin->w_p_fcs);
       }
+      FOR_ALL_TAB_WINDOWS(tp, wp) {
+        // If no error was returned above, we don't expect an error
+        // here, so ignore the return value.
+        (void)set_chars_option(wp, &wp->w_p_fcs, true);
+      }
+      redraw_all_later(NOT_VALID);
     }
-    redraw_all_later(NOT_VALID);
   } else if (varp == &curwin->w_p_fcs) {  // local 'fillchars'
     errmsg = set_chars_option(curwin, varp, true);
   } else if (varp == &p_cedit) {  // 'cedit'
@@ -2690,7 +2704,7 @@ ambw_end:
     // there would be a disconnect between the check for P_ALLOCED at the start
     // of the function and the set of P_ALLOCED at the end of the function.
     free_oldval = (options[opt_idx].flags & P_ALLOCED);
-    for (s = p_shada; *s; ) {
+    for (s = p_shada; *s;) {
       // Check it's a valid character
       if (vim_strchr((char_u *)"!\"%'/:<@cfhnrs", *s) == NULL) {
         errmsg = illegal_char(errbuf, errbuflen, *s);
@@ -2735,7 +2749,7 @@ ambw_end:
       errmsg = N_("E528: Must specify a ' value");
     }
   } else if (gvarp == &p_sbr) {  // 'showbreak'
-    for (s = *varp; *s; ) {
+    for (s = *varp; *s;) {
       if (ptr2cells(s) != 1) {
         errmsg = N_("E595: 'showbreak' contains unprintable or wide character");
       }
@@ -2879,7 +2893,7 @@ ambw_end:
     }
   } else if (gvarp == &p_cpt) {
     // check if it is a valid value for 'complete' -- Acevedo
-    for (s = *varp; *s; ) {
+    for (s = *varp; *s;) {
       while (*s == ',' || *s == ' ') {
         s++;
       }
@@ -3355,7 +3369,7 @@ char *check_colorcolumn(win_T *wp)
     return NULL;      // buffer was closed
   }
 
-  for (s = wp->w_p_cc; *s != NUL && count < 255; ) {
+  for (s = wp->w_p_cc; *s != NUL && count < 255;) {
     if (*s == '-' || *s == '+') {
       // -N and +N: add to 'textwidth'
       col = (*s == '-') ? -1 : 1;
@@ -3422,6 +3436,37 @@ void check_blending(win_T *wp)
     wp->w_p_winbl > 0 || (wp->w_floating && wp->w_float_config.shadow);
 }
 
+/// Calls mb_cptr2char_adv(p) and returns the character.
+/// If "p" starts with "\x", "\u" or "\U" the hex or unicode value is used.
+/// Returns 0 for invalid hex or invalid UTF-8 byte.
+static int get_encoded_char_adv(char_u **p)
+{
+  char_u *s = *p;
+
+  if (s[0] == '\\' && (s[1] == 'x' || s[1] == 'u' || s[1] == 'U')) {
+    int64_t num = 0;
+    int bytes;
+    int n;
+    for (bytes = s[1] == 'x' ? 1 : s[1] == 'u' ? 2 : 4; bytes > 0; bytes--) {
+      *p += 2;
+      n = hexhex2nr(*p);
+      if (n < 0) {
+        return 0;
+      }
+      num = num * 256 + n;
+    }
+    *p += 2;
+    return (int)num;
+  }
+
+  // TODO(bfredl): use schar_T representation and utfc_ptr2len
+  int clen = utf_ptr2len(s);
+  int c = mb_cptr2char_adv((const char_u **)p);
+  if (clen == 1 && c > 127) {  // Invalid UTF-8 byte
+    return 0;
+  }
+  return c;
+}
 
 /// Handle setting 'listchars' or 'fillchars'.
 /// Assume monocell characters
@@ -3526,26 +3571,21 @@ static char *set_chars_option(win_T *wp, char_u **varp, bool set)
             && p[len + 1] != NUL) {
           c2 = c3 = 0;
           s = p + len + 1;
-
-          // TODO(bfredl): use schar_T representation and utfc_ptr2len
-          int c1len = utf_ptr2len(s);
-          c1 = mb_cptr2char_adv((const char_u **)&s);
-          if (utf_char2cells(c1) > 1 || (c1len == 1 && c1 > 127)) {
+          c1 = get_encoded_char_adv(&s);
+          if (c1 == 0 || utf_char2cells(c1) > 1) {
             return e_invarg;
           }
           if (tab[i].cp == &wp->w_p_lcs_chars.tab2) {
             if (*s == NUL) {
               return e_invarg;
             }
-            int c2len = utf_ptr2len(s);
-            c2 = mb_cptr2char_adv((const char_u **)&s);
-            if (utf_char2cells(c2) > 1 || (c2len == 1 && c2 > 127)) {
+            c2 = get_encoded_char_adv(&s);
+            if (c2 == 0 || utf_char2cells(c2) > 1) {
               return e_invarg;
             }
             if (!(*s == ',' || *s == NUL)) {
-              int c3len = utf_ptr2len(s);
-              c3 = mb_cptr2char_adv((const char_u **)&s);
-              if (utf_char2cells(c3) > 1 || (c3len == 1 && c3 > 127)) {
+              c3 = get_encoded_char_adv(&s);
+              if (c3 == 0 || utf_char2cells(c3) > 1) {
                 return e_invarg;
               }
             }
@@ -3578,9 +3618,8 @@ static char *set_chars_option(win_T *wp, char_u **varp, bool set)
             last_multispace = p;
             multispace_len = 0;
             while (*s != NUL && *s != ',') {
-              int c1len = utf_ptr2len(s);
-              c1 = mb_cptr2char_adv((const char_u **)&s);
-              if (utf_char2cells(c1) > 1 || (c1len == 1 && c1 > 127)) {
+              c1 = get_encoded_char_adv(&s);
+              if (c1 == 0 || utf_char2cells(c1) > 1) {
                 return e_invarg;
               }
               multispace_len++;
@@ -3593,7 +3632,7 @@ static char *set_chars_option(win_T *wp, char_u **varp, bool set)
           } else {
             int multispace_pos = 0;
             while (*s != NUL && *s != ',') {
-              c1 = mb_cptr2char_adv((const char_u **)&s);
+              c1 = get_encoded_char_adv(&s);
               if (p == last_multispace) {
                 wp->w_p_lcs_chars.multispace[multispace_pos++] = c1;
               }
@@ -6779,7 +6818,7 @@ static void langmap_set(void)
   ga_clear(&langmap_mapga);                 // clear the previous map first
   langmap_init();                           // back to one-to-one map
 
-  for (p = p_langmap; p[0] != NUL; ) {
+  for (p = p_langmap; p[0] != NUL;) {
     for (p2 = p; p2[0] != NUL && p2[0] != ',' && p2[0] != ';';
          MB_PTR_ADV(p2)) {
       if (p2[0] == '\\' && p2[1] != NUL) {

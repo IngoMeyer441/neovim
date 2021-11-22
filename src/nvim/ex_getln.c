@@ -1665,7 +1665,7 @@ static int may_do_command_line_next_incsearch(int firstc, long count, incsearch_
 static void command_line_next_histidx(CommandLineState *s, bool next_match)
 {
   int j = (int)STRLEN(s->lookfor);
-  for (;; ) {
+  for (;;) {
     // one step backwards
     if (!next_match) {
       if (s->hiscnt == hislen) {
@@ -2686,7 +2686,7 @@ static void color_expr_cmdline(const CmdlineInfo *const colored_ccline,
   viml_parser_destroy(&pstate);
   kv_resize(ret_ccline_colors->colors, kv_size(colors));
   size_t prev_end = 0;
-  for (size_t i = 0 ; i < kv_size(colors) ; i++) {
+  for (size_t i = 0; i < kv_size(colors); i++) {
     const ParserHighlightChunk chunk = kv_A(colors, i);
     assert(chunk.start.col < INT_MAX);
     assert(chunk.end_col < INT_MAX);
@@ -2697,7 +2697,7 @@ static void color_expr_cmdline(const CmdlineInfo *const colored_ccline,
         .attr = 0,
       }));
     }
-    const int id = syn_name2id((const char_u *)chunk.group);
+    const int id = syn_name2id(chunk.group);
     const int attr = (id == 0 ? 0 : syn_id2attr(id));
     kv_push(ret_ccline_colors->colors, ((CmdlineColorChunk) {
       .start = (int)chunk.start.col,
@@ -2899,7 +2899,7 @@ static bool color_cmdline(CmdlineInfo *colored_ccline)
     if (group == NULL) {
       goto color_cmdline_error;
     }
-    const int id = syn_name2id((char_u *)group);
+    const int id = syn_name2id(group);
     const int attr = (id == 0 ? 0 : syn_id2attr(id));
     kv_push(ccline_colors->colors, ((CmdlineColorChunk) {
       .start = (int)start,
@@ -3466,7 +3466,7 @@ static bool cmdline_paste(int regname, bool literally, bool remcr)
       int len;
 
       // Locate start of last word in the cmd buffer.
-      for (w = ccline.cmdbuff + ccline.cmdpos; w > ccline.cmdbuff; ) {
+      for (w = ccline.cmdbuff + ccline.cmdpos; w > ccline.cmdbuff;) {
         len = utf_head_off(ccline.cmdbuff, w - 1) + 1;
         if (!vim_iswordc(utf_ptr2char(w - len))) {
           break;
@@ -4386,7 +4386,7 @@ static int showmatches(expand_T *xp, int wildmenu)
           msg_outtrans_long_attr(p + 2, HL_ATTR(HLF_D));
           break;
         }
-        for (j = maxlen - lastlen; --j >= 0; ) {
+        for (j = maxlen - lastlen; --j >= 0;) {
           msg_putchar(' ');
         }
         if (xp->xp_context == EXPAND_FILES
@@ -4457,7 +4457,7 @@ char_u *sm_gettail(char_u *s, bool eager)
   char_u *t = s;
   int had_sep = FALSE;
 
-  for (p = s; *p != NUL; ) {
+  for (p = s; *p != NUL;) {
     if (vim_ispathsep(*p)
 #ifdef BACKSLASH_IN_FILENAME
         && !rem_backslash(p)
@@ -4989,13 +4989,13 @@ static int ExpandFromContext(expand_T *xp, char_u *pat, int *num_file, char_u **
 
   // When expanding a function name starting with s:, match the <SNR>nr_
   // prefix.
-  char_u *tofree = NULL;
+  char *tofree = NULL;
   if (xp->xp_context == EXPAND_USER_FUNC && STRNCMP(pat, "^s:", 3) == 0) {
     const size_t len = STRLEN(pat) + 20;
 
     tofree = xmalloc(len);
-    snprintf((char *)tofree, len, "^<SNR>\\d\\+_%s", pat + 3);
-    pat = tofree;
+    snprintf(tofree, len, "^<SNR>\\d\\+_%s", pat + 3);
+    pat = (char_u *)tofree;
   }
 
   if (xp->xp_context == EXPAND_LUA) {
@@ -5219,7 +5219,7 @@ static void expand_shellcmd(char_u *filepat, int *num_file, char_u ***file, int 
   ga_init(&ga, (int)sizeof(char *), 10);
   hashtab_T found_ht;
   hash_init(&found_ht);
-  for (s = path; ; s = e) {
+  for (s = path;; s = e) {
     e = vim_strchr(s, ENV_SEPCHAR);
     if (e == NULL) {
       e = s + STRLEN(s);

@@ -573,7 +573,6 @@ void free_all_mem(void)
     return;
   }
   entered_free_all_mem = true;
-
   // Don't want to trigger autocommands from here on.
   block_autocmds();
 
@@ -672,7 +671,7 @@ void free_all_mem(void)
   first_tabpage = NULL;
 
   // message history
-  for (;; ) {
+  for (;;) {
     if (delete_first_msg() == FAIL) {
       break;
     }
@@ -687,7 +686,7 @@ void free_all_mem(void)
   // Must be after eval_clear to avoid it trying to access b:changedtick after
   // freeing it.
   p_acd = false;
-  for (buf = firstbuf; buf != NULL; ) {
+  for (buf = firstbuf; buf != NULL;) {
     bufref_T bufref;
     set_bufref(&bufref, buf);
     nextbuf = buf->b_next;

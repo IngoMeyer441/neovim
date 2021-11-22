@@ -432,8 +432,8 @@ int do_cmdline(char_u *cmdline, LineGetter fgetline, void *cookie, int flags)
     if (next_cmdline == NULL
         && !force_abort
         && cstack.cs_idx < 0
-        && !(getline_is_func &&
-             func_has_abort(real_cookie))) {
+        && !(getline_is_func
+             && func_has_abort(real_cookie))) {
       did_emsg = FALSE;
     }
 
@@ -2065,7 +2065,7 @@ int parse_command_modifiers(exarg_T *eap, char **errormsg, bool skip_only)
   eap->save_msg_silent = -1;
 
   // Repeat until no more command modifiers are found.
-  for (;; ) {
+  for (;;) {
     while (*eap->cmd == ' '
            || *eap->cmd == '\t'
            || *eap->cmd == ':') {
@@ -2647,7 +2647,7 @@ static char_u *find_command(exarg_T *eap, int *full)
       const int c2 = len == 1 ? NUL : eap->cmd[1];
 
       if (command_count != CMD_SIZE) {
-        iemsg((char *)_("E943: Command table needs to be updated, run 'make'"));
+        iemsg(_("E943: Command table needs to be updated, run 'make'"));
         getout(1);
       }
 
@@ -2715,7 +2715,7 @@ static char_u *find_ucmd(exarg_T *eap, char_u *p, int *full, expand_T *xp, int *
    * Look for buffer-local user commands first, then global ones.
    */
   gap = &curbuf->b_ucmds;
-  for (;; ) {
+  for (;;) {
     for (j = 0; j < gap->ga_len; ++j) {
       uc = USER_CMD_GA(gap, j);
       cp = eap->cmd;
@@ -4071,7 +4071,7 @@ static linenr_T get_address(exarg_T *eap, char_u **ptr, cmd_addr_T addr_type, in
       }
     }
 
-    for (;; ) {
+    for (;;) {
       cmd = skipwhite(cmd);
       if (*cmd != '-' && *cmd != '+' && !ascii_isdigit(*cmd)) {
         break;
@@ -5326,7 +5326,7 @@ static void uc_list(char_u *name, size_t name_len)
   garray_T *gap = (cmdwin_type != 0 && get_cmdline_type() == NUL)
     ? &prevwin->w_buffer->b_ucmds
     : &curbuf->b_ucmds;
-  for (;; ) {
+  for (;;) {
     for (i = 0; i < gap->ga_len; ++i) {
       cmd = USER_CMD_GA(gap, i);
       a = cmd->uc_argt;
@@ -5713,7 +5713,7 @@ static void ex_delcommand(exarg_T *eap)
   garray_T *gap;
 
   gap = &curbuf->b_ucmds;
-  for (;; ) {
+  for (;;) {
     for (i = 0; i < gap->ga_len; ++i) {
       cmd = USER_CMD_GA(gap, i);
       cmp = STRCMP(eap->arg, cmd->uc_name);
@@ -6153,12 +6153,12 @@ static void do_ucmd(exarg_T *eap)
    * Second round: copy result into "buf".
    */
   buf = NULL;
-  for (;; ) {
+  for (;;) {
     p = cmd->uc_rep;        // source
     q = buf;                // destination
     totlen = 0;
 
-    for (;; ) {
+    for (;;) {
       start = vim_strchr(p, '<');
       if (start != NULL) {
         end = vim_strchr(start + 1, '>');
@@ -6184,7 +6184,7 @@ static void do_ucmd(exarg_T *eap)
         }
       }
 
-      // break if there no <item> is found
+      // break if no <item> is found
       if (start == NULL || end == NULL) {
         break;
       }
@@ -7753,6 +7753,7 @@ void post_chdir(CdScope scope, bool trigger_dirchanged)
     abort();
   }
 
+  last_chdir_reason = NULL;
   shorten_fnames(true);
 
   if (trigger_dirchanged) {
@@ -7870,7 +7871,9 @@ static void ex_pwd(exarg_T *eap)
 #endif
     if (p_verbose > 0) {
       char *context = "global";
-      if (curwin->w_localdir != NULL) {
+      if (last_chdir_reason != NULL) {
+        context = last_chdir_reason;
+      } else if (curwin->w_localdir != NULL) {
         context = "window";
       } else if (curtab->tp_localdir != NULL) {
         context = "tabpage";
@@ -8983,8 +8986,8 @@ ssize_t find_cmdline_var(const char_u *src, size_t *usedlen)
 /// @return          an allocated string if a valid match was found.
 ///                  Returns NULL if no match was found.  "usedlen" then still contains the
 ///                  number of characters to skip.
-char_u *eval_vars(char_u *src, char_u *srcstart, size_t *usedlen, linenr_T *lnump,
-                  char **errormsg, int *escaped)
+char_u *eval_vars(char_u *src, char_u *srcstart, size_t *usedlen, linenr_T *lnump, char **errormsg,
+                  int *escaped)
 {
   int i;
   char_u *s;
@@ -9130,7 +9133,7 @@ char_u *eval_vars(char_u *src, char_u *srcstart, size_t *usedlen, linenr_T *lnum
         // postponed to avoid a delay when <afile> is not used.
         result = (char_u *)FullName_save((char *)autocmd_fname, false);
         // Copy into `autocmd_fname`, don't reassign it. #8165
-        xstrlcpy((char *)autocmd_fname, (char *)result, MAXPATHL);
+        STRLCPY(autocmd_fname, result, MAXPATHL);
         xfree(result);
       }
       result = autocmd_fname;
@@ -9252,7 +9255,7 @@ static char_u *arg_all(void)
    * first time: compute the total length
    * second time: concatenate the names
    */
-  for (;; ) {
+  for (;;) {
     len = 0;
     for (idx = 0; idx < ARGCOUNT; ++idx) {
       p = alist_name(&ARGLIST[idx]);
@@ -9315,7 +9318,7 @@ char_u *expand_sfile(char_u *arg)
 
   result = vim_strsave(arg);
 
-  for (p = result; *p; ) {
+  for (p = result; *p;) {
     if (STRNCMP(p, "<sfile>", 7) != 0) {
       ++p;
     } else {
@@ -9461,7 +9464,7 @@ static void ex_filetype(exarg_T *eap)
   }
 
   // Accept "plugin" and "indent" in any order.
-  for (;; ) {
+  for (;;) {
     if (STRNCMP(arg, "plugin", 6) == 0) {
       plugin = true;
       arg = skipwhite(arg + 6);

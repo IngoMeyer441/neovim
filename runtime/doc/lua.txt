@@ -1200,7 +1200,7 @@ inspect({object}, {options})                                   *vim.inspect()*
                     https://github.com/kikito/inspect.lua
                     https://github.com/mpeterv/vinspect
 
-make_dict_accessor({scope})                         *vim.make_dict_accessor()*
+make_dict_accessor({scope}, {handle})               *vim.make_dict_accessor()*
                 TODO: Documentation
 
 notify({msg}, {log_level}, {_opts})                             *vim.notify()*
@@ -1617,14 +1617,12 @@ validate({opt})                                               *vim.validate()*
 
                   vim.validate{arg1={{'foo'}, 'table'}, arg2={'foo', 'string'}}
                      => NOP (success)
-<
->
-    vim.validate{arg1={1, 'table'}}
-       => error('arg1: expected table, got number')
-<
->
-    vim.validate{arg1={3, function(a) return (a % 2) == 0 end, 'even number'}}
-       => error('arg1: expected even number, got 3')
+
+                  vim.validate{arg1={1, 'table'}}
+                     => error('arg1: expected table, got number')
+
+                  vim.validate{arg1={3, function(a) return (a % 2) == 0 end, 'even number'}}
+                     => error('arg1: expected even number, got 3')
 <
 
                 Parameters: ~
@@ -1658,40 +1656,38 @@ uri_from_bufnr({bufnr})                                 *vim.uri_from_bufnr()*
                 Get a URI from a bufnr
 
                 Parameters: ~
-                    {bufnr}  (number): Buffer number
+                    {bufnr}  number
 
                 Return: ~
-                    URI
+                    string URI
 
 uri_from_fname({path})                                  *vim.uri_from_fname()*
                 Get a URI from a file path.
 
                 Parameters: ~
-                    {path}  (string): Path to file
+                    {path}  string Path to file
 
                 Return: ~
-                    URI
+                    string URI
 
 uri_to_bufnr({uri})                                       *vim.uri_to_bufnr()*
-                Return or create a buffer for a uri.
+                Get the buffer for a uri. Creates a new unloaded buffer if no
+                buffer for the uri already exists.
 
                 Parameters: ~
-                    {uri}  (string): The URI
+                    {uri}  string
 
                 Return: ~
-                    bufnr.
-
-                Note:
-                    Creates buffer but does not load it
+                    number bufnr
 
 uri_to_fname({uri})                                       *vim.uri_to_fname()*
                 Get a filename from a URI
 
                 Parameters: ~
-                    {uri}  (string): The URI
+                    {uri}  string
 
                 Return: ~
-                    Filename
+                    string filename or unchanged URI for non-file URIs
 
 
 ==============================================================================
@@ -1731,6 +1727,12 @@ select({items}, {opts}, {on_choice})                         *vim.ui.select()*
                                  • format_item (function item -> text)
                                    Function to format an individual item from
                                    `items` . Defaults to `tostring` .
+                                 • kind (string|nil) Arbitrary hint string
+                                   indicating the item shape. Plugins
+                                   reimplementing `vim.ui.select` may wish to
+                                   use this to infer the structure or
+                                   semantics of `items` , or the context in
+                                   which select() was called.
                     {on_choice}  function ((item|nil, idx|nil) -> ()) Called
                                  once the user made a choice. `idx` is the
                                  1-based index of `item` within `item` . `nil`

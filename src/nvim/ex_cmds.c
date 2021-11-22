@@ -303,7 +303,7 @@ void ex_align(exarg_T *eap)
                * Now try to move the line as much as possible to
                * the right.  Stop when it moves too far.
                */
-              do{
+              do {
                 (void)set_indent(++new_indent, 0);
               }
               while (linelen(NULL) <= width);
@@ -774,7 +774,7 @@ void ex_retab(exarg_T *eap)
     col = 0;
     vcol = 0;
     did_undo = false;
-    for (;; ) {
+    for (;;) {
       if (ascii_iswhite(ptr[col])) {
         if (!got_tab && num_spaces == 0) {
           // First consecutive white-space
@@ -1440,7 +1440,7 @@ static void do_filter(linenr_T line1, linenr_T line2, exarg_T *eap, char_u *cmd,
                      _("%" PRId64 " lines filtered"), (int64_t)linecount);
         if (msg(msg_buf) && !msg_scroll) {
           // save message to display it after redraw
-          set_keep_msg((char_u *)msg_buf, 0);
+          set_keep_msg(msg_buf, 0);
         }
       } else {
         msgmore((long)linecount);
@@ -2150,7 +2150,7 @@ static int check_readonly(int *forceit, buf_T *buf)
 
       if (buf->b_p_ro) {
         dialog_msg(buff,
-                   _(  "'readonly' option is set for \"%s\".\nDo you wish to write anyway?"),
+                   _("'readonly' option is set for \"%s\".\nDo you wish to write anyway?"),
                    buf->b_fname);
       } else {
         dialog_msg(buff,
@@ -2944,7 +2944,7 @@ void ex_append(exarg_T *eap)
     State |= LANGMAP;
   }
 
-  for (;; ) {
+  for (;;) {
     msg_scroll = TRUE;
     need_wait_return = false;
     if (curbuf->b_p_ai) {
@@ -3280,7 +3280,7 @@ static bool sub_joining_lines(exarg_T *eap, char_u *pat, char_u *sub, char_u *cm
   // TODO(vim): find a generic solution to make line-joining operations more
   // efficient, avoid allocating a string that grows in size.
   if (pat != NULL
-      && strcmp((const char *)pat, "\\n") == 0
+      && STRCMP(pat, "\\n") == 0
       && *sub == NUL
       && (*cmd == NUL || (cmd[1] == NUL
                           && (*cmd == 'g'
@@ -3719,7 +3719,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
        * 4. if subflags.do_all is set, find next match
        * 5. break if there isn't another match in this line
        */
-      for (;; ) {
+      for (;;) {
         SubResult current_match = {
           .start = { 0, 0 },
           .end   = { 0, 0 },
@@ -4468,7 +4468,7 @@ bool do_sub_msg(bool count_only)
                      (int64_t)sub_nsubs, (int64_t)sub_nlines);
     if (msg(msg_buf)) {
       // save message to display it after redraw
-      set_keep_msg((char_u *)msg_buf, 0);
+      set_keep_msg(msg_buf, 0);
     }
     return true;
   }
@@ -5030,9 +5030,9 @@ int find_help_tags(const char_u *arg, int *num_matches, char_u ***matches, bool 
     // When the string starting with "expr-" and containing '?' and matches
     // the table, it is taken literally (but ~ is escaped).  Otherwise '?'
     // is recognized as a wildcard.
-    for (i = (int)ARRAY_SIZE(expr_table); --i >= 0; ) {
+    for (i = (int)ARRAY_SIZE(expr_table); --i >= 0;) {
       if (STRCMP(arg + 5, expr_table[i]) == 0) {
-        for (int si = 0, di = 0; ; si++) {
+        for (int si = 0, di = 0;; si++) {
           if (arg[si] == '~') {
             d[di++] = '\\';
           }
@@ -5047,7 +5047,7 @@ int find_help_tags(const char_u *arg, int *num_matches, char_u ***matches, bool 
   } else {
     // Recognize a few exceptions to the rule.  Some strings that contain
     // '*' with "star".  Otherwise '*' is recognized as a wildcard.
-    for (i = (int)ARRAY_SIZE(mtable); --i >= 0; ) {
+    for (i = (int)ARRAY_SIZE(mtable); --i >= 0;) {
       if (STRCMP(arg, mtable[i]) == 0) {
         STRCPY(d, rtable[i]);
         break;

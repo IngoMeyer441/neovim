@@ -65,7 +65,7 @@ FileComparison path_full_compare(char_u *const s1, char_u *const s2, const bool 
   if (expandenv) {
     expand_env(s1, exp1, MAXPATHL);
   } else {
-    xstrlcpy((char *)exp1, (const char *)s1, MAXPATHL);
+    STRLCPY(exp1, s1, MAXPATHL);
   }
   bool id_ok_1 = os_fileid((char *)exp1, &file_id_1);
   bool id_ok_2 = os_fileid((char *)s2, &file_id_2);
@@ -1079,7 +1079,7 @@ const char *gettail_dir(const char *const fname)
   const char *next_dir_end = fname;
   bool look_for_sep = true;
 
-  for (const char *p = fname; *p != NUL; ) {
+  for (const char *p = fname; *p != NUL;) {
     if (vim_ispathsep(*p)) {
       if (look_for_sep) {
         next_dir_end = p;
@@ -1289,8 +1289,8 @@ int gen_expand_wildcards(int num_pat, char_u **pat, int *num_file, char_u ***fil
             && !path_is_absolute(p)
             && !(p[0] == '.'
                  && (vim_ispathsep(p[1])
-                     || (p[1] == '.' &&
-                         vim_ispathsep(p[2]))))) {
+                     || (p[1] == '.'
+                         && vim_ispathsep(p[2]))))) {
           /* :find completion where 'path' is used.
            * Recursiveness is OK here. */
           recursive = false;
@@ -1505,7 +1505,7 @@ void simplify_filename(char_u *filename)
 
   if (vim_ispathsep(*p)) {
     relative = false;
-    do{
+    do {
       ++p;
     }
     while (vim_ispathsep(*p));
@@ -1517,8 +1517,8 @@ void simplify_filename(char_u *filename)
      * or "p" is at the "start" of the (absolute or relative) path name. */
     if (vim_ispathsep(*p)) {
       STRMOVE(p, p + 1);                // remove duplicate "/"
-    } else if (p[0] == '.' &&
-               (vim_ispathsep(p[1]) || p[1] == NUL)) {
+    } else if (p[0] == '.'
+               && (vim_ispathsep(p[1]) || p[1] == NUL)) {
       if (p == start && relative) {
         p += 1 + (p[1] != NUL);         // keep single "." or leading "./"
       } else {
@@ -2198,7 +2198,7 @@ int match_suffix(char_u *fname)
 
   size_t fnamelen = STRLEN(fname);
   size_t setsuflen = 0;
-  for (char_u *setsuf = p_su; *setsuf; ) {
+  for (char_u *setsuf = p_su; *setsuf;) {
     setsuflen = copy_option_part(&setsuf, suf_buf, MAXSUFLEN, ".,");
     if (setsuflen == 0) {
       char_u *tail = path_tail(fname);
@@ -2245,11 +2245,17 @@ int path_full_dir_name(char *directory, char *buffer, size_t len)
   }
 
   if (os_chdir(directory) != SUCCESS) {
-    // Do not return immediately since we may be in the wrong directory.
-    retval = FAIL;
-  }
-
-  if (retval == FAIL || os_dirname((char_u *)buffer, len) == FAIL) {
+    // Path does not exist (yet).  For a full path fail,
+    // will use the path as-is.  For a relative path use
+    // the current directory and append the file name.
+    if (path_is_absolute((const char_u *)directory)) {
+      // Do not return immediately since we may be in the wrong directory.
+      retval = FAIL;
+    } else {
+      xstrlcpy(buffer, old_dir, len);
+      append_path(buffer, directory, len);
+    }
+  } else if (os_dirname((char_u *)buffer, len) == FAIL) {
     // Do not return immediately since we are in the wrong directory.
     retval = FAIL;
   }
@@ -2395,9 +2401,9 @@ void path_guess_exepath(const char *argv0, char *buf, size_t bufsize)
       if (dir_len + 1 > sizeof(NameBuff)) {
         continue;
       }
-      xstrlcpy((char *)NameBuff, dir, dir_len + 1);
-      xstrlcat((char *)NameBuff, PATHSEPSTR, sizeof(NameBuff));
-      xstrlcat((char *)NameBuff, argv0, sizeof(NameBuff));
+      STRLCPY(NameBuff, dir, dir_len + 1);
+      STRLCAT(NameBuff, PATHSEPSTR, sizeof(NameBuff));
+      STRLCAT(NameBuff, argv0, sizeof(NameBuff));
       if (os_can_exe((char *)NameBuff, NULL, false)) {
         xstrlcpy(buf, (char *)NameBuff, bufsize);
         return;

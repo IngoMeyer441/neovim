@@ -224,7 +224,7 @@ newwindow:
       beep_flush();
     } else {
       if (Prenum) {  // go to specified window
-        for (wp = firstwin; --Prenum > 0; ) {
+        for (wp = firstwin; --Prenum > 0;) {
           if (wp->w_next == NULL) {
             break;
           } else {
@@ -569,7 +569,7 @@ wingotofile:
 
 static void cmd_with_count(char *cmd, char_u *bufp, size_t bufsize, int64_t Prenum)
 {
-  size_t len = xstrlcpy((char *)bufp, cmd, bufsize);
+  size_t len = STRLCPY(bufp, cmd, bufsize);
 
   if (Prenum > 0 && len < bufsize) {
     vim_snprintf((char *)bufp + len, bufsize - len, "%" PRId64, Prenum);
@@ -1958,8 +1958,8 @@ static void win_equal_rec(win_T *next_curwin, bool current, frame_T *topfr, int 
     // Set the width/height of this frame.
     // Redraw when size or position changes
     if (topfr->fr_height != height || topfr->fr_win->w_winrow != row
-        || topfr->fr_width != width ||
-        topfr->fr_win->w_wincol != col) {
+        || topfr->fr_width != width
+        || topfr->fr_win->w_wincol != col) {
       topfr->fr_win->w_winrow = row;
       frame_new_height(topfr, height, false, false);
       topfr->fr_win->w_wincol = col;
@@ -2239,7 +2239,7 @@ void close_windows(buf_T *buf, int keep_curwin)
 
   ++RedrawingDisabled;
 
-  for (win_T *wp = firstwin; wp != NULL && !ONE_WINDOW; ) {
+  for (win_T *wp = firstwin; wp != NULL && !ONE_WINDOW;) {
     if (wp->w_buffer == buf && (!keep_curwin || wp != curwin)
         && !(wp->w_closing || wp->w_buffer->b_locked > 0)) {
       if (win_close(wp, false) == FAIL) {
@@ -2582,7 +2582,7 @@ int win_close(win_T *win, bool free_buf)
        * If the cursor goes to the preview or the quickfix window, try
        * finding another window to go to.
        */
-      for (;; ) {
+      for (;;) {
         if (wp->w_next == NULL) {
           wp = firstwin;
         } else {
@@ -3147,12 +3147,12 @@ static void frame_new_height(frame_T *topfrp, int height, bool topfirst, bool wf
           break;
         }
         if (topfirst) {
-          do{
+          do {
             frp = frp->fr_next;
           }
           while (wfh && frp != NULL && frame_fixed_height(frp));
         } else {
-          do{
+          do {
             frp = frp->fr_prev;
           }
           while (wfh && frp != NULL && frame_fixed_height(frp));
@@ -3347,12 +3347,12 @@ static void frame_new_width(frame_T *topfrp, int width, bool leftfirst, bool wfw
           break;
         }
         if (leftfirst) {
-          do{
+          do {
             frp = frp->fr_next;
           }
           while (wfw && frp != NULL && frame_fixed_width(frp));
         } else {
-          do{
+          do {
             frp = frp->fr_prev;
           }
           while (wfw && frp != NULL && frame_fixed_width(frp));
@@ -4316,7 +4316,7 @@ win_T *win_vert_neighbor(tabpage_T *tp, win_T *wp, bool up, long count)
      * downwards neighbor.
      */
     fr = foundfr;
-    for (;; ) {
+    for (;;) {
       if (fr == tp->tp_topframe) {
         goto end;
       }
@@ -4334,7 +4334,7 @@ win_T *win_vert_neighbor(tabpage_T *tp, win_T *wp, bool up, long count)
     /*
      * Now go downwards to find the bottom or top frame in it.
      */
-    for (;; ) {
+    for (;;) {
       if (nfr->fr_layout == FR_LEAF) {
         foundfr = nfr;
         break;
@@ -4399,7 +4399,7 @@ win_T *win_horz_neighbor(tabpage_T *tp, win_T *wp, bool left, long count)
      * right neighbor.
      */
     fr = foundfr;
-    for (;; ) {
+    for (;;) {
       if (fr == tp->tp_topframe) {
         goto end;
       }
@@ -4417,7 +4417,7 @@ win_T *win_horz_neighbor(tabpage_T *tp, win_T *wp, bool left, long count)
     /*
      * Now go downwards to find the leftmost or rightmost frame in it.
      */
-    for (;; ) {
+    for (;;) {
       if (nfr->fr_layout == FR_LEAF) {
         foundfr = nfr;
         break;
@@ -4523,41 +4523,7 @@ static void win_enter_ext(win_T *const wp, const int flags)
   }
   changed_line_abv_curs();      // assume cursor position needs updating
 
-  // New directory is either the local directory of the window, tab or NULL.
-  char *new_dir = (char *)(curwin->w_localdir
-                           ? curwin->w_localdir : curtab->tp_localdir);
-
-  char cwd[MAXPATHL];
-  if (os_dirname((char_u *)cwd, MAXPATHL) != OK) {
-    cwd[0] = NUL;
-  }
-
-  if (new_dir) {
-    // Window/tab has a local directory: Save current directory as global
-    // (unless that was done already) and change to the local directory.
-    if (globaldir == NULL) {
-      if (cwd[0] != NUL) {
-        globaldir = (char_u *)xstrdup(cwd);
-      }
-    }
-    if (os_chdir(new_dir) == 0) {
-      if (!p_acd && pathcmp(new_dir, cwd, -1) != 0) {
-        do_autocmd_dirchanged(new_dir, curwin->w_localdir
-                              ? kCdScopeWindow : kCdScopeTabpage, kCdCauseWindow);
-      }
-      shorten_fnames(true);
-    }
-  } else if (globaldir != NULL) {
-    // Window doesn't have a local directory and we are not in the global
-    // directory: Change to the global directory.
-    if (os_chdir((char *)globaldir) == 0) {
-      if (!p_acd && pathcmp((char *)globaldir, cwd, -1) != 0) {
-        do_autocmd_dirchanged((char *)globaldir, kCdScopeGlobal, kCdCauseWindow);
-      }
-    }
-    XFREE_CLEAR(globaldir);
-    shorten_fnames(true);
-  }
+  fix_current_dir();
 
   if (flags & WEE_TRIGGER_NEW_AUTOCMDS) {
     apply_autocmds(EVENT_WINNEW, NULL, NULL, false, curbuf);
@@ -4602,6 +4568,46 @@ static void win_enter_ext(win_T *const wp, const int flags)
   do_autochdir();
 }
 
+/// Used after making another window the current one: change directory if needed.
+void fix_current_dir(void)
+{
+  // New directory is either the local directory of the window, tab or NULL.
+  char *new_dir = (char *)(curwin->w_localdir
+                           ? curwin->w_localdir : curtab->tp_localdir);
+  char cwd[MAXPATHL];
+  if (os_dirname((char_u *)cwd, MAXPATHL) != OK) {
+    cwd[0] = NUL;
+  }
+
+  if (new_dir) {
+    // Window/tab has a local directory: Save current directory as global
+    // (unless that was done already) and change to the local directory.
+    if (globaldir == NULL) {
+      if (cwd[0] != NUL) {
+        globaldir = (char_u *)xstrdup(cwd);
+      }
+    }
+    if (os_chdir(new_dir) == 0) {
+      if (!p_acd && pathcmp(new_dir, cwd, -1) != 0) {
+        do_autocmd_dirchanged(new_dir, curwin->w_localdir
+                              ? kCdScopeWindow : kCdScopeTabpage, kCdCauseWindow);
+      }
+      last_chdir_reason = NULL;
+      shorten_fnames(true);
+    }
+  } else if (globaldir != NULL) {
+    // Window doesn't have a local directory and we are not in the global
+    // directory: Change to the global directory.
+    if (os_chdir((char *)globaldir) == 0) {
+      if (!p_acd && pathcmp((char *)globaldir, cwd, -1) != 0) {
+        do_autocmd_dirchanged((char *)globaldir, kCdScopeGlobal, kCdCauseWindow);
+      }
+    }
+    XFREE_CLEAR(globaldir);
+    last_chdir_reason = NULL;
+    shorten_fnames(true);
+  }
+}
 
 /// Jump to the first open window that contains buffer "buf", if one exists.
 /// Returns a pointer to the window found, otherwise NULL.
@@ -4749,6 +4755,8 @@ static void win_free(win_T *wp, tabpage_T *tp)
 
   clear_winopt(&wp->w_onebuf_opt);
   clear_winopt(&wp->w_allbuf_opt);
+
+  xfree(wp->w_p_lcs_chars.multispace);
 
   vars_clear(&wp->w_vars->dv_hashtab);          // free all w: variables
   hash_init(&wp->w_vars->dv_hashtab);
@@ -5823,8 +5831,8 @@ void scroll_to_fraction(win_T *wp, int prev_height)
   //   is visible.
   if (height > 0
       && (!wp->w_p_scb || wp == curwin)
-      && (height < wp->w_buffer->b_ml.ml_line_count ||
-          wp->w_topline > 1)) {
+      && (height < wp->w_buffer->b_ml.ml_line_count
+          || wp->w_topline > 1)) {
     /*
      * Find a value for w_topline that shows the cursor at the same
      * relative position in the window as before (more or less).
@@ -6080,7 +6088,7 @@ void command_height(void)
 static void frame_add_height(frame_T *frp, int n)
 {
   frame_new_height(frp, frp->fr_height + n, false, false);
-  for (;; ) {
+  for (;;) {
     frp = frp->fr_parent;
     if (frp == NULL) {
       break;
@@ -6624,6 +6632,9 @@ void restore_win_noblock(win_T *save_curwin, tabpage_T *save_curtab, bool no_dis
     curwin = save_curwin;
     curbuf = curwin->w_buffer;
   }
+  // If called by win_execute() and executing the command changed the
+  // directory, it now has to be restored.
+  fix_current_dir();
 }
 
 /// Make "buf" the current buffer.
@@ -7003,7 +7014,7 @@ int win_getid(typval_T *argvars)
         wp = tp->tp_firstwin;
       }
     }
-    for ( ; wp != NULL; wp = wp->w_next) {
+    for (; wp != NULL; wp = wp->w_next) {
       if (--winnr == 0) {
         return wp->handle;
       }

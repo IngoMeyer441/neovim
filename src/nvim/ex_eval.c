@@ -566,7 +566,7 @@ static void discard_exception(except_T *excp, bool was_finished)
     } else {
       verbose_leave();
     }
-    xstrlcpy((char *)IObuff, (const char *)saved_IObuff, IOSIZE);
+    STRLCPY(IObuff, saved_IObuff, IOSIZE);
     xfree(saved_IObuff);
   }
   if (excp->type != ET_INTERRUPT) {
@@ -1628,7 +1628,7 @@ void ex_endtry(exarg_T *eap)
       eap->errmsg = get_end_emsg(cstack);
       // Find the matching ":try" and report what's missing.
       idx = cstack->cs_idx;
-      do{
+      do {
         --idx;
       }
       while (idx > 0 && !(cstack->cs_flags[idx] & CSF_TRY));
@@ -2091,7 +2091,7 @@ int has_loop_cmd(char_u *p)
   int len;
 
   // skip modifiers, white space and ':'
-  for (;; ) {
+  for (;;) {
     while (*p == ' ' || *p == '\t' || *p == ':') {
       ++p;
     }

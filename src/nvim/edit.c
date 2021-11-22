@@ -3292,16 +3292,11 @@ void get_complete_info(list_T *what_list, dict_T *retdict)
           dict_T *di = tv_dict_alloc();
 
           tv_list_append_dict(li, di);
-          tv_dict_add_str(di, S_LEN("word"),
-                          (char *)EMPTY_IF_NULL(match->cp_str));
-          tv_dict_add_str(di, S_LEN("abbr"),
-                          (char *)EMPTY_IF_NULL(match->cp_text[CPT_ABBR]));
-          tv_dict_add_str(di, S_LEN("menu"),
-                          (char *)EMPTY_IF_NULL(match->cp_text[CPT_MENU]));
-          tv_dict_add_str(di, S_LEN("kind"),
-                          (char *)EMPTY_IF_NULL(match->cp_text[CPT_KIND]));
-          tv_dict_add_str(di, S_LEN("info"),
-                          (char *)EMPTY_IF_NULL(match->cp_text[CPT_INFO]));
+          tv_dict_add_str(di, S_LEN("word"), EMPTY_IF_NULL(match->cp_str));
+          tv_dict_add_str(di, S_LEN("abbr"), EMPTY_IF_NULL(match->cp_text[CPT_ABBR]));
+          tv_dict_add_str(di, S_LEN("menu"), EMPTY_IF_NULL(match->cp_text[CPT_MENU]));
+          tv_dict_add_str(di, S_LEN("kind"), EMPTY_IF_NULL(match->cp_text[CPT_KIND]));
+          tv_dict_add_str(di, S_LEN("info"), EMPTY_IF_NULL(match->cp_text[CPT_INFO]));
           if (match->cp_user_data.v_type == VAR_UNKNOWN) {
             tv_dict_add_str(di, S_LEN("user_data"), "");
           } else {
@@ -4171,7 +4166,7 @@ static int ins_compl_get_exp(pos_T *ini)
   pos = (compl_direction == FORWARD) ? &last_match_pos : &first_match_pos;
 
   // For ^N/^P loop over all the flags/windows/buffers in 'complete'
-  for (;; ) {
+  for (;;) {
     found_new_match = FAIL;
     set_match_pos = false;
 
@@ -4389,7 +4384,7 @@ static int ins_compl_get_exp(pos_T *ini)
         p_ws = true;
       }
       bool looped_around = false;
-      for (;; ) {
+      for (;;) {
         bool cont_s_ipos = false;
 
         msg_silent++;          // Don't want messages for wrapscan.
@@ -4635,16 +4630,11 @@ static dict_T *ins_compl_dict_alloc(compl_T *match)
 {
   // { word, abbr, menu, kind, info }
   dict_T *dict = tv_dict_alloc_lock(VAR_FIXED);
-  tv_dict_add_str(dict, S_LEN("word"),
-                  (const char *)EMPTY_IF_NULL(match->cp_str));
-  tv_dict_add_str(dict, S_LEN("abbr"),
-                  (const char *)EMPTY_IF_NULL(match->cp_text[CPT_ABBR]));
-  tv_dict_add_str(dict, S_LEN("menu"),
-                  (const char *)EMPTY_IF_NULL(match->cp_text[CPT_MENU]));
-  tv_dict_add_str(dict, S_LEN("kind"),
-                  (const char *)EMPTY_IF_NULL(match->cp_text[CPT_KIND]));
-  tv_dict_add_str(dict, S_LEN("info"),
-                  (const char *)EMPTY_IF_NULL(match->cp_text[CPT_INFO]));
+  tv_dict_add_str(dict, S_LEN("word"), EMPTY_IF_NULL(match->cp_str));
+  tv_dict_add_str(dict, S_LEN("abbr"), EMPTY_IF_NULL(match->cp_text[CPT_ABBR]));
+  tv_dict_add_str(dict, S_LEN("menu"), EMPTY_IF_NULL(match->cp_text[CPT_MENU]));
+  tv_dict_add_str(dict, S_LEN("kind"), EMPTY_IF_NULL(match->cp_text[CPT_KIND]));
+  tv_dict_add_str(dict, S_LEN("info"), EMPTY_IF_NULL(match->cp_text[CPT_INFO]));
   if (match->cp_user_data.v_type == VAR_UNKNOWN) {
     tv_dict_add_str(dict, S_LEN("user_data"), "");
   } else {
@@ -5580,7 +5570,7 @@ int get_literal(void)
   no_mapping++;                 // don't map the next key hits
   cc = 0;
   i = 0;
-  for (;; ) {
+  for (;;) {
     nc = plain_vgetc();
     if (!(State & CMDLINE)
         && MB_BYTE2LEN_CHECK(nc) == 1) {
@@ -6687,7 +6677,7 @@ static void stop_insert(pos_T *end_insert_pos, int esc, int nomove)
 
       curwin->w_cursor = *end_insert_pos;
       check_cursor_col();        // make sure it is not past the line
-      for (;; ) {
+      for (;;) {
         if (gchar_cursor() == NUL && curwin->w_cursor.col > 0) {
           --curwin->w_cursor.col;
         }
@@ -6878,7 +6868,7 @@ int oneleft(void)
 
     // We might get stuck on 'showbreak', skip over it.
     width = 1;
-    for (;; ) {
+    for (;;) {
       coladvance(v - width);
       // getviscol() is slow, skip it when 'showbreak' is empty,
       // 'breakindent' is not set and there are no multi-byte
@@ -7212,7 +7202,7 @@ static void replace_join(int off)
 {
   int i;
 
-  for (i = replace_stack_nr; --i >= 0; ) {
+  for (i = replace_stack_nr; --i >= 0;) {
     if (replace_stack[i] == NUL && off-- <= 0) {
       --replace_stack_nr;
       memmove(replace_stack + i, replace_stack + i + 1,
@@ -7261,7 +7251,7 @@ static void mb_replace_pop_ins(int cc)
   }
 
   // Handle composing chars.
-  for (;; ) {
+  for (;;) {
     c = replace_pop();
     if (c == -1) {                // stack empty
       break;
@@ -9022,7 +9012,7 @@ static bool ins_tab(void)
         // correct replace stack.
         if ((State & REPLACE_FLAG)
             && !(State & VREPLACE_FLAG)) {
-          for (temp = i; --temp >= 0; ) {
+          for (temp = i; --temp >= 0;) {
             replace_join(repl_off);
           }
         }
