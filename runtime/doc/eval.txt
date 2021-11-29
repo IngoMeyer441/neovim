@@ -3081,7 +3081,7 @@ bufname([{buf}])						*bufname()*
 	bufname(3)		name of buffer 3
 	bufname("%")		name of current buffer
 	bufname("file2")	name of buffer where "file2" matches.
-
+<
 							*bufnr()*
 bufnr([{buf} [, {create}]])
 		The result is the number of a buffer, as it is displayed by
@@ -5136,8 +5136,8 @@ getline({lnum} [, {end}])
 		digit, |line()| is called to translate the String into a Number.
 		To get the line under the cursor: >
 			getline(".")
-<		When {lnum} is smaller than 1 or bigger than the number of
-		lines in the buffer, an empty string is returned.
+<		When {lnum} is a number smaller than 1 or bigger than the
+		number of lines in the buffer, an empty string is returned.
 
 		When {end} is given the result is a |List| where each item is
 		a line from the current buffer in the range {lnum} to {end},
@@ -7464,15 +7464,18 @@ printf({fmt}, {expr1} ...)				*printf()*
 			field width.  If the converted value has fewer bytes
 			than the field width, it will be padded with spaces on
 			the left (or right, if the left-adjustment flag has
-			been given) to fill out the field width.
+			been given) to fill out the field width.  For the S
+			conversion the count is in cells.
 
 		.precision
 			An optional precision, in the form of a period '.'
 			followed by an optional digit string.  If the digit
 			string is omitted, the precision is taken as zero.
 			This gives the minimum number of digits to appear for
-			d, o, x, and X conversions, or the maximum number of
-			bytes to be printed from a string for s conversions.
+			d, o, x, and X conversions, the maximum number of
+			bytes to be printed from a string for s conversions,
+			or the maximum number of cells to be printed from a
+			string for S conversions.
 			For floating point it is the number of digits after
 			the decimal point.
 
@@ -8549,6 +8552,7 @@ setbufline({buf}, {lnum}, {text})			*setbufline()*
 		For the use of {buf}, see |bufname()| above.
 
 		{lnum} is used like with |setline()|.
+		Use "$" to refer to the last line in buffer {buf}.
 		When {lnum} is just below the last line the {text} will be
 		added below the last line.
 		On success 0 is returned, on failure 1 is returned.
@@ -8973,7 +8977,7 @@ shellescape({string} [, {special}])			*shellescape()*
 		Otherwise encloses {string} in single-quotes and replaces all
 		"'" with "'\''".
 
-		If {special} is a ||non-zero-arg|:
+		If {special} is a |non-zero-arg|:
 		- Special items such as "!", "%", "#" and "<cword>" will be
 		  preceded by a backslash. The backslash will be removed again
 		  by the |:!| command.
@@ -8983,7 +8987,7 @@ shellescape({string} [, {special}])			*shellescape()*
 		- The "!" character will be escaped. This is because csh and
 		  tcsh use "!" for history replacement even in single-quotes.
 		- The <NL> character is escaped (twice if {special} is
-		  a ||non-zero-arg|).
+		  a |non-zero-arg|).
 
 		If 'shell' contains "fish" in the tail, the "\" character will
 		be escaped because in fish it is used as an escape character

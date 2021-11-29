@@ -320,7 +320,8 @@ do
   ---
   ---   state
   ---     pending_change?: function that the timer starts to trigger didChange
-  ---     pending_changes: list of tables with the pending changesets; for incremental_sync only
+  ---     pending_changes: table (uri -> list of pending changeset tables));
+  --                       Only set if incremental_sync is used
   ---     use_incremental_sync: bool
   ---     buffers?: table (bufnr → lines); for incremental sync only
   ---     timer?: uv_timer
@@ -348,12 +349,10 @@ do
   end
 
   function changetracking.reset_buf(client, bufnr)
+    changetracking.flush(client)
     local state = state_by_client[client.id]
-    if state then
-      changetracking._reset_timer(state)
-      if state.buffers then
-        state.buffers[bufnr] = nil
-      end
+    if state and state.buffers then
+      state.buffers[bufnr] = nil
     end
   end
 
@@ -365,7 +364,7 @@ do
     end
   end
 
-  function changetracking.prepare(bufnr, firstline, lastline, new_lastline, changedtick)
+  function changetracking.prepare(bufnr, firstline, lastline, new_lastline)
     local incremental_changes = function(client)
       local cached_buffers = state_by_client[client.id].buffers
       local curr_lines = nvim_buf_get_lines(bufnr, 0, -1, true)
@@ -392,7 +391,7 @@ do
         client.notify("textDocument/didChange", {
           textDocument = {
             uri = uri;
-            version = changedtick;
+            version = util.buf_versions[bufnr];
           };
           contentChanges = { changes, }
         })
@@ -402,27 +401,36 @@ do
       if state.use_incremental_sync then
         -- This must be done immediately and cannot be delayed
         -- The contents would further change and startline/endline may no longer fit
-        table.insert(state.pending_changes, incremental_changes(client))
+        if not state.pending_changes[uri] then
+          state.pending_changes[uri] = {}
+        end
+        table.insert(state.pending_changes[uri], incremental_changes(client))
       end
       state.pending_change = function()
         state.pending_change = nil
         if client.is_stopped() or not vim.api.nvim_buf_is_valid(bufnr) then
           return
         end
-        local contentChanges
         if state.use_incremental_sync then
-          contentChanges = state.pending_changes
+          for change_uri, content_changes in pairs(state.pending_changes) do
+            client.notify("textDocument/didChange", {
+              textDocument = {
+                uri = change_uri;
+                version = util.buf_versions[vim.uri_to_bufnr(change_uri)];
+              };
+              contentChanges = content_changes,
+            })
+          end
           state.pending_changes = {}
         else
-          contentChanges = { full_changes(), }
+          client.notify("textDocument/didChange", {
+            textDocument = {
+              uri = uri;
+              version = util.buf_versions[bufnr];
+            };
+            contentChanges = { full_changes() },
+          })
         end
-        client.notify("textDocument/didChange", {
-          textDocument = {
-            uri = uri;
-            version = changedtick;
-          };
-          contentChanges = contentChanges
-        })
       end
       state.timer = vim.loop.new_timer()
       -- Must use schedule_wrap because `full_changes()` calls nvim_buf_get_lines
@@ -613,7 +621,7 @@ end
 ---
 ---@param commands table Table that maps string of clientside commands to user-defined functions.
 --- Commands passed to start_client take precedence over the global command registry. Each key
---- must be a unique comand name, and the value is a function which is called if any LSP action
+--- must be a unique command name, and the value is a function which is called if any LSP action
 --- (code action, code lenses, ...) triggers the command.
 ---
 ---@param init_options Values to pass in the initialization request
@@ -667,8 +675,8 @@ end
 ---       notifications to the server by the given number in milliseconds. No debounce
 ---       occurs if nil
 --- - exit_timeout (number, default 500): Milliseconds to wait for server to
---        exit cleanly after sending the 'shutdown' request before sending kill -15.
---        If set to false, nvim exits immediately after sending the 'shutdown' request to the server.
+---       exit cleanly after sending the 'shutdown' request before sending kill -15.
+---       If set to false, nvim exits immediately after sending the 'shutdown' request to the server.
 ---
 ---@param root_dir string Directory where the LSP
 --- server will base its workspaceFolders, rootUri, and rootPath
@@ -790,6 +798,9 @@ function lsp.start_client(config)
     env = config.cmd_env;
   })
 
+  -- Return nil if client fails to start
+  if not rpc then return end
+
   local client = {
     id = client_id;
     name = name;
@@ -831,9 +842,9 @@ function lsp.start_client(config)
       root_uri = workspace_folders[1].uri
       root_path = vim.uri_to_fname(root_uri)
     else
-      workspace_folders = vim.NIL
-      root_uri = vim.NIL
-      root_path = vim.NIL
+      workspace_folders = nil
+      root_uri = nil
+      root_path = nil
     end
 
     local initialize_params = {
@@ -851,15 +862,15 @@ function lsp.start_client(config)
       -- The rootPath of the workspace. Is null if no folder is open.
       --
       -- @deprecated in favour of rootUri.
-      rootPath = root_path;
+      rootPath = root_path or vim.NIL;
       -- The rootUri of the workspace. Is null if no folder is open. If both
       -- `rootPath` and `rootUri` are set `rootUri` wins.
-      rootUri = root_uri;
+      rootUri = root_uri or vim.NIL;
       -- The workspace folders configured in the client when the server starts.
       -- This property is only available if the client supports workspace folders.
       -- It can be `null` if the client supports workspace folders but none are
       -- configured.
-      workspaceFolders = workspace_folders;
+      workspaceFolders = workspace_folders or vim.NIL;
       -- User provided initialization options.
       initializationOptions = config.init_options;
       -- The capabilities provided by the client (editor or tool)
@@ -879,7 +890,9 @@ function lsp.start_client(config)
       rpc.notify('initialized', vim.empty_dict())
       client.initialized = true
       uninitialized_clients[client_id] = nil
-      client.workspaceFolders = initialize_params.workspaceFolders
+      client.workspace_folders = workspace_folders
+      -- TODO(mjlbach): Backwards compatbility, to be removed in 0.7
+      client.workspaceFolders = client.workspace_folders
       client.server_capabilities = assert(result.capabilities, "initialize result doesn't contain capabilities")
       -- These are the cleaned up capabilities we use for dynamically deciding
       -- when to send certain events to clients.
@@ -1021,7 +1034,7 @@ function lsp.start_client(config)
     return rpc.notify("$/cancelRequest", { id = id })
   end
 
-  -- Track this so that we can escalate automatically if we've alredy tried a
+  -- Track this so that we can escalate automatically if we've already tried a
   -- graceful shutdown
   local graceful_shutdown_failed = false
   ---@private
@@ -1098,7 +1111,7 @@ do
       return
     end
     util.buf_versions[bufnr] = changedtick
-    local compute_change_and_notify = changetracking.prepare(bufnr, firstline, lastline, new_lastline, changedtick)
+    local compute_change_and_notify = changetracking.prepare(bufnr, firstline, lastline, new_lastline)
     for_each_buffer_client(bufnr, compute_change_and_notify)
   end
 end
@@ -1157,6 +1170,7 @@ function lsp.buf_attach_client(bufnr, client_id)
       on_reload = function()
         local params = { textDocument = { uri = uri; } }
         for_each_buffer_client(bufnr, function(client, _)
+          changetracking.reset_buf(client, bufnr)
           if client.resolved_capabilities.text_document_open_close then
             client.notify('textDocument/didClose', params)
           end
@@ -1166,10 +1180,10 @@ function lsp.buf_attach_client(bufnr, client_id)
       on_detach = function()
         local params = { textDocument = { uri = uri; } }
         for_each_buffer_client(bufnr, function(client, _)
+          changetracking.reset_buf(client, bufnr)
           if client.resolved_capabilities.text_document_open_close then
             client.notify('textDocument/didClose', params)
           end
-          changetracking.reset_buf(client, bufnr)
         end)
         util.buf_versions[bufnr] = nil
         all_buffer_active_clients[bufnr] = nil
@@ -1204,7 +1218,7 @@ end
 
 --- Gets a client by id, or nil if the id is invalid.
 --- The returned client may not yet be fully initialized.
---
+---
 ---@param client_id number client id
 ---
 ---@returns |vim.lsp.client| object, or nil
@@ -1213,7 +1227,7 @@ function lsp.get_client_by_id(client_id)
 end
 
 --- Returns list of buffers attached to client_id.
---
+---
 ---@param client_id number client id
 ---@returns list of buffer ids
 function lsp.get_buffers_by_client_id(client_id)
@@ -1317,8 +1331,8 @@ nvim_command("autocmd VimLeavePre * lua vim.lsp._vim_exit_handler()")
 ---@param method (string) LSP method name
 ---@param params (optional, table) Parameters to send to the server
 ---@param handler (optional, function) See |lsp-handler|
---  If nil, follows resolution strategy defined in |lsp-handler-configuration|
---
+---       If nil, follows resolution strategy defined in |lsp-handler-configuration|
+---
 ---@returns 2-tuple:
 ---  - Map of client-id:request-id pairs for all successful requests.
 ---  - Function which can be used to cancel all the requests. You could instead
@@ -1728,11 +1742,11 @@ end
 --- using `workspace/executeCommand`.
 ---
 --- The first argument to the function will be the `Command`:
---    Command
---      title: String
---      command: String
---      arguments?: any[]
---
+---   Command
+---     title: String
+---     command: String
+---     arguments?: any[]
+---
 --- The second argument is the `ctx` of |lsp-handler|
 lsp.commands = setmetatable({}, {
   __newindex = function(tbl, key, value)

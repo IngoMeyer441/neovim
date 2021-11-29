@@ -39,39 +39,22 @@ M.handlers = setmetatable({}, {
 -- Metatable that automatically creates an empty table when assigning to a missing key
 local bufnr_and_namespace_cacher_mt = {
   __index = function(t, bufnr)
-    if not bufnr or bufnr == 0 then
-      bufnr = vim.api.nvim_get_current_buf()
-    end
-
-    rawset(t, bufnr, {})
-
-    return rawget(t, bufnr)
-  end,
-
-  __newindex = function(t, bufnr, v)
-    if not bufnr or bufnr == 0 then
-      bufnr = vim.api.nvim_get_current_buf()
-    end
-
-    rawset(t, bufnr, v)
+    assert(bufnr > 0, "Invalid buffer number")
+    t[bufnr] = {}
+    return t[bufnr]
   end,
 }
 
 local diagnostic_cache = setmetatable({}, {
   __index = function(t, bufnr)
-    if not bufnr or bufnr == 0 then
-      bufnr = vim.api.nvim_get_current_buf()
-    end
-
+    assert(bufnr > 0, "Invalid buffer number")
     vim.api.nvim_buf_attach(bufnr, false, {
       on_detach = function()
         rawset(t, bufnr, nil) -- clear cache
       end
     })
-
-    rawset(t, bufnr, {})
-
-    return rawget(t, bufnr)
+    t[bufnr] = {}
+    return t[bufnr]
   end,
 })
 
@@ -389,43 +372,55 @@ local function get_diagnostics(bufnr, opts, clamp)
 
   local namespace = opts.namespace
   local diagnostics = {}
-  local buf_line_count = clamp and vim.api.nvim_buf_line_count(bufnr) or math.huge
+
+  -- Memoized results of buf_line_count per bufnr
+  local buf_line_count = setmetatable({}, {
+    __index = function(t, k)
+      t[k] = vim.api.nvim_buf_line_count(k)
+      return rawget(t, k)
+    end,
+  })
 
   ---@private
-  local function add(d)
+  local function add(b, d)
     if not opts.lnum or d.lnum == opts.lnum then
-      if clamp and (d.lnum >= buf_line_count or d.end_lnum >= buf_line_count) then
-        d = vim.deepcopy(d)
-        d.lnum = math.max(math.min(d.lnum, buf_line_count - 1), 0)
-        d.end_lnum = math.max(math.min(d.end_lnum, buf_line_count - 1), 0)
+      if clamp and vim.api.nvim_buf_is_loaded(b) then
+        local line_count = buf_line_count[b] - 1
+        if (d.lnum > line_count or d.end_lnum > line_count) then
+          d = vim.deepcopy(d)
+          d.lnum = math.max(math.min(d.lnum, line_count), 0)
+          d.end_lnum = math.max(math.min(d.end_lnum, line_count), 0)
+        end
       end
       table.insert(diagnostics, d)
     end
   end
 
   if namespace == nil and bufnr == nil then
-    for _, t in pairs(diagnostic_cache) do
+    for b, t in pairs(diagnostic_cache) do
       for _, v in pairs(t) do
         for _, diagnostic in pairs(v) do
-          add(diagnostic)
+          add(b, diagnostic)
         end
       end
     end
   elseif namespace == nil then
+    bufnr = get_bufnr(bufnr)
     for iter_namespace in pairs(diagnostic_cache[bufnr]) do
       for _, diagnostic in pairs(diagnostic_cache[bufnr][iter_namespace]) do
-        add(diagnostic)
+        add(bufnr, diagnostic)
       end
     end
   elseif bufnr == nil then
-    for _, t in pairs(diagnostic_cache) do
+    for b, t in pairs(diagnostic_cache) do
       for _, diagnostic in pairs(t[namespace] or {}) do
-        add(diagnostic)
+        add(b, diagnostic)
       end
     end
   else
+    bufnr = get_bufnr(bufnr)
     for _, diagnostic in pairs(diagnostic_cache[bufnr][namespace] or {}) do
-      add(diagnostic)
+      add(bufnr, diagnostic)
     end
   end
 
@@ -446,7 +441,9 @@ local function set_list(loclist, opts)
   if loclist then
     bufnr = vim.api.nvim_win_get_buf(winnr)
   end
-  local diagnostics = get_diagnostics(bufnr, opts, true)
+  -- Don't clamp line numbers since the quickfix list can already handle line
+  -- numbers beyond the end of the buffer
+  local diagnostics = get_diagnostics(bufnr, opts, false)
   local items = M.toqflist(diagnostics)
   if loclist then
     vim.fn.setloclist(winnr, {}, ' ', { title = title, items = items })
@@ -521,7 +518,10 @@ local function diagnostic_move_pos(opts, pos)
     vim.schedule(function()
       M.open_float(
         vim.api.nvim_win_get_buf(win_id),
-        vim.tbl_extend("keep", float_opts, {scope="cursor"})
+        vim.tbl_extend("keep", float_opts, {
+          scope = "cursor",
+          focusable = false,
+        })
       )
     end)
   end
@@ -579,26 +579,7 @@ end
 ---                * priority: (number, default 10) Base priority to use for signs. When
 ---                {severity_sort} is used, the priority of a sign is adjusted based on
 ---                its severity. Otherwise, all signs use the same priority.
----       - float: Options for floating windows:
----                  * severity: See |diagnostic-severity|.
----                  * header: (string or table) String to use as the header for the floating
----                            window. If a table, it is interpreted as a [text, hl_group] tuple.
----                            Defaults to "Diagnostics:".
----                  * source: (string) Include the diagnostic source in
----                            the message. One of "always" or "if_many".
----                  * format: (function) A function that takes a diagnostic as input and returns a
----                            string. The return value is the text used to display the diagnostic.
----                  * prefix: (function, string, or table) Prefix each diagnostic in the floating
----                            window. If a function, it must have the signature (diagnostic, i,
----                            total) -> (string, string), where {i} is the index of the diagnostic
----                            being evaluated and {total} is the total number of diagnostics
----                            displayed in the window. The function should return a string which
----                            is prepended to each diagnostic in the window as well as an
----                            (optional) highlight group which will be used to highlight the
----                            prefix. If {prefix} is a table, it is interpreted as a [text,
----                            hl_group] tuple as in |nvim_echo()|; otherwise, if {prefix} is a
----                            string, it is prepended to each diagnostic in the window with no
----                            highlight.
+---       - float: Options for floating windows. See |vim.diagnostic.open_float()|.
 ---       - update_in_insert: (default false) Update diagnostics in Insert mode (if false,
 ---                           diagnostics are updated on InsertLeave)
 ---       - severity_sort: (default false) Sort diagnostics by severity. This affects the order in
@@ -606,6 +587,7 @@ end
 ---                         are displayed before lower severities (e.g. ERROR is displayed before WARN).
 ---                         Options:
 ---                         * reverse: (boolean) Reverse sort order
+---
 ---@param namespace number|nil Update the options for the given namespace. When omitted, update the
 ---                            global diagnostic options.
 function M.config(opts, namespace)
@@ -659,6 +641,8 @@ function M.set(namespace, bufnr, diagnostics, opts)
     opts = {opts, 't', true},
   }
 
+  bufnr = get_bufnr(bufnr)
+
   if vim.tbl_isempty(diagnostics) then
     diagnostic_cache[bufnr][namespace] = nil
   else
@@ -666,15 +650,17 @@ function M.set(namespace, bufnr, diagnostics, opts)
   end
 
   if vim.api.nvim_buf_is_loaded(bufnr) then
-    M.show(namespace, bufnr, diagnostics, opts)
+    M.show(namespace, bufnr, nil, opts)
   end
 
-  vim.api.nvim_command("doautocmd <nomodeline> User DiagnosticsChanged")
+  vim.api.nvim_command(
+    string.format("doautocmd <nomodeline> DiagnosticChanged %s", vim.api.nvim_buf_get_name(bufnr))
+  )
 end
 
 --- Get namespace metadata.
 ---
----@param ns number Diagnostic namespace
+---@param namespace number Diagnostic namespace
 ---@return table Namespace metadata
 function M.get_namespace(namespace)
   vim.validate { namespace = { namespace, 'n' } }
@@ -796,7 +782,9 @@ end
 ---         - severity: See |diagnostic-severity|.
 ---         - float: (boolean or table, default true) If "true", call |vim.diagnostic.open_float()|
 ---                    after moving. If a table, pass the table as the {opts} parameter to
----                    |vim.diagnostic.open_float()|.
+---                    |vim.diagnostic.open_float()|. Unless overridden, the float will show
+---                    diagnostics at the new cursor position (as if "cursor" were passed to
+---                    the "scope" option).
 ---         - win_id: (number, default 0) Window ID
 function M.goto_next(opts)
   return diagnostic_move_pos(
@@ -1143,7 +1131,7 @@ end
 ---@param opts table|nil Configuration table with the same keys as
 ---            |vim.lsp.util.open_floating_preview()| in addition to the following:
 ---            - namespace: (number) Limit diagnostics to the given namespace
----            - scope: (string, default "buffer") Show diagnostics from the whole buffer ("buffer"),
+---            - scope: (string, default "line") Show diagnostics from the whole buffer ("buffer"),
 ---                     the current cursor line ("line"), or the current cursor position ("cursor").
 ---            - pos: (number or table) If {scope} is "line" or "cursor", use this position rather
 ---                   than the cursor position. If a number, interpreted as a line number;
@@ -1160,7 +1148,17 @@ end
 ---            - format: (function) A function that takes a diagnostic as input and returns a
 ---                      string. The return value is the text used to display the diagnostic.
 ---                      Overrides the setting from |vim.diagnostic.config()|.
----            - prefix: (function, string, or table) Prefix each diagnostic in the floating window.
+---            - prefix: (function, string, or table) Prefix each diagnostic in the floating
+---                      window. If a function, it must have the signature (diagnostic, i,
+---                      total) -> (string, string), where {i} is the index of the diagnostic
+---                      being evaluated and {total} is the total number of diagnostics
+---                      displayed in the window. The function should return a string which
+---                      is prepended to each diagnostic in the window as well as an
+---                      (optional) highlight group which will be used to highlight the
+---                      prefix. If {prefix} is a table, it is interpreted as a [text,
+---                      hl_group] tuple as in |nvim_echo()|; otherwise, if {prefix} is a
+---                      string, it is prepended to each diagnostic in the window with no
+---                      highlight.
 ---                      Overrides the setting from |vim.diagnostic.config()|.
 ---@return tuple ({float_bufnr}, {win_id})
 function M.open_float(bufnr, opts)
@@ -1171,7 +1169,7 @@ function M.open_float(bufnr, opts)
 
   opts = opts or {}
   bufnr = get_bufnr(bufnr)
-  local scope = opts.scope or "buffer"
+  local scope = opts.scope or "line"
   local lnum, col
   if scope == "line" or scope == "cursor" then
     if not opts.pos then
@@ -1320,7 +1318,7 @@ function M.reset(namespace, bufnr)
     bufnr = {bufnr, 'n', true},
   }
 
-  local buffers = bufnr and {bufnr} or vim.tbl_keys(diagnostic_cache)
+  local buffers = bufnr and {get_bufnr(bufnr)} or vim.tbl_keys(diagnostic_cache)
   for _, iter_bufnr in ipairs(buffers) do
     local namespaces = namespace and {namespace} or vim.tbl_keys(diagnostic_cache[iter_bufnr])
     for _, iter_namespace in ipairs(namespaces) do
@@ -1329,7 +1327,9 @@ function M.reset(namespace, bufnr)
     end
   end
 
-  vim.api.nvim_command("doautocmd <nomodeline> User DiagnosticsChanged")
+  vim.api.nvim_command(
+      string.format("doautocmd <nomodeline> DiagnosticChanged %s", vim.api.nvim_buf_get_name(bufnr))
+  )
 end
 
 --- Add all diagnostics to the quickfix list.

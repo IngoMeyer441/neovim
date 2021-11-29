@@ -2162,7 +2162,8 @@ void op_insert(oparg_T *oap, long count1)
 {
   long ins_len, pre_textlen = 0;
   char_u *firstline, *ins_text;
-  colnr_T ind_pre = 0;
+  colnr_T ind_pre_col = 0, ind_post_col;
+  int ind_pre_vcol = 0, ind_post_vcol = 0;
   struct block_def bd;
   int i;
   pos_T t1;
@@ -2196,7 +2197,8 @@ void op_insert(oparg_T *oap, long count1)
     // Get the info about the block before entering the text
     block_prep(oap, &bd, oap->start.lnum, true);
     // Get indent information
-    ind_pre = (colnr_T)getwhitecols_curline();
+    ind_pre_col = (colnr_T)getwhitecols_curline();
+    ind_pre_vcol = get_indent();
     firstline = ml_get(oap->start.lnum) + bd.textcol;
 
     if (oap->op_type == OP_APPEND) {
@@ -2261,10 +2263,11 @@ void op_insert(oparg_T *oap, long count1)
 
     // if indent kicked in, the firstline might have changed
     // but only do that, if the indent actually increased
-    const colnr_T ind_post = (colnr_T)getwhitecols_curline();
-    if (curbuf->b_op_start.col > ind_pre && ind_post > ind_pre) {
-      bd.textcol += ind_post - ind_pre;
-      bd.start_vcol += ind_post - ind_pre;
+    ind_post_col = (colnr_T)getwhitecols_curline();
+    if (curbuf->b_op_start.col > ind_pre_col && ind_post_col > ind_pre_col) {
+      bd.textcol += ind_post_col - ind_pre_col;
+      ind_post_vcol = get_indent();
+      bd.start_vcol += ind_post_vcol - ind_pre_vcol;
       did_indent = true;
     }
 
@@ -2297,12 +2300,26 @@ void op_insert(oparg_T *oap, long count1)
       }
     }
 
-    /*
-     * Spaces and tabs in the indent may have changed to other spaces and
-     * tabs.  Get the starting column again and correct the length.
-     * Don't do this when "$" used, end-of-line will have changed.
-     */
+    // Spaces and tabs in the indent may have changed to other spaces and
+    // tabs.  Get the starting column again and correct the length.
+    // Don't do this when "$" used, end-of-line will have changed.
+    //
+    // if indent was added and the inserted text was after the indent,
+    // correct the selection for the new indent.
+    if (did_indent && bd.textcol - ind_post_col > 0) {
+      oap->start.col += ind_post_col - ind_pre_col;
+      oap->start_vcol += ind_post_vcol - ind_pre_vcol;
+      oap->end.col += ind_post_col - ind_pre_col;
+      oap->end_vcol += ind_post_vcol - ind_pre_vcol;
+    }
     block_prep(oap, &bd2, oap->start.lnum, true);
+    if (did_indent && bd.textcol - ind_post_col > 0) {
+      // undo for where "oap" is used below
+      oap->start.col -= ind_post_col - ind_pre_col;
+      oap->start_vcol -= ind_post_vcol - ind_pre_vcol;
+      oap->end.col -= ind_post_col - ind_pre_col;
+      oap->end_vcol -= ind_post_vcol - ind_pre_vcol;
+    }
     if (!bd.is_MAX || bd2.textlen < bd.textlen) {
       if (oap->op_type == OP_APPEND) {
         pre_textlen += bd2.textlen - bd.textlen;
@@ -3340,6 +3357,7 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
     if (y_type == kMTCharWise && y_size == 1) {
       linenr_T end_lnum = 0;  // init for gcc
       linenr_T start_lnum = lnum;
+      int first_byte_off = 0;
 
       if (VIsual_active) {
         end_lnum = curbuf->b_visual.vi_end.lnum;
@@ -3386,6 +3404,10 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
           }
           STRMOVE(ptr, oldp + col);
           ml_replace(lnum, newp, false);
+
+          // compute the byte offset for the last character
+          first_byte_off = utf_head_off(newp, ptr - 1);
+
           // Place cursor on last putted char.
           if (lnum == curwin->w_cursor.lnum) {
             // make sure curwin->w_virtcol is updated
@@ -3405,10 +3427,15 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
         lnum--;
       }
 
+      // put '] at the first byte of the last character
       curbuf->b_op_end = curwin->w_cursor;
+      curbuf->b_op_end.col -= first_byte_off;
+
       // For "CTRL-O p" in Insert mode, put cursor after last char
       if (totlen && (restart_edit != 0 || (flags & PUT_CURSEND))) {
         curwin->w_cursor.col++;
+      } else {
+        curwin->w_cursor.col -= first_byte_off;
       }
     } else {
       // Insert at least one line.  When y_type is kMTCharWise, break the first
@@ -3520,12 +3547,13 @@ error:
                       curbuf->b_op_start.lnum, nr_lines, true);
       }
 
-      // put '] mark at last inserted character
+      // Put the '] mark on the first byte of the last inserted character.
+      // Correct the length for change in indent.
       curbuf->b_op_end.lnum = lnum;
-      // correct length for change in indent
       col = (colnr_T)STRLEN(y_array[y_size - 1]) - lendiff;
       if (col > 1) {
-        curbuf->b_op_end.col = col - 1;
+        curbuf->b_op_end.col = col - 1 - utf_head_off(y_array[y_size - 1],
+                                                      y_array[y_size - 1] + col - 1);
       } else {
         curbuf->b_op_end.col = 0;
       }

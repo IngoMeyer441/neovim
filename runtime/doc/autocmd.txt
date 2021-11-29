@@ -57,7 +57,7 @@ The special pattern <buffer> or <buffer=N> defines a buffer-local autocommand.
 See |autocmd-buflocal|.
 
 Note: The ":autocmd" command can only be followed by another command when the
-'|' appears before {cmd}.  This works: >
+'|' appears where the pattern is expected.  This works: >
 	:augroup mine | au! BufRead | augroup END
 But this sees "augroup" as part of the defined command: >
 	:augroup mine | au! BufRead * | augroup END
@@ -793,7 +793,7 @@ QuitPre				When using `:quit`, `:wq` or `:qall`, before
 				before QuitPre is triggered.  Can be used to
 				close any non-essential window if the current
 				window is the last ordinary window.
-				See also |ExitPre|, ||WinClosed|.
+				See also |ExitPre|, |WinClosed|.
 							*RemoteReply*
 RemoteReply			When a reply from a Vim that functions as
 				server was received |server2client()|.  The
