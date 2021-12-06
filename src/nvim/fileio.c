@@ -100,8 +100,8 @@ struct bw_info {
   char_u bw_rest[CONV_RESTLEN];  // not converted bytes
   int bw_restlen;                // nr of bytes in bw_rest[]
   int bw_first;                  // first write call
-  char_u *bw_conv_buf;      // buffer for writing converted chars
-  int bw_conv_buflen;            // size of bw_conv_buf
+  char_u *bw_conv_buf;           // buffer for writing converted chars
+  size_t bw_conv_buflen;         // size of bw_conv_buf
   int bw_conv_error;             // set for conversion error
   linenr_T bw_conv_error_lnum;   // first line with error or zero
   linenr_T bw_start_lnum;        // line number at start of buffer
@@ -1851,7 +1851,7 @@ failed:
       msg_scrolled_ign = true;
 
       if (!read_stdin && !read_buffer) {
-        p = (char_u *)msg_trunc_attr((char *)IObuff, FALSE, 0);
+        p = (char_u *)msg_trunc_attr((char *)IObuff, false, 0);
       }
 
       if (read_stdin || read_buffer || restart_edit != 0

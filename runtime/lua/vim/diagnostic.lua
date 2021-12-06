@@ -386,7 +386,7 @@ local function get_diagnostics(bufnr, opts, clamp)
     if not opts.lnum or d.lnum == opts.lnum then
       if clamp and vim.api.nvim_buf_is_loaded(b) then
         local line_count = buf_line_count[b] - 1
-        if (d.lnum > line_count or d.end_lnum > line_count) then
+        if (d.lnum > line_count or d.end_lnum > line_count or d.lnum < 0 or d.end_lnum < 0) then
           d = vim.deepcopy(d)
           d.lnum = math.max(math.min(d.lnum, line_count), 0)
           d.end_lnum = math.max(math.min(d.end_lnum, line_count), 0)
@@ -508,10 +508,13 @@ local function diagnostic_move_pos(opts, pos)
     return
   end
 
-  -- Save position in the window's jumplist
-  vim.api.nvim_win_call(win_id, function() vim.cmd("normal! m'") end)
-
-  vim.api.nvim_win_set_cursor(win_id, {pos[1] + 1, pos[2]})
+  vim.api.nvim_win_call(win_id, function()
+    -- Save position in the window's jumplist
+    vim.cmd("normal! m'")
+    vim.api.nvim_win_set_cursor(win_id, {pos[1] + 1, pos[2]})
+    -- Open folds under the cursor
+    vim.cmd("normal! zv")
+  end)
 
   if float then
     local float_opts = type(float) == "table" and float or {}
@@ -520,7 +523,7 @@ local function diagnostic_move_pos(opts, pos)
         vim.api.nvim_win_get_buf(win_id),
         vim.tbl_extend("keep", float_opts, {
           scope = "cursor",
-          focusable = false,
+          focus = false,
         })
       )
     end)
@@ -653,9 +656,14 @@ function M.set(namespace, bufnr, diagnostics, opts)
     M.show(namespace, bufnr, nil, opts)
   end
 
-  vim.api.nvim_command(
-    string.format("doautocmd <nomodeline> DiagnosticChanged %s", vim.api.nvim_buf_get_name(bufnr))
-  )
+  vim.api.nvim_buf_call(bufnr, function()
+    vim.api.nvim_command(
+      string.format(
+        "doautocmd <nomodeline> DiagnosticChanged %s",
+        vim.fn.fnameescape(vim.api.nvim_buf_get_name(bufnr))
+      )
+    )
+  end)
 end
 
 --- Get namespace metadata.
@@ -1328,7 +1336,10 @@ function M.reset(namespace, bufnr)
   end
 
   vim.api.nvim_command(
-      string.format("doautocmd <nomodeline> DiagnosticChanged %s", vim.api.nvim_buf_get_name(bufnr))
+    string.format(
+      "doautocmd <nomodeline> DiagnosticChanged %s",
+      vim.fn.fnameescape(vim.api.nvim_buf_get_name(bufnr))
+    )
   )
 end
 

@@ -5401,7 +5401,7 @@ static int get_id_list(char_u **const arg, const int keylen, int16_t **const lis
     do {
       for (end = p; *end && !ascii_iswhite(*end) && *end != ','; end++) {
       }
-      char_u *const name = xmalloc((int)(end - p + 3));   // leave room for "^$"
+      char_u *const name = xmalloc(end - p + 3);   // leave room for "^$"
       STRLCPY(name + 1, p, end - p + 1);
       if (STRCMP(name + 1, "ALLBUT") == 0
           || STRCMP(name + 1, "ALL") == 0
@@ -7573,7 +7573,7 @@ static bool syn_list_header(const bool did_header, const int outlen, const int i
   // Show "xxx" with the attributes.
   if (!did_header) {
     if (endcol == Columns - 1 && endcol <= name_col) {
-        msg_putchar(' ');
+      msg_putchar(' ');
     }
     msg_puts_attr("xxx", syn_id2attr(id));
     msg_putchar(' ');

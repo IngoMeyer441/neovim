@@ -196,6 +196,7 @@ void do_exmode(void)
 
   exmode_active = true;
   State = NORMAL;
+  trigger_modechanged();
 
   // When using ":global /pat/ visual" and then "Q" we return to continue
   // the :global command.
@@ -434,7 +435,7 @@ int do_cmdline(char_u *cmdline, LineGetter fgetline, void *cookie, int flags)
         && cstack.cs_idx < 0
         && !(getline_is_func
              && func_has_abort(real_cookie))) {
-      did_emsg = FALSE;
+      did_emsg = false;
     }
 
     /*
@@ -818,7 +819,7 @@ int do_cmdline(char_u *cmdline, LineGetter fgetline, void *cookie, int flags)
     // of interrupts or errors to exceptions, and ensure that no more
     // commands are executed.
     if (current_exception) {
-      void *p = NULL;
+      char *p = NULL;
       char_u *saved_sourcing_name;
       int saved_sourcing_lnum;
       struct msglist *messages = NULL;
@@ -835,7 +836,7 @@ int do_cmdline(char_u *cmdline, LineGetter fgetline, void *cookie, int flags)
         vim_snprintf((char *)IObuff, IOSIZE,
                      _("E605: Exception not caught: %s"),
                      current_exception->value);
-        p = vim_strsave(IObuff);
+        p = (char *)vim_strsave(IObuff);
         break;
       case ET_ERROR:
         messages = current_exception->messages;
@@ -2716,7 +2717,7 @@ static char_u *find_ucmd(exarg_T *eap, char_u *p, int *full, expand_T *xp, int *
    */
   gap = &curbuf->b_ucmds;
   for (;;) {
-    for (j = 0; j < gap->ga_len; ++j) {
+    for (j = 0; j < gap->ga_len; j++) {
       uc = USER_CMD_GA(gap, j);
       cp = eap->cmd;
       np = uc->uc_name;
@@ -5327,7 +5328,7 @@ static void uc_list(char_u *name, size_t name_len)
     ? &prevwin->w_buffer->b_ucmds
     : &curbuf->b_ucmds;
   for (;;) {
-    for (i = 0; i < gap->ga_len; ++i) {
+    for (i = 0; i < gap->ga_len; i++) {
       cmd = USER_CMD_GA(gap, i);
       a = cmd->uc_argt;
 
@@ -5714,7 +5715,7 @@ static void ex_delcommand(exarg_T *eap)
 
   gap = &curbuf->b_ucmds;
   for (;;) {
-    for (i = 0; i < gap->ga_len; ++i) {
+    for (i = 0; i < gap->ga_len; i++) {
       cmd = USER_CMD_GA(gap, i);
       cmp = STRCMP(eap->arg, cmd->uc_name);
       if (cmp <= 0) {
@@ -8337,9 +8338,7 @@ static void ex_redir(exarg_T *eap)
       if (var_redir_start(skipwhite(arg), append) == OK) {
         redir_vname = 1;
       }
-    }
-    // TODO: redirect to a buffer
-    else {
+    } else {  // TODO(vim): redirect to a buffer
       semsg(_(e_invarg2), eap->arg);
     }
   }
