@@ -14,7 +14,6 @@
 #include "nvim/mark.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
-#include "nvim/misc1.h"
 #include "nvim/move.h"
 #include "nvim/plines.h"
 #include "nvim/screen.h"
@@ -108,6 +107,7 @@ static int coladvance2(pos_T *pos, bool addspaces, bool finetune, colnr_T wcol_a
   int head = 0;
 
   one_more = (State & INSERT)
+             || (State & TERM_FOCUS)
              || restart_edit != NUL
              || (VIsual_active && *p_sel != 'o')
              || ((ve_flags & VE_ONEMORE) && wcol < MAXCOL);

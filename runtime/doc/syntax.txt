@@ -3161,6 +3161,14 @@ buffer by buffer basis.
 For more detailed instructions see |ft_sql.txt|.
 
 
+SQUIRREL				*squirrel.vim* *ft-squirrel-syntax*
+
+Squirrel is a high level imperative, object-oriented programming language,
+designed to be a light-weight scripting language that fits in the size, memory
+bandwidth, and real-time requirements of applications like video games.  Files
+with the following extensions are recognized as squirrel files: .nut.
+
+
 TCSH						*tcsh.vim* *ft-tcsh-syntax*
 
 This covers the shell named "tcsh".  It is a superset of csh.  See |csh.vim|
@@ -5119,6 +5127,10 @@ LineNrBelow	Line number for when the 'relativenumber'
 							*hl-CursorLineNr*
 CursorLineNr	Like LineNr when 'cursorline' is set and 'cursorlineopt'
 		contains "number" or is "both", for the cursor line.
+							*hl-CursorLineSign*
+CursorLineSign	Like SignColumn when 'cursorline' is set for the cursor line.
+							*hl-CursorLineFold*
+CursorLineFold	Like FoldColumn when 'cursorline' is set for the cursor line.
 							*hl-MatchParen*
 MatchParen	The character under the cursor or just before it, if it
 		is a paired bracket, and its match. |pi_paren.txt|

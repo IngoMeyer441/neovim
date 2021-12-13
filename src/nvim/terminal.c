@@ -46,6 +46,7 @@
 #include "nvim/ascii.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
+#include "nvim/cursor.h"
 #include "nvim/edit.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/time.h"
@@ -63,7 +64,6 @@
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/misc1.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
@@ -464,9 +464,7 @@ static void terminal_check_cursor(void)
                               row_to_linenr(term, term->cursor.row));
   // Nudge cursor when returning to normal-mode.
   int off = is_focused(term) ? 0 : (curwin->w_p_rl ? 1 : -1);
-  curwin->w_cursor.col = MAX(0, term->cursor.col + win_col_off(curwin) + off);
-  curwin->w_cursor.coladd = 0;
-  mb_check_adjust_col(curwin);
+  coladvance(MAX(0, term->cursor.col + off));
 }
 
 // Function executed before each iteration of terminal mode.
@@ -1507,6 +1505,13 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   vterm_get_size(term->vt, &height, &width);
   // Terminal height may have decreased before `invalid_end` reflects it.
   term->invalid_end = MIN(term->invalid_end, height);
+
+  // There are no invalid rows.
+  if (term->invalid_start >= term->invalid_end) {
+    term->invalid_start = INT_MAX;
+    term->invalid_end = -1;
+    return;
+  }
 
   for (int r = term->invalid_start, linenr = row_to_linenr(term, r);
        r < term->invalid_end; r++, linenr++) {

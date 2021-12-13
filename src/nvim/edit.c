@@ -35,7 +35,6 @@
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/misc1.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/normal.h"
@@ -227,6 +226,7 @@ typedef struct insert_state {
   cmdarg_T *ca;
   int mincol;
   int cmdchar;
+  int cmdchar_todo;                  // cmdchar to handle once in init_prompt
   int startln;
   long count;
   int c;
@@ -290,6 +290,7 @@ static void insert_enter(InsertState *s)
   s->did_backspace = true;
   s->old_topfill = -1;
   s->replaceState = REPLACE;
+  s->cmdchar_todo = s->cmdchar;
   // Remember whether editing was restarted after CTRL-O
   did_restart_edit = restart_edit;
   // sleep before redrawing, needed for "CTRL-O :" that results in an
@@ -585,7 +586,8 @@ static int insert_check(VimState *state)
   }
 
   if (bt_prompt(curbuf)) {
-    init_prompt(s->cmdchar);
+    init_prompt(s->cmdchar_todo);
+    s->cmdchar_todo = NUL;
   }
 
   // If we inserted a character at the last position of the last line in the
@@ -655,10 +657,17 @@ static int insert_check(VimState *state)
 
 static int insert_execute(VimState *state, int key)
 {
+  InsertState *const s = (InsertState *)state;
+  if (stop_insert_mode) {
+    // Insert mode ended, possibly from a callback.
+    s->count = 0;
+    s->nomove = true;
+    return 0;
+  }
+
   if (key == K_IGNORE || key == K_NOP) {
     return -1;  // get another key
   }
-  InsertState *s = (InsertState *)state;
   s->c = key;
 
   // Don't want K_EVENT with cursorhold for the second key, e.g., after CTRL-V.
@@ -820,6 +829,16 @@ static int insert_execute(VimState *state, int key)
   }
 
   return insert_handle_key(s);
+}
+
+
+/// Return true when need to go to Insert mode because of 'insertmode'.
+///
+/// Don't do this when still processing a command or a mapping.
+/// Don't do this when inside a ":normal" command.
+bool goto_im(void)
+{
+  return p_im && stuff_empty() && typebuf_typed();
 }
 
 static int insert_handle_key(InsertState *s)
@@ -984,6 +1003,15 @@ static int insert_handle_key(InsertState *s)
     break;
 
   case Ctrl_W:        // delete word before the cursor
+    if (bt_prompt(curbuf) && (mod_mask & MOD_MASK_SHIFT) == 0) {
+      // In a prompt window CTRL-W is used for window commands.
+      // Use Shift-CTRL-W to delete a word.
+      stuffcharReadbuff(Ctrl_W);
+      restart_edit = 'A';
+      s->nomove = true;
+      s->count = 0;
+      return 0;
+    }
     s->did_backspace = ins_bs(s->c, BACKSPACE_WORD, &s->inserted_space);
     auto_format(false, true);
     break;
@@ -1653,10 +1681,21 @@ static void init_prompt(int cmdchar_todo)
     coladvance(MAXCOL);
     changed_bytes(curbuf->b_ml.ml_line_count, 0);
   }
+
+  // Insert always starts after the prompt, allow editing text after it.
+  if (Insstart_orig.lnum != curwin->w_cursor.lnum || Insstart_orig.col != (colnr_T)STRLEN(prompt)) {
+    Insstart.lnum = curwin->w_cursor.lnum;
+    Insstart.col = STRLEN(prompt);
+    Insstart_orig = Insstart;
+    Insstart_textlen = Insstart.col;
+    Insstart_blank_vcol = MAXCOL;
+    arrow_used = false;
+  }
+
   if (cmdchar_todo == 'A') {
     coladvance(MAXCOL);
   }
-  if (cmdchar_todo == 'I' || curwin->w_cursor.col <= (int)STRLEN(prompt)) {
+  if (curwin->w_cursor.col < (colnr_T)STRLEN(prompt)) {
     curwin->w_cursor.col = STRLEN(prompt);
   }
   // Make sure the cursor is in a valid position.
@@ -8241,7 +8280,7 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
       || (!revins_on
           && ((curwin->w_cursor.lnum == 1 && curwin->w_cursor.col == 0)
               || (!can_bs(BS_START)
-                  && (arrow_used
+                  && ((arrow_used && !bt_prompt(curbuf))
                       || (curwin->w_cursor.lnum == Insstart_orig.lnum
                           && curwin->w_cursor.col <= Insstart_orig.col)))
               || (!can_bs(BS_INDENT) && !arrow_used && ai_col > 0

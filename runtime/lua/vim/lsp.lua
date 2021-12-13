@@ -489,7 +489,8 @@ local function text_document_did_open_handler(bufnr, client)
     -- Protect against a race where the buffer disappears
     -- between `did_open_handler` and the scheduled function firing.
     if vim.api.nvim_buf_is_valid(bufnr) then
-      vim.lsp.diagnostic.redraw(bufnr, client.id)
+      local namespace = vim.lsp.diagnostic.get_namespace(client.id)
+      vim.diagnostic.show(namespace, bufnr)
     end
   end)
 end
@@ -1492,11 +1493,7 @@ local function adjust_start_col(lnum, line, items, encoding)
     end
   end
   if min_start_char then
-    if encoding == 'utf-8' then
-      return min_start_char
-    else
-      return vim.str_byteindex(line, min_start_char, encoding == 'utf-16')
-    end
+    return util._str_byteindex_enc(line, min_start_char, encoding)
   else
     return nil
   end
