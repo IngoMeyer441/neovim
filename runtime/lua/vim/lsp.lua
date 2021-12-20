@@ -777,6 +777,10 @@ function lsp.start_client(config)
   ---@param code (number) exit code of the process
   ---@param signal (number) the signal used to terminate (if any)
   function dispatch.on_exit(code, signal)
+    if config.on_exit then
+      pcall(config.on_exit, code, signal, client_id)
+    end
+
     active_clients[client_id] = nil
     uninitialized_clients[client_id] = nil
 
@@ -791,10 +795,6 @@ function lsp.start_client(config)
       vim.schedule(function()
         vim.notify(msg, vim.log.levels.WARN)
       end)
-    end
-
-    if config.on_exit then
-      pcall(config.on_exit, code, signal, client_id)
     end
   end
 
@@ -1156,6 +1156,12 @@ function lsp.buf_attach_client(bufnr, client_id)
     client_id = {client_id, 'n'};
   }
   bufnr = resolve_bufnr(bufnr)
+  if not vim.api.nvim_buf_is_loaded(bufnr) then
+    local _ = log.warn() and log.warn(
+      string.format("buf_attach_client called on unloaded buffer (id: %d): ", bufnr)
+    )
+    return false
+  end
   local buffer_client_ids = all_buffer_active_clients[bufnr]
   -- This is our first time attaching to this buffer.
   if not buffer_client_ids then

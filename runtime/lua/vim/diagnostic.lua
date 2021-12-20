@@ -91,23 +91,22 @@ local function filter_by_severity(severity, diagnostics)
 end
 
 ---@private
-local function prefix_source(source, diagnostics)
-  vim.validate { source = {source, function(v)
-    return v == "always" or v == "if_many"
-  end, "'always' or 'if_many'" } }
-
-  if source == "if_many" then
-    local sources = {}
-    for _, d in pairs(diagnostics) do
-      if d.source then
-        sources[d.source] = true
+local function count_sources(bufnr)
+  local seen = {}
+  local count = 0
+  for _, namespace_diagnostics in pairs(diagnostic_cache[bufnr]) do
+    for _, diagnostic in ipairs(namespace_diagnostics) do
+      if diagnostic.source and not seen[diagnostic.source] then
+        seen[diagnostic.source] = true
+        count = count + 1
       end
     end
-    if #vim.tbl_keys(sources) <= 1 then
-      return diagnostics
-    end
   end
+  return count
+end
 
+---@private
+local function prefix_source(diagnostics)
   return vim.tbl_map(function(d)
     if not d.source then
       return d
@@ -272,6 +271,8 @@ end
 ---@private
 local function set_diagnostic_cache(namespace, bufnr, diagnostics)
   for _, diagnostic in ipairs(diagnostics) do
+    assert(diagnostic.lnum, "Diagnostic line number is required")
+    assert(diagnostic.col, "Diagnostic column is required")
     diagnostic.severity = diagnostic.severity and to_severity(diagnostic.severity) or M.severity.ERROR
     diagnostic.end_lnum = diagnostic.end_lnum or diagnostic.lnum
     diagnostic.end_col = diagnostic.end_col or diagnostic.col
@@ -297,11 +298,6 @@ local function restore_extmarks(bufnr, last)
       if not found[extmark[1]] then
         local opts = extmark[4]
         opts.id = extmark[1]
-        -- HACK: end_row should be end_line
-        if opts.end_row then
-          opts.end_line = opts.end_row
-          opts.end_row = nil
-        end
         pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, extmark[2], extmark[3], opts)
       end
     end
@@ -563,8 +559,10 @@ end
 ---       - virtual_text: (default true) Use virtual text for diagnostics. Options:
 ---                       * severity: Only show virtual text for diagnostics matching the given
 ---                       severity |diagnostic-severity|
----                       * source: (string) Include the diagnostic source in virtual
----                       text. One of "always" or "if_many".
+---                       * source: (boolean or string) Include the diagnostic source in virtual
+---                                 text. Use "if_many" to only show sources if there is more than
+---                                 one diagnostic source in the buffer. Otherwise, any truthy value
+---                                 means to always show the diagnostic source.
 ---                       * format: (function) A function that takes a diagnostic as input and
 ---                                 returns a string. The return value is the text used to display
 ---                                 the diagnostic. Example:
@@ -928,8 +926,11 @@ M.handlers.virtual_text = {
       if opts.virtual_text.format then
         diagnostics = reformat_diagnostics(opts.virtual_text.format, diagnostics)
       end
-      if opts.virtual_text.source then
-        diagnostics = prefix_source(opts.virtual_text.source, diagnostics)
+      if
+        opts.virtual_text.source
+        and (opts.virtual_text.source ~= "if_many" or count_sources(bufnr) > 1)
+      then
+        diagnostics = prefix_source(diagnostics)
       end
       if opts.virtual_text.severity then
         severity = opts.virtual_text.severity
@@ -1154,8 +1155,11 @@ end
 ---            - header: (string or table) String to use as the header for the floating window. If a
 ---                      table, it is interpreted as a [text, hl_group] tuple. Overrides the setting
 ---                      from |vim.diagnostic.config()|.
----            - source: (string) Include the diagnostic source in the message. One of "always" or
----                      "if_many". Overrides the setting from |vim.diagnostic.config()|.
+---            - source: (boolean or string) Include the diagnostic source in the message.
+---                      Use "if_many" to only show sources if there is more than one source of
+---                      diagnostics in the buffer. Otherwise, any truthy value means to always show
+---                      the diagnostic source. Overrides the setting from
+---                      |vim.diagnostic.config()|.
 ---            - format: (function) A function that takes a diagnostic as input and returns a
 ---                      string. The return value is the text used to display the diagnostic.
 ---                      Overrides the setting from |vim.diagnostic.config()|.
@@ -1267,8 +1271,8 @@ function M.open_float(opts, ...)
     diagnostics = reformat_diagnostics(opts.format, diagnostics)
   end
 
-  if opts.source then
-    diagnostics = prefix_source(opts.source, diagnostics)
+  if opts.source and (opts.source ~= "if_many" or count_sources(bufnr) > 1) then
+    diagnostics = prefix_source(diagnostics)
   end
 
   local prefix_opt = if_nil(opts.prefix, (scope == "cursor" and #diagnostics <= 1) and "" or function(_, i)

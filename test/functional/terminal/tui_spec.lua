@@ -20,6 +20,7 @@ local nvim_prog = helpers.nvim_prog
 local nvim_set = helpers.nvim_set
 local ok = helpers.ok
 local read_file = helpers.read_file
+local exec_lua = helpers.exec_lua
 
 if helpers.pending_win32(pending) then return end
 
@@ -580,21 +581,34 @@ describe('TUI', function()
   end)
 
   it("paste: 'nomodifiable' buffer", function()
+    local has_luajit = exec_lua('return jit ~= nil')
     child_session:request('nvim_command', 'set nomodifiable')
     child_session:request('nvim_exec_lua', [[
       -- Stack traces for this test are non-deterministic, so disable them
       _G.debug.traceback = function(msg) return msg end
     ]], {})
     feed_data('\027[200~fail 1\nfail 2\n\027[201~')
-    screen:expect{grid=[[
-                                                        |
-      {4:~                                                 }|
-      {5:                                                  }|
-      {8:paste: Error executing lua: vim.lua:243: Vim:E21: }|
-      {8:Cannot make changes, 'modifiable' is off}          |
-      {10:Press ENTER or type command to continue}{1: }          |
-      {3:-- TERMINAL --}                                    |
-    ]]}
+    if has_luajit then
+      screen:expect{grid=[[
+                                                          |
+        {4:~                                                 }|
+        {5:                                                  }|
+        {8:paste: Error executing lua: vim.lua:0: Vim:E21: Ca}|
+        {8:nnot make changes, 'modifiable' is off}            |
+        {10:Press ENTER or type command to continue}{1: }          |
+        {3:-- TERMINAL --}                                    |
+      ]]}
+    else
+      screen:expect{grid=[[
+                                                          |
+        {4:~                                                 }|
+        {5:                                                  }|
+        {8:paste: Error executing lua: Vim:E21: Cannot make c}|
+        {8:hanges, 'modifiable' is off}                       |
+        {10:Press ENTER or type command to continue}{1: }          |
+        {3:-- TERMINAL --}                                    |
+      ]]}
+    end
     feed_data('\n')  -- <Enter>
     child_session:request('nvim_command', 'set modifiable')
     feed_data('\027[200~success 1\nsuccess 2\n\027[201~')
@@ -677,8 +691,8 @@ describe('TUI', function()
       item 2997                                         |
       item 2998                                         |
       item 2999                                         |
-      item 3000 en{1:d}                                     |
-      {5:[No Name] [+]                   3000,13        Bot}|
+      item 3000 en{1:d}d                                    |
+      {5:[No Name] [+]                   5999,13        Bot}|
                                                         |
       {3:-- TERMINAL --}                                    |
     ]])
@@ -763,6 +777,44 @@ describe('TUI', function()
       {3:-- INSERT --}                                      |
       {3:-- TERMINAL --}                                    |
     ]])
+  end)
+
+  it('paste: streamed paste with isolated "stop paste" code', function()
+    child_session:request('nvim_exec_lua', [[
+      _G.paste_phases = {}
+      vim.paste = (function(overridden)
+        return function(lines, phase)
+          table.insert(_G.paste_phases, phase)
+          overridden(lines, phase)
+        end
+      end)(vim.paste)
+    ]], {})
+    feed_data('i')
+    feed_data('\027[200~pasted')  -- phase 1
+    screen:expect([[
+      pasted{1: }                                           |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+      {3:-- INSERT --}                                      |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    feed_data(' from terminal')  -- phase 2
+    screen:expect([[
+      pasted from terminal{1: }                             |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+      {3:-- INSERT --}                                      |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- Send isolated "stop paste" sequence.
+    feed_data('\027[201~')  -- phase 3
+    screen:expect_unchanged()
+    local _, rv = child_session:request('nvim_exec_lua', [[return _G.paste_phases]], {})
+    eq({1, 2, 3}, rv)
   end)
 
   it('allows termguicolors to be set at runtime', function()
