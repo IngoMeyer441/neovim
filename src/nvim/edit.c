@@ -643,7 +643,10 @@ static int insert_check(VimState *state)
   update_curswant();
   s->old_topline = curwin->w_topline;
   s->old_topfill = curwin->w_topfill;
-  s->lastc = s->c;   // remember previous char for CTRL-D
+
+  if (s->c != K_EVENT) {
+    s->lastc = s->c;  // remember previous char for CTRL-D
+  }
 
   // After using CTRL-G U the next cursor key will not break undo.
   if (dont_sync_undo == kNone) {
@@ -1685,7 +1688,7 @@ static void init_prompt(int cmdchar_todo)
   // Insert always starts after the prompt, allow editing text after it.
   if (Insstart_orig.lnum != curwin->w_cursor.lnum || Insstart_orig.col != (colnr_T)STRLEN(prompt)) {
     Insstart.lnum = curwin->w_cursor.lnum;
-    Insstart.col = STRLEN(prompt);
+    Insstart.col = (colnr_T)STRLEN(prompt);
     Insstart_orig = Insstart;
     Insstart_textlen = Insstart.col;
     Insstart_blank_vcol = MAXCOL;
@@ -1696,7 +1699,7 @@ static void init_prompt(int cmdchar_todo)
     coladvance(MAXCOL);
   }
   if (curwin->w_cursor.col < (colnr_T)STRLEN(prompt)) {
-    curwin->w_cursor.col = STRLEN(prompt);
+    curwin->w_cursor.col = (colnr_T)STRLEN(prompt);
   }
   // Make sure the cursor is in a valid position.
   check_cursor();

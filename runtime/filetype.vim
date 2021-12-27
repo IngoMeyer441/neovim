@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2021 Dec 14
+" Last Change:	2021 Dec 22
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -1087,7 +1087,9 @@ au BufNewFile,BufRead *.mmp			setf mmp
 
 " Modsim III (or LambdaProlog)
 au BufNewFile,BufRead *.mod
-	\ if getline(1) =~ '\<module\>' |
+	\ if expand("<afile>") =~ '\<go.mod$' |
+	\   setf gomod |
+	\ elseif getline(1) =~ '\<module\>' |
 	\   setf lprolog |
 	\ else |
 	\   setf modsim3 |
@@ -1744,6 +1746,7 @@ au BufNewFile,BufRead *.ice			setf slice
 
 " Microsoft Visual Studio Solution
 au BufNewFile,BufRead *.sln			setf solution
+au BufNewFile,BufRead *.slnf			setf json
 
 " Spice
 au BufNewFile,BufRead *.sp,*.spice		setf spice

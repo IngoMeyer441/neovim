@@ -2991,7 +2991,7 @@ ambw_end:
     }
   } else if (varp == &curwin->w_p_fdc || varp == &curwin->w_allbuf_opt.wo_fdc) {
     // 'foldcolumn'
-    if (check_opt_strings(*varp, p_fdc_values, false) != OK) {
+    if (**varp == NUL || check_opt_strings(*varp, p_fdc_values, false) != OK) {
       errmsg = e_invarg;
     }
   } else if (varp == &p_pt) {
@@ -3370,6 +3370,9 @@ static int int_cmp(const void *a, const void *b)
 /// @return OK when the value is valid, FAIL otherwise
 int check_signcolumn(char_u *val)
 {
+  if (*val == NUL) {
+    return FAIL;
+  }
   // check for basic match
   if (check_opt_strings(val, p_scl_values, false) == OK) {
     return OK;
@@ -3610,7 +3613,7 @@ static char *set_chars_option(win_T *wp, char_u **varp, bool set)
           c2 = c3 = 0;
           s = p + len + 1;
           c1 = get_encoded_char_adv(&s);
-          if (c1 == 0 || utf_char2cells(c1) > 1) {
+          if (c1 == 0 || char2cells(c1) > 1) {
             return e_invarg;
           }
           if (tab[i].cp == &wp->w_p_lcs_chars.tab2) {
@@ -3618,12 +3621,12 @@ static char *set_chars_option(win_T *wp, char_u **varp, bool set)
               return e_invarg;
             }
             c2 = get_encoded_char_adv(&s);
-            if (c2 == 0 || utf_char2cells(c2) > 1) {
+            if (c2 == 0 || char2cells(c2) > 1) {
               return e_invarg;
             }
             if (!(*s == ',' || *s == NUL)) {
               c3 = get_encoded_char_adv(&s);
-              if (c3 == 0 || utf_char2cells(c3) > 1) {
+              if (c3 == 0 || char2cells(c3) > 1) {
                 return e_invarg;
               }
             }
@@ -3657,7 +3660,7 @@ static char *set_chars_option(win_T *wp, char_u **varp, bool set)
             multispace_len = 0;
             while (*s != NUL && *s != ',') {
               c1 = get_encoded_char_adv(&s);
-              if (c1 == 0 || utf_char2cells(c1) > 1) {
+              if (c1 == 0 || char2cells(c1) > 1) {
                 return e_invarg;
               }
               multispace_len++;
@@ -5059,6 +5062,9 @@ int get_option_value_strict(char *name, int64_t *numval, char **stringval, int o
 /// @param[in]  number  New value for the number or boolean option.
 /// @param[in]  string  New value for string option.
 /// @param[in]  opt_flags  Flags: OPT_LOCAL, OPT_GLOBAL, or 0 (both).
+///                        If OPT_CLEAR is set, the value of the option
+///                        is cleared  (the exact semantics of this depend
+///                        on the option).
 ///
 /// @return NULL on success, error message on error.
 char *set_option_value(const char *const name, const long number, const char *const string,
@@ -5084,7 +5090,7 @@ char *set_option_value(const char *const name, const long number, const char *co
     }
     if (flags & P_STRING) {
       const char *s = string;
-      if (s == NULL) {
+      if (s == NULL || opt_flags & OPT_CLEAR) {
         s = "";
       }
       return set_string_option(opt_idx, s, opt_flags);
@@ -5106,10 +5112,23 @@ char *set_option_value(const char *const name, const long number, const char *co
             return NULL;  // do nothing as we hit an error
           }
         }
+        long numval = number;
+        if (opt_flags & OPT_CLEAR) {
+          if ((int *)varp == &curbuf->b_p_ar) {
+            numval = -1;
+          } else if ((long *)varp == &curbuf->b_p_ul) {
+            numval = NO_LOCAL_UNDOLEVEL;
+          } else if ((long *)varp == &curwin->w_p_so || (long *)varp == &curwin->w_p_siso) {
+            numval = -1;
+          } else {
+            char *s = NULL;
+            (void)get_option_value(name, &numval, (char_u **)&s, OPT_GLOBAL);
+          }
+        }
         if (flags & P_NUM) {
-          return set_num_option(opt_idx, varp, number, NULL, 0, opt_flags);
+          return set_num_option(opt_idx, varp, numval, NULL, 0, opt_flags);
         } else {
-          return set_bool_option(opt_idx, varp, (int)number, opt_flags);
+          return set_bool_option(opt_idx, varp, (int)numval, opt_flags);
         }
       }
     }
