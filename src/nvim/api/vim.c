@@ -169,7 +169,7 @@ void nvim__set_hl_ns(Integer ns_id, Error *err)
   // event path for redraws caused by "fast" events. This could tie in with
   // better throttling of async events causing redraws, such as non-batched
   // nvim_buf_set_extmark calls from async contexts.
-  if (!provider_active && !ns_hl_changed) {
+  if (!provider_active && !ns_hl_changed && must_redraw < NOT_VALID) {
     multiqueue_put(main_loop.events, on_redraw_event, 0);
   }
   ns_hl_changed = true;
@@ -662,7 +662,7 @@ Object nvim_get_option(String name, Error *err)
 ///
 /// @param name      Option name
 /// @param opts      Optional parameters
-///                  - scope: One of 'global' or 'local'. Analagous to
+///                  - scope: One of 'global' or 'local'. Analogous to
 ///                  |:setglobal| and |:setlocal|, respectively.
 /// @param[out] err  Error details, if any
 /// @return          Option value
@@ -724,7 +724,7 @@ end:
 /// @param name      Option name
 /// @param value     New option value
 /// @param opts      Optional parameters
-///                  - scope: One of 'global' or 'local'. Analagous to
+///                  - scope: One of 'global' or 'local'. Analogous to
 ///                  |:setglobal| and |:setlocal|, respectively.
 /// @param[out] err  Error details, if any
 void nvim_set_option_value(String name, Object value, Dict(option) *opts, Error *err)
@@ -1538,10 +1538,10 @@ Dictionary nvim_get_mode(void)
 /// @param  mode       Mode short-name ("n", "i", "v", ...)
 /// @returns Array of maparg()-like dictionaries describing mappings.
 ///          The "buffer" key is always zero.
-ArrayOf(Dictionary) nvim_get_keymap(String mode)
+ArrayOf(Dictionary) nvim_get_keymap(uint64_t channel_id, String mode)
   FUNC_API_SINCE(3)
 {
-  return keymap_array(mode, NULL);
+  return keymap_array(mode, NULL, channel_id == LUA_INTERNAL_CALL);
 }
 
 /// Sets a global |mapping| for the given mode.
@@ -1566,7 +1566,10 @@ ArrayOf(Dictionary) nvim_get_keymap(String mode)
 /// @param  lhs   Left-hand-side |{lhs}| of the mapping.
 /// @param  rhs   Right-hand-side |{rhs}| of the mapping.
 /// @param  opts  Optional parameters map. Accepts all |:map-arguments|
-///               as keys excluding |<buffer>| but including |noremap|.
+///               as keys excluding |<buffer>| but including |noremap| and "desc".
+///               |desc| can be used to give a description to keymap.
+///               When called from Lua, also accepts a "callback" key that takes
+///               a Lua function to call when the mapping is executed.
 ///               Values are Booleans. Unknown key is an error.
 /// @param[out]   err   Error details, if any.
 void nvim_set_keymap(String mode, String lhs, String rhs, Dict(keymap) *opts, Error *err)
@@ -1741,7 +1744,7 @@ Array nvim_list_chans(void)
 /// 1. To perform several requests from an async context atomically, i.e.
 ///    without interleaving redraws, RPC requests from other clients, or user
 ///    interactions (however API methods may trigger autocommands or event
-///    processing which have such side-effects, e.g. |:sleep| may wake timers).
+///    processing which have such side effects, e.g. |:sleep| may wake timers).
 /// 2. To minimize RPC overhead (roundtrips) of a sequence of many requests.
 ///
 /// @param channel_id
@@ -2101,7 +2104,7 @@ void nvim__screenshot(String path)
 }
 
 
-/// Deletes a uppercase/file named mark. See |mark-motions|.
+/// Deletes an uppercase/file named mark. See |mark-motions|.
 ///
 /// @note fails with error if a lowercase or buffer local named mark is used.
 /// @param name       Mark name
@@ -2362,4 +2365,53 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
   PUT(result, "str", CSTR_TO_OBJ((char *)buf));
 
   return result;
+}
+
+/// Create a new user command |user-commands|
+///
+/// {name} is the name of the new command. The name must begin with an uppercase letter.
+///
+/// {command} is the replacement text or Lua function to execute.
+///
+/// Example:
+/// <pre>
+///    :call nvim_add_user_command('SayHello', 'echo "Hello world!"', {})
+///    :SayHello
+///    Hello world!
+/// </pre>
+///
+/// @param  name    Name of the new user command. Must begin with an uppercase letter.
+/// @param  command Replacement command to execute when this user command is executed. When called
+///                 from Lua, the command can also be a Lua function. The function is called with a
+///                 single table argument that contains the following keys:
+///                 - args: (string) The args passed to the command, if any |<args>|
+///                 - bang: (boolean) "true" if the command was executed with a ! modifier |<bang>|
+///                 - line1: (number) The starting line of the command range |<line1>|
+///                 - line2: (number) The final line of the command range |<line2>|
+///                 - range: (number) The number of items in the command range: 0, 1, or 2 |<range>|
+///                 - count: (number) Any count supplied |<count>|
+///                 - reg: (string) The optional register, if specified |<reg>|
+///                 - mods: (string) Command modifiers, if any |<mods>|
+/// @param  opts    Optional command attributes. See |command-attributes| for more details. To use
+///                 boolean attributes (such as |:command-bang| or |:command-bar|) set the value to
+///                 "true". When using a Lua function for {command} you can also provide a "desc"
+///                 key that will be displayed when listing commands. In addition to the string
+///                 options listed in |:command-complete|, the "complete" key also accepts a Lua
+///                 function which works like the "customlist" completion mode
+///                 |:command-complete-customlist|.
+/// @param[out] err Error details, if any.
+void nvim_add_user_command(String name, Object command, Dict(user_command) *opts, Error *err)
+  FUNC_API_SINCE(9)
+{
+  add_user_command(name, command, opts, 0, err);
+}
+
+/// Delete a user-defined command.
+///
+/// @param  name    Name of the command to delete.
+/// @param[out] err Error details, if any.
+void nvim_del_user_command(String name, Error *err)
+  FUNC_API_SINCE(9)
+{
+  nvim_buf_del_user_command(-1, name, err);
 }

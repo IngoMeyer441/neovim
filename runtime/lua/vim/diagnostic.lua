@@ -556,13 +556,19 @@ end
 ---       - underline: (default true) Use underline for diagnostics. Options:
 ---                    * severity: Only underline diagnostics matching the given severity
 ---                    |diagnostic-severity|
----       - virtual_text: (default true) Use virtual text for diagnostics. Options:
+---       - virtual_text: (default true) Use virtual text for diagnostics. If multiple diagnostics
+---                       are set for a namespace, one prefix per diagnostic + the last diagnostic
+---                       message are shown.
+---                       Options:
 ---                       * severity: Only show virtual text for diagnostics matching the given
 ---                       severity |diagnostic-severity|
 ---                       * source: (boolean or string) Include the diagnostic source in virtual
 ---                                 text. Use "if_many" to only show sources if there is more than
 ---                                 one diagnostic source in the buffer. Otherwise, any truthy value
 ---                                 means to always show the diagnostic source.
+---                       * spacing: (number) Amount of empty spaces inserted at the beginning
+---                                  of the virtual text.
+---                       * prefix: (string) Prepend diagnostic message with prefix.
 ---                       * format: (function) A function that takes a diagnostic as input and
 ---                                 returns a string. The return value is the text used to display
 ---                                 the diagnostic. Example:
@@ -638,7 +644,11 @@ function M.set(namespace, bufnr, diagnostics, opts)
   vim.validate {
     namespace = {namespace, 'n'},
     bufnr = {bufnr, 'n'},
-    diagnostics = {diagnostics, 't'},
+    diagnostics = {
+      diagnostics,
+      vim.tbl_islist,
+      "a list of diagnostics",
+    },
     opts = {opts, 't', true},
   }
 
@@ -804,7 +814,11 @@ M.handlers.signs = {
     vim.validate {
       namespace = {namespace, 'n'},
       bufnr = {bufnr, 'n'},
-      diagnostics = {diagnostics, 't'},
+      diagnostics = {
+        diagnostics,
+        vim.tbl_islist,
+        "a list of diagnostics",
+      },
       opts = {opts, 't', true},
     }
 
@@ -867,7 +881,11 @@ M.handlers.underline = {
     vim.validate {
       namespace = {namespace, 'n'},
       bufnr = {bufnr, 'n'},
-      diagnostics = {diagnostics, 't'},
+      diagnostics = {
+        diagnostics,
+        vim.tbl_islist,
+        "a list of diagnostics",
+      },
       opts = {opts, 't', true},
     }
 
@@ -915,7 +933,11 @@ M.handlers.virtual_text = {
     vim.validate {
       namespace = {namespace, 'n'},
       bufnr = {bufnr, 'n'},
-      diagnostics = {diagnostics, 't'},
+      diagnostics = {
+        diagnostics,
+        vim.tbl_islist,
+        "a list of diagnostics",
+      },
       opts = {opts, 't', true},
     }
 
@@ -1075,7 +1097,11 @@ function M.show(namespace, bufnr, diagnostics, opts)
   vim.validate {
     namespace = { namespace, 'n', true },
     bufnr = { bufnr, 'n', true },
-    diagnostics = { diagnostics, 't', true },
+    diagnostics = {
+      diagnostics,
+      function(v) return v == nil or vim.tbl_islist(v) end,
+      "a list of diagnostics",
+    },
     opts = { opts, 't', true },
   }
 
@@ -1520,7 +1546,13 @@ local errlist_type_map = {
 ---@param diagnostics table List of diagnostics |diagnostic-structure|.
 ---@return array of quickfix list items |setqflist-what|
 function M.toqflist(diagnostics)
-  vim.validate { diagnostics = {diagnostics, 't'} }
+  vim.validate {
+    diagnostics = {
+      diagnostics,
+      vim.tbl_islist,
+      "a list of diagnostics",
+    },
+  }
 
   local list = {}
   for _, v in ipairs(diagnostics) do
@@ -1551,7 +1583,13 @@ end
 ---            |getloclist()|.
 ---@return array of diagnostics |diagnostic-structure|
 function M.fromqflist(list)
-  vim.validate { list = {list, 't'} }
+  vim.validate {
+    list = {
+      list,
+      vim.tbl_islist,
+      "a list of quickfix items",
+    },
+  }
 
   local diagnostics = {}
   for _, item in ipairs(list) do

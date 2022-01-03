@@ -3991,7 +3991,6 @@ static void f_getregtype(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   MotionType reg_type = get_reg_type(regname, &reglen);
   format_reg_type(reg_type, reglen, buf, ARRAY_SIZE(buf));
 
-  rettv->v_type = VAR_STRING;
   rettv->vval.v_string = (char_u *)xstrdup(buf);
 }
 
@@ -5980,6 +5979,7 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
 {
   char_u *keys_buf = NULL;
   char_u *rhs;
+  LuaRef rhs_lua;
   int mode;
   int abbr = FALSE;
   int get_dict = FALSE;
@@ -6016,7 +6016,7 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
 
   keys = replace_termcodes(keys, STRLEN(keys), &keys_buf, true, true, true,
                            CPO_TO_CPO_FLAGS);
-  rhs = check_map(keys, mode, exact, false, abbr, &mp, &buffer_local);
+  rhs = check_map(keys, mode, exact, false, abbr, &mp, &buffer_local, &rhs_lua);
   xfree(keys_buf);
 
   if (!get_dict) {
@@ -6027,10 +6027,15 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
       } else {
         rettv->vval.v_string = (char_u *)str2special_save((char *)rhs, false, false);
       }
+    } else if (rhs_lua != LUA_NOREF) {
+      size_t msglen = 100;
+      char *msg = (char *)xmalloc(msglen);
+      snprintf(msg, msglen, "<Lua function %d>", mp->m_luaref);
+      rettv->vval.v_string = (char_u *)msg;
     }
   } else {
     tv_dict_alloc_ret(rettv);
-    if (rhs != NULL) {
+    if (mp != NULL && (rhs != NULL || rhs_lua != LUA_NOREF)) {
       // Return a dictionary.
       mapblock_fill_dict(rettv->vval.v_dict, mp, buffer_local, true);
     }

@@ -29,9 +29,23 @@ return {
     "script";
     "expr";
     "unique";
+    "callback";
+    "desc";
   };
   get_commands = {
     "builtin";
+  };
+  user_command = {
+    "addr";
+    "bang";
+    "bar";
+    "complete";
+    "count";
+    "desc";
+    "force";
+    "nargs";
+    "range";
+    "register";
   };
   float_config = {
     "row";
