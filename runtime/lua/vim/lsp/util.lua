@@ -10,14 +10,6 @@ local uv = vim.loop
 local npcall = vim.F.npcall
 local split = vim.split
 
-local _warned = {}
-local warn_once = function(message)
-  if not _warned[message] then
-    vim.api.nvim_err_writeln(message)
-    _warned[message] = true
-  end
-end
-
 local M = {}
 
 local default_border = {
@@ -200,6 +192,11 @@ end
 ---@return table<number string> a table mapping rows to lines
 local function get_lines(bufnr, rows)
   rows = type(rows) == "table" and rows or { rows }
+
+  -- This is needed for bufload and bufloaded
+  if bufnr == 0 then
+    bufnr = vim.api.nvim_get_current_buf()
+  end
 
   ---@private
   local function buf_lines()
@@ -1505,7 +1502,7 @@ do --[[ References ]]
   ---@param bufnr number Buffer id
   function M.buf_clear_references(bufnr)
     validate { bufnr = {bufnr, 'n', true} }
-    api.nvim_buf_clear_namespace(bufnr, reference_ns, 0, -1)
+    api.nvim_buf_clear_namespace(bufnr or 0, reference_ns, 0, -1)
   end
 
   --- Shows a list of document highlights for a certain buffer.
@@ -1677,7 +1674,7 @@ function M.symbols_to_items(symbols, bufnr)
     end
     return _items
   end
-  return _symbols_to_items(symbols, {}, bufnr)
+  return _symbols_to_items(symbols, {}, bufnr or 0)
 end
 
 --- Removes empty lines from the beginning and end.
@@ -1796,7 +1793,7 @@ end
 ---@returns { textDocument = { uri = `current_file_uri` }, range = { start =
 ---`current_position`, end = `current_position` } }
 function M.make_range_params(window, offset_encoding)
-  local buf = vim.api.nvim_win_get_buf(window)
+  local buf = vim.api.nvim_win_get_buf(window or 0)
   offset_encoding = offset_encoding or M._get_offset_encoding(buf)
   local position = make_position_param(window, offset_encoding)
   return {
@@ -1822,7 +1819,7 @@ function M.make_given_range_params(start_pos, end_pos, bufnr, offset_encoding)
     end_pos = {end_pos, 't', true};
     offset_encoding = {offset_encoding, 's', true};
   }
-  bufnr = bufnr or 0
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
   offset_encoding = offset_encoding or M._get_offset_encoding(bufnr)
   local A = list_extend({}, start_pos or api.nvim_buf_get_mark(bufnr, '<'))
   local B = list_extend({}, end_pos or api.nvim_buf_get_mark(bufnr, '>'))
@@ -1928,7 +1925,6 @@ function M.lookup_section(settings, section)
 end
 
 M._get_line_byte_from_position = get_line_byte_from_position
-M._warn_once = warn_once
 
 M.buf_versions = {}
 

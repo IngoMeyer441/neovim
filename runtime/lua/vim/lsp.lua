@@ -256,7 +256,7 @@ local function validate_client_config(config)
     (not config.flags
       or not config.flags.debounce_text_changes
       or type(config.flags.debounce_text_changes) == 'number'),
-    "flags.debounce_text_changes must be nil or a number with the debounce time in milliseconds"
+    "flags.debounce_text_changes must be a number with the debounce time in milliseconds"
   )
 
   local cmd, cmd_args = lsp._cmd_parts(config.cmd)
@@ -306,7 +306,6 @@ local function once(fn)
   end
 end
 
-
 local changetracking = {}
 do
   --@private
@@ -327,6 +326,7 @@ do
     if not state then
       state = {
         pending_changes = {};
+        last_flush = {};
         use_incremental_sync = (
           if_nil(client.config.flags.allow_incremental_sync, true)
           and client.resolved_capabilities.text_document_did_change == protocol.TextDocumentSyncKind.Incremental
@@ -347,8 +347,11 @@ do
   function changetracking.reset_buf(client, bufnr)
     changetracking.flush(client)
     local state = state_by_client[client.id]
-    if state and state.buffers then
-      state.buffers[bufnr] = nil
+    if state then
+      if state.buffers then
+        state.buffers[bufnr] = nil
+      end
+      state.last_flush = {}
     end
   end
 
@@ -358,6 +361,33 @@ do
     if state then
       state_by_client[client_id] = nil
       changetracking._reset_timer(state)
+    end
+  end
+
+  ---@private
+  --
+  -- Adjust debounce time by taking time of last didChange notification into
+  -- consideration. If the last didChange happened more than `debounce` time ago,
+  -- debounce can be skipped and otherwise maybe reduced.
+  --
+  -- This turns the debounce into a kind of client rate limiting
+  local function next_debounce(debounce, state, bufnr)
+    if debounce == 0 then
+      return 0
+    end
+    local ns_to_ms = 0.000001
+    local last_flush = state.last_flush[bufnr]
+    if not last_flush then
+      return debounce
+    end
+    local now = uv.hrtime()
+    local ms_since_last_flush = (now - last_flush) * ns_to_ms
+    local remaining_debounce = debounce - ms_since_last_flush
+    if remaining_debounce > 0 then
+      return remaining_debounce
+    else
+      state.last_flush[bufnr] = now
+      return 0
     end
   end
 
@@ -383,8 +413,8 @@ do
         return
       end
       local state = state_by_client[client.id]
-      local debounce = client.config.flags.debounce_text_changes
-      if not debounce then
+      local debounce = next_debounce(client.config.flags.debounce_text_changes or 150, state, bufnr)
+      if debounce == 0 then
         local changes = state.use_incremental_sync and incremental_changes(client) or full_changes()
         client.notify("textDocument/didChange", {
           textDocument = {
@@ -406,6 +436,7 @@ do
       end
       state.pending_change = function()
         state.pending_change = nil
+        state.last_flush[bufnr] = uv.hrtime()
         if client.is_stopped() or not vim.api.nvim_buf_is_valid(bufnr) then
           return
         end
@@ -897,7 +928,7 @@ function lsp.start_client(config)
       client.initialized = true
       uninitialized_clients[client_id] = nil
       client.workspace_folders = workspace_folders
-      -- TODO(mjlbach): Backwards compatbility, to be removed in 0.7
+      -- TODO(mjlbach): Backwards compatibility, to be removed in 0.7
       client.workspaceFolders = client.workspace_folders
       client.server_capabilities = assert(result.capabilities, "initialize result doesn't contain capabilities")
       -- These are the cleaned up capabilities we use for dynamically deciding
@@ -1131,7 +1162,7 @@ function lsp._text_document_did_save_handler(bufnr)
     if client.resolved_capabilities.text_document_save then
       local included_text
       if client.resolved_capabilities.text_document_save_include_text then
-        included_text = text()
+        included_text = text(bufnr)
       end
       client.notify('textDocument/didSave', {
         textDocument = {
