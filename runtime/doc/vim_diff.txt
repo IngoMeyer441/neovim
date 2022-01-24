@@ -23,8 +23,10 @@ centralized reference of the differences.
 ==============================================================================
 2. Defaults					            *nvim-defaults*
 
-- Syntax highlighting is enabled by default
-- ":filetype plugin indent on" is enabled by default
+- Filetype detection is enabled by default. This can be disabled by adding
+  ":filetype off" to |init.vim|.
+- Syntax highlighting is enabled by default. This can be disabled by adding
+  ":syntax off" to |init.vim|.
 
 - 'autoindent' is enabled
 - 'autoread' is enabled

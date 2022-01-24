@@ -76,6 +76,7 @@ let s:filename_checks = {
     \ 'ave': ['file.ave'],
     \ 'awk': ['file.awk', 'file.gawk'],
     \ 'b': ['file.mch', 'file.ref', 'file.imp'],
+    \ 'basic': ['file.bas', 'file.bi', 'file.bm'],
     \ 'bzl': ['file.bazel', 'file.bzl', 'WORKSPACE'],
     \ 'bc': ['file.bc'],
     \ 'bdf': ['file.bdf'],
@@ -186,7 +187,7 @@ let s:filename_checks = {
     \ 'fortran': ['file.f', 'file.for', 'file.fortran', 'file.fpp', 'file.ftn', 'file.f77', 'file.f90', 'file.f95', 'file.f03', 'file.f08'],
     \ 'fpcmake': ['file.fpc'],
     \ 'framescript': ['file.fsl'],
-    \ 'freebasic': ['file.fb', 'file.bi'],
+    \ 'freebasic': ['file.fb'],
     \ 'fsharp': ['file.fs', 'file.fsi', 'file.fsx'],
     \ 'fstab': ['fstab', 'mtab'],
     \ 'fvwm': ['/.fvwm/file', 'any/.fvwm/file'],
@@ -196,13 +197,13 @@ let s:filename_checks = {
     \ 'gemtext': ['file.gmi', 'file.gemini'],
     \ 'gift': ['file.gift'],
     \ 'gitcommit': ['COMMIT_EDITMSG', 'MERGE_MSG', 'TAG_EDITMSG', 'NOTES_EDITMSG', 'EDIT_DESCRIPTION'],
-    \ 'gitconfig': ['file.git/config', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'],
+    \ 'gitconfig': ['file.git/config', 'file.git/config.worktree', 'file.git/worktrees/x/config.worktree', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/usr/local/etc/gitconfig', '/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'],
     \ 'gitolite': ['gitolite.conf', '/gitolite-admin/conf/file', 'any/gitolite-admin/conf/file'],
     \ 'gitrebase': ['git-rebase-todo'],
     \ 'gitsendemail': ['.gitsendemail.msg.xxxxxx'],
     \ 'gkrellmrc': ['gkrellmrc', 'gkrellmrc_x'],
     \ 'gnash': ['gnashrc', '.gnashrc', 'gnashpluginrc', '.gnashpluginrc'],
-    \ 'gnuplot': ['file.gpi'],
+    \ 'gnuplot': ['file.gpi', '.gnuplot'],
     \ 'go': ['file.go'],
     \ 'gomod': ['go.mod'],
     \ 'gp': ['file.gp', '.gprc'],
@@ -264,6 +265,7 @@ let s:filename_checks = {
     \ 'jovial': ['file.jov', 'file.j73', 'file.jovial'],
     \ 'jproperties': ['file.properties', 'file.properties_xx', 'file.properties_xx_xx', 'some.properties_xx_xx_file'],
     \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', '.babelrc', '.eslintrc', '.prettierrc', '.firebaserc', 'file.slnf'],
+    \ 'json5': ['file.json5'],
     \ 'jsonc': ['file.jsonc'],
     \ 'jsp': ['file.jsp'],
     \ 'julia': ['file.jl'],
@@ -1143,6 +1145,67 @@ func Test_foam_file()
 
   call delete('0', 'rf')
   call delete('0.orig', 'rf')
+  filetype off
+endfunc
+
+func Test_bas_file()
+  filetype on
+
+  call writefile(['looks like BASIC'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('basic', &filetype)
+  bwipe!
+
+  " Test dist#ft#FTbas()
+
+  let g:filetype_bas = 'freebasic'
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+  unlet g:filetype_bas
+
+  " FreeBASIC
+
+  call writefile(["/' FreeBASIC multiline comment '/"], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+
+  call writefile(['#define TESTING'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+
+  call writefile(['option byval'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+
+  call writefile(['extern "C"'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('freebasic', &filetype)
+  bwipe!
+
+  " QB64
+
+  call writefile(['$LET TESTING = 1'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('qb64', &filetype)
+  bwipe!
+
+  call writefile(['OPTION _EXPLICIT'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('qb64', &filetype)
+  bwipe!
+
+  " Visual Basic
+
+  call writefile(['Attribute VB_NAME = "Testing"'], 'Xfile.bas')
+  split Xfile.bas
+  call assert_equal('vb', &filetype)
+  bwipe!
+
+  call delete('Xfile.bas')
   filetype off
 endfunc
 

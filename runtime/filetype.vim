@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2022 Jan 05
+" Last Change:	2022 Jan 23
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -189,7 +189,8 @@ au BufNewFile,BufRead *.awk,*.gawk		setf awk
 au BufNewFile,BufRead *.mch,*.ref,*.imp		setf b
 
 " BASIC or Visual Basic
-au BufNewFile,BufRead *.bas			call dist#ft#FTVB("basic")
+au BufNewFile,BufRead *.bas			call dist#ft#FTbas()
+au BufNewFile,BufRead *.bi,*.bm			call dist#ft#FTbas()
 
 " Visual Basic Script (close to Visual Basic) or Visual Basic .NET
 au BufNewFile,BufRead *.vb,*.vbs,*.dsm,*.ctl	setf vb
@@ -198,7 +199,7 @@ au BufNewFile,BufRead *.vb,*.vbs,*.dsm,*.ctl	setf vb
 au BufNewFile,BufRead *.iba,*.ibi		setf ibasic
 
 " FreeBasic file (similar to QBasic)
-au BufNewFile,BufRead *.fb,*.bi			setf freebasic
+au BufNewFile,BufRead *.fb			setf freebasic
 
 " Batch file for MSDOS.
 au BufNewFile,BufRead *.bat,*.sys		setf dosbatch
@@ -673,8 +674,10 @@ autocmd BufRead,BufNewFile *.gift		setf gift
 " Git
 au BufNewFile,BufRead COMMIT_EDITMSG,MERGE_MSG,TAG_EDITMSG 	setf gitcommit
 au BufNewFile,BufRead NOTES_EDITMSG,EDIT_DESCRIPTION		setf gitcommit
-au BufNewFile,BufRead *.git/config,.gitconfig,/etc/gitconfig 	setf gitconfig
+au BufNewFile,BufRead *.git/config,.gitconfig,*/etc/gitconfig 	setf gitconfig
 au BufNewFile,BufRead */.config/git/config			setf gitconfig
+au BufNewFile,BufRead *.git/config.worktree			setf gitconfig
+au BufNewFile,BufRead *.git/worktrees/*/config.worktree		setf gitconfig
 au BufNewFile,BufRead .gitmodules,*.git/modules/*/config	setf gitconfig
 if !empty($XDG_CONFIG_HOME)
   au BufNewFile,BufRead $XDG_CONFIG_HOME/git/config		setf gitconfig
@@ -709,7 +712,7 @@ au BufNewFile,BufRead gitolite.conf		setf gitolite
 au BufNewFile,BufRead {,.}gitolite.rc,example.gitolite.rc	setf perl
 
 " Gnuplot scripts
-au BufNewFile,BufRead *.gpi			setf gnuplot
+au BufNewFile,BufRead *.gpi,.gnuplot		setf gnuplot
 
 " Go (Google)
 au BufNewFile,BufRead *.go			setf go
@@ -880,6 +883,9 @@ au BufNewFile,BufRead *.jov,*.j73,*.jovial	setf jovial
 
 " JSON
 au BufNewFile,BufRead *.json,*.jsonp,*.webmanifest	setf json
+
+" JSON5
+au BufNewFile,BufRead *.json5			setf json5
 
 " JSON Patch (RFC 6902)
 au BufNewFile,BufRead *.json-patch			setf json

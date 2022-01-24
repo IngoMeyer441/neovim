@@ -5517,6 +5517,8 @@ static int uc_scan_attr(char_u *attr, size_t len, uint32_t *argt, long *def, int
     *flags |= UC_BUFFER;
   } else if (STRNICMP(attr, "register", len) == 0) {
     *argt |= EX_REGSTR;
+  } else if (STRNICMP(attr, "keepscript", len) == 0) {
+    *argt |= EX_KEEPSCRIPT;
   } else if (STRNICMP(attr, "bar", len) == 0) {
     *argt |= EX_TRLBAR;
   } else {
@@ -6204,7 +6206,6 @@ static void do_ucmd(exarg_T *eap)
           // K_SPECIAL has been put in the buffer as K_SPECIAL
           // KS_SPECIAL KE_FILLER, like for mappings, but
           // do_cmdline() doesn't handle that, so convert it back.
-          // Also change K_SPECIAL KS_EXTRA KE_CSI into CSI.
           len = ksp - p;
           if (len > 0) {
             memmove(q, p, len);
@@ -6257,10 +6258,14 @@ static void do_ucmd(exarg_T *eap)
     buf = xmalloc(totlen + 1);
   }
 
-  current_sctx.sc_sid = cmd->uc_script_ctx.sc_sid;
+  if ((cmd->uc_argt & EX_KEEPSCRIPT) == 0) {
+    current_sctx.sc_sid = cmd->uc_script_ctx.sc_sid;
+  }
   (void)do_cmdline(buf, eap->getline, eap->cookie,
                    DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_KEYTYPED);
-  current_sctx = save_current_sctx;
+  if ((cmd->uc_argt & EX_KEEPSCRIPT) == 0) {
+    current_sctx = save_current_sctx;
+  }
   xfree(buf);
   xfree(split_buf);
 }
@@ -6306,7 +6311,7 @@ char_u *get_user_cmd_flags(expand_T *xp, int idx)
 {
   static char *user_cmd_flags[] = { "addr",   "bang",     "bar",
                                     "buffer", "complete", "count",
-                                    "nargs",  "range",    "register" };
+                                    "nargs",  "range",    "register", "keepscript" };
 
   if (idx >= (int)ARRAY_SIZE(user_cmd_flags)) {
     return NULL;
@@ -8627,7 +8632,7 @@ static void ex_normal(exarg_T *eap)
     return;
   }
 
-  // vgetc() expects a CSI and K_SPECIAL to have been escaped.  Don't do
+  // vgetc() expects K_SPECIAL to have been escaped.  Don't do
   // this for the K_SPECIAL leading byte, otherwise special keys will not
   // work.
   {
@@ -8636,8 +8641,7 @@ static void ex_normal(exarg_T *eap)
     // Count the number of characters to be escaped.
     for (p = eap->arg; *p != NUL; p++) {
       for (l = utfc_ptr2len(p) - 1; l > 0; l--) {
-        if (*++p == K_SPECIAL             // trailbyte K_SPECIAL or CSI
-            ) {
+        if (*++p == K_SPECIAL) {  // trailbyte K_SPECIAL
           len += 2;
         }
       }
@@ -9546,7 +9550,23 @@ static void ex_filetype(exarg_T *eap)
   }
 }
 
-/// Set all :filetype options ON if user did not explicitly set any to OFF.
+/// Source ftplugin.vim and indent.vim to create the necessary FileType
+/// autocommands. We do this separately from filetype.vim so that these
+/// autocommands will always fire first (and thus can be overriden) while still
+/// allowing general filetype detection to be disabled in the user's init file.
+void filetype_plugin_enable(void)
+{
+  if (filetype_plugin == kNone) {
+    source_runtime(FTPLUGIN_FILE, DIP_ALL);
+    filetype_plugin = kTrue;
+  }
+  if (filetype_indent == kNone) {
+    source_runtime(INDENT_FILE, DIP_ALL);
+    filetype_indent = kTrue;
+  }
+}
+
+/// Enable filetype detection if the user did not explicitly disable it.
 void filetype_maybe_enable(void)
 {
   if (filetype_detect == kNone) {
@@ -9555,14 +9575,6 @@ void filetype_maybe_enable(void)
     // autocommand to be defined first so that it runs first
     source_runtime(FILETYPE_FILE, DIP_ALL);
     filetype_detect = kTrue;
-  }
-  if (filetype_plugin == kNone) {
-    source_runtime(FTPLUGIN_FILE, DIP_ALL);
-    filetype_plugin = kTrue;
-  }
-  if (filetype_indent == kNone) {
-    source_runtime(INDENT_FILE, DIP_ALL);
-    filetype_indent = kTrue;
   }
 }
 
@@ -9838,6 +9850,7 @@ Dictionary commands_array(buf_T *buf)
     PUT(d, "bang", BOOLEAN_OBJ(!!(cmd->uc_argt & EX_BANG)));
     PUT(d, "bar", BOOLEAN_OBJ(!!(cmd->uc_argt & EX_TRLBAR)));
     PUT(d, "register", BOOLEAN_OBJ(!!(cmd->uc_argt & EX_REGSTR)));
+    PUT(d, "keepscript", BOOLEAN_OBJ(!!(cmd->uc_argt & EX_KEEPSCRIPT)));
 
     switch (cmd->uc_argt & (EX_EXTRA | EX_NOSPC | EX_NEEDARG)) {
     case 0:
