@@ -26,6 +26,7 @@ describe('ui/ext_popupmenu', function()
       [5] = {bold = true, foreground = Screen.colors.SeaGreen},
       [6] = {background = Screen.colors.WebGray},
       [7] = {background = Screen.colors.LightMagenta},
+      [8] = {foreground = Screen.colors.Red},
     })
     source([[
       function! TestComplete() abort
@@ -419,6 +420,55 @@ describe('ui/ext_popupmenu', function()
     screen:expect([[
                                                                   |
       bar^                                                         |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {2:-- INSERT --}                                                |
+    ]])
+
+    feed('<esc>ddiaa bb cc<cr>')
+    feed('<c-x><c-n>')
+    screen:expect([[
+      aa bb cc                                                    |
+      aa^                                                          |
+      {6:aa             }{1:                                             }|
+      {7:bb             }{1:                                             }|
+      {7:cc             }{1:                                             }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {2:-- Keyword Local completion (^N^P) }{5:match 1 of 3}             |
+    ]])
+
+    feed('<f1>')
+    screen:expect([[
+      aa bb cc                                                    |
+      cc^                                                          |
+      {7:aa             }{1:                                             }|
+      {7:bb             }{1:                                             }|
+      {6:cc             }{1:                                             }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {2:-- Keyword Local completion (^N^P) }{5:match 3 of 3}             |
+    ]])
+
+    feed('<f2>')
+    screen:expect([[
+      aa bb cc                                                    |
+      cc^                                                          |
+      {7:aa             }{1:                                             }|
+      {7:bb             }{1:                                             }|
+      {7:cc             }{1:                                             }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {2:-- Keyword Local completion (^N^P) }{8:Back at original}         |
+    ]])
+
+    feed('<f3>')
+    screen:expect([[
+      aa bb cc                                                    |
+      bb^                                                          |
       {1:~                                                           }|
       {1:~                                                           }|
       {1:~                                                           }|
@@ -2269,6 +2319,47 @@ describe('builtin popupmenu', function()
     funcs.complete(col - max_len, items)
     feed('<c-y>')
     assert_alive()
+  end)
+
+  it('is closed by :stopinsert from timer #12976', function()
+    screen:try_resize(32,14)
+    command([[call setline(1, ['hello', 'hullo', 'heeee', ''])]])
+    feed('Gah<C-N>')
+    screen:expect([[
+      hello                           |
+      hullo                           |
+      heeee                           |
+      hello^                           |
+      {s:hello          }{1:                 }|
+      {n:hullo          }{1:                 }|
+      {n:heeee          }{1:                 }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {2:-- }{5:match 1 of 3}                 |
+    ]])
+    command([[call timer_start(100, { -> execute('stopinsert') })]])
+    helpers.sleep(200)
+    feed('k')  -- cursor should move up in Normal mode
+    screen:expect([[
+      hello                           |
+      hullo                           |
+      heee^e                           |
+      hello                           |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+      {1:~                               }|
+                                      |
+    ]])
   end)
 
   it('truncates double-width character correctly when there is no scrollbar', function()

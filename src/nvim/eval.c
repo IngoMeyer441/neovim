@@ -3218,9 +3218,8 @@ char_u *get_user_var_name(expand_T *xp, int idx)
 
   // b: variables
   // In cmdwin, the alternative buffer should be used.
-  hashtab_T *ht = (cmdwin_type != 0 && get_cmdline_type() == NUL)
-    ? &prevwin->w_buffer->b_vars->dv_hashtab
-    : &curbuf->b_vars->dv_hashtab;
+  hashtab_T *ht
+      = is_in_cmdwin() ? &prevwin->w_buffer->b_vars->dv_hashtab : &curbuf->b_vars->dv_hashtab;
   if (bdone < ht->ht_used) {
     if (bdone++ == 0) {
       hi = ht->ht_array;
@@ -3235,9 +3234,7 @@ char_u *get_user_var_name(expand_T *xp, int idx)
 
   // w: variables
   // In cmdwin, the alternative window should be used.
-  ht = (cmdwin_type != 0 && get_cmdline_type() == NUL)
-    ? &prevwin->w_vars->dv_hashtab
-    : &curwin->w_vars->dv_hashtab;
+  ht = is_in_cmdwin() ? &prevwin->w_vars->dv_hashtab : &curwin->w_vars->dv_hashtab;
   if (wdone < ht->ht_used) {
     if (wdone++ == 0) {
       hi = ht->ht_array;
@@ -4402,7 +4399,7 @@ static int eval_lambda(char_u **const arg, typval_T *const rettv, const bool eva
   rettv->v_type = VAR_UNKNOWN;
 
   int ret = get_lambda_tv(arg, rettv, evaluate);
-  if (ret == NOTDONE) {
+  if (ret != OK) {
     return FAIL;
   } else if (**arg != '(') {
     if (verbose) {
@@ -6468,6 +6465,10 @@ void filter_map(typval_T *argvars, typval_T *rettv, int map)
     if (argvars[0].v_type == VAR_DICT) {
       vimvars[VV_KEY].vv_type = VAR_STRING;
 
+      const VarLockStatus prev_lock = d->dv_lock;
+      if (map && d->dv_lock == VAR_UNLOCKED) {
+        d->dv_lock = VAR_LOCKED;
+      }
       ht = &d->dv_hashtab;
       hash_lock(ht);
       todo = (int)ht->ht_used;
@@ -6498,6 +6499,7 @@ void filter_map(typval_T *argvars, typval_T *rettv, int map)
         }
       }
       hash_unlock(ht);
+      d->dv_lock = prev_lock;
     } else if (argvars[0].v_type == VAR_BLOB) {
       vimvars[VV_KEY].vv_type = VAR_NUMBER;
 
@@ -6530,6 +6532,10 @@ void filter_map(typval_T *argvars, typval_T *rettv, int map)
       assert(argvars[0].v_type == VAR_LIST);
       vimvars[VV_KEY].vv_type = VAR_NUMBER;
 
+      const VarLockStatus prev_lock = tv_list_locked(l);
+      if (map && tv_list_locked(l) == VAR_UNLOCKED) {
+        tv_list_set_lock(l, VAR_LOCKED);
+      }
       for (listitem_T *li = tv_list_first(l); li != NULL;) {
         if (map
             && var_check_lock(TV_LIST_ITEM_TV(li)->v_lock, arg_errmsg,
@@ -6548,6 +6554,7 @@ void filter_map(typval_T *argvars, typval_T *rettv, int map)
         }
         idx++;
       }
+      tv_list_set_lock(l, prev_lock);
     }
 
     restore_vimvar(VV_KEY, &save_key);
@@ -8946,7 +8953,7 @@ static bool tv_is_luafunc(typval_T *tv)
 const char *skip_luafunc_name(const char *p)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  while (ASCII_ISALNUM(*p) || *p == '_' || *p == '.' || *p == '\'') {
+  while (ASCII_ISALNUM(*p) || *p == '_' || *p == '-' || *p == '.' || *p == '\'') {
     p++;
   }
   return p;

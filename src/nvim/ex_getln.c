@@ -772,7 +772,7 @@ static uint8_t *command_line_enter(int firstc, long count, int indent)
   ccline.cmdindent = (s->firstc > 0 ? s->indent : 0);
 
   // alloc initial ccline.cmdbuff
-  alloc_cmdbuff(exmode_active ? 250 : s->indent + 1);
+  alloc_cmdbuff(indent + 50);
   ccline.cmdlen = ccline.cmdpos = 0;
   ccline.cmdbuff[0] = NUL;
 
@@ -6585,6 +6585,13 @@ static int open_cmdwin(void)
   setmouse();
 
   return cmdwin_result;
+}
+
+/// @return true if in the cmdwin, not editing the command line.
+bool is_in_cmdwin(void)
+  FUNC_ATTR_PURE
+{
+  return cmdwin_type != 0 && get_cmdline_type() == NUL;
 }
 
 /// Get script string

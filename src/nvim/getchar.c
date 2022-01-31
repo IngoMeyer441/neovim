@@ -163,6 +163,7 @@ void free_buff(buffheader_T *buf)
     xfree(p);
   }
   buf->bh_first.b_next = NULL;
+  buf->bh_curr = NULL;
 }
 
 /// Return the contents of a buffer as a single string.
@@ -284,9 +285,23 @@ static void add_buff(buffheader_T *const buf, const char *const s, ptrdiff_t sle
   }
 }
 
-/*
- * Add number "n" to buffer "buf".
- */
+/// Delete "slen" bytes from the end of "buf".
+/// Only works when it was just added.
+static void delete_buff_tail(buffheader_T *buf, int slen)
+{
+  int len;
+
+  if (buf->bh_curr == NULL) {
+    return;  // nothing to delete
+  }
+  len = (int)STRLEN(buf->bh_curr->b_str);
+  if (len >= slen) {
+    buf->bh_curr->b_str[len - slen] = NUL;
+    buf->bh_space += (size_t)slen;
+  }
+}
+
+/// Add number "n" to buffer "buf".
 static void add_num_buff(buffheader_T *buf, long n)
 {
   char number[32];
@@ -967,31 +982,31 @@ int ins_typebuf(char_u *str, int noremap, int offset, bool nottyped, bool silent
   return OK;
 }
 
-/*
- * Put character "c" back into the typeahead buffer.
- * Can be used for a character obtained by vgetc() that needs to be put back.
- * Uses cmd_silent, KeyTyped and KeyNoremap to restore the flags belonging to
- * the char.
- */
-void ins_char_typebuf(int c, int modifier)
+/// Put character "c" back into the typeahead buffer.
+/// Can be used for a character obtained by vgetc() that needs to be put back.
+/// Uses cmd_silent, KeyTyped and KeyNoremap to restore the flags belonging to
+/// the char.
+/// @return the length of what was inserted
+int ins_char_typebuf(int c, int modifier)
 {
-  char_u buf[MB_MAXBYTES + 4];
-  int idx = 0;
+  char_u buf[MB_MAXBYTES * 3 + 4];
+  int len = 0;
   if (modifier != 0) {
     buf[0] = K_SPECIAL;
     buf[1] = KS_MODIFIER;
     buf[2] = (char_u)modifier;
     buf[3] = NUL;
-    idx = 3;
+    len = 3;
   }
   if (IS_SPECIAL(c)) {
-    buf[idx] = K_SPECIAL;
-    buf[idx + 1] = (char_u)K_SECOND(c);
-    buf[idx + 2] = (char_u)K_THIRD(c);
-    buf[idx + 3] = NUL;
+    buf[len] = K_SPECIAL;
+    buf[len + 1] = (char_u)K_SECOND(c);
+    buf[len + 2] = (char_u)K_THIRD(c);
+    buf[len + 3] = NUL;
   } else {
-    char_u *p = buf + idx;
+    char_u *p = buf + len;
     int char_len = utf_char2bytes(c, p);
+    len += char_len;
     // If the character contains K_SPECIAL bytes they need escaping.
     for (int i = char_len; --i >= 0; p++) {
       if ((uint8_t)(*p) == K_SPECIAL) {
@@ -999,11 +1014,13 @@ void ins_char_typebuf(int c, int modifier)
         *p++ = K_SPECIAL;
         *p++ = KS_SPECIAL;
         *p = KE_FILLER;
+        len += 2;
       }
     }
     *p = NUL;
   }
   (void)ins_typebuf(buf, KeyNoremap, 0, !KeyTyped, cmd_silent);
+  return len;
 }
 
 /// Return TRUE if the typeahead buffer was changed (while waiting for a
@@ -1161,6 +1178,18 @@ static void gotchars(const char_u *chars, size_t len)
   // Since characters have been typed, consider the following to be in
   // another mapping.  Search string will be kept in history.
   maptick++;
+}
+
+/// Undo the last gotchars() for "len" bytes.  To be used when putting a typed
+/// character back into the typeahead buffer, thus gotchars() will be called
+/// again.
+/// Only affects recorded characters.
+void ungetchars(int len)
+{
+  if (reg_recording != 0) {
+    delete_buff_tail(&recordbuff, len);
+    last_recorded_len -= (size_t)len;
+  }
 }
 
 /*
@@ -1569,8 +1598,9 @@ int vgetc(void)
       if (!no_mapping && KeyTyped && !(State & TERM_FOCUS)
           && (mod_mask == MOD_MASK_ALT || mod_mask == MOD_MASK_META)) {
         mod_mask = 0;
-        ins_char_typebuf(c, 0);
-        ins_char_typebuf(ESC, 0);
+        int len = ins_char_typebuf(c, 0);
+        (void)ins_char_typebuf(ESC, 0);
+        ungetchars(len + 3);  // The ALT/META modifier takes three more bytes
         continue;
       }
 
@@ -2640,9 +2670,10 @@ void set_maparg_lhs_rhs(const char_u *orig_lhs, const size_t orig_lhs_len,
     }
   } else {
     char tmp_buf[64];
+    // orig_rhs is not used for Lua mappings, but still needs to be a string.
+    mapargs->orig_rhs = xcalloc(1, sizeof(char_u));
+    mapargs->orig_rhs_len = 0;
     // stores <lua>ref_no<cr> in map_str
-    mapargs->orig_rhs_len = (size_t)vim_snprintf(S_LEN(tmp_buf), "<LUA>%d<CR>", rhs_lua);
-    mapargs->orig_rhs = vim_strsave((char_u *)tmp_buf);
     mapargs->rhs_len = (size_t)vim_snprintf(S_LEN(tmp_buf), "%c%c%c%d\r", K_SPECIAL,
                                             (char_u)KEY2TERMCAP0(K_LUA), KEY2TERMCAP1(K_LUA),
                                             rhs_lua);

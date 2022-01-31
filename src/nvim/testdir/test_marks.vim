@@ -25,6 +25,16 @@ function! Test_Incr_Marks()
   enew!
 endfunction
 
+func Test_previous_jump_mark()
+  new
+  call setline(1, ['']->repeat(6))
+  normal Ggg
+  call assert_equal(6, getpos("''")[1])
+  normal jjjjj
+  call assert_equal(6, getpos("''")[1])
+  bwipe!
+endfunc
+
 func Test_setpos()
   new Xone
   let onebuf = bufnr('%')
@@ -207,6 +217,21 @@ func Test_mark_error()
   call assert_fails('mark _', 'E191:')
 endfunc
 
+" Test for :lockmarks when pasting content
+func Test_lockmarks_with_put()
+  new
+  call append(0, repeat(['sky is blue'], 4))
+  normal gg
+  1,2yank r
+  put r
+  normal G
+  lockmarks put r
+  call assert_equal(2, line("'["))
+  call assert_equal(3, line("']"))
+
+  bwipe!
+endfunc
+
 " Test for the getmarklist() function
 func Test_getmarklist()
   new
@@ -231,3 +256,5 @@ func Test_getmarklist()
   call assert_equal([], {}->getmarklist())
   close!
 endfunc
+
+" vim: shiftwidth=2 sts=2 expandtab

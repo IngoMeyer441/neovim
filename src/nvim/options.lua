@@ -1846,7 +1846,7 @@ return {
       type='number', scope={'global'},
       secure=true,
       varname='p_pyx',
-      defaults={if_true=0}
+      defaults={if_true=3}
     },
     {
       full_name='quickfixtextfunc', abbreviation='qftf',
@@ -2736,7 +2736,7 @@ return {
     {
       full_name='virtualedit', abbreviation='ve',
       short_desc=N_("when to use virtual editing"),
-      type='string', list='onecomma', scope={'global'},
+      type='string', list='onecomma', scope={'global', 'window'},
       deny_duplicates=true,
       redraw={'curswant'},
       varname='p_ve',

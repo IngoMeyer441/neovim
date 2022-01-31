@@ -135,21 +135,6 @@ void ex_profile(exarg_T *eap)
   }
 }
 
-void ex_python(exarg_T *eap)
-{
-  script_host_execute("python", eap);
-}
-
-void ex_pyfile(exarg_T *eap)
-{
-  script_host_execute_file("python", eap);
-}
-
-void ex_pydo(exarg_T *eap)
-{
-  script_host_do_range("python", eap);
-}
-
 void ex_ruby(exarg_T *eap)
 {
   script_host_execute("ruby", eap);
@@ -1660,126 +1645,6 @@ void ex_options(exarg_T *eap)
   cmd_source((char_u *)SYS_OPTWIN_FILE, NULL);
 }
 
-// Detect Python 3 or 2, and initialize 'pyxversion'.
-void init_pyxversion(void)
-{
-  if (p_pyx == 0) {
-    if (eval_has_provider("python3")) {
-      p_pyx = 3;
-    } else if (eval_has_provider("python")) {
-      p_pyx = 2;
-    }
-  }
-}
-
-// Does a file contain one of the following strings at the beginning of any
-// line?
-// "#!(any string)python2"  => returns 2
-// "#!(any string)python3"  => returns 3
-// "# requires python 2.x"  => returns 2
-// "# requires python 3.x"  => returns 3
-// otherwise return 0.
-static int requires_py_version(char_u *filename)
-{
-  FILE *file;
-  int requires_py_version = 0;
-  int i, lines;
-
-  lines = (int)p_mls;
-  if (lines < 0) {
-    lines = 5;
-  }
-
-  file = os_fopen((char *)filename, "r");
-  if (file != NULL) {
-    for (i = 0; i < lines; i++) {
-      if (vim_fgets(IObuff, IOSIZE, file)) {
-        break;
-      }
-      if (i == 0 && IObuff[0] == '#' && IObuff[1] == '!') {
-        // Check shebang.
-        if (strstr((char *)IObuff + 2, "python2") != NULL) {
-          requires_py_version = 2;
-          break;
-        }
-        if (strstr((char *)IObuff + 2, "python3") != NULL) {
-          requires_py_version = 3;
-          break;
-        }
-      }
-      IObuff[21] = '\0';
-      if (STRCMP("# requires python 2.x", IObuff) == 0) {
-        requires_py_version = 2;
-        break;
-      }
-      if (STRCMP("# requires python 3.x", IObuff) == 0) {
-        requires_py_version = 3;
-        break;
-      }
-    }
-    fclose(file);
-  }
-  return requires_py_version;
-}
-
-
-// Source a python file using the requested python version.
-static void source_pyx_file(exarg_T *eap, char_u *fname)
-{
-  exarg_T ex;
-  long int v = requires_py_version(fname);
-
-  init_pyxversion();
-  if (v == 0) {
-    // user didn't choose a preference, 'pyx' is used
-    v = p_pyx;
-  }
-
-  // now source, if required python version is not supported show
-  // unobtrusive message.
-  if (eap == NULL) {
-    memset(&ex, 0, sizeof(ex));
-  } else {
-    ex = *eap;
-  }
-  ex.arg = fname;
-  ex.cmd = (char_u *)(v == 2 ? "pyfile" : "pyfile3");
-
-  if (v == 2) {
-    ex_pyfile(&ex);
-  } else {
-    ex_py3file(&ex);
-  }
-}
-
-// ":pyxfile {fname}"
-void ex_pyxfile(exarg_T *eap)
-{
-  source_pyx_file(eap, eap->arg);
-}
-
-// ":pyx"
-void ex_pyx(exarg_T *eap)
-{
-  init_pyxversion();
-  if (p_pyx == 2) {
-    ex_python(eap);
-  } else {
-    ex_python3(eap);
-  }
-}
-
-// ":pyxdo"
-void ex_pyxdo(exarg_T *eap)
-{
-  init_pyxversion();
-  if (p_pyx == 2) {
-    ex_pydo(eap);
-  } else {
-    ex_pydo3(eap);
-  }
-}
-
 /// ":source [{fname}]"
 void ex_source(exarg_T *eap)
 {
@@ -2323,9 +2188,11 @@ void ex_scriptnames(exarg_T *eap)
 
   for (int i = 1; i <= script_items.ga_len && !got_int; i++) {
     if (SCRIPT_ITEM(i).sn_name != NULL) {
-      home_replace(NULL, SCRIPT_ITEM(i).sn_name,
-                   NameBuff, MAXPATHL, true);
-      smsg("%3d: %s", i, NameBuff);
+      home_replace(NULL, SCRIPT_ITEM(i).sn_name, NameBuff, MAXPATHL, true);
+      vim_snprintf((char *)IObuff, IOSIZE, "%3d: %s", i, NameBuff);
+      msg_putchar('\n');
+      msg_outtrans(IObuff);
+      line_breakcheck();
     }
   }
 }
