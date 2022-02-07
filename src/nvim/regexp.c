@@ -2901,18 +2901,14 @@ static int peekchr(void)
   {
     int c = regparse[1];
 
-    if (c == NUL)
-      curchr = '\\';                  /* trailing '\' */
-    else if (
-      c <= '~' && META_flags[c]
-      ) {
-      /*
-       * META contains everything that may be magic sometimes,
-       * except ^ and $ ("\^" and "\$" are only magic after
-       * "\V").  We now fetch the next character and toggle its
-       * magicness.  Therefore, \ is so meta-magic that it is
-       * not in META.
-       */
+    if (c == NUL) {
+      curchr = '\\';  // trailing '\'
+    } else if (c <= '~' && META_flags[c]) {
+      // META contains everything that may be magic sometimes,
+      // except ^ and $ ("\^" and "\$" are only magic after
+      // "\V").  We now fetch the next character and toggle its
+      // magicness.  Therefore, \ is so meta-magic that it is
+      // not in META.
       curchr = -1;
       prev_at_start = at_start;
       at_start = false;  // be able to say "/\*ptr"
@@ -6538,11 +6534,16 @@ char_u *regtilde(char_u *source, int magic)
     }
   }
 
-  xfree(reg_prev_sub);
-  if (newsub != source)         /* newsub was allocated, just keep it */
-    reg_prev_sub = newsub;
-  else                          /* no ~ found, need to save newsub  */
-    reg_prev_sub = vim_strsave(newsub);
+  // Only change reg_prev_sub when not previewing.
+  if (!(State & CMDPREVIEW)) {
+    xfree(reg_prev_sub);
+    if (newsub != source) {             // newsub was allocated, just keep it
+      reg_prev_sub = newsub;
+    } else {                            // no ~ found, need to save newsub
+      reg_prev_sub = vim_strsave(newsub);
+    }
+  }
+
   return newsub;
 }
 

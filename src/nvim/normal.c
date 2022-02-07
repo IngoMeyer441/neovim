@@ -1030,7 +1030,7 @@ static int normal_execute(VimState *state, int key)
 
   s->need_flushbuf = add_to_showcmd(s->c);
 
-  while (normal_get_command_count(s)) { continue; }
+  while (normal_get_command_count(s)) { }
 
   if (s->c == K_EVENT) {
     // Save the count values so that ca.opcount and ca.count0 are exactly
@@ -3098,8 +3098,14 @@ static void nv_gd(oparg_T *oap, int nchar, int thisblock)
   if ((len = find_ident_under_cursor(&ptr, FIND_IDENT)) == 0
       || !find_decl(ptr, len, nchar == 'd', thisblock, SEARCH_START)) {
     clearopbeep(oap);
-  } else if ((fdo_flags & FDO_SEARCH) && KeyTyped && oap->op_type == OP_NOP) {
-    foldOpenCursor();
+  } else {
+    if ((fdo_flags & FDO_SEARCH) && KeyTyped && oap->op_type == OP_NOP) {
+      foldOpenCursor();
+    }
+    // clear any search statistics
+    if (messaging() && !msg_silent && !shortmess(SHM_SEARCHCOUNT)) {
+      clear_cmdline = true;
+    }
   }
 }
 
@@ -4093,7 +4099,7 @@ static void nv_colon(cmdarg_T *cap)
     if (is_lua) {
       cmd_result = map_execute_lua();
     } else {
-    // get a command line and execute it
+      // get a command line and execute it
       cmd_result = do_cmdline(NULL, is_cmdkey ? getcmdkeycmd : getexline, NULL,
                               cap->oap->op_type != OP_NOP ? DOCMD_KEEPLINE : 0);
     }
@@ -5027,9 +5033,7 @@ static void nv_brackets(cmdarg_T *cap)
    * identifier     "]i"  "[i"   "]I"  "[I"     "]^I"  "[^I"
    * define           "]d"  "[d"   "]D"  "[D"   "]^D"  "[^D"
    */
-  if (vim_strchr((char_u *)
-                 "iI\011dD\004",
-                 cap->nchar) != NULL) {
+  if (vim_strchr((char_u *)"iI\011dD\004", cap->nchar) != NULL) {
     char_u *ptr;
     size_t len;
 
@@ -6330,7 +6334,7 @@ static void nv_g_cmd(cmdarg_T *cap)
     curwin->w_set_curswant = true;
     break;
 
-  case 'M': {
+  case 'M':
     oap->motion_type = kMTCharWise;
     oap->inclusive = false;
     i = linetabsize(get_cursor_line_ptr());
@@ -6340,8 +6344,7 @@ static void nv_g_cmd(cmdarg_T *cap)
       coladvance((colnr_T)(i / 2));
     }
     curwin->w_set_curswant = true;
-  }
-  break;
+    break;
 
   case '_':
     /* "g_": to the last non-blank character in the line or <count> lines
@@ -6685,9 +6688,8 @@ static void n_opencmd(cmdarg_T *cap)
                           (cap->cmdchar == 'o' ? 1 : 0))
                )
         && open_line(cap->cmdchar == 'O' ? BACKWARD : FORWARD,
-                     has_format_option(FO_OPEN_COMS)
-                     ? OPENLINE_DO_COM : 0,
-                     0)) {
+                     has_format_option(FO_OPEN_COMS) ? OPENLINE_DO_COM : 0,
+                     0, NULL)) {
       if (win_cursorline_standout(curwin)) {
         // force redraw of cursorline
         curwin->w_valid &= ~VALID_CROW;

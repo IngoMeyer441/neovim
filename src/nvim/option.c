@@ -1781,7 +1781,7 @@ static char *illegal_char(char *errbuf, size_t errbuflen, int c)
   if (errbuf == NULL) {
     return "";
   }
-  vim_snprintf((char *)errbuf, errbuflen, _("E539: Illegal character <%s>"),
+  vim_snprintf(errbuf, errbuflen, _("E539: Illegal character <%s>"),
                (char *)transchar(c));
   return errbuf;
 }
@@ -2284,12 +2284,12 @@ static char *set_string_option(const int opt_idx, const char *const value, const
   *varp = s;
 
   char *const saved_oldval = xstrdup(oldval);
-  char *const saved_oldval_l = (oldval_l != NULL) ? xstrdup((char *)oldval_l) : 0;
-  char *const saved_oldval_g = (oldval_g != NULL) ? xstrdup((char *)oldval_g) : 0;
+  char *const saved_oldval_l = (oldval_l != NULL) ? xstrdup(oldval_l) : 0;
+  char *const saved_oldval_g = (oldval_g != NULL) ? xstrdup(oldval_g) : 0;
   char *const saved_newval = xstrdup(s);
 
   int value_checked = false;
-  char *const r = did_set_string_option(opt_idx, (char_u **)varp, (int)true,
+  char *const r = did_set_string_option(opt_idx, (char_u **)varp, true,
                                         (char_u *)oldval,
                                         NULL, 0, opt_flags, &value_checked);
   if (r == NULL) {
@@ -2777,7 +2777,7 @@ ambw_end:
 
         if (!ascii_isdigit(*(s - 1))) {
           if (errbuf != NULL) {
-            vim_snprintf((char *)errbuf, errbuflen,
+            vim_snprintf(errbuf, errbuflen,
                          _("E526: Missing number after <%s>"),
                          transchar_byte(*(s - 1)));
             errmsg = errbuf;
@@ -2968,7 +2968,7 @@ ambw_end:
           }
         } else {
           if (errbuf != NULL) {
-            vim_snprintf((char *)errbuf, errbuflen,
+            vim_snprintf(errbuf, errbuflen,
                          _("E535: Illegal character after <%c>"),
                          *--s);
             errmsg = errbuf;
@@ -3178,10 +3178,7 @@ ambw_end:
     char_u *cp;
 
     if (!(*varp)[0] || ((*varp)[0] == '0' && !(*varp)[1])) {
-      if (curbuf->b_p_vsts_array) {
-        xfree(curbuf->b_p_vsts_array);
-        curbuf->b_p_vsts_array = 0;
-      }
+      XFREE_CLEAR(curbuf->b_p_vsts_array);
     } else {
       for (cp = *varp; *cp; cp++) {
         if (ascii_isdigit(*cp)) {
@@ -3206,10 +3203,7 @@ ambw_end:
     char_u *cp;
 
     if (!(*varp)[0] || ((*varp)[0] == '0' && !(*varp)[1])) {
-      if (curbuf->b_p_vts_array) {
-        xfree(curbuf->b_p_vts_array);
-        curbuf->b_p_vts_array = NULL;
-      }
+      XFREE_CLEAR(curbuf->b_p_vts_array);
     } else {
       for (cp = *varp; *cp; cp++) {
         if (ascii_isdigit(*cp)) {
@@ -4420,6 +4414,8 @@ static char *set_num_option(int opt_idx, char_u *varp, long value, char *errbuf,
   } else if (pp == &curbuf->b_p_ts || pp == &p_ts) {
     if (value < 1) {
       errmsg = e_positive;
+    } else if (value > TABSTOP_MAX) {
+      errmsg = e_invarg;
     }
   } else if (pp == &curbuf->b_p_tw || pp == &p_tw) {
     if (value < 0) {
@@ -4433,7 +4429,7 @@ static char *set_num_option(int opt_idx, char_u *varp, long value, char *errbuf,
 
   // Don't change the value and return early if validation failed.
   if (errmsg != NULL) {
-    return (char *)errmsg;
+    return errmsg;
   }
 
   *pp = value;
@@ -4557,7 +4553,7 @@ static char *set_num_option(int opt_idx, char_u *varp, long value, char *errbuf,
   // Check the (new) bounds for Rows and Columns here.
   if (p_lines < min_rows() && full_screen) {
     if (errbuf != NULL) {
-      vim_snprintf((char *)errbuf, errbuflen,
+      vim_snprintf(errbuf, errbuflen,
                    _("E593: Need at least %d lines"), min_rows());
       errmsg = errbuf;
     }
@@ -4565,7 +4561,7 @@ static char *set_num_option(int opt_idx, char_u *varp, long value, char *errbuf,
   }
   if (p_columns < MIN_COLUMNS && full_screen) {
     if (errbuf != NULL) {
-      vim_snprintf((char *)errbuf, errbuflen,
+      vim_snprintf(errbuf, errbuflen,
                    _("E594: Need at least %d columns"), MIN_COLUMNS);
       errmsg = errbuf;
     }
@@ -4681,7 +4677,7 @@ static char *set_num_option(int opt_idx, char_u *varp, long value, char *errbuf,
   }
   check_redraw(options[opt_idx].flags);
 
-  return (char *)errmsg;
+  return errmsg;
 }
 
 /// Trigger the OptionSet autocommand.
@@ -6416,7 +6412,7 @@ void buf_copy_options(buf_T *buf, int flags)
       if (p_vsts && p_vsts != empty_option) {
         (void)tabstop_set(p_vsts, &buf->b_p_vsts_array);
       } else {
-        buf->b_p_vsts_array = 0;
+        buf->b_p_vsts_array = NULL;
       }
       buf->b_p_vsts_nopaste = p_vsts_nopaste
                                 ? vim_strsave(p_vsts_nopaste)
@@ -7153,10 +7149,7 @@ static void paste_option_changed(void)
         free_string_option(buf->b_p_vsts);
       }
       buf->b_p_vsts = empty_option;
-      if (buf->b_p_vsts_array) {
-        xfree(buf->b_p_vsts_array);
-      }
-      buf->b_p_vsts_array = 0;
+      XFREE_CLEAR(buf->b_p_vsts_array);
     }
 
     // set global options
@@ -7193,13 +7186,11 @@ static void paste_option_changed(void)
       buf->b_p_vsts = buf->b_p_vsts_nopaste
                         ? vim_strsave(buf->b_p_vsts_nopaste)
                         : empty_option;
-      if (buf->b_p_vsts_array) {
-        xfree(buf->b_p_vsts_array);
-      }
+      xfree(buf->b_p_vsts_array);
       if (buf->b_p_vsts && buf->b_p_vsts != empty_option) {
         (void)tabstop_set(buf->b_p_vsts, &buf->b_p_vsts_array);
       } else {
-        buf->b_p_vsts_array = 0;
+        buf->b_p_vsts_array = NULL;
       }
     }
 
@@ -7560,7 +7551,7 @@ bool tabstop_set(char_u *var, long **array)
     int n = atoi((char *)cp);
 
     // Catch negative values, overflow and ridiculous big values.
-    if (n < 0 || n > 9999) {
+    if (n <= 0 || n > TABSTOP_MAX) {
       semsg(_(e_invarg2), cp);
       XFREE_CLEAR(*array);
       return false;

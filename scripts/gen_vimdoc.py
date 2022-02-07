@@ -52,7 +52,7 @@ import logging
 
 from xml.dom import minidom
 
-MIN_PYTHON_VERSION = (3, 5)
+MIN_PYTHON_VERSION = (3, 6)
 
 if sys.version_info < MIN_PYTHON_VERSION:
     print("requires Python {}.{}+".format(*MIN_PYTHON_VERSION))
@@ -96,7 +96,6 @@ CONFIG = {
             'win_config.c',
             'tabpage.c',
             'ui.c',
-            'extmark.c',
         ],
         # List of files/directories for doxygen to read, separated by blanks
         'files': os.path.join(base_dir, 'src/nvim/api'),

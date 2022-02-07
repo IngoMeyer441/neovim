@@ -4,7 +4,7 @@ source shared.vim
 source check.vim
 source term_util.vim
 
-func! s:cleanup_buffers() abort
+func s:cleanup_buffers() abort
   for bnr in range(1, bufnr('$'))
     if bufloaded(bnr) && bufnr('%') != bnr
       execute 'bd! ' . bnr
@@ -2540,6 +2540,16 @@ func Test_close_autocmd_tab()
     au!
   augroup END
   augroup! aucmd_win_test
+  %bwipe!
+endfunc
+
+func Test_Visual_doautoall_redraw()
+  call setline(1, ['a', 'b'])
+  new
+  wincmd p
+  call feedkeys("G\<C-V>", 'txn')
+  autocmd User Explode ++once redraw
+  doautoall User Explode
   %bwipe!
 endfunc
 

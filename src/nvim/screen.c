@@ -1981,7 +1981,7 @@ static size_t fill_foldcolumn(char_u *p, win_T *wp, foldinfo_T foldinfo, linenr_
   level = foldinfo.fi_level;
 
   // If the column is too narrow, we start at the lowest level that
-  // fits and use numbers to indicated the depth.
+  // fits and use numbers to indicate the depth.
   first_level = level - fdc - closed + 1;
   if (first_level < 1) {
     first_level = 1;
@@ -6919,8 +6919,6 @@ void grid_ins_lines(ScreenGrid *grid, int row, int line_count, int end, int col,
   if (!grid->throttled) {
     ui_call_grid_scroll(grid->handle, row, end, col, col+width, -line_count, 0);
   }
-
-  return;
 }
 
 /// delete lines on the screen and move lines up.
@@ -6971,8 +6969,6 @@ void grid_del_lines(ScreenGrid *grid, int row, int line_count, int end, int col,
   if (!grid->throttled) {
     ui_call_grid_scroll(grid->handle, row, end, col, col+width, line_count, 0);
   }
-
-  return;
 }
 
 
@@ -7354,7 +7350,7 @@ void draw_tabline(void)
       if (room > 0) {
         // Get buffer name in NameBuff[]
         get_trans_bufname(cwp->w_buffer);
-        (void)shorten_dir(NameBuff);
+        shorten_dir(NameBuff);
         len = vim_strsize(NameBuff);
         p = NameBuff;
         while (len > room) {
