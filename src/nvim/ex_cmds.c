@@ -814,7 +814,11 @@ void ex_retab(exarg_T *eap)
             // len is actual number of white characters used
             len = num_spaces + num_tabs;
             old_len = (long)STRLEN(ptr);
-            long new_len = old_len - col + start_col + len + 1;
+            const long new_len = old_len - col + start_col + len + 1;
+            if (new_len <= 0 || new_len >= MAXCOL) {
+              emsg(_(e_resulting_text_too_long));
+              break;
+            }
             new_line = xmalloc(new_len);
 
             if (start_col > 0) {
@@ -847,6 +851,10 @@ void ex_retab(exarg_T *eap)
         break;
       }
       vcol += win_chartabsize(curwin, ptr + col, (colnr_T)vcol);
+      if (vcol >= MAXCOL) {
+        emsg(_(e_resulting_text_too_long));
+        break;
+      }
       col += utfc_ptr2len(ptr + col);
     }
     if (new_line == NULL) {                 // out of memory
@@ -5856,7 +5864,7 @@ void ex_helpclose(exarg_T *eap)
 {
   FOR_ALL_WINDOWS_IN_TAB(win, curtab) {
     if (bt_help(win->w_buffer)) {
-      win_close(win, false);
+      win_close(win, false, eap->forceit);
       return;
     }
   }
@@ -6141,12 +6149,14 @@ char_u *skip_vimgrep_pat(char_u *p, char_u **s, int *flags)
     p++;
 
     // Find the flags
-    while (*p == 'g' || *p == 'j') {
+    while (*p == 'g' || *p == 'j' || *p == 'f') {
       if (flags != NULL) {
         if (*p == 'g') {
           *flags |= VGR_GLOBAL;
-        } else {
+        } else if (*p == 'j') {
           *flags |= VGR_NOJUMP;
+        } else {
+          *flags |= VGR_FUZZY;
         }
       }
       p++;

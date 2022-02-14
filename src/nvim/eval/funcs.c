@@ -98,9 +98,9 @@ PRAGMA_DIAG_POP
 #endif
 
 
-static char *e_listarg = N_("E686: Argument of %s must be a List");
 static char *e_listblobarg = N_("E899: Argument of %s must be a List or Blob");
 static char *e_invalwindow = N_("E957: Invalid window number");
+static char *e_reduceempty = N_("E998: Reduce of an empty %s with no initial value");
 
 /// Dummy va_list for passing to vim_snprintf
 ///
@@ -1588,7 +1588,7 @@ static void set_cursorpos(typval_T *argvars, typval_T *rettv, bool charcol)
     line = tv_get_lnum(argvars);
     col = (long)tv_get_number_chk(&argvars[1], NULL);
     if (charcol) {
-      col = buf_charidx_to_byteidx(curbuf, line, col);
+      col = buf_charidx_to_byteidx(curbuf, line, col) + 1;
     }
     if (argvars[2].v_type != VAR_UNKNOWN) {
       coladd = (long)tv_get_number_chk(&argvars[2], NULL);
@@ -3327,7 +3327,7 @@ static void getpos_both(typval_T *argvars, typval_T *rettv, bool getcurpos, bool
     }
     if (fp != NULL && charcol) {
       pos = *fp;
-      pos.col = buf_byteidx_to_charidx(wp->w_buffer, pos.lnum, pos.col) - 1;
+      pos.col = buf_byteidx_to_charidx(wp->w_buffer, pos.lnum, pos.col);
       fp = &pos;
     }
   } else {
@@ -4539,6 +4539,7 @@ static void f_has(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     "mouse",
     "multi_byte",
     "multi_lang",
+    "nanotime",
     "num64",
     "packages",
     "path_extra",
@@ -8055,6 +8056,102 @@ static void f_reverse(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
 }
 
+/// "reduce(list, { accumlator, element -> value } [, initial])" function
+static void f_reduce(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  if (argvars[0].v_type != VAR_LIST && argvars[0].v_type != VAR_BLOB) {
+    emsg(_(e_listblobreq));
+    return;
+  }
+
+  const char_u *func_name;
+  partial_T *partial = NULL;
+  if (argvars[1].v_type == VAR_FUNC) {
+    func_name = argvars[1].vval.v_string;
+  } else if (argvars[1].v_type == VAR_PARTIAL) {
+    partial = argvars[1].vval.v_partial;
+    func_name = partial_name(partial);
+  } else {
+    func_name = (const char_u *)tv_get_string(&argvars[1]);
+  }
+  if (*func_name == NUL) {
+    return;  // type error or empty name
+  }
+
+  funcexe_T funcexe = FUNCEXE_INIT;
+  funcexe.evaluate = true;
+  funcexe.partial = partial;
+
+  typval_T initial;
+  typval_T argv[3];
+  if (argvars[0].v_type == VAR_LIST) {
+    list_T *const l = argvars[0].vval.v_list;
+    const listitem_T *li;
+
+    if (argvars[2].v_type == VAR_UNKNOWN) {
+      if (tv_list_len(l) == 0) {
+        semsg(_(e_reduceempty), "List");
+        return;
+      }
+      const listitem_T *const first = tv_list_first(l);
+      initial = *TV_LIST_ITEM_TV(first);
+      li = TV_LIST_ITEM_NEXT(l, first);
+    } else {
+      initial = argvars[2];
+      li = tv_list_first(l);
+    }
+
+    tv_copy(&initial, rettv);
+
+    if (l != NULL) {
+      const VarLockStatus prev_locked = tv_list_locked(l);
+      const int called_emsg_start = called_emsg;
+
+      tv_list_set_lock(l, VAR_FIXED);  // disallow the list changing here
+      for (; li != NULL; li = TV_LIST_ITEM_NEXT(l, li)) {
+        argv[0] = *rettv;
+        argv[1] = *TV_LIST_ITEM_TV(li);
+        rettv->v_type = VAR_UNKNOWN;
+        const int r = call_func(func_name, -1, rettv, 2, argv, &funcexe);
+        tv_clear(&argv[0]);
+        if (r == FAIL || called_emsg != called_emsg_start) {
+          break;
+        }
+      }
+      tv_list_set_lock(l, prev_locked);
+    }
+  } else {
+    const blob_T *const b = argvars[0].vval.v_blob;
+    int i;
+
+    if (argvars[2].v_type == VAR_UNKNOWN) {
+      if (tv_blob_len(b) == 0) {
+        semsg(_(e_reduceempty), "Blob");
+        return;
+      }
+      initial.v_type = VAR_NUMBER;
+      initial.vval.v_number = tv_blob_get(b, 0);
+      i = 1;
+    } else if (argvars[2].v_type != VAR_NUMBER) {
+      emsg(_(e_number_exp));
+      return;
+    } else {
+      initial = argvars[2];
+      i = 0;
+    }
+
+    tv_copy(&initial, rettv);
+    for (; i < tv_blob_len(b); i++) {
+      argv[0] = *rettv;
+      argv[1].v_type = VAR_NUMBER;
+      argv[1].vval.v_number = tv_blob_get(b, i);
+      if (call_func(func_name, -1, rettv, 2, argv, &funcexe) == FAIL) {
+        return;
+      }
+    }
+  }
+}
+
 #define SP_NOMOVE       0x01        ///< don't move cursor
 #define SP_REPEAT       0x02        ///< repeat to find outer pair
 #define SP_RETCOUNT     0x04        ///< return matchcount
@@ -8141,6 +8238,7 @@ static int search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
   int options = SEARCH_KEEP;
   int subpatnum;
   searchit_arg_T sia;
+  bool use_skip = false;
 
   const char *const pat = tv_get_string(&argvars[0]);
   dir = get_search_arg(&argvars[1], flagsp);  // May set p_ws.
@@ -8158,7 +8256,7 @@ static int search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
     options |= SEARCH_COL;
   }
 
-  // Optional arguments: line number to stop searching and timeout.
+  // Optional arguments: line number to stop searching, timeout and skip.
   if (argvars[1].v_type != VAR_UNKNOWN && argvars[2].v_type != VAR_UNKNOWN) {
     lnum_stop = tv_get_number_chk(&argvars[2], NULL);
     if (lnum_stop < 0) {
@@ -8169,6 +8267,7 @@ static int search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
       if (time_limit < 0) {
         goto theend;
       }
+      use_skip = eval_expr_valid_arg(&argvars[4]);
     }
   }
 
@@ -8188,11 +8287,46 @@ static int search_cmn(typval_T *argvars, pos_T *match_pos, int *flagsp)
   }
 
   pos = save_cursor = curwin->w_cursor;
+  pos_T firstpos = { 0 };
   memset(&sia, 0, sizeof(sia));
   sia.sa_stop_lnum = (linenr_T)lnum_stop;
   sia.sa_tm = &tm;
-  subpatnum = searchit(curwin, curbuf, &pos, NULL, dir, (char_u *)pat, 1,
-                       options, RE_SEARCH, &sia);
+
+  // Repeat until {skip} returns false.
+  for (;;) {
+    subpatnum
+        = searchit(curwin, curbuf, &pos, NULL, dir, (char_u *)pat, 1, options, RE_SEARCH, &sia);
+    // finding the first match again means there is no match where {skip}
+    // evaluates to zero.
+    if (firstpos.lnum != 0 && equalpos(pos, firstpos)) {
+      subpatnum = FAIL;
+    }
+
+    if (subpatnum == FAIL || !use_skip) {
+      // didn't find it or no skip argument
+      break;
+    }
+    firstpos = pos;
+
+    // If the skip expression matches, ignore this match.
+    {
+      const pos_T save_pos = curwin->w_cursor;
+
+      curwin->w_cursor = pos;
+      bool err = false;
+      const bool do_skip = eval_expr_to_bool(&argvars[4], &err);
+      curwin->w_cursor = save_pos;
+      if (err) {
+        // Evaluating {skip} caused an error, break here.
+        subpatnum = FAIL;
+        break;
+      }
+      if (!do_skip) {
+        break;
+      }
+    }
+  }
+
   if (subpatnum != FAIL) {
     if (flags & SP_SUBPAT) {
       retval = subpatnum;
@@ -8652,13 +8786,9 @@ static int searchpair_cmn(typval_T *argvars, pos_T *match_pos)
       || argvars[4].v_type == VAR_UNKNOWN) {
     skip = NULL;
   } else {
+    // Type is checked later.
     skip = &argvars[4];
-    if (skip->v_type != VAR_FUNC
-        && skip->v_type != VAR_PARTIAL
-        && skip->v_type != VAR_STRING) {
-      semsg(_(e_invarg2), tv_get_string(&argvars[4]));
-      goto theend;  // Type error.
-    }
+
     if (argvars[5].v_type != VAR_UNKNOWN) {
       lnum_stop = tv_get_number_chk(&argvars[5], NULL);
       if (lnum_stop < 0) {
@@ -8769,10 +8899,7 @@ long do_searchpair(const char *spat, const char *mpat, const char *epat, int dir
   }
 
   if (skip != NULL) {
-    // Empty string means to not use the skip expression.
-    if (skip->v_type == VAR_STRING || skip->v_type == VAR_FUNC) {
-      use_skip = skip->vval.v_string != NULL && *skip->vval.v_string != NUL;
-    }
+    use_skip = eval_expr_valid_arg(skip);
   }
 
   save_cursor = curwin->w_cursor;

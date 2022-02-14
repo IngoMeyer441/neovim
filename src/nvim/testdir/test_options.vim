@@ -314,19 +314,48 @@ func Test_set_errors()
   set modifiable&
 endfunc
 
+func CheckWasSet(name)
+  let verb_cm = execute('verbose set ' .. a:name .. '?')
+  call assert_match('Last set from.*test_options.vim', verb_cm)
+endfunc
+func CheckWasNotSet(name)
+  let verb_cm = execute('verbose set ' .. a:name .. '?')
+  call assert_notmatch('Last set from', verb_cm)
+endfunc
+
 " Must be executed before other tests that set 'term'.
 func Test_000_term_option_verbose()
   if has('nvim') || has('gui_running')
     return
   endif
-  let verb_cm = execute('verbose set t_cm')
-  call assert_notmatch('Last set from', verb_cm)
+
+  call CheckWasNotSet('t_cm')
 
   let term_save = &term
   set term=ansi
-  let verb_cm = execute('verbose set t_cm')
-  call assert_match('Last set from.*test_options.vim', verb_cm)
+  call CheckWasSet('t_cm')
   let &term = term_save
+endfunc
+
+func Test_copy_context()
+  setlocal list
+  call CheckWasSet('list')
+  split
+  call CheckWasSet('list')
+  quit
+  setlocal nolist
+
+  set ai
+  call CheckWasSet('ai')
+  set filetype=perl
+  call CheckWasSet('filetype')
+  set fo=tcroq
+  call CheckWasSet('fo')
+
+  split Xsomebuf
+  call CheckWasSet('ai')
+  call CheckWasNotSet('filetype')
+  call CheckWasSet('fo')
 endfunc
 
 func Test_set_ttytype()
@@ -654,6 +683,19 @@ func Test_buftype()
   set buftype=nowrite
   call assert_fails('write', 'E382:')
   close!
+endfunc
+
+" Test for the 'shellquote' option
+func Test_shellquote()
+  CheckUnix
+  set shellquote=#
+  set verbose=20
+  redir => v
+  silent! !echo Hello
+  redir END
+  set verbose&
+  set shellquote&
+  call assert_match(': "#echo Hello#"', v)
 endfunc
 
 " Test for setting option values using v:false and v:true

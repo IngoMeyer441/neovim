@@ -846,7 +846,7 @@ void goto_buffer(exarg_T *eap, int start, int dir, int count)
     enter_cleanup(&cs);
 
     // Quitting means closing the split window, nothing else.
-    win_close(curwin, true);
+    win_close(curwin, true, false);
     swap_exists_action = SEA_NONE;
     swap_exists_did_quit = true;
 
@@ -1237,7 +1237,7 @@ int do_buffer(int action, int start, int dir, int count, int forceit)
     while (buf == curbuf
            && !(curwin->w_closing || curwin->w_buffer->b_locked > 0)
            && (!ONE_WINDOW || first_tabpage->tp_next != NULL)) {
-      if (win_close(curwin, false) == FAIL) {
+      if (win_close(curwin, false, false) == FAIL) {
         break;
       }
     }
@@ -1497,6 +1497,11 @@ void set_curbuf(buf_T *buf, int action)
  */
 void enter_buffer(buf_T *buf)
 {
+  // Get the buffer in the current window.
+  curwin->w_buffer = buf;
+  curbuf = buf;
+  curbuf->b_nwindows++;
+
   // Copy buffer and window local option values.  Not for a help buffer.
   buf_copy_options(buf, BCO_ENTER | BCO_NOHELP);
   if (!buf->b_help) {
@@ -1506,11 +1511,6 @@ void enter_buffer(buf_T *buf)
     clearFolding(curwin);
   }
   foldUpdateAll(curwin);        // update folds (later).
-
-  // Get the buffer in the current window.
-  curwin->w_buffer = buf;
-  curbuf = buf;
-  curbuf->b_nwindows++;
 
   if (curwin->w_p_diff) {
     diff_buf_add(curbuf);
@@ -3327,7 +3327,7 @@ void maketitle(void)
       len = (int)STRLEN(buf_p);
       if (len > 100) {
         len -= 100;
-        len += (*mb_tail_off)(buf_p, buf_p + len) + 1;
+        len += mb_tail_off(buf_p, buf_p + len) + 1;
         buf_p += len;
       }
       STRCPY(icon_str, buf_p);
@@ -4822,7 +4822,7 @@ void do_arg_all(int count, int forceit, int keep_tabs)
               && (first_tabpage->tp_next == NULL || !had_tab)) {
             use_firstwin = true;
           } else {
-            win_close(wp, !buf_hide(buf) && !bufIsChanged(buf));
+            win_close(wp, !buf_hide(buf) && !bufIsChanged(buf), false);
             // check if autocommands removed the next window
             if (!win_valid(wpnext)) {
               // start all over...
@@ -5013,7 +5013,7 @@ void ex_buffer_all(exarg_T *eap)
           && !ONE_WINDOW
           && !(wp->w_closing
                || wp->w_buffer->b_locked > 0)) {
-        win_close(wp, false);
+        win_close(wp, false, false);
         wpnext = firstwin;              // just in case an autocommand does
                                         // something strange with windows
         tpnext = first_tabpage;         // start all over...
@@ -5094,7 +5094,7 @@ void ex_buffer_all(exarg_T *eap)
         enter_cleanup(&cs);
 
         // User selected Quit at ATTENTION prompt; close this window.
-        win_close(curwin, true);
+        win_close(curwin, true, false);
         open_wins--;
         swap_exists_action = SEA_NONE;
         swap_exists_did_quit = true;
@@ -5136,7 +5136,7 @@ void ex_buffer_all(exarg_T *eap)
       // BufWrite Autocommands made the window invalid, start over
       wp = lastwin;
     } else if (r) {
-      win_close(wp, !buf_hide(wp->w_buffer));
+      win_close(wp, !buf_hide(wp->w_buffer), false);
       open_wins--;
       wp = lastwin;
     } else {
@@ -5455,30 +5455,43 @@ bool find_win_for_buf(buf_T *buf, win_T **wp, tabpage_T **tp)
   return false;
 }
 
-int buf_signcols(buf_T *buf)
+static int buf_signcols_inner(buf_T *buf, int maximum)
+{
+  sign_entry_T *sign;  // a sign in the sign list
+  int signcols = 0;
+  int linesum = 0;
+  linenr_T curline = 0;
+
+  FOR_ALL_SIGNS_IN_BUF(buf, sign) {
+    if (sign->se_lnum > curline) {
+      if (linesum > signcols) {
+        signcols = linesum;
+        if (signcols >= maximum) {
+          return maximum;
+        }
+      }
+      curline = sign->se_lnum;
+      linesum = 0;
+    }
+    if (sign->se_has_text_or_icon) {
+      linesum++;
+    }
+  }
+
+  if (linesum > signcols) {
+    signcols = linesum;
+    if (signcols >= maximum) {
+      return maximum;
+    }
+  }
+
+  return signcols;
+}
+
+int buf_signcols(buf_T *buf, int maximum)
 {
   if (!buf->b_signcols_valid) {
-    sign_entry_T *sign;  // a sign in the sign list
-    int signcols = 0;
-    int linesum = 0;
-    linenr_T curline = 0;
-
-    FOR_ALL_SIGNS_IN_BUF(buf, sign) {
-      if (sign->se_lnum > curline) {
-        if (linesum > signcols) {
-          signcols = linesum;
-        }
-        curline = sign->se_lnum;
-        linesum = 0;
-      }
-      if (sign->se_has_text_or_icon) {
-        linesum++;
-      }
-    }
-    if (linesum > signcols) {
-      signcols = linesum;
-    }
-
+    int signcols = buf_signcols_inner(buf, maximum);
     // Check if we need to redraw
     if (signcols != buf->b_signcols) {
       buf->b_signcols = signcols;

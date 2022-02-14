@@ -31,6 +31,7 @@
 #include "nvim/file_search.h"
 #include "nvim/fileio.h"
 #include "nvim/getchar.h"
+#include "nvim/globals.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/lua/executor.h"
@@ -545,20 +546,19 @@ void nvim_set_current_dir(String dir, Error *err)
     return;
   }
 
-  char string[MAXPATHL];
+  char_u string[MAXPATHL];
   memcpy(string, dir.data, dir.size);
   string[dir.size] = NUL;
 
   try_start();
 
-  if (vim_chdir((char_u *)string)) {
+  if (!changedir_func(string, kCdScopeGlobal)) {
     if (!try_end(err)) {
       api_set_error(err, kErrorTypeException, "Failed to change directory");
     }
     return;
   }
 
-  post_chdir(kCdScopeGlobal, true);
   try_end(err);
 }
 
@@ -601,7 +601,19 @@ void nvim_del_current_line(Error *err)
 Object nvim_get_var(String name, Error *err)
   FUNC_API_SINCE(1)
 {
-  return dict_get_value(&globvardict, name, err);
+  dictitem_T *di = tv_dict_find(&globvardict, name.data, (ptrdiff_t)name.size);
+  if (di == NULL) {  // try to autoload script
+    if (!script_autoload(name.data, name.size, false) || aborting()) {
+      api_set_error(err, kErrorTypeValidation, "Key not found: %s", name.data);
+      return (Object)OBJECT_INIT;
+    }
+    di = tv_dict_find(&globvardict, name.data, (ptrdiff_t)name.size);
+  }
+  if (di == NULL) {
+    api_set_error(err, kErrorTypeValidation, "Key not found: %s", name.data);
+    return (Object)OBJECT_INIT;
+  }
+  return vim_to_object(&di->di_tv);
 }
 
 /// Sets a global (g:) variable.
