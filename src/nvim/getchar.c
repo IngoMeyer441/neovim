@@ -1004,20 +1004,9 @@ int ins_char_typebuf(int c, int modifier)
     buf[len + 2] = (char_u)K_THIRD(c);
     buf[len + 3] = NUL;
   } else {
-    char_u *p = buf + len;
-    int char_len = utf_char2bytes(c, p);
-    len += char_len;
-    // If the character contains K_SPECIAL bytes they need escaping.
-    for (int i = char_len; --i >= 0; p++) {
-      if ((uint8_t)(*p) == K_SPECIAL) {
-        memmove(p + 3, p + 1, (size_t)i);
-        *p++ = K_SPECIAL;
-        *p++ = KS_SPECIAL;
-        *p = KE_FILLER;
-        len += 2;
-      }
-    }
-    *p = NUL;
+    char_u *end = add_char2buf(c, buf + len);
+    *end = NUL;
+    len = (int)(end - buf);
   }
   (void)ins_typebuf(buf, KeyNoremap, 0, !KeyTyped, cmd_silent);
   return len;
@@ -2466,7 +2455,7 @@ static int vgetorpeek(bool advance)
 ///      1. a scriptfile
 ///      2. the keyboard
 ///
-///  As much characters as we can get (up to 'maxlen') are put in "buf" and
+///  As many characters as we can get (up to 'maxlen') are put in "buf" and
 ///  NUL terminated (buffer length must be 'maxlen' + 1).
 ///  Minimum for "maxlen" is 3!!!!
 ///
@@ -2679,8 +2668,7 @@ void set_maparg_lhs_rhs(const char_u *orig_lhs, const size_t orig_lhs_len,
     mapargs->orig_rhs_len = 0;
     // stores <lua>ref_no<cr> in map_str
     mapargs->rhs_len = (size_t)vim_snprintf(S_LEN(tmp_buf), "%c%c%c%d\r", K_SPECIAL,
-                                            (char_u)KEY2TERMCAP0(K_LUA), KEY2TERMCAP1(K_LUA),
-                                            rhs_lua);
+                                            (char_u)KS_EXTRA, KE_LUA, rhs_lua);
     mapargs->rhs = vim_strsave((char_u *)tmp_buf);
   }
 
@@ -3434,8 +3422,8 @@ static void showmap(mapblock_T *mp, bool local)
 {
   size_t len = 1;
 
-  if (message_filtered(mp->m_keys)
-      && mp->m_str != NULL && message_filtered(mp->m_str)) {
+  if (message_filtered(mp->m_keys) && message_filtered(mp->m_str)
+      && (mp->m_desc == NULL || message_filtered((char_u *)mp->m_desc))) {
     return;
   }
 
@@ -3484,7 +3472,7 @@ static void showmap(mapblock_T *mp, bool local)
     char msg[100];
     snprintf(msg, sizeof(msg), "<Lua function %d>", mp->m_luaref);
     msg_puts_attr(msg, HL_ATTR(HLF_8));
-  } else if (mp->m_str == NULL) {
+  } else if (mp->m_str[0] == NUL) {
     msg_puts_attr("<Nop>", HL_ATTR(HLF_8));
   } else {
     // Remove escaping of K_SPECIAL, because "m_str" is in a format to be used
@@ -3584,8 +3572,7 @@ int map_to_exists_mode(const char *const rhs, const int mode, const bool abbr)
         mp = maphash[hash];
       }
       for (; mp; mp = mp->m_next) {
-        if ((mp->m_mode & mode)
-            && mp->m_str != NULL && strstr((char *)mp->m_str, rhs) != NULL) {
+        if ((mp->m_mode & mode) && strstr((char *)mp->m_str, rhs) != NULL) {
           return true;
         }
       }

@@ -4141,7 +4141,11 @@ static linenr_T get_address(exarg_T *eap, char_u **ptr, cmd_addr_T addr_type, in
       if (!ascii_isdigit(*cmd)) {       // '+' is '+1', but '+0' is not '+1'
         n = 1;
       } else {
-        n = getdigits(&cmd, true, 0);
+        n = getdigits(&cmd, false, MAXLNUM);
+        if (n == MAXLNUM) {
+          emsg(_(e_line_number_out_of_range));
+          goto error;
+        }
       }
 
       if (addr_type == ADDR_TABS_RELATIVE) {
@@ -4160,6 +4164,10 @@ static linenr_T get_address(exarg_T *eap, char_u **ptr, cmd_addr_T addr_type, in
         if (i == '-') {
           lnum -= n;
         } else {
+          if (n >= LONG_MAX - lnum) {
+            emsg(_(e_line_number_out_of_range));
+            goto error;
+          }
           lnum += n;
         }
       }
@@ -5164,6 +5172,24 @@ char_u *get_command_name(expand_T *xp, int idx)
   return cmdnames[idx].cmd_name;
 }
 
+/// Check for a valid user command name
+///
+/// If the given {name} is valid, then a pointer to the end of the valid name is returned.
+/// Otherwise, returns NULL.
+char *uc_validate_name(char *name)
+{
+  if (ASCII_ISALPHA(*name)) {
+    while (ASCII_ISALNUM(*name)) {
+      name++;
+    }
+  }
+  if (!ends_excmd(*name) && !ascii_iswhite(*name)) {
+    return NULL;
+  }
+
+  return name;
+}
+
 int uc_add_command(char_u *name, size_t name_len, char_u *rep, uint32_t argt, long def, int flags,
                    int compl, char_u *compl_arg, LuaRef compl_luaref, cmd_addr_T addr_type,
                    LuaRef luaref, bool force)
@@ -5679,23 +5705,18 @@ static void ex_command(exarg_T *eap)
 
   // Get the name (if any) and skip to the following argument.
   name = p;
-  if (ASCII_ISALPHA(*p)) {
-    while (ASCII_ISALNUM(*p)) {
-      p++;
-    }
-  }
-  if (!ends_excmd(*p) && !ascii_iswhite(*p)) {
+  end = (char_u *)uc_validate_name((char *)name);
+  if (!end) {
     emsg(_("E182: Invalid command name"));
     return;
   }
-  end = p;
-  name_len = (int)(end - name);
+  name_len = (size_t)(end - name);
 
   // If there is nothing after the name, and no attributes were specified,
   // we are listing commands
   p = skipwhite(end);
   if (!has_attr && ends_excmd(*p)) {
-    uc_list(name, end - name);
+    uc_list(name, name_len);
   } else if (!ASCII_ISUPPER(*name)) {
     emsg(_("E183: User defined commands must start with an uppercase letter"));
   } else if (name_len <= 4 && STRNCMP(name, "Next", name_len) == 0) {
@@ -5703,7 +5724,7 @@ static void ex_command(exarg_T *eap)
   } else if (compl > 0 && (argt & EX_EXTRA) == 0) {
     emsg(_(e_complete_used_without_nargs));
   } else {
-    uc_add_command(name, end - name, p, argt, def, flags, compl, compl_arg, LUA_NOREF,
+    uc_add_command(name, name_len, p, argt, def, flags, compl, compl_arg, LUA_NOREF,
                    addr_type_arg, LUA_NOREF, eap->forceit);
   }
 }
@@ -7485,7 +7506,7 @@ static void ex_edit(exarg_T *eap)
   do_exedit(eap, NULL);
 }
 
-/// ":edit <file>" command and alikes.
+/// ":edit <file>" command and alike.
 ///
 /// @param old_curwin  curwin before doing a split or NULL
 void do_exedit(exarg_T *eap, win_T *old_curwin)
@@ -7784,7 +7805,7 @@ static char_u *get_prevdir(CdScope scope)
 /// Deal with the side effects of changing the current directory.
 ///
 /// @param scope  Scope of the function call (global, tab or window).
-void post_chdir(CdScope scope, bool trigger_dirchanged)
+static void post_chdir(CdScope scope, bool trigger_dirchanged)
 {
   // Always overwrite the window-local CWD.
   XFREE_CLEAR(curwin->w_localdir);
@@ -7825,7 +7846,7 @@ void post_chdir(CdScope scope, bool trigger_dirchanged)
   shorten_fnames(true);
 
   if (trigger_dirchanged) {
-    do_autocmd_dirchanged(cwd, scope, kCdCauseManual);
+    do_autocmd_dirchanged(cwd, scope, kCdCauseManual, false);
   }
 }
 
@@ -7869,10 +7890,13 @@ bool changedir_func(char_u *new_dir, CdScope scope)
   }
 
   bool dir_differs = pdir == NULL || pathcmp((char *)pdir, (char *)new_dir, -1) != 0;
-  if (dir_differs && vim_chdir(new_dir) != 0) {
-    emsg(_(e_failed));
-    xfree(pdir);
-    return false;
+  if (dir_differs) {
+    do_autocmd_dirchanged((char *)new_dir, scope, kCdCauseManual, true);
+    if (vim_chdir(new_dir) != 0) {
+      emsg(_(e_failed));
+      xfree(pdir);
+      return false;
+    }
   }
 
   char_u **pp;

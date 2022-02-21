@@ -447,7 +447,7 @@ local function set_list(loclist, opts)
     vim.fn.setqflist({}, ' ', { title = title, items = items })
   end
   if open then
-    vim.api.nvim_command(loclist and "lopen" or "copen")
+    vim.api.nvim_command(loclist and "lopen" or "botright copen")
   end
 end
 
@@ -920,7 +920,10 @@ M.handlers.underline = {
         underline_ns,
         higroup,
         { diagnostic.lnum, diagnostic.col },
-        { diagnostic.end_lnum, diagnostic.end_col }
+        { diagnostic.end_lnum, diagnostic.end_col },
+        'v',
+        false,
+        150
       )
     end
     save_extmarks(underline_ns, bufnr)
