@@ -97,6 +97,7 @@ return {
     "special"; "sp";
     "link";
     "fallback";
+    "blend";
     "temp";
   };
   highlight_cterm = {
@@ -108,6 +109,35 @@ return {
     "italic";
     "reverse";
     "nocombine";
+  };
+  -- Autocmds
+  create_autocmd = {
+    "buffer";
+    "callback";
+    "command";
+    "desc";
+    "event";
+    "group";
+    "once";
+    "nested";
+    "pattern";
+  };
+  do_autocmd = {
+    "buffer";
+    "event";
+    "group";
+    "modeline";
+    "pattern";
+  };
+  get_autocmds = {
+    "event";
+    "group";
+    "id";
+    "pattern";
+  };
+  create_augroup = {
+    "clear";
+    "name";
   };
 }
 

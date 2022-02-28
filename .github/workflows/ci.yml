@@ -21,6 +21,7 @@ jobs:
   lint:
     if: (github.event_name == 'pull_request' && github.base_ref == 'master' && !github.event.pull_request.draft) || (github.event_name == 'push' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-20.04
+    timeout-minutes: 10
     env:
       CC: gcc
     steps:
@@ -66,8 +67,12 @@ jobs:
         uses: actions/cache@v2
         with:
           path: |
+            ${{ env.CACHE_NVIM_DEPS_DIR }}
             ~/.ccache
           key: lint-${{ hashFiles('cmake/*', '**/CMakeLists.txt', '!third-party/**CMakeLists.txt') }}-${{ github.base_ref }}
+
+      - name: Build third-party
+        run: ./ci/before_script.sh
 
       - name: Build nvim
         run: ./ci/run_tests.sh build
@@ -207,7 +212,8 @@ jobs:
         run: ./ci/before_cache.sh
 
   windows:
-    runs-on: windows-2016
+    runs-on: windows-2019
+    timeout-minutes: 45
     if: github.event.pull_request.draft == false
     env:
       DEPS_BUILD_DIR: ${{ format('{0}/nvim-deps', github.workspace) }}
