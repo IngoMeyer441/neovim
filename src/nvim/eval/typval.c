@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "lauxlib.h"
 #include "nvim/ascii.h"
 #include "nvim/assert.h"
 #include "nvim/charset.h"
@@ -1154,12 +1155,6 @@ void callback_free(Callback *callback)
   callback->data.funcref = NULL;
 }
 
-/// Check if callback is freed
-bool callback_is_freed(Callback callback)
-{
-  return false;
-}
-
 /// Copy a callback into a typval_T.
 void callback_put(Callback *cb, typval_T *tv)
   FUNC_ATTR_NONNULL_ALL
@@ -1176,8 +1171,10 @@ void callback_put(Callback *cb, typval_T *tv)
     func_ref(cb->data.funcref);
     break;
   case kCallbackLua:
-    // TODO(tjdevries): I'm not even sure if this is strictly necessary?
-    abort();
+    // TODO(tjdevries): Unified Callback.
+    // At this point this isn't possible, but it'd be nice to put
+    // these handled more neatly in one place.
+    // So instead, we just do the default and put nil
   default:
     tv->v_type = VAR_SPECIAL;
     tv->vval.v_special = kSpecialVarNull;

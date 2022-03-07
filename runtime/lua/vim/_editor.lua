@@ -3,9 +3,11 @@
 -- Lua code lives in one of three places:
 --    1. runtime/lua/vim/ (the runtime): For "nice to have" features, e.g. the
 --       `inspect` and `lpeg` modules.
---    2. runtime/lua/vim/shared.lua: Code shared between Nvim and tests.
---       (This will go away if we migrate to nvim as the test-runner.)
---    3. src/nvim/lua/: Compiled-into Nvim itself.
+--    2. runtime/lua/vim/shared.lua: pure lua functions which always
+--       are available. Used in the test runner, as well as worker threads
+--       and processes launched from Nvim.
+--    3. runtime/lua/vim/_editor.lua: Code which directly interacts with
+--       the Nvim editor state. Only available in the main thread.
 --
 -- Guideline: "If in doubt, put it in the runtime".
 --
@@ -34,47 +36,20 @@
 --    - https://github.com/bakpakin/Fennel (pretty print, repl)
 --    - https://github.com/howl-editor/howl/tree/master/lib/howl/util
 
-local vim = vim
-assert(vim)
-
-vim.inspect = package.loaded['vim.inspect']
-assert(vim.inspect)
-
-vim.filetype = package.loaded['vim.filetype']
-assert(vim.filetype)
+local vim = assert(vim)
 
 -- These are for loading runtime modules lazily since they aren't available in
 -- the nvim binary as specified in executor.c
-setmetatable(vim, {
-  __index = function(t, key)
-    if key == 'treesitter' then
-      t.treesitter = require('vim.treesitter')
-      return t.treesitter
-    elseif key == 'F' then
-      t.F = require('vim.F')
-      return t.F
-    elseif require('vim.uri')[key] ~= nil then
-      -- Expose all `vim.uri` functions on the `vim` module.
-      t[key] = require('vim.uri')[key]
-      return t[key]
-    elseif key == 'lsp' then
-      t.lsp = require('vim.lsp')
-      return t.lsp
-    elseif key == 'highlight' then
-      t.highlight = require('vim.highlight')
-      return t.highlight
-    elseif key == 'diagnostic' then
-      t.diagnostic = require('vim.diagnostic')
-      return t.diagnostic
-    elseif key == 'ui' then
-      t.ui = require('vim.ui')
-      return t.ui
-    elseif key == 'keymap' then
-      t.keymap = require('vim.keymap')
-      return t.keymap
-    end
-  end
-})
+for k,v in pairs {
+  treesitter=true;
+  filetype = true;
+  F=true;
+  lsp=true;
+  highlight=true;
+  diagnostic=true;
+  keymap=true;
+  ui=true;
+} do vim._submodules[k] = v end
 
 vim.log = {
   levels = {
@@ -244,12 +219,6 @@ function vim.schedule_wrap(cb)
     local args = vim.F.pack_len(...)
     vim.schedule(function() cb(vim.F.unpack_len(args)) end)
   end)
-end
-
---- <Docs described in |vim.empty_dict()| >
----@private
-function vim.empty_dict()
-  return setmetatable({}, vim._empty_dict_mt)
 end
 
 -- vim.fn.{func}(...)
@@ -662,4 +631,7 @@ function vim.pretty_print(...)
   return ...
 end
 
-return module
+
+require('vim._meta')
+
+return vim

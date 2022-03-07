@@ -253,11 +253,11 @@ int main(int argc, char **argv)
   // Check if we have an interactive window.
   check_and_set_isatty(&params);
 
-  nlua_init();
-
   // Process the command line arguments.  File names are put in the global
   // argument list "global_alist".
   command_line_scan(&params);
+
+  nlua_init();
 
   if (embedded_mode) {
     const char *err;
@@ -357,7 +357,7 @@ int main(int argc, char **argv)
   // Execute --cmd arguments.
   exe_pre_commands(&params);
 
-  if (!vimrc_none) {
+  if (!vimrc_none || params.clean) {
     // Sources ftplugin.vim and indent.vim. We do this *before* the user startup scripts to ensure
     // ftplugins run before FileType autocommands defined in the init file (which allows those
     // autocommands to overwrite settings from ftplugins).
@@ -368,7 +368,7 @@ int main(int argc, char **argv)
   source_startup_scripts(&params);
 
   // If using the runtime (-u is not NONE), enable syntax & filetype plugins.
-  if (!vimrc_none) {
+  if (!vimrc_none || params.clean) {
     // Sources filetype.lua and filetype.vim unless the user explicitly disabled it with :filetype
     // off.
     filetype_maybe_enable();
@@ -823,7 +823,6 @@ static void command_line_scan(mparm_T *parmp)
   bool had_stdin_file = false;          // found explicit "-" argument
   bool had_minmin = false;              // found "--" argument
   int want_argument;                    // option argument with argument
-  int c;
   long n;
 
   argc--;
@@ -845,7 +844,7 @@ static void command_line_scan(mparm_T *parmp)
       // Optional argument.
     } else if (argv[0][0] == '-' && !had_minmin) {
       want_argument = false;
-      c = argv[0][argv_idx++];
+      char c = argv[0][argv_idx++];
       switch (c) {
       case NUL:    // "nvim -"  read from stdin
         if (exmode_active) {
@@ -918,6 +917,8 @@ static void command_line_scan(mparm_T *parmp)
           parmp->use_vimrc = "NONE";
           parmp->clean = true;
           set_option_value("shadafile", 0L, "NONE", 0);
+        } else if (STRNICMP(argv[0] + argv_idx, "luamod-dev", 9) == 0) {
+          nlua_disable_preload = true;
         } else {
           if (argv[0][argv_idx]) {
             mainerr(err_opt_unknown, argv[0]);
@@ -1990,6 +1991,8 @@ static void mainerr(const char *errstr, const char *str)
 /// Prints version information for "nvim -v" or "nvim --version".
 static void version(void)
 {
+  // TODO(bfred): not like this?
+  nlua_init();
   info_message = true;  // use mch_msg(), not mch_errmsg()
   list_version();
   msg_putchar('\n');

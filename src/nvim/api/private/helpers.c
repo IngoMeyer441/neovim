@@ -406,6 +406,7 @@ void set_option_to(uint64_t channel_id, void *to, int type, String name, Object 
   });
 }
 
+
 buf_T *find_buffer_by_handle(Buffer buffer, Error *err)
 {
   if (buffer == 0) {
@@ -585,8 +586,8 @@ Array string_to_array(const String input, bool crlf)
 /// @param  buffer    Buffer handle for a specific buffer, or 0 for the current
 ///                   buffer, or -1 to signify global behavior ("all buffers")
 /// @param  is_unmap  When true, removes the mapping that matches {lhs}.
-void modify_keymap(Buffer buffer, bool is_unmap, String mode, String lhs, String rhs,
-                   Dict(keymap) *opts, Error *err)
+void modify_keymap(uint64_t channel_id, Buffer buffer, bool is_unmap, String mode, String lhs,
+                   String rhs, Dict(keymap) *opts, Error *err)
 {
   LuaRef lua_funcref = LUA_NOREF;
   bool global = (buffer == -1);
@@ -598,6 +599,8 @@ void modify_keymap(Buffer buffer, bool is_unmap, String mode, String lhs, String
   if (!target_buf) {
     return;
   }
+
+  const sctx_T save_current_sctx = api_set_sctx(channel_id);
 
   if (opts != NULL && opts->callback.type == kObjectTypeLuaRef) {
     lua_funcref = opts->callback.data.luaref;
@@ -710,6 +713,7 @@ void modify_keymap(Buffer buffer, bool is_unmap, String mode, String lhs, String
 
   parsed_args.rhs_lua = LUA_NOREF;  // don't clear ref on success
 fail_and_free:
+  current_sctx = save_current_sctx;
   NLUA_CLEAR_REF(parsed_args.rhs_lua);
   xfree(parsed_args.rhs);
   xfree(parsed_args.orig_rhs);
@@ -1614,11 +1618,64 @@ int find_sid(uint64_t channel_id)
 {
   switch (channel_id) {
   case VIML_INTERNAL_CALL:
-    // TODO(autocmd): Figure out what this should be
-    // return SID_API_CLIENT;
+  // TODO(autocmd): Figure out what this should be
+  // return SID_API_CLIENT;
   case LUA_INTERNAL_CALL:
     return SID_LUA;
   default:
     return SID_API_CLIENT;
   }
+}
+
+/// Sets sctx for API calls.
+///
+/// @param channel_id     api clients id. Used to determine if it's a internal
+///                       call or a rpc call.
+/// @return returns       previous value of current_sctx. To be used
+///                       to be used for restoring sctx to previous state.
+sctx_T api_set_sctx(uint64_t channel_id)
+{
+  sctx_T old_current_sctx = current_sctx;
+  if (channel_id != VIML_INTERNAL_CALL) {
+    current_sctx.sc_sid =
+      channel_id == LUA_INTERNAL_CALL ? SID_LUA : SID_API_CLIENT;
+    current_sctx.sc_lnum = 0;
+  }
+  return old_current_sctx;
+}
+
+// adapted from sign.c:sign_define_init_text.
+// TODO(lewis6991): Consider merging
+int init_sign_text(char_u **sign_text, char_u *text)
+{
+  char_u *s;
+
+  char_u *endp = text + (int)STRLEN(text);
+
+  // Count cells and check for non-printable chars
+  int cells = 0;
+  for (s = text; s < endp; s += utfc_ptr2len(s)) {
+    if (!vim_isprintc(utf_ptr2char(s))) {
+      break;
+    }
+    cells += utf_ptr2cells(s);
+  }
+  // Currently must be empty, one or two display cells
+  if (s != endp || cells > 2) {
+    return FAIL;
+  }
+  if (cells < 1) {
+    return OK;
+  }
+
+  // Allocate one byte more if we need to pad up
+  // with a space.
+  size_t len = (size_t)(endp - text + ((cells == 1) ? 1 : 0));
+  *sign_text = vim_strnsave(text, len);
+
+  if (cells == 1) {
+    STRCPY(*sign_text + len - 1, " ");
+  }
+
+  return OK;
 }

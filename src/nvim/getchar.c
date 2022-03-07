@@ -1712,11 +1712,10 @@ static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
   int local_State = get_real_state();
   bool is_plug_map = false;
 
-  // Check if typehead starts with a <Plug> mapping.
-  // In that case we will ignore nore flag on it.
+  // If typehead starts with <Plug> then remap, even for a "noremap" mapping.
   if (typebuf.tb_buf[typebuf.tb_off] == K_SPECIAL
-      && typebuf.tb_buf[typebuf.tb_off+1] == KS_EXTRA
-      && typebuf.tb_buf[typebuf.tb_off+2] == KE_PLUG) {
+      && typebuf.tb_buf[typebuf.tb_off + 1] == KS_EXTRA
+      && typebuf.tb_buf[typebuf.tb_off + 2] == KE_PLUG) {
     is_plug_map = true;
   }
 
@@ -1908,9 +1907,6 @@ static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
   // complete match
   if (keylen >= 0 && keylen <= typebuf.tb_len) {
     char_u *map_str = NULL;
-    int save_m_expr;
-    int save_m_noremap;
-    int save_m_silent;
 
     // Write chars to script file(s).
     // Note: :lmap mappings are written *after* being applied. #5658
@@ -1947,9 +1943,9 @@ static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
     // Copy the values from *mp that are used, because evaluating the
     // expression may invoke a function that redefines the mapping, thereby
     // making *mp invalid.
-    save_m_expr = mp->m_expr;
-    save_m_noremap = mp->m_noremap;
-    save_m_silent = mp->m_silent;
+    char save_m_expr = mp->m_expr;
+    int save_m_noremap = mp->m_noremap;
+    char save_m_silent = mp->m_silent;
     char_u *save_m_keys = NULL;  // only saved when needed
     char_u *save_m_str = NULL;  // only saved when needed
     LuaRef save_m_luaref = mp->m_luaref;
@@ -2662,9 +2658,9 @@ int fix_input_buffer(char_u *buf, int len)
 /// @param[in] orig_rhs_len   `strlen` of orig_rhs.
 /// @param[in] cpo_flags  See param docs for @ref replace_termcodes.
 /// @param[out] mapargs   MapArguments struct holding the replaced strings.
-void set_maparg_lhs_rhs(const char_u *orig_lhs, const size_t orig_lhs_len,
-                        const char_u *orig_rhs, const size_t orig_rhs_len,
-                        LuaRef rhs_lua, int cpo_flags, MapArguments *mapargs)
+void set_maparg_lhs_rhs(const char_u *orig_lhs, const size_t orig_lhs_len, const char_u *orig_rhs,
+                        const size_t orig_rhs_len, LuaRef rhs_lua, int cpo_flags,
+                        MapArguments *mapargs)
 {
   char_u *lhs_buf = NULL;
   char_u *rhs_buf = NULL;
@@ -3086,6 +3082,7 @@ int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev, buf_T 
                 mp->m_expr = args->expr;
                 mp->m_script_ctx = current_sctx;
                 mp->m_script_ctx.sc_lnum += sourcing_lnum;
+                nlua_set_sctx(&mp->m_script_ctx);
                 if (args->desc != NULL) {
                   mp->m_desc = xstrdup(args->desc);
                 }
@@ -3166,6 +3163,7 @@ int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev, buf_T 
   mp->m_expr = args->expr;
   mp->m_script_ctx = current_sctx;
   mp->m_script_ctx.sc_lnum += sourcing_lnum;
+  nlua_set_sctx(&mp->m_script_ctx);
   mp->m_desc = NULL;
   if (args->desc != NULL) {
     mp->m_desc = xstrdup(args->desc);
@@ -3987,7 +3985,7 @@ bool check_abbr(int c, char_u *ptr, int col, int mincol)
 /// special characters.
 ///
 /// @param c  NUL or typed character for abbreviation
-static char_u *eval_map_expr(mapblock_T  *mp, int c)
+static char_u *eval_map_expr(mapblock_T *mp, int c)
 {
   char_u *res;
   char_u *p = NULL;

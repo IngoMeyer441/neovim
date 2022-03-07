@@ -4,13 +4,10 @@
 // autocmd.c: Autocommand related functions
 #include <signal.h>
 
-#include "nvim/autocmd.h"
-
-// #include "nvim/api/private/handle.h"
-
 #include "lauxlib.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
+#include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
@@ -107,17 +104,6 @@ static char_u *old_termresponse = NULL;
 /// Iterates over all the AutoPats for a particular event
 #define FOR_ALL_AUPATS_IN_EVENT(event, ap) \
   for (AutoPat *ap = first_autopat[event]; ap != NULL; ap = ap->next)  // NOLINT
-
-/// Handles grabbing arguments from `:autocmd` such as ++once and ++nested
-#define ARG_GET_FLAG(errored, cmd, flag, pattern, len) \
-  if (STRNCMP(cmd, pattern, len) == 0 && ascii_iswhite((cmd)[len])) { \
-    if (flag) { \
-      semsg(_(e_duparg2), pattern); \
-      (errored) = true; \
-    } \
-    (flag) = true; \
-    (cmd) = skipwhite((cmd) + (len)); \
-  }
 
 // Map of autocmd group names.
 //  name -> ID
@@ -253,8 +239,7 @@ void aupat_del_for_event_and_group(event_T event, int group)
     }
   }
 
-  au_need_clean = true;
-  au_cleanup();  // may really delete removed patterns/commands now
+  au_cleanup();
 }
 
 // Mark all commands for a pattern for deletion.
@@ -408,6 +393,16 @@ int augroup_add(char *name)
 }
 
 /// Delete the augroup that matches name.
+/// @param stupid_legacy_mode bool: This paremeter determines whether to run the augroup
+///     deletion in the same fashion as `:augroup! {name}` where if there are any remaining
+///     autocmds left in the augroup, it will change the name of the augroup to `--- DELETED ---`
+///     but leave the autocmds existing. These are _separate_ augroups, so if you do this for
+///     multiple augroups, you will have a bunch of `--- DELETED ---` augroups at the same time.
+///     There is no way, as far as I could tell, how to actually delete them at this point as a user
+///
+///     I did not consider this good behavior, so now when NOT in stupid_legacy_mode, we actually
+///     delete these groups and their commands, like you would expect (and don't leave hanging
+///     `--- DELETED ---` groups around)
 void augroup_del(char *name, bool stupid_legacy_mode)
 {
   int i = augroup_find(name);
@@ -556,7 +551,7 @@ void free_all_autocmds(void)
   }
 
   au_need_clean = true;
-  au_cleanup();  // may really delete removed patterns/commands now
+  au_cleanup();
 
   // Delete the augroup_map, including free the data
   String name;
@@ -602,7 +597,7 @@ event_T event_name2nr(const char_u *start, char_u **end)
 /// @param[in]  event  Event to return name for.
 ///
 /// @return Event name, static string. Returns "Unknown" for unknown events.
-static const char *event_nr2name(event_T event)
+const char *event_nr2name(event_T event)
   FUNC_ATTR_NONNULL_RET FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_CONST
 {
   int i;
@@ -723,7 +718,7 @@ void do_autocmd(char_u *arg_in, int forceit)
   char_u *envpat = NULL;
   char_u *cmd;
   int need_free = false;
-  int nested = false;
+  bool nested = false;
   bool once = false;
   int group;
 
@@ -778,11 +773,11 @@ void do_autocmd(char_u *arg_in, int forceit)
     bool invalid_flags = false;
     for (size_t i = 0; i < 2; i++) {
       if (*cmd != NUL) {
-        ARG_GET_FLAG(invalid_flags, cmd, once, "++once", 6);
-        ARG_GET_FLAG(invalid_flags, cmd, nested, "++nested", 8);
+        invalid_flags |= arg_autocmd_flag_get(&once, &cmd, "++once", 6);
+        invalid_flags |= arg_autocmd_flag_get(&nested, &cmd, "++nested", 8);
 
         // Check the deprecated "nested" flag.
-        ARG_GET_FLAG(invalid_flags, cmd, nested, "nested", 6);
+        invalid_flags |= arg_autocmd_flag_get(&nested, &cmd, "nested", 6);
       }
     }
 
@@ -891,7 +886,6 @@ int do_autocmd_event(event_T event, char_u *pat, bool once, int nested, char_u *
   while (patlen) {
     // detect special <buffer[=X]> buffer-local patterns
     is_buflocal = aupat_is_buflocal(pat, patlen);
-    buflocal_nr = 0;
 
     if (is_buflocal) {
       buflocal_nr = aupat_get_buflocal_nr(pat, patlen);
@@ -946,7 +940,7 @@ int do_autocmd_event(event_T event, char_u *pat, bool once, int nested, char_u *
     patlen = (int)aucmd_pattern_length(pat);
   }
 
-  au_cleanup();
+  au_cleanup();  // may really delete removed patterns/commands now
   return OK;
 }
 
@@ -1086,6 +1080,7 @@ int autocmd_register(int64_t id, event_T event, char_u *pat, int patlen, int gro
   ac->exec = aucmd_exec_copy(aucmd);
   ac->script_ctx = current_sctx;
   ac->script_ctx.sc_lnum += sourcing_lnum;
+  nlua_set_sctx(&ac->script_ctx);
   ac->next = NULL;
   ac->once = once;
   ac->nested = nested;
@@ -2050,6 +2045,8 @@ char_u *getnextac(int c, void *cookie, int indent, bool do_concat)
     typval_T rettv = TV_INITIAL_VALUE;
     callback_call(&ac->exec.callable.cb, 0, &argsin, &rettv);
 
+    // TODO(tjdevries):
+    //
     // Major Hack Alert:
     //  We just return "not-null" and continue going.
     //  This would be a good candidate for a refactor. You would need to refactor:
@@ -2057,7 +2054,7 @@ char_u *getnextac(int c, void *cookie, int indent, bool do_concat)
     //      OR
     //      2. make where we call do_cmdline for autocmds not have to return anything,
     //      and instead we loop over all the matches and just execute one-by-one.
-    //          However, my expectation woudl be that could be expensive.
+    //          However, my expectation would be that could be expensive.
     retval = vim_strsave((char_u *)"");
   } else {
     retval = vim_strsave(ac->exec.callable.cmd);
@@ -2475,7 +2472,7 @@ bool aucmd_exec_is_deleted(AucmdExecutable acc)
   case CALLABLE_EX:
     return acc.callable.cmd == NULL;
   case CALLABLE_CB:
-    return callback_is_freed(acc.callable.cb);
+    return acc.callable.cb.type == kCallbackNone;
   case CALLABLE_NONE:
     return true;
   }
@@ -2542,6 +2539,22 @@ static int arg_augroup_get(char_u **argp)
     xfree(group_name);
   }
   return group;
+}
+
+/// Handles grabbing arguments from `:autocmd` such as ++once and ++nested
+static bool arg_autocmd_flag_get(bool *flag, char_u **cmd_ptr, char *pattern, int len)
+{
+  if (STRNCMP(*cmd_ptr, pattern, len) == 0 && ascii_iswhite((*cmd_ptr)[len])) {
+    if (*flag) {
+      semsg(_(e_duparg2), pattern);
+      return true;
+    }
+
+    *flag = true;
+    *cmd_ptr = skipwhite((*cmd_ptr) + len);
+  }
+
+  return false;
 }
 
 
