@@ -1544,23 +1544,21 @@ nvim_set_current_win({window})                        *nvim_set_current_win()*
                     {window}  Window handle
 
 nvim_set_hl({ns_id}, {name}, {*val})                           *nvim_set_hl()*
-                Set a highlight group.
+                Sets a highlight group.
 
                 Parameters: ~
-                    {ns_id}  number of namespace for this highlight. Use value
-                             0 to set a highlight group in the global (
-                             `:highlight` ) namespace.
-                    {name}   highlight group name, like ErrorMsg
-                    {val}    highlight definition map, like
-                             |nvim_get_hl_by_name|. in addition the following
-                             keys are also recognized: `default` : don't
-                             override existing definition, like `hi default`
-                             `ctermfg` : sets foreground of cterm color
-                             `ctermbg` : sets background of cterm color
-                             `cterm` : cterm attribute map. sets attributed
-                             for cterm colors. similer to `hi cterm` Note: by
-                             default cterm attributes are same as attributes
-                             of gui color
+                    {ns_id}  Namespace id for this highlight |nvim_create_namespace()|.
+                             Use 0 to set a highlight group globally |:highlight|.
+                    {name}   Highlight group name, e.g. "ErrorMsg"
+                    {val}    Highlight definition map, like |synIDattr()|. In
+                             addition, the following keys are recognized:
+                             • default: Don't override existing definition |:hi-default|
+                             • ctermfg: Sets foreground of cterm color |highlight-ctermfg|
+                             • ctermbg: Sets background of cterm color |highlight-ctermbg|
+                             • cterm: cterm attribute map, like
+                               |highlight-args|.
+                               Note: Attributes default to those set for `gui`
+                                     if not set.
 
 nvim_set_keymap({mode}, {lhs}, {rhs}, {*opts})             *nvim_set_keymap()*
                 Sets a global |mapping| for the given mode.
@@ -3165,7 +3163,7 @@ nvim_create_autocmd({event}, {*opts})                  *nvim_create_autocmd()*
                               • create a |autocmd-buflocal| autocmd.
                               • NOTE: Cannot be used with {pattern}
 
-                            • group: (string) The augroup name
+                            • group: (string|int) The augroup name or id
                             • once: (boolean) - See |autocmd-once|
                             • nested: (boolean) - See |autocmd-nested|
                             • desc: (string) - Description of the autocmd
@@ -3213,7 +3211,7 @@ nvim_do_autocmd({event}, {*opts})                          *nvim_do_autocmd()*
                                "*".
                                • NOTE: Cannot be used with {buffer}
 
-                             • group (string) - autocmd group name
+                             • group (string|int) - autocmd group name or id
                              • modeline (boolean) - Default true, see
                                |<nomodeline>|
 
@@ -3224,7 +3222,8 @@ nvim_get_autocmds({*opts})                               *nvim_get_autocmds()*
                     {opts}  Optional Parameters:
                             • event : Name or list of name of events to match
                               against
-                            • group (string): Name of group to match against
+                            • group (string|int): Name or id of group to match
+                              against
                             • pattern: Pattern or list of patterns to match
                               against. Cannot be used with {buffer}
                             • buffer: Buffer number or list of buffer numbers

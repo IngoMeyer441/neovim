@@ -2710,7 +2710,7 @@ bool next_for_item(void *fi_void, char_u *arg)
     tv.vval.v_string = vim_strnsave(fi->fi_string + fi->fi_byte_idx, len);
     fi->fi_byte_idx += len;
     const int result
-        = ex_let_vars(arg, &tv, true, fi->fi_semicolon, fi->fi_varcount, false, NULL) == OK;
+      = ex_let_vars(arg, &tv, true, fi->fi_semicolon, fi->fi_varcount, false, NULL) == OK;
     xfree(tv.vval.v_string);
     return result;
   }
@@ -6436,7 +6436,7 @@ win_T *find_win_by_nr_or_id(typval_T *vp)
   int nr = (int)tv_get_number_chk(vp, NULL);
 
   if (nr >= LOWEST_WIN_ID) {
-    return win_id2wp(vp);
+    return win_id2wp(tv_get_number(vp));
   }
 
   return find_win_by_nr(vp, NULL);
@@ -7789,8 +7789,7 @@ bool callback_call(Callback *const callback, const int argcount_in, typval_T *co
     break;
 
   case kCallbackLua:
-    ILOG(" We tryin  to call dat dang lua ref ");
-    nlua_call_ref(callback->data.luaref, "aucmd", args, false, NULL);
+    nlua_call_ref(callback->data.luaref, NULL, args, false, NULL);
 
     return false;
     break;
@@ -9441,7 +9440,7 @@ void new_script_vars(scid_T id)
   hashtab_T *ht;
   scriptvar_T *sv;
 
-  ga_grow(&ga_scripts, (int)(id - ga_scripts.ga_len));
+  ga_grow(&ga_scripts, id - ga_scripts.ga_len);
   {
     /* Re-allocating ga_data means that an ht_array pointing to
      * ht_smallarray becomes invalid.  We can recognize this: ht_mask is

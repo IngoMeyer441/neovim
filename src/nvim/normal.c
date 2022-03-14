@@ -2105,10 +2105,9 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
     } else {  // MOUSE_RIGHT
       stuffcharReadbuff('#');
     }
-  }
-  // Handle double clicks, unless on status line
-  else if (in_status_line) {
-  } else if (in_sep_line) {
+  } else if (in_status_line || in_sep_line) {
+    // Do nothing if on status line or vertical separator
+    // Handle double clicks otherwise
   } else if ((mod_mask & MOD_MASK_MULTI_CLICK) && (State & (NORMAL | INSERT))) {
     if (is_click || !VIsual_active) {
       if (VIsual_active) {
@@ -3569,7 +3568,6 @@ static void nv_zet(cmdarg_T *cap)
   bool undo = false;
 
   int l_p_siso = (int)get_sidescrolloff_value(curwin);
-  assert(l_p_siso <= INT_MAX);
 
   if (ascii_isdigit(nchar)) {
     /*

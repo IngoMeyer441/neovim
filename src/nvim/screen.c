@@ -75,6 +75,7 @@
 #include "nvim/cursor.h"
 #include "nvim/cursor_shape.h"
 #include "nvim/decoration.h"
+#include "nvim/decoration_provider.h"
 #include "nvim/diff.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
@@ -126,8 +127,6 @@
 #define MB_FILLER_CHAR '<'  /* character used when a double-width character
                              * doesn't fit. */
 
-typedef kvec_withinit_t(DecorProvider *, 4) Providers;
-
 // temporary buffer for rendering a single screenline, so it can be
 // compared with previous contents to calculate smallest delta.
 // Per-cell attributes
@@ -167,36 +166,6 @@ static bool resizing = false;
 #define SEARCH_HL_PRIORITY 0
 
 static char *provider_err = NULL;
-
-static bool provider_invoke(NS ns_id, const char *name, LuaRef ref, Array args, bool default_true)
-{
-  Error err = ERROR_INIT;
-
-  textlock++;
-  provider_active = true;
-  Object ret = nlua_call_ref(ref, name, args, true, &err);
-  provider_active = false;
-  textlock--;
-
-  if (!ERROR_SET(&err)
-      && api_object_to_bool(ret, "provider %s retval", default_true, &err)) {
-    return true;
-  }
-
-  if (ERROR_SET(&err)) {
-    const char *ns_name = describe_ns(ns_id);
-    ELOG("error in provider %s:%s: %s", ns_name, name, err.msg);
-    bool verbose_errs = true;  // TODO(bfredl):
-    if (verbose_errs && provider_err == NULL) {
-      static char errbuf[IOSIZE];
-      snprintf(errbuf, sizeof errbuf, "%s: %s", ns_name, err.msg);
-      provider_err = xstrdup(errbuf);
-    }
-  }
-
-  api_free_object(ret);
-  return false;
-}
 
 /// Redraw a window later, with update_screen(type).
 ///
@@ -501,28 +470,8 @@ int update_screen(int type)
 
   ui_comp_set_screen_valid(true);
 
-  Providers providers;
-  kvi_init(providers);
-  for (size_t i = 0; i < kv_size(decor_providers); i++) {
-    DecorProvider *p = &kv_A(decor_providers, i);
-    if (!p->active) {
-      continue;
-    }
-
-    bool active;
-    if (p->redraw_start != LUA_NOREF) {
-      FIXED_TEMP_ARRAY(args, 2);
-      args.items[0] = INTEGER_OBJ(display_tick);
-      args.items[1] = INTEGER_OBJ(type);
-      active = provider_invoke(p->ns_id, "start", p->redraw_start, args, true);
-    } else {
-      active = true;
-    }
-
-    if (active) {
-      kvi_push(providers, p);
-    }
-  }
+  DecorProviders providers;
+  decor_providers_start(&providers, type, &provider_err);
 
   // "start" callback could have changed highlights for global elements
   if (win_check_ns_hl(NULL)) {
@@ -591,14 +540,7 @@ int update_screen(int type)
       }
 
       if (buf->b_mod_tick_decor < display_tick) {
-        for (size_t i = 0; i < kv_size(providers); i++) {
-          DecorProvider *p = kv_A(providers, i);
-          if (p && p->redraw_buf != LUA_NOREF) {
-            FIXED_TEMP_ARRAY(args, 1);
-            args.items[0] = BUFFER_OBJ(buf->handle);
-            provider_invoke(p->ns_id, "buf", p->redraw_buf, args, true);
-          }
-        }
+        decor_providers_invoke_buf(buf, &providers, &provider_err);
         buf->b_mod_tick_decor = display_tick;
       }
     }
@@ -668,18 +610,7 @@ int update_screen(int type)
   }
   did_intro = true;
 
-  for (size_t i = 0; i < kv_size(providers); i++) {
-    DecorProvider *p = kv_A(providers, i);
-    if (!p->active) {
-      continue;
-    }
-
-    if (p->redraw_end != LUA_NOREF) {
-      FIXED_TEMP_ARRAY(args, 1);
-      args.items[0] = INTEGER_OBJ(display_tick);
-      provider_invoke(p->ns_id, "end", p->redraw_end, args, true);
-    }
-  }
+  decor_providers_invoke_end(&providers, &provider_err);
   kvi_destroy(providers);
 
 
@@ -766,7 +697,7 @@ bool win_cursorline_standout(const win_T *wp)
  * mid: from mid_start to mid_end (update inversion or changed text)
  * bot: from bot_start to last row (when scrolled up)
  */
-static void win_update(win_T *wp, Providers *providers)
+static void win_update(win_T *wp, DecorProviders *providers)
 {
   buf_T *buf = wp->w_buffer;
   int type;
@@ -1377,30 +1308,8 @@ static void win_update(win_T *wp, Providers *providers)
 
   decor_redraw_reset(buf, &decor_state);
 
-  Providers line_providers;
-  kvi_init(line_providers);
-
-  linenr_T knownmax = ((wp->w_valid & VALID_BOTLINE)
-                       ? wp->w_botline
-                       : (wp->w_topline + wp->w_height_inner));
-
-  for (size_t k = 0; k < kv_size(*providers); k++) {
-    DecorProvider *p = kv_A(*providers, k);
-    if (p && p->redraw_win != LUA_NOREF) {
-      FIXED_TEMP_ARRAY(args, 4);
-      args.items[0] = WINDOW_OBJ(wp->handle);
-      args.items[1] = BUFFER_OBJ(buf->handle);
-      // TODO(bfredl): we are not using this, but should be first drawn line?
-      args.items[2] = INTEGER_OBJ(wp->w_topline-1);
-      args.items[3] = INTEGER_OBJ(knownmax);
-      if (provider_invoke(p->ns_id, "win", p->redraw_win, args, true)) {
-        kvi_push(line_providers, p);
-      }
-    }
-  }
-
-  win_check_ns_hl(wp);
-
+  DecorProviders line_providers;
+  decor_providers_invoke_win(wp, providers, &line_providers, &provider_err);
 
   for (;;) {
     /* stop updating when reached the end of the window (check for _past_
@@ -2028,6 +1937,38 @@ static size_t fill_foldcolumn(char_u *p, win_T *wp, foldinfo_T foldinfo, linenr_
   return MAX(char_counter + (fdc-i), (size_t)fdc);
 }
 
+static inline void provider_err_virt_text(linenr_T lnum, char *err)
+{
+  Decoration err_decor = DECORATION_INIT;
+  int hl_err = syn_check_group(S_LEN("ErrorMsg"));
+  kv_push(err_decor.virt_text,
+          ((VirtTextChunk){ .text = provider_err,
+                            .hl_id = hl_err }));
+  err_decor.virt_text_width = mb_string2cells((char_u *)err);
+  decor_add_ephemeral(lnum-1, 0, lnum-1, 0, &err_decor);
+}
+
+static inline void get_line_number_str(win_T *wp, linenr_T lnum, char_u *buf, size_t buf_len)
+{
+  long num;
+  char *fmt = "%*ld ";
+
+  if (wp->w_p_nu && !wp->w_p_rnu) {
+    // 'number' + 'norelativenumber'
+    num = (long)lnum;
+  } else {
+    // 'relativenumber', don't use negative numbers
+    num = labs((long)get_cursor_rel_lnum(wp, lnum));
+    if (num == 0 && wp->w_p_nu && wp->w_p_rnu) {
+      // 'number' + 'relativenumber'
+      num = lnum;
+      fmt = "%-*ld ";
+    }
+  }
+
+  snprintf((char *)buf, buf_len, fmt, number_width(wp), num);
+}
+
 /// Display line "lnum" of window 'wp' on the screen.
 /// wp->w_virtcol needs to be valid.
 ///
@@ -2043,7 +1984,7 @@ static size_t fill_foldcolumn(char_u *p, win_T *wp, foldinfo_T foldinfo, linenr_
 ///
 /// @return             the number of last row the line occupies.
 static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange,
-                    bool number_only, foldinfo_T foldinfo, Providers *providers)
+                    bool number_only, foldinfo_T foldinfo, DecorProviders *providers)
 {
   int c = 0;                          // init for GCC
   long vcol = 0;                      // virtual column (for tabs)
@@ -2208,8 +2149,6 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
   buf_T *buf = wp->w_buffer;
   bool end_fill = (lnum == buf->b_ml.ml_line_count+1);
 
-  has_decor = decor_redraw_line(buf, lnum-1, &decor_state);
-
   if (!number_only) {
     // To speed up the loop below, set extra_check when there is linebreak,
     // trailing white space and/or syntax processing to be done.
@@ -2231,34 +2170,14 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
       }
     }
 
-    for (size_t k = 0; k < kv_size(*providers); k++) {
-      DecorProvider *p = kv_A(*providers, k);
-      if (p && p->redraw_line != LUA_NOREF) {
-        FIXED_TEMP_ARRAY(args, 3);
-        args.items[0] = WINDOW_OBJ(wp->handle);
-        args.items[1] = BUFFER_OBJ(buf->handle);
-        args.items[2] = INTEGER_OBJ(lnum-1);
-        if (provider_invoke(p->ns_id, "line", p->redraw_line, args, true)) {
-          has_decor = true;
-        } else {
-          // return 'false' or error: skip rest of this window
-          kv_A(*providers, k) = NULL;
-        }
+    has_decor = decor_redraw_line(buf, lnum-1, &decor_state);
 
-        win_check_ns_hl(wp);
-      }
-    }
+    providers_invoke_line(wp, providers, lnum-1, &has_decor, &provider_err);
 
     if (provider_err) {
-      Decoration err_decor = DECORATION_INIT;
-      int hl_err = syn_check_group(S_LEN("ErrorMsg"));
-      kv_push(err_decor.virt_text,
-              ((VirtTextChunk){ .text = provider_err,
-                                .hl_id = hl_err }));
-      err_decor.virt_text_width = mb_string2cells((char_u *)provider_err);
-      decor_add_ephemeral(lnum-1, 0, lnum-1, 0, &err_decor);
-      provider_err = NULL;
+      provider_err_virt_text(lnum, provider_err);
       has_decor = true;
+      provider_err = NULL;
     }
 
     if (has_decor) {
@@ -2459,9 +2378,7 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
 
   memset(sattrs, 0, sizeof(sattrs));
   num_signs = buf_get_signattrs(wp->w_buffer, lnum, sattrs);
-  if (decor_state.has_sign_decor) {
-    decor_redraw_signs(buf, &decor_state, lnum-1, &num_signs, sattrs);
-  }
+  decor_redraw_signs(buf, lnum-1, &num_signs, sattrs);
 
   // If this line has a sign with line highlighting set line_attr.
   // TODO(bfredl, vigoux): this should not take priority over decoration!
@@ -2806,8 +2723,13 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
           get_sign_display_info(false, wp, lnum, sattrs, row,
                                 startrow, filler_lines, filler_todo,
                                 &c_extra, &c_final, extra, sizeof(extra),
-                                &p_extra, &n_extra,
-                                &char_attr, &draw_state, &sign_idx);
+                                &p_extra, &n_extra, &char_attr, sign_idx);
+          sign_idx++;
+          if (sign_idx < wp->w_scwidth) {
+            draw_state = WL_SIGN - 1;
+          } else {
+            sign_idx = 0;
+          }
         }
       }
 
@@ -2826,29 +2748,11 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
             get_sign_display_info(true, wp, lnum, sattrs, row,
                                   startrow, filler_lines, filler_todo,
                                   &c_extra, &c_final, extra, sizeof(extra),
-                                  &p_extra, &n_extra,
-                                  &char_attr, &draw_state, &sign_idx);
+                                  &p_extra, &n_extra, &char_attr, sign_idx);
           } else {
+            // Draw the line number (empty space after wrapping).
             if (row == startrow + filler_lines) {
-              // Draw the line number (empty space after wrapping). */
-              long num;
-              char *fmt = "%*ld ";
-
-              if (wp->w_p_nu && !wp->w_p_rnu) {
-                // 'number' + 'norelativenumber'
-                num = (long)lnum;
-              } else {
-                // 'relativenumber', don't use negative numbers
-                num = labs((long)get_cursor_rel_lnum(wp, lnum));
-                if (num == 0 && wp->w_p_nu && wp->w_p_rnu) {
-                  // 'number' + 'relativenumber'
-                  num = lnum;
-                  fmt = "%-*ld ";
-                }
-              }
-
-              snprintf((char *)extra, sizeof(extra),
-                       fmt, number_width(wp), num);
+              get_line_number_str(wp, lnum, (char_u *)extra, sizeof(extra));
               if (wp->w_skipcol > 0) {
                 for (p_extra = extra; *p_extra == ' '; p_extra++) {
                   *p_extra = '-';
@@ -2866,41 +2770,12 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
               }
               p_extra = extra;
               c_extra = NUL;
-              c_final = NUL;
             } else {
               c_extra = ' ';
-              c_final = NUL;
             }
+            c_final = NUL;
             n_extra = number_width(wp) + 1;
-            char_attr = win_hl_attr(wp, HLF_N);
-
-            if (wp->w_p_rnu && lnum < wp->w_cursor.lnum) {
-              // Use LineNrAbove
-              char_attr = win_hl_attr(wp, HLF_LNA);
-            }
-            if (wp->w_p_rnu && lnum > wp->w_cursor.lnum) {
-              // Use LineNrBelow
-              char_attr = win_hl_attr(wp, HLF_LNB);
-            }
-
-            sign_attrs_T *num_sattr = sign_get_attr(SIGN_NUMHL, sattrs, 0, 1);
-            if (num_sattr != NULL) {
-              // :sign defined with "numhl" highlight.
-              char_attr = num_sattr->sat_numhl;
-            } else if (wp->w_p_cul
-                       && lnum == wp->w_cursor.lnum
-                       && (wp->w_p_culopt_flags & CULOPT_NBR)
-                       && (row == startrow
-                           || wp->w_p_culopt_flags & CULOPT_LINE)
-                       && filler_todo == 0) {
-              // When 'cursorline' is set highlight the line number of
-              // the current line differently.
-              // When 'cursorlineopt' has "screenline" only highlight
-              // the line number itself.
-              // TODO(vim): Can we use CursorLine instead of CursorLineNr
-              // when CursorLineNr isn't set?
-              char_attr = win_hl_attr(wp, HLF_CLN);
-            }
+            char_attr = get_line_number_attr(wp, lnum, row, startrow, filler_lines, sattrs);
           }
         }
       }
@@ -4673,20 +4548,66 @@ static bool use_cursor_line_sign(win_T *wp, linenr_T lnum)
          && (wp->w_p_culopt_flags & CULOPT_NBR);
 }
 
+/// Return true if CursorLineNr highlight is to be used for the number column.
+///
+/// - 'cursorline' must be set
+/// - lnum must be the cursor line
+/// - 'cursorlineopt' has "number"
+/// - don't highlight filler lines (when in diff mode)
+/// - When line is wrapped and 'cursorlineopt' does not have "line", only highlight the line number
+///   itself on the first screenline of the wrapped line, otherwise highlight the number column of
+///   all screenlines of the wrapped line.
+static bool use_cursor_line_nr(win_T *wp, linenr_T lnum, int row, int startrow, int filler_lines)
+{
+  return wp->w_p_cul
+         && lnum == wp->w_cursor.lnum
+         && (wp->w_p_culopt_flags & CULOPT_NBR)
+         && (row == startrow + filler_lines
+             || (row > startrow + filler_lines
+                 && (wp->w_p_culopt_flags & CULOPT_LINE)));
+}
+
+static int get_line_number_attr(win_T *wp, linenr_T lnum, int row, int startrow, int filler_lines,
+                                sign_attrs_T *sattrs)
+{
+  sign_attrs_T *num_sattr = sign_get_attr(SIGN_NUMHL, sattrs, 0, 1);
+  if (num_sattr != NULL) {
+    // :sign defined with "numhl" highlight.
+    return num_sattr->sat_numhl;
+  }
+
+  if (wp->w_p_rnu) {
+    if (lnum < wp->w_cursor.lnum) {
+      // Use LineNrAbove
+      return win_hl_attr(wp, HLF_LNA);
+    }
+    if (lnum > wp->w_cursor.lnum) {
+      // Use LineNrBelow
+      return win_hl_attr(wp, HLF_LNB);
+    }
+  }
+
+  if (use_cursor_line_nr(wp, lnum, row, startrow, filler_lines)) {
+    // TODO(vim): Can we use CursorLine instead of CursorLineNr
+    // when CursorLineNr isn't set?
+    return win_hl_attr(wp, HLF_CLN);
+  }
+
+  return win_hl_attr(wp, HLF_N);
+}
+
 // Get information needed to display the sign in line 'lnum' in window 'wp'.
 // If 'nrcol' is TRUE, the sign is going to be displayed in the number column.
 // Otherwise the sign is going to be displayed in the sign column.
 //
 // @param count max number of signs
 // @param[out] n_extrap number of characters from pp_extra to display
-// @param[in, out] sign_idxp Index of the displayed sign
+// @param sign_idxp Index of the displayed sign
 static void get_sign_display_info(bool nrcol, win_T *wp, linenr_T lnum, sign_attrs_T sattrs[],
                                   int row, int startrow, int filler_lines, int filler_todo,
-                                  int *c_extrap, int *c_finalp, char_u *extra,
-                                  size_t extra_size, char_u **pp_extra, int *n_extrap,
-                                  int *char_attrp, int *draw_statep, int *sign_idxp)
+                                  int *c_extrap, int *c_finalp, char_u *extra, size_t extra_size,
+                                  char_u **pp_extra, int *n_extrap, int *char_attrp, int sign_idx)
 {
-  int count = wp->w_scwidth;
   // Draw cells with the sign value or blank.
   *c_extrap = ' ';
   *c_finalp = NUL;
@@ -4702,7 +4623,7 @@ static void get_sign_display_info(bool nrcol, win_T *wp, linenr_T lnum, sign_att
   }
 
   if (row == startrow + filler_lines && filler_todo <= 0) {
-    sign_attrs_T *sattr = sign_get_attr(SIGN_TEXT, sattrs, *sign_idxp, count);
+    sign_attrs_T *sattr = sign_get_attr(SIGN_TEXT, sattrs, sign_idx, wp->w_scwidth);
     if (sattr != NULL) {
       *pp_extra = sattr->sat_text;
       if (*pp_extra != NULL) {
@@ -4744,13 +4665,6 @@ static void get_sign_display_info(bool nrcol, win_T *wp, linenr_T lnum, sign_att
         *char_attrp = sattr->sat_texthl;
       }
     }
-  }
-
-  (*sign_idxp)++;
-  if (*sign_idxp < count) {
-    *draw_statep = WL_SIGN - 1;
-  } else {
-    *sign_idxp = 0;
   }
 }
 

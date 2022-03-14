@@ -150,7 +150,6 @@ bool decor_redraw_reset(buf_T *buf, DecorState *state)
 {
   state->row = -1;
   state->buf = buf;
-  state->has_sign_decor = false;
   for (size_t i = 0; i < kv_size(state->active); i++) {
     DecorRange item = kv_A(state->active, i);
     if (item.virt_text_owned) {
@@ -199,11 +198,6 @@ bool decor_redraw_start(buf_T *buf, int top_row, DecorState *state)
     if (!mt_paired(mark)
         && !kv_size(decor.virt_text)
         && !decor_has_sign(&decor)) {
-      goto next_mark;
-    }
-
-    // Don't add signs for end marks as the start mark has already been added.
-    if (mt_end(mark) && decor_has_sign(&decor)) {
       goto next_mark;
     }
 
@@ -270,10 +264,6 @@ static void decor_add(DecorState *state, int start_row, int start_col, int end_r
     kv_A(state->active, index) = kv_A(state->active, index-1);
   }
   kv_A(state->active, index) = range;
-
-  if (decor_has_sign(decor)) {
-    state->has_sign_decor = true;
-  }
 }
 
 int decor_redraw_col(buf_T *buf, int col, int win_col, bool hidden, DecorState *state)
@@ -327,8 +317,7 @@ next_mark:
     bool active = false, keep = true;
     if (item.end_row < state->row
         || (item.end_row == state->row && item.end_col <= col)) {
-      if (!(item.start_row >= state->row && kv_size(item.decor.virt_text))
-          && !decor_has_sign(&item.decor)) {
+      if (!(item.start_row >= state->row && kv_size(item.decor.virt_text))) {
         keep = false;
       }
     } else {
@@ -363,19 +352,29 @@ next_mark:
   return attr;
 }
 
-void decor_redraw_signs(buf_T *buf, DecorState *state, int row,
-                        int *num_signs, sign_attrs_T sattrs[])
+void decor_redraw_signs(buf_T *buf, int row, int *num_signs, sign_attrs_T sattrs[])
 {
-  for (size_t i = 0; i < kv_size(state->active); i++) {
-    DecorRange item = kv_A(state->active, i);
-    Decoration *decor = &item.decor;
+  if (!buf->b_signs) {
+    return;
+  }
 
-    if (!decor_has_sign(decor)) {
-      continue;
+  MarkTreeIter itr[1] = { 0 };
+  marktree_itr_get(buf->b_marktree, row, 0, itr);
+
+  while (true) {
+    mtkey_t mark = marktree_itr_current(itr);
+    if (mark.pos.row < 0 || mark.pos.row > row) {
+      break;
     }
 
-    if (state->row != item.start_row) {
-      continue;
+    if (mt_end(mark) || marktree_decor_level(mark) < kDecorLevelVisible) {
+      goto next_mark;
+    }
+
+    Decoration *decor = mark.decor_full;
+
+    if (!decor || !decor_has_sign(decor)) {
+      goto next_mark;
     }
 
     int j;
@@ -403,6 +402,9 @@ void decor_redraw_signs(buf_T *buf, DecorState *state, int row,
       sattrs[j].sat_prio = decor->priority;
       (*num_signs)++;
     }
+
+next_mark:
+    marktree_itr_next(buf->b_marktree, itr);
   }
 }
 
@@ -520,59 +522,6 @@ void decor_add_ephemeral(int start_row, int start_col, int end_row, int end_col,
   decor_add(&decor_state, start_row, start_col, end_row, end_col, decor, true);
 }
 
-
-DecorProvider *get_decor_provider(NS ns_id, bool force)
-{
-  size_t i;
-  size_t len = kv_size(decor_providers);
-  for (i = 0; i < len; i++) {
-    DecorProvider *item = &kv_A(decor_providers, i);
-    if (item->ns_id == ns_id) {
-      return item;
-    } else if (item->ns_id > ns_id) {
-      break;
-    }
-  }
-
-  if (!force) {
-    return NULL;
-  }
-
-  // Adding a new provider, so allocate room in the vector
-  (void)kv_a(decor_providers, len);
-  if (i < len) {
-    // New ns_id needs to be inserted between existing providers to maintain
-    // ordering, so shift other providers with larger ns_id
-    memmove(&kv_A(decor_providers, i + 1),
-            &kv_A(decor_providers, i),
-            (len - i) * sizeof(kv_a(decor_providers, i)));
-  }
-  DecorProvider *item = &kv_a(decor_providers, i);
-  *item = DECORATION_PROVIDER_INIT(ns_id);
-
-  return item;
-}
-
-void decor_provider_clear(DecorProvider *p)
-{
-  if (p == NULL) {
-    return;
-  }
-  NLUA_CLEAR_REF(p->redraw_start);
-  NLUA_CLEAR_REF(p->redraw_buf);
-  NLUA_CLEAR_REF(p->redraw_win);
-  NLUA_CLEAR_REF(p->redraw_line);
-  NLUA_CLEAR_REF(p->redraw_end);
-  p->active = false;
-}
-
-void decor_free_all_mem(void)
-{
-  for (size_t i = 0; i < kv_size(decor_providers); i++) {
-    decor_provider_clear(&kv_A(decor_providers, i));
-  }
-  kv_destroy(decor_providers);
-}
 
 
 int decor_virt_lines(win_T *wp, linenr_T lnum, VirtLines *lines)

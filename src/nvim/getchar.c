@@ -842,7 +842,10 @@ static void init_typebuf(void)
 void init_default_mappings(void)
 {
   add_map((char_u *)"Y y$", NORMAL, true);
-  add_map((char_u *)"<C-L> <Cmd>nohlsearch<Bar>diffupdate<CR><C-L>", NORMAL, true);
+
+  // Use normal! <C-L> to prevent inserting raw <C-L> when using i_<C-O>
+  // See https://github.com/neovim/neovim/issues/17473
+  add_map((char_u *)"<C-L> <Cmd>nohlsearch<Bar>diffupdate<Bar>normal! <C-L><CR>", NORMAL, true);
   add_map((char_u *)"<C-U> <C-G>u<C-U>", INSERT, true);
   add_map((char_u *)"<C-W> <C-G>u<C-W>", INSERT, true);
 }
@@ -4140,7 +4143,7 @@ int makemap(FILE *fd, buf_T *buf)
         }
         for (p = mp->m_str; *p != NUL; p++) {
           if (p[0] == K_SPECIAL && p[1] == KS_EXTRA
-              && p[2] == (int)KE_SNR) {
+              && p[2] == KE_SNR) {
             break;
           }
         }

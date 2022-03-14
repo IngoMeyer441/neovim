@@ -22,6 +22,7 @@
 #include "nvim/charset.h"
 #include "nvim/context.h"
 #include "nvim/decoration.h"
+#include "nvim/decoration_provider.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
@@ -122,26 +123,24 @@ Dictionary nvim__get_hl_defs(Integer ns_id, Error *err)
   abort();
 }
 
-/// Set a highlight group.
+/// Sets a highlight group.
 ///
-/// Note: unlike the `:highlight` command which can update a highlight group,
+/// Note: Unlike the `:highlight` command which can update a highlight group,
 /// this function completely replaces the definition. For example:
 /// `nvim_set_hl(0, 'Visual', {})` will clear the highlight group 'Visual'.
 ///
-/// @param ns_id number of namespace for this highlight. Use value 0
-///              to set a highlight group in the global (`:highlight`)
-///              namespace.
-/// @param name highlight group name, like ErrorMsg
-/// @param val highlight definition map, like |nvim_get_hl_by_name|.
-///            in addition the following keys are also recognized:
-///              `default`: don't override existing definition,
-///                         like `hi default`
-///              `ctermfg`: sets foreground of cterm color
-///              `ctermbg`: sets background of cterm color
-///              `cterm`  : cterm attribute map. sets attributed for
-///                         cterm colors. similer to `hi cterm`
-///                         Note: by default cterm attributes are
-///                               same as attributes of gui color
+/// @param ns_id Namespace id for this highlight |nvim_create_namespace()|.
+///              Use 0 to set a highlight group globally |:highlight|.
+/// @param name  Highlight group name, e.g. "ErrorMsg"
+/// @param val   Highlight definition map, like |synIDattr()|. In
+///              addition, the following keys are recognized:
+///                - default: Don't override existing definition |:hi-default|
+///                - ctermfg: Sets foreground of cterm color |highlight-ctermfg|
+///                - ctermbg: Sets background of cterm color |highlight-ctermbg|
+///                - cterm: cterm attribute map, like
+///                  |highlight-args|.
+///                  Note: Attributes default to those set for `gui`
+///                        if not set.
 /// @param[out] err Error details, if any
 ///
 // TODO(bfredl): val should take update vs reset flag
@@ -220,7 +219,7 @@ void nvim_feedkeys(String keys, String mode, Boolean escape_ks)
   bool execute = false;
   bool dangerous = false;
 
-  for (size_t i = 0; i < mode.size; ++i) {
+  for (size_t i = 0; i < mode.size; i++) {
     switch (mode.data[i]) {
     case 'n':
       remap = false; break;
@@ -722,15 +721,15 @@ Object nvim_get_option_value(String name, Dict(option) *opts, Error *err)
     break;
   case 2:
     switch (numval) {
-      case 0:
-      case 1:
-        rv = BOOLEAN_OBJ(numval);
-        break;
-      default:
-        // Boolean options that return something other than 0 or 1 should return nil. Currently this
-        // only applies to 'autoread' which uses -1 as a local value to indicate "unset"
-        rv = NIL;
-        break;
+    case 0:
+    case 1:
+      rv = BOOLEAN_OBJ(numval);
+      break;
+    default:
+      // Boolean options that return something other than 0 or 1 should return nil. Currently this
+      // only applies to 'autoread' which uses -1 as a local value to indicate "unset"
+      rv = NIL;
+      break;
     }
     break;
   default:
@@ -1139,6 +1138,7 @@ Integer nvim_open_term(Buffer buffer, DictionaryOf(LuaRef) opts, Error *err)
   TerminalOptions topts;
   Channel *chan = channel_alloc(kChannelStreamInternal);
   chan->stream.internal.cb = cb;
+  chan->stream.internal.closed = false;
   topts.data = chan;
   // NB: overridden in terminal_check_size if a window is already
   // displaying the buffer
@@ -1880,7 +1880,7 @@ static void write_msg(String message, bool to_err)
   } \
   line_buf[pos++] = message.data[i];
 
-  ++no_wait_return;
+  no_wait_return++;
   for (uint32_t i = 0; i < message.size; i++) {
     if (got_int) {
       break;
@@ -1891,7 +1891,7 @@ static void write_msg(String message, bool to_err)
       PUSH_CHAR(i, out_pos, out_line_buf, msg);
     }
   }
-  --no_wait_return;
+  no_wait_return--;
   msg_end();
 }
 
@@ -1996,9 +1996,8 @@ Array nvim_get_proc_children(Integer pid, Error *err)
     DLOG("fallback to vim._os_proc_children()");
     Array a = ARRAY_DICT_INIT;
     ADD(a, INTEGER_OBJ(pid));
-    String s = cstr_to_string("return vim._os_proc_children(select(1, ...))");
+    String s = STATIC_CSTR_AS_STRING("return vim._os_proc_children(...)");
     Object o = nlua_exec(s, a, err);
-    api_free_string(s);
     api_free_array(a);
     if (o.type == kObjectTypeArray) {
       rvobj = o.data.array;
@@ -2241,7 +2240,7 @@ Array nvim_get_mark(String name, Dictionary opts, Error *err)
 ///           - winid: (number) |window-ID| of the window to use as context for statusline.
 ///           - maxwidth: (number) Maximum width of statusline.
 ///           - fillchar: (string) Character to fill blank spaces in the statusline (see
-///                                'fillchars').
+///                                'fillchars'). Treated as single-width even if it isn't.
 ///           - highlights: (boolean) Return highlight information.
 ///           - use_tabline: (boolean) Evaluate tabline instead of statusline. When |TRUE|, {winid}
 ///                                    is ignored.
@@ -2277,11 +2276,12 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
 
   if (HAS_KEY(opts->fillchar)) {
     if (opts->fillchar.type != kObjectTypeString || opts->fillchar.data.string.size == 0
-        || char2cells(fillchar = utf_ptr2char((char_u *)opts->fillchar.data.string.data)) != 1
-        || (size_t)utf_char2len(fillchar) != opts->fillchar.data.string.size) {
-      api_set_error(err, kErrorTypeValidation, "fillchar must be a single-width character");
+        || ((size_t)utf_ptr2len((char_u *)opts->fillchar.data.string.data)
+            != opts->fillchar.data.string.size)) {
+      api_set_error(err, kErrorTypeValidation, "fillchar must be a single character");
       return result;
     }
+    fillchar = utf_ptr2char((char_u *)opts->fillchar.data.string.data);
   }
 
   if (HAS_KEY(opts->highlights)) {

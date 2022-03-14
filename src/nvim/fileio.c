@@ -3,6 +3,8 @@
 
 // fileio.c: read from and write to a file
 
+// uncrustify:off
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -3911,13 +3913,13 @@ static int check_mtime(buf_T *buf, FileInfo *file_info)
 
 static bool time_differs(const FileInfo *file_info, long mtime, long mtime_ns) FUNC_ATTR_CONST
 {
-  return (long)file_info->stat.st_mtim.tv_nsec != mtime_ns
+  return file_info->stat.st_mtim.tv_nsec != mtime_ns
 #if defined(__linux__) || defined(MSWIN)
          // On a FAT filesystem, esp. under Linux, there are only 5 bits to store
          // the seconds.  Since the roundoff is done when flushing the inode, the
          // time may change unexpectedly by one second!!!
-         || (long)file_info->stat.st_mtim.tv_sec - mtime > 1
-         || mtime - (long)file_info->stat.st_mtim.tv_sec > 1;
+         || file_info->stat.st_mtim.tv_sec - mtime > 1
+         || mtime - file_info->stat.st_mtim.tv_sec > 1;
 #else
          || (long)file_info->stat.st_mtim.tv_sec != mtime;
 #endif
@@ -4961,9 +4963,8 @@ int buf_check_timestamp(buf_T *buf)
       buf_store_file_info(buf, &file_info);
     }
 
-    // Don't do anything for a directory.  Might contain the file
-    // explorer.
     if (os_isdir(buf->b_fname)) {
+      // Don't do anything for a directory.  Might contain the file explorer.
     } else if ((buf->b_p_ar >= 0 ? buf->b_p_ar : p_ar)
                && !bufIsChanged(buf) && file_info_ok) {
       // If 'autoread' is set, the buffer has no changes and the file still
