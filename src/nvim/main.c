@@ -25,6 +25,7 @@
 #include "nvim/getchar.h"
 #include "nvim/hashtab.h"
 #include "nvim/highlight.h"
+#include "nvim/highlight_group.h"
 #include "nvim/iconv.h"
 #include "nvim/if_cscope.h"
 #include "nvim/lua/executor.h"
@@ -111,7 +112,6 @@ static const char *err_opt_unknown = N_("Unknown option argument");
 static const char *err_too_many_args = N_("Too many edit arguments");
 static const char *err_extra_cmd =
   N_("Too many \"+command\", \"-c command\" or \"--cmd command\" arguments");
-
 
 void event_init(void)
 {
@@ -342,6 +342,12 @@ int main(int argc, char **argv)
     starting = NO_BUFFERS;
     screenclear();
     TIME_MSG("init screen for UI");
+  }
+
+  if (ui_client_channel_id) {
+    ui_client_init(ui_client_channel_id);
+    ui_client_execute(ui_client_channel_id);
+    abort();  // unreachable
   }
 
   init_default_mappings();  // Default mappings.
@@ -840,9 +846,8 @@ static void remote_request(mparm_T *params, int remote_args,
       exit(1);
     }
 
-    ui_client_init(chan);
-    ui_client_execute(chan);
-    abort();  // unreachable
+    ui_client_channel_id = chan;
+    return;
   }
 
   Array args = ARRAY_DICT_INIT;

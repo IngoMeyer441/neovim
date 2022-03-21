@@ -55,6 +55,7 @@
 #include "nvim/fileio.h"
 #include "nvim/getchar.h"
 #include "nvim/highlight.h"
+#include "nvim/highlight_group.h"
 #include "nvim/keymap.h"
 #include "nvim/log.h"
 #include "nvim/macros.h"
@@ -70,7 +71,6 @@
 #include "nvim/os/input.h"
 #include "nvim/screen.h"
 #include "nvim/state.h"
-#include "nvim/syntax.h"
 #include "nvim/terminal.h"
 #include "nvim/ui.h"
 #include "nvim/vim.h"
@@ -1288,7 +1288,7 @@ static bool send_mouse_event(Terminal *term, int c)
     return mouse_win == curwin;
   }
 
-  // ignore left release action if it was not proccessed above
+  // ignore left release action if it was not processed above
   // to prevent leaving Terminal mode after entering to it using a mouse
   if (c == K_LEFTRELEASE && mouse_win->w_buffer->terminal == term) {
     return false;
