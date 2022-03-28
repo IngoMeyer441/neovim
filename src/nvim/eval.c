@@ -3976,18 +3976,11 @@ static int eval6(char_u **arg, typval_T *rettv, int evaluate, int want_string)
           f1 = f1 * f2;
         } else if (op == '/') {
           // Division by zero triggers error from AddressSanitizer
-          f1 = (f2 == 0
-                ? (
+          f1 = (f2 == 0 ? (
 #ifdef NAN
-                   f1 == 0
-                    ? NAN
-                    :
+              f1 == 0 ? (float_T)NAN :
 #endif
-                   (f1 > 0
-                     ? INFINITY
-                     : -INFINITY)
-                   )
-                     : f1 / f2);
+              (f1 > 0 ? (float_T)INFINITY : (float_T)-INFINITY)) : f1 / f2);
         } else {
           emsg(_("E804: Cannot use '%' with Float"));
           return FAIL;
@@ -5842,15 +5835,15 @@ size_t string2float(const char *const text, float_T *const ret_value)
 
   // MS-Windows does not deal with "inf" and "nan" properly
   if (STRNICMP(text, "inf", 3) == 0) {
-    *ret_value = INFINITY;
+    *ret_value = (float_T)INFINITY;
     return 3;
   }
   if (STRNICMP(text, "-inf", 3) == 0) {
-    *ret_value = -INFINITY;
+    *ret_value = (float_T)-INFINITY;
     return 4;
   }
   if (STRNICMP(text, "nan", 3) == 0) {
-    *ret_value = NAN;
+    *ret_value = (float_T)NAN;
     return 3;
   }
   *ret_value = strtod(text, &s);
@@ -9224,6 +9217,8 @@ dictitem_T *find_var_in_ht(hashtab_T *const ht, int htname, const char *const va
 
 /// Finds the dict (g:, l:, s:, …) and hashtable used for a variable.
 ///
+/// Assigns SID if s: scope is accessed from Lua or anonymous Vimscript. #15994
+///
 /// @param[in]  name  Variable name, possibly with scope prefix.
 /// @param[in]  name_len  Variable name length.
 /// @param[out]  varname  Will be set to the start of the name without scope
@@ -9311,6 +9306,7 @@ static hashtab_T *find_var_ht_dict(const char *name, const size_t name_len, cons
       }
     }
     if (current_sctx.sc_sid == SID_STR || current_sctx.sc_sid == SID_LUA) {
+      // Create SID if s: scope is accessed from Lua or anon Vimscript. #15994
       new_script_item(NULL, &current_sctx.sc_sid);
     }
     *d = &SCRIPT_SV(current_sctx.sc_sid)->sv_dict;

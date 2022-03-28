@@ -95,6 +95,7 @@
 #include "nvim/lua/executor.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
+#include "nvim/match.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -937,7 +938,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
     if (mod_top != 0
         && wp->w_topline == mod_top
         && (!wp->w_lines[0].wl_valid
-            || wp->w_topline <= wp->w_lines[0].wl_lnum)) {
+            || wp->w_topline == wp->w_lines[0].wl_lnum)) {
       // w_topline is the first changed line and window is not scrolled,
       // the scrolling from changed lines will be done further down.
     } else if (wp->w_lines[0].wl_valid
@@ -1322,6 +1323,8 @@ static void win_update(win_T *wp, DecorProviders *providers)
   DecorProviders line_providers;
   decor_providers_invoke_win(wp, providers, &line_providers, &provider_err);
 
+  bool cursorline_standout = win_cursorline_standout(wp);
+
   for (;;) {
     /* stop updating when reached the end of the window (check for _past_
      * the end of the window is at the end of the loop) */
@@ -1366,8 +1369,8 @@ static void win_update(win_T *wp, DecorProviders *providers)
                         // if lines were inserted or deleted
                         || (wp->w_match_head != NULL
                             && buf->b_mod_xlines != 0)))))
-        || (wp->w_p_cul && (lnum == wp->w_cursor.lnum
-                            || lnum == wp->w_last_cursorline))) {
+        || (cursorline_standout && lnum == wp->w_cursor.lnum)
+        || lnum == wp->w_last_cursorline) {
       if (lnum == mod_top) {
         top_to_mod = false;
       }
@@ -1544,17 +1547,17 @@ static void win_update(win_T *wp, DecorProviders *providers)
                        foldinfo.fi_lines ? srow : wp->w_grid.Rows,
                        mod_top == 0, false, foldinfo, &line_providers);
 
-        wp->w_lines[idx].wl_folded = foldinfo.fi_lines != 0;
-        wp->w_lines[idx].wl_lastlnum = lnum;
-        did_update = DID_LINE;
-
-        if (foldinfo.fi_lines > 0) {
-          did_update = DID_FOLD;
+        if (foldinfo.fi_lines == 0) {
+          wp->w_lines[idx].wl_folded = false;
+          wp->w_lines[idx].wl_lastlnum = lnum;
+          did_update = DID_LINE;
+          syntax_last_parsed = lnum;
+        } else {
           foldinfo.fi_lines--;
+          wp->w_lines[idx].wl_folded = true;
           wp->w_lines[idx].wl_lastlnum = lnum + foldinfo.fi_lines;
+          did_update = DID_FOLD;
         }
-
-        syntax_last_parsed = lnum;
       }
 
       wp->w_lines[idx].wl_lnum = lnum;
@@ -1600,6 +1603,9 @@ static void win_update(win_T *wp, DecorProviders *providers)
    * End of loop over all window lines.
    */
 
+  // Now that the window has been redrawn with the old and new cursor line,
+  // update w_last_cursorline.
+  wp->w_last_cursorline = cursorline_standout ? wp->w_cursor.lnum : 0;
 
   if (idx > wp->w_lines_valid) {
     wp->w_lines_valid = idx;
@@ -2159,7 +2165,8 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
     // To speed up the loop below, set extra_check when there is linebreak,
     // trailing white space and/or syntax processing to be done.
     extra_check = wp->w_p_lbr;
-    if (syntax_present(wp) && !wp->w_s->b_syn_error && !wp->w_s->b_syn_slow) {
+    if (syntax_present(wp) && !wp->w_s->b_syn_error && !wp->w_s->b_syn_slow
+        && !has_fold && !end_fill) {
       // Prepare for syntax highlighting in this line.  When there is an
       // error, stop syntax highlighting.
       save_did_emsg = did_emsg;
@@ -2378,8 +2385,6 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
       }
       area_highlighting = true;
     }
-    // Update w_last_cursorline even if Visual mode is active.
-    wp->w_last_cursorline = wp->w_cursor.lnum;
   }
 
   memset(sattrs, 0, sizeof(sattrs));
@@ -7612,4 +7617,3 @@ win_T *get_win_by_grid_handle(handle_T handle)
   }
   return NULL;
 }
-

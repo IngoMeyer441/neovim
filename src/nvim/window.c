@@ -25,9 +25,9 @@
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
 #include "nvim/hashtab.h"
-#include "nvim/highlight_group.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
+#include "nvim/match.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
@@ -300,7 +300,7 @@ newwindow:
 
   // move window to new tab page
   case 'T':
-    if (one_window()) {
+    if (one_window(curwin)) {
       msg(_(m_onlyone));
     } else {
       tabpage_T *oldtab = curtab;
@@ -560,7 +560,7 @@ wingotofile:
       config.height = curwin->w_height;
       config.external = true;
       Error err = ERROR_INIT;
-      if (!win_new_float(curwin, config, &err)) {
+      if (!win_new_float(curwin, false, config, &err)) {
         emsg(err.msg);
         api_clear_error(&err);
         beep_flush();
@@ -629,16 +629,18 @@ void win_set_buf(Window window, Buffer buffer, bool noautocmd, Error *err)
 
 /// Create a new float.
 ///
-/// if wp == NULL allocate a new window, otherwise turn existing window into a
-/// float. It must then already belong to the current tabpage!
-///
-/// config must already have been validated!
-win_T *win_new_float(win_T *wp, FloatConfig fconfig, Error *err)
+/// @param wp      if NULL, allocate a new window, otherwise turn existing window into a float.
+///                It must then already belong to the current tabpage!
+/// @param last    make the window the last one in the window list.
+///                Only used when allocating the autocommand window.
+/// @param config  must already have been validated!
+win_T *win_new_float(win_T *wp, bool last, FloatConfig fconfig, Error *err)
 {
   if (wp == NULL) {
-    wp = win_alloc(lastwin_nofloating(), false);
+    wp = win_alloc(last ? lastwin : lastwin_nofloating(), false);
     win_init(wp, curwin, 0);
   } else {
+    assert(!last);
     assert(!wp->w_floating);
     if (firstwin == wp && lastwin_nofloating() == wp) {
       // last non-float
@@ -834,7 +836,7 @@ void ui_ext_win_position(win_T *wp)
   FloatConfig c = wp->w_float_config;
   if (!c.external) {
     ScreenGrid *grid = &default_grid;
-    float row = c.row, col = c.col;
+    Float row = c.row, col = c.col;
     if (c.relative == kFloatRelativeWindow) {
       Error dummy = ERROR_INIT;
       win_T *win = find_window_by_handle(c.window, &dummy);
@@ -969,7 +971,6 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
   int before;
   int minheight;
   int wmh1;
-  int hsep_height;
   bool did_set_fraction = false;
 
   // aucmd_win should always remain floating
@@ -1082,7 +1083,6 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
       }
     }
   } else {
-    hsep_height = STATUS_HEIGHT;
     layout = FR_COL;
 
     /*
@@ -1091,7 +1091,7 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
      */
     // Current window requires at least 1 space.
     wmh1 = p_wmh == 0 ? 1 : p_wmh;
-    needed = wmh1 + hsep_height;
+    needed = wmh1 + STATUS_HEIGHT;
     if (flags & WSP_ROOM) {
       needed += p_wh - wmh1;
     }
@@ -1133,15 +1133,15 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
       new_size = oldwin_height / 2;
     }
 
-    if (new_size > available - minheight - hsep_height) {
-      new_size = available - minheight - hsep_height;
+    if (new_size > available - minheight - STATUS_HEIGHT) {
+      new_size = available - minheight - STATUS_HEIGHT;
     }
     if (new_size < wmh1) {
       new_size = wmh1;
     }
 
     // if it doesn't fit in the current window, need win_equal()
-    if (oldwin_height - new_size - hsep_height < p_wmh) {
+    if (oldwin_height - new_size - STATUS_HEIGHT < p_wmh) {
       do_equal = true;
     }
 
@@ -1154,7 +1154,7 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
       set_fraction(oldwin);
       did_set_fraction = true;
 
-      win_setheight_win(oldwin->w_height + new_size + hsep_height,
+      win_setheight_win(oldwin->w_height + new_size + STATUS_HEIGHT,
                         oldwin);
       oldwin_height = oldwin->w_height;
       if (need_status) {
@@ -1171,7 +1171,7 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
       while (frp != NULL) {
         if (frp->fr_win != oldwin && frp->fr_win != NULL
             && (frp->fr_win->w_height > new_size
-                || frp->fr_win->w_height > oldwin_height - new_size - hsep_height)) {
+                || frp->fr_win->w_height > oldwin_height - new_size - STATUS_HEIGHT)) {
           do_equal = true;
           break;
         }
@@ -2019,7 +2019,6 @@ static void win_equal_rec(win_T *next_curwin, bool current, frame_T *topfr, int 
   int room = 0;
   int new_size;
   int has_next_curwin = 0;
-  int hsep_height;
   bool hnc;
 
   if (topfr->fr_layout == FR_LEAF) {
@@ -2165,7 +2164,6 @@ static void win_equal_rec(win_T *next_curwin, bool current, frame_T *topfr, int 
       totwincount -= wincount;
     }
   } else {  // topfr->fr_layout == FR_COL
-    hsep_height = STATUS_HEIGHT;
     topfr->fr_width = width;
     topfr->fr_height = height;
 
@@ -2180,7 +2178,7 @@ static void win_equal_rec(win_T *next_curwin, bool current, frame_T *topfr, int 
       } else {
         extra_sep = 0;
       }
-      totwincount = (n + extra_sep) / (p_wmh + hsep_height);
+      totwincount = (n + extra_sep) / (p_wmh + STATUS_HEIGHT);
       has_next_curwin = frame_has_win(topfr, next_curwin);
 
       /*
@@ -2215,7 +2213,7 @@ static void win_equal_rec(win_T *next_curwin, bool current, frame_T *topfr, int 
           } else {
             // These windows don't use up room.
             totwincount -= (n + (fr->fr_next == NULL
-                                 ? extra_sep : 0)) / (p_wmh + hsep_height);
+                                 ? extra_sep : 0)) / (p_wmh + STATUS_HEIGHT);
           }
           room -= new_size - n;
           if (room < 0) {
@@ -2261,7 +2259,7 @@ static void win_equal_rec(win_T *next_curwin, bool current, frame_T *topfr, int 
         // Compute the maximum number of windows vert. in "fr".
         n = frame_minheight(fr, NOWIN);
         wincount = (n + (fr->fr_next == NULL ? extra_sep : 0))
-                   / (p_wmh + hsep_height);
+                   / (p_wmh + STATUS_HEIGHT);
         m = frame_minheight(fr, next_curwin);
         if (has_next_curwin) {
           hnc = frame_has_win(fr, next_curwin);
@@ -2348,17 +2346,43 @@ void entering_window(win_T *const win)
   }
 }
 
-/// Closes all windows for buffer `buf`.
+void win_init_empty(win_T *wp)
+{
+  redraw_later(wp, NOT_VALID);
+  wp->w_lines_valid = 0;
+  wp->w_cursor.lnum = 1;
+  wp->w_curswant = wp->w_cursor.col = 0;
+  wp->w_cursor.coladd = 0;
+  wp->w_pcmark.lnum = 1;        // pcmark not cleared but set to line 1
+  wp->w_pcmark.col = 0;
+  wp->w_prev_pcmark.lnum = 0;
+  wp->w_prev_pcmark.col = 0;
+  wp->w_topline = 1;
+  wp->w_topfill = 0;
+  wp->w_botline = 2;
+  wp->w_s = &wp->w_buffer->b_s;
+}
+
+/// Init the current window "curwin".
+/// Called when a new file is being edited.
+void curwin_init(void)
+{
+  win_init_empty(curwin);
+}
+
+/// Closes all windows for buffer `buf` unless there is only one non-floating window.
 ///
-/// @param keep_curwin don't close `curwin`
-void close_windows(buf_T *buf, int keep_curwin)
+/// @param keep_curwin  don't close `curwin`
+void close_windows(buf_T *buf, bool keep_curwin)
 {
   tabpage_T *tp, *nexttp;
   int h = tabline_height();
 
   ++RedrawingDisabled;
 
-  for (win_T *wp = firstwin; wp != NULL && !ONE_WINDOW;) {
+  // Start from lastwin to close floating windows with the same buffer first.
+  // When the autocommand window is involved win_close() may need to print an error message.
+  for (win_T *wp = lastwin; wp != NULL && (lastwin == aucmd_win || !one_window(wp));) {
     if (wp->w_buffer == buf && (!keep_curwin || wp != curwin)
         && !(wp->w_closing || wp->w_buffer->b_locked > 0)) {
       if (win_close(wp, false, false) == FAIL) {
@@ -2367,9 +2391,9 @@ void close_windows(buf_T *buf, int keep_curwin)
       }
 
       // Start all over, autocommands may change the window layout.
-      wp = firstwin;
+      wp = lastwin;
     } else {
-      wp = wp->w_next;
+      wp = wp->w_prev;
     }
   }
 
@@ -2399,23 +2423,24 @@ void close_windows(buf_T *buf, int keep_curwin)
   }
 }
 
-/// Check that current window is the last one.
+/// Check that the specified window is the last one.
+/// @param win  counted even if floating
 ///
-/// @return true if the current window is the only window that exists, false if
-///         there is another, possibly in another tab page.
-static bool last_window(void) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+/// @return  true if the specified window is the only window that exists,
+///          false if there is another, possibly in another tab page.
+bool last_window(win_T *win) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  return one_window() && first_tabpage->tp_next == NULL;
+  return one_window(win) && first_tabpage->tp_next == NULL;
 }
 
-/// Check that current tab page contains no more then one window other than
-/// "aucmd_win". Only counts floating window if it is current.
-bool one_window(void) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+/// Check that current tab page contains no more then one window other than `aucmd_win`.
+/// @param counted_float  counted even if floating, but not if it is `aucmd_win`
+bool one_window(win_T *counted_float) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
   bool seen_one = false;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if (wp != aucmd_win && (!wp->w_floating || wp == curwin)) {
+    if (wp != aucmd_win && (!wp->w_floating || wp == counted_float)) {
       if (seen_one) {
         return false;
       }
@@ -2439,12 +2464,14 @@ bool last_nonfloat(win_T *wp) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
   return wp != NULL && firstwin == wp && !(wp->w_next && !wp->w_floating);
 }
 
-/// Check if floating windows can be closed.
+/// Check if floating windows in the current tab can be closed.
+/// Do not call this when the autocommand window is in use!
 ///
 /// @return true if all floating windows can be closed
-static bool can_close_floating_windows(tabpage_T *tab)
+static bool can_close_floating_windows(void)
 {
-  FOR_ALL_WINDOWS_IN_TAB(wp, tab) {
+  assert(lastwin != aucmd_win);
+  for (win_T *wp = lastwin; wp->w_floating; wp = wp->w_prev) {
     buf_T *buf = wp->w_buffer;
     int need_hide = (bufIsChanged(buf) && buf->b_nwindows <= 1);
 
@@ -2530,7 +2557,7 @@ int win_close(win_T *win, bool free_buf, bool force)
   frame_T *win_frame = win->w_floating ? NULL : win->w_frame->fr_parent;
   const bool had_diffmode = win->w_p_diff;
 
-  if (last_window() && !win->w_floating) {
+  if (last_window(win)) {
     emsg(_("E444: Cannot close last window"));
     return FAIL;
   }
@@ -2543,18 +2570,18 @@ int win_close(win_T *win, bool free_buf, bool force)
     emsg(_(e_autocmd_close));
     return FAIL;
   }
-  if ((firstwin == aucmd_win || lastwin == aucmd_win) && one_window()) {
-    emsg(_("E814: Cannot close window, only autocmd window would remain"));
-    return FAIL;
-  }
-  if ((firstwin == win && lastwin_nofloating() == win)
-      && lastwin->w_floating) {
-    if (force || can_close_floating_windows(curtab)) {
-      win_T *nextwp;
-      for (win_T *wpp = firstwin; wpp != NULL; wpp = nextwp) {
-        nextwp = wpp->w_next;
-        if (wpp->w_floating) {
-          win_close(wpp, free_buf, force);
+  if (lastwin->w_floating && one_window(win)) {
+    if (lastwin == aucmd_win) {
+      emsg(_("E814: Cannot close window, only autocmd window would remain"));
+      return FAIL;
+    }
+    if (force || can_close_floating_windows()) {
+      // close the last window until the there are no floating windows
+      while (lastwin->w_floating) {
+        // `force` flag isn't actually used when closing a floating window.
+        if (win_close(lastwin, free_buf, true) == FAIL) {
+          // If closing the window fails give up, to avoid looping forever.
+          return FAIL;
         }
       }
     } else {
@@ -2605,7 +2632,7 @@ int win_close(win_T *win, bool free_buf, bool force)
         return FAIL;
       }
       win->w_closing = false;
-      if (last_window()) {
+      if (last_window(win)) {
         return FAIL;
       }
     }
@@ -2615,7 +2642,7 @@ int win_close(win_T *win, bool free_buf, bool force)
       return FAIL;
     }
     win->w_closing = false;
-    if (last_window()) {
+    if (last_window(win)) {
       return FAIL;
     }
     // autocmds may abort script processing
@@ -2684,7 +2711,7 @@ int win_close(win_T *win, bool free_buf, bool force)
   }
 
   if (only_one_window() && win_valid(win) && win->w_buffer == NULL
-      && (last_window() || curtab != prev_curtab
+      && (last_window(win) || curtab != prev_curtab
           || close_last_window_tabpage(win, free_buf, prev_curtab))
       && !win->w_floating) {
     // Autocommands have closed all windows, quit now.  Restore
@@ -2704,7 +2731,7 @@ int win_close(win_T *win, bool free_buf, bool force)
 
   // Autocommands may have closed the window already, or closed the only
   // other window or moved to another tab page.
-  if (!win_valid(win) || (!win->w_floating && last_window())
+  if (!win_valid(win) || (!win->w_floating && last_window(win))
       || close_last_window_tabpage(win, free_buf, prev_curtab)) {
     return FAIL;
   }
@@ -2860,6 +2887,13 @@ void win_close_othertab(win_T *win, int free_buf, tabpage_T *tp)
   for (ptp = first_tabpage; ptp != NULL && ptp != tp; ptp = ptp->tp_next) {
   }
   if (ptp == NULL || tp == curtab) {
+    // If the buffer was removed from the window we have to give it any
+    // buffer.
+    if (win_valid_any_tab(win) && win->w_buffer == NULL) {
+      win->w_buffer = firstbuf;
+      firstbuf->b_nwindows++;
+      win_init_empty(win);
+    }
     return;
   }
 
@@ -3743,7 +3777,7 @@ void close_others(int message, int forceit)
     return;
   }
 
-  if (one_window() && !lastwin->w_floating) {
+  if (one_nonfloat() && !lastwin->w_floating) {
     if (message
         && !autocmd_busy) {
       msg(_(m_onlyone));
@@ -3786,33 +3820,6 @@ void close_others(int message, int forceit)
   }
 }
 
-
-/*
- * Init the current window "curwin".
- * Called when a new file is being edited.
- */
-void curwin_init(void)
-{
-  win_init_empty(curwin);
-}
-
-void win_init_empty(win_T *wp)
-{
-  redraw_later(wp, NOT_VALID);
-  wp->w_lines_valid = 0;
-  wp->w_cursor.lnum = 1;
-  wp->w_curswant = wp->w_cursor.col = 0;
-  wp->w_cursor.coladd = 0;
-  wp->w_pcmark.lnum = 1;        // pcmark not cleared but set to line 1
-  wp->w_pcmark.col = 0;
-  wp->w_prev_pcmark.lnum = 0;
-  wp->w_prev_pcmark.col = 0;
-  wp->w_topline = 1;
-  wp->w_topfill = 0;
-  wp->w_botline = 2;
-  wp->w_s = &wp->w_buffer->b_s;
-}
-
 /*
  * Allocate the first window and put an empty buffer in it.
  * Called from main().
@@ -3844,7 +3851,7 @@ void win_alloc_aucmd_win(void)
   fconfig.width = Columns;
   fconfig.height = 5;
   fconfig.focusable = false;
-  aucmd_win = win_new_float(NULL, fconfig, &err);
+  aucmd_win = win_new_float(NULL, true, fconfig, &err);
   aucmd_win->w_buffer->b_nwindows--;
   RESET_BINDING(aucmd_win);
 }
@@ -6498,42 +6505,36 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
 void last_status(bool morewin)
 {
   // Don't make a difference between horizontal or vertical split.
-  last_status_rec(topframe, (p_ls == 2 || (p_ls == 1 && (morewin || !one_window()))),
+  last_status_rec(topframe, (p_ls == 2 || (p_ls == 1 && (morewin || !one_nonfloat()))),
                   global_stl_height() > 0);
 }
 
 // Look for resizable frames and take lines from them to make room for the statusline
-static void resize_frame_for_status(frame_T *fr, int resize_amount)
+static void resize_frame_for_status(frame_T *fr)
 {
   // Find a frame to take a line from.
   frame_T *fp = fr;
   win_T *wp = fr->fr_win;
-  int n;
 
-  while (resize_amount > 0) {
-    while (fp->fr_height <= frame_minheight(fp, NULL)) {
-      if (fp == topframe) {
-        emsg(_(e_noroom));
-        return;
-      }
-      // In a column of frames: go to frame above.  If already at
-      // the top or in a row of frames: go to parent.
-      if (fp->fr_parent->fr_layout == FR_COL && fp->fr_prev != NULL) {
-        fp = fp->fr_prev;
-      } else {
-        fp = fp->fr_parent;
-      }
+  while (fp->fr_height <= frame_minheight(fp, NULL)) {
+    if (fp == topframe) {
+      emsg(_(e_noroom));
+      return;
     }
-    n = MIN(fp->fr_height - frame_minheight(fp, NULL), resize_amount);
-    resize_amount -= n;
-
-    if (fp != fr) {
-      frame_new_height(fp, fp->fr_height - n, false, false);
-      frame_fix_height(wp);
-      (void)win_comp_pos();
+    // In a column of frames: go to frame above.  If already at
+    // the top or in a row of frames: go to parent.
+    if (fp->fr_parent->fr_layout == FR_COL && fp->fr_prev != NULL) {
+      fp = fp->fr_prev;
     } else {
-      win_new_height(wp, wp->w_height - n);
+      fp = fp->fr_parent;
     }
+  }
+  if (fp != fr) {
+    frame_new_height(fp, fp->fr_height - 1, false, false);
+    frame_fix_height(wp);
+    (void)win_comp_pos();
+  } else {
+    win_new_height(wp, wp->w_height - 1);
   }
 }
 
@@ -6555,15 +6556,12 @@ static void last_status_rec(frame_T *fr, bool statusline, bool is_stl_global)
       } else if (wp->w_status_height == 0 && !is_stl_global && statusline) {
         // Add statusline to window if needed
         wp->w_status_height = STATUS_HEIGHT;
-        resize_frame_for_status(fr, STATUS_HEIGHT);
+        resize_frame_for_status(fr);
         comp_col();
       }
     } else if (wp->w_status_height != 0 && is_stl_global) {
       // If statusline is global and the window has a statusline, replace it with a horizontal
       // separator
-      if (STATUS_HEIGHT - 1 != 0) {
-        win_new_height(wp, wp->w_height + STATUS_HEIGHT - 1);
-      }
       wp->w_status_height = 0;
       wp->w_hsep_height = 1;
       comp_col();
@@ -6571,7 +6569,6 @@ static void last_status_rec(frame_T *fr, bool statusline, bool is_stl_global)
       // If statusline isn't global and the window doesn't have a statusline, re-add it
       wp->w_status_height = STATUS_HEIGHT;
       wp->w_hsep_height = 0;
-      resize_frame_for_status(fr, STATUS_HEIGHT - 1);
       comp_col();
     }
     redraw_all_later(SOME_VALID);
