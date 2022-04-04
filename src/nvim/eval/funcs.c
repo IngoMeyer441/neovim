@@ -64,6 +64,7 @@
 #include "nvim/state.h"
 #include "nvim/syntax.h"
 #include "nvim/tag.h"
+#include "nvim/testing.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/version.h"
@@ -446,90 +447,6 @@ static void f_argv(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   } else {
     get_arglist_as_rettv(ARGLIST, ARGCOUNT, rettv);
   }
-}
-
-/// "assert_beeps(cmd [, error])" function
-static void f_assert_beeps(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_beeps(argvars, false);
-}
-
-/// "assert_nobeep(cmd [, error])" function
-static void f_assert_nobeep(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_beeps(argvars, true);
-}
-
-/// "assert_equal(expected, actual[, msg])" function
-static void f_assert_equal(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_equal_common(argvars, ASSERT_EQUAL);
-}
-
-/// "assert_equalfile(fname-one, fname-two[, msg])" function
-static void f_assert_equalfile(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_equalfile(argvars);
-}
-
-/// "assert_notequal(expected, actual[, msg])" function
-static void f_assert_notequal(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_equal_common(argvars, ASSERT_NOTEQUAL);
-}
-
-/// "assert_report(msg)
-static void f_assert_report(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  garray_T ga;
-
-  prepare_assert_error(&ga);
-  ga_concat(&ga, tv_get_string(&argvars[0]));
-  assert_error(&ga);
-  ga_clear(&ga);
-  rettv->vval.v_number = 1;
-}
-
-/// "assert_exception(string[, msg])" function
-static void f_assert_exception(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_exception(argvars);
-}
-
-/// "assert_fails(cmd [, error [, msg]])" function
-static void f_assert_fails(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_fails(argvars);
-}
-
-// "assert_false(actual[, msg])" function
-static void f_assert_false(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_bool(argvars, false);
-}
-
-/// "assert_inrange(lower, upper[, msg])" function
-static void f_assert_inrange(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_inrange(argvars);
-}
-
-/// "assert_match(pattern, actual[, msg])" function
-static void f_assert_match(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_match_common(argvars, ASSERT_MATCH);
-}
-
-/// "assert_notmatch(pattern, actual[, msg])" function
-static void f_assert_notmatch(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_match_common(argvars, ASSERT_NOTMATCH);
-}
-
-/// "assert_true(actual[, msg])" function
-static void f_assert_true(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = assert_bool(argvars, true);
 }
 
 /// "atan2()" function
@@ -6633,7 +6550,7 @@ static inline uint32_t shuffle_xoshiro128starstar(uint32_t *const x, uint32_t *c
                                                   uint32_t *const z, uint32_t *const w)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_ALWAYS_INLINE
 {
-#define ROTL(x, k) ((x << k) | (x >> (32 - k)))
+#define ROTL(x, k) (((x) << (k)) | ((x) >> (32 - (k))))
   const uint32_t result = ROTL(*y * 5, 7) * 9;
   const uint32_t t = *y << 9;
   *z ^= *x;
@@ -6785,14 +6702,20 @@ static void f_range(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
 }
 
-/// Evaluate "expr" for readdir().
-static varnumber_T readdir_checkitem(typval_T *expr, const char *name)
+/// Evaluate "expr" (= "context") for readdir().
+static varnumber_T readdir_checkitem(void *context, const char *name)
+  FUNC_ATTR_NONNULL_ALL
 {
+  typval_T *expr = (typval_T *)context;
   typval_T save_val;
   typval_T rettv;
   typval_T argv[2];
   varnumber_T retval = 0;
   bool error = false;
+
+  if (expr->v_type == VAR_UNKNOWN) {
+    return 1;
+  }
 
   prepare_vimvar(VV_VAL, &save_val);
   set_vim_var_string(VV_VAL, name, -1);
@@ -6819,54 +6742,16 @@ theend:
 /// "readdir()" function
 static void f_readdir(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  typval_T *expr;
-  const char *path;
-  garray_T ga;
-  Directory dir;
-
   tv_list_alloc_ret(rettv, kListLenUnknown);
-  path = tv_get_string(&argvars[0]);
-  expr = &argvars[1];
-  ga_init(&ga, (int)sizeof(char *), 20);
 
-  if (!os_scandir(&dir, path)) {
-    smsg(_(e_notopen), path);
-  } else {
-    for (;;) {
-      bool ignore;
-
-      path = os_scandir_next(&dir);
-      if (path == NULL) {
-        break;
-      }
-
-      ignore = (path[0] == '.'
-                && (path[1] == NUL || (path[1] == '.' && path[2] == NUL)));
-      if (!ignore && expr->v_type != VAR_UNKNOWN) {
-        varnumber_T r = readdir_checkitem(expr, path);
-
-        if (r < 0) {
-          break;
-        }
-        if (r == 0) {
-          ignore = true;
-        }
-      }
-
-      if (!ignore) {
-        ga_grow(&ga, 1);
-        ((char **)ga.ga_data)[ga.ga_len++] = xstrdup(path);
-      }
-    }
-
-    os_closedir(&dir);
-  }
-
-  if (rettv->vval.v_list != NULL && ga.ga_len > 0) {
-    sort_strings((char_u **)ga.ga_data, ga.ga_len);
+  const char *path = tv_get_string(&argvars[0]);
+  typval_T *expr = &argvars[1];
+  garray_T ga;
+  int ret = readdir_core(&ga, path, (void *)expr, readdir_checkitem);
+  if (ret == OK && ga.ga_len > 0) {
     for (int i = 0; i < ga.ga_len; i++) {
-      path = ((const char **)ga.ga_data)[i];
-      tv_list_append_string(rettv->vval.v_list, path, -1);
+      const char *p = ((const char **)ga.ga_data)[i];
+      tv_list_append_string(rettv->vval.v_list, p, -1);
     }
   }
   ga_clear_strings(&ga);
@@ -10894,24 +10779,6 @@ static void f_termopen(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   channel_terminal_open(curbuf, chan);
   channel_create_event(chan, NULL);
-}
-
-/// "test_garbagecollect_now()" function
-static void f_test_garbagecollect_now(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  // This is dangerous, any Lists and Dicts used internally may be freed
-  // while still in use.
-  garbage_collect(true);
-}
-
-/// "test_write_list_log()" function
-static void f_test_write_list_log(typval_T *const argvars, typval_T *const rettv, FunPtr fptr)
-{
-  const char *const fname = tv_get_string_chk(&argvars[0]);
-  if (fname == NULL) {
-    return;
-  }
-  list_write_log(fname);
 }
 
 /// "timer_info([timer])" function

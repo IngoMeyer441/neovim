@@ -667,15 +667,11 @@ void conceal_check_cursor_line(void)
 
 /// Whether cursorline is drawn in a special way
 ///
-/// If true, both old and new cursorline will need
-/// to be redrawn when moving cursor within windows.
-/// TODO(bfredl): VIsual_active shouldn't be needed, but is used to fix a glitch
-///               caused by scrolling.
+/// If true, both old and new cursorline will need to be redrawn when moving cursor within windows.
 bool win_cursorline_standout(const win_T *wp)
   FUNC_ATTR_NONNULL_ALL
 {
-  return wp->w_p_cul
-         || (wp->w_p_cole > 0 && (VIsual_active || !conceal_cursor_line(wp)));
+  return wp->w_p_cul || (wp->w_p_cole > 0 && !conceal_cursor_line(wp));
 }
 
 /*
@@ -2123,13 +2119,13 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
 
   // draw_state: items that are drawn in sequence:
 #define WL_START        0               // nothing done yet
-#define WL_CMDLINE     WL_START + 1    // cmdline window column
-#define WL_FOLD        WL_CMDLINE + 1  // 'foldcolumn'
-#define WL_SIGN        WL_FOLD + 1     // column for signs
-#define WL_NR           WL_SIGN + 1     // line number
-#define WL_BRI         WL_NR + 1       // 'breakindent'
-#define WL_SBR         WL_BRI + 1       // 'showbreak' or 'diff'
-#define WL_LINE         WL_SBR + 1      // text in the line
+#define WL_CMDLINE      (WL_START + 1)    // cmdline window column
+#define WL_FOLD         (WL_CMDLINE + 1)  // 'foldcolumn'
+#define WL_SIGN         (WL_FOLD + 1)     // column for signs
+#define WL_NR           (WL_SIGN + 1)     // line number
+#define WL_BRI          (WL_NR + 1)       // 'breakindent'
+#define WL_SBR          (WL_BRI + 1)      // 'showbreak' or 'diff'
+#define WL_LINE         (WL_SBR + 1)      // text in the line
   int draw_state = WL_START;            // what to draw next
 
   int syntax_flags    = 0;
