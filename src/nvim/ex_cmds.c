@@ -2527,9 +2527,9 @@ int do_ecmd(int fnum, char_u *ffname, char_u *sfname, exarg_T *eap, linenr_T new
         // Close the link to the current buffer. This will set
         // oldwin->w_buffer to NULL.
         u_sync(false);
-        const bool did_decrement = close_buffer(oldwin, curbuf,
-                                                (flags & ECMD_HIDE) || curbuf->terminal ? 0 : DOBUF_UNLOAD,
-                                                false);
+        const bool did_decrement
+          = close_buffer(oldwin, curbuf, (flags & ECMD_HIDE) || curbuf->terminal ? 0 : DOBUF_UNLOAD,
+                         false, false);
 
         // Autocommands may have closed the window.
         if (win_valid(the_curwin)) {
@@ -2875,7 +2875,7 @@ int do_ecmd(int fnum, char_u *ffname, char_u *sfname, exarg_T *eap, linenr_T new
     redraw_curbuf_later(NOT_VALID);     // redraw this buffer later
   }
 
-  if (p_im) {
+  if (p_im && (State & INSERT) == 0) {
     need_start_insertmode = true;
   }
 
@@ -3627,15 +3627,22 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
 
   sub_firstline = NULL;
 
-  // ~ in the substitute pattern is replaced with the old pattern.
-  // We do it here once to avoid it to be replaced over and over again.
-  // But don't do it when it starts with "\=", then it's an expression.
   assert(sub != NULL);
 
   bool sub_needs_free = false;
-  if (!(sub[0] == '\\' && sub[1] == '=')) {
+  char_u *sub_copy = NULL;
+
+  // If the substitute pattern starts with "\=" then it's an expression.
+  // Make a copy, a recursive function may free it.
+  // Otherwise, '~' in the substitute pattern is replaced with the old
+  // pattern.  We do it here once to avoid it to be replaced over and over
+  // again.
+  if (sub[0] == '\\' && sub[1] == '=') {
+    sub = vim_strsave(sub);
+    sub_copy = sub;
+  } else {
     char_u *source = sub;
-    sub = regtilde(sub, p_magic);
+    sub = regtilde(sub, p_magic, preview);
     // When previewing, the new pattern allocated by regtilde() needs to be freed
     // in this function because it will not be used or freed by regtilde() later.
     sub_needs_free = preview && sub != source;
@@ -4306,18 +4313,22 @@ skip:
 
 #define PUSH_PREVIEW_LINES() \
   do { \
-    linenr_T match_lines = current_match.end.lnum \
-                           - current_match.start.lnum +1; \
-    if (preview_lines.subresults.size > 0) { \
-      linenr_T last = kv_last(preview_lines.subresults).end.lnum; \
-      if (last == current_match.start.lnum) { \
-        preview_lines.lines_needed += match_lines - 1; \
+    if (preview) { \
+      linenr_T match_lines = current_match.end.lnum \
+                             - current_match.start.lnum +1; \
+      if (preview_lines.subresults.size > 0) { \
+        linenr_T last = kv_last(preview_lines.subresults).end.lnum; \
+        if (last == current_match.start.lnum) { \
+          preview_lines.lines_needed += match_lines - 1; \
+        } else { \
+          preview_lines.lines_needed += match_lines; \
+        } \
+      } else { \
+        preview_lines.lines_needed += match_lines; \
       } \
-    } else { \
-      preview_lines.lines_needed += match_lines; \
+      kv_push(preview_lines.subresults, current_match); \
     } \
-    kv_push(preview_lines.subresults, current_match); \
-  } while (0)
+    } while (0)
 
             // Push the match to preview_lines.
             PUSH_PREVIEW_LINES();
@@ -4412,6 +4423,10 @@ skip:
   }
 
   vim_regfree(regmatch.regprog);
+  xfree(sub_copy);
+  if (sub_needs_free) {
+    xfree(sub);
+  }
 
   // Restore the flag values, they can be used for ":&&".
   subflags.do_all = save_do_all;
@@ -4443,10 +4458,6 @@ skip:
   }
 
   kv_destroy(preview_lines.subresults);
-
-  if (sub_needs_free) {
-    xfree(sub);
-  }
 
   return preview_buf;
 #undef ADJUST_SUB_FIRSTLNUM
