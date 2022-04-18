@@ -1223,10 +1223,9 @@ static void normal_check_interrupt(NormalState *s)
 
 static void normal_check_window_scrolled(NormalState *s)
 {
-  // Trigger Scroll if the viewport changed.
-  if (!finish_op && has_event(EVENT_WINSCROLLED)
-      && win_did_scroll(curwin)) {
-    do_autocmd_winscrolled(curwin);
+  if (!finish_op) {
+    // Trigger Scroll if the viewport changed.
+    may_trigger_winscrolled();
   }
 }
 
@@ -1353,9 +1352,10 @@ static int normal_check(VimState *state)
   if (skip_redraw || exmode_active) {
     skip_redraw = false;
   } else if (do_redraw || stuff_empty()) {
-    // Need to make sure w_topline and w_leftcol are correct before
-    // normal_check_window_scrolled() is called.
+    // Ensure curwin->w_topline and curwin->w_leftcol are up to date
+    // before triggering a WinScrolled autocommand.
     update_topline(curwin);
+    validate_cursor();
 
     normal_check_cursor_moved(s);
     normal_check_text_changed(s);
@@ -4533,7 +4533,7 @@ static void nv_scroll(cmdarg_T *cap)
       validate_botline(curwin);  // make sure w_empty_rows is valid
       half = (curwin->w_height_inner - curwin->w_empty_rows + 1) / 2;
       for (n = 0; curwin->w_topline + n < curbuf->b_ml.ml_line_count; n++) {
-        // Count half he number of filler lines to be "below this
+        // Count half the number of filler lines to be "below this
         // line" and half to be "above the next line".
         if (n > 0 && used + win_get_fill(curwin, curwin->w_topline + n) / 2 >= half) {
           n--;

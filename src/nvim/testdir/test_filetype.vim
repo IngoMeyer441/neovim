@@ -113,7 +113,7 @@ let s:filename_checks = {
     \ 'cobol': ['file.cbl', 'file.cob', 'file.lib'],
     \ 'coco': ['file.atg'],
     \ 'conaryrecipe': ['file.recipe'],
-    \ 'conf': ['auto.master'],
+    \ 'conf': ['/etc/pacman.conf', 'any/etc/pacman.conf', 'auto.master'],
     \ 'config': ['configure.in', 'configure.ac', '/etc/hostname.file'],
     \ 'context': ['tex/context/any/file.tex', 'file.mkii', 'file.mkiv', 'file.mkvi', 'file.mkxl', 'file.mklx'],
     \ 'cook': ['file.cook'],
@@ -152,7 +152,7 @@ let s:filename_checks = {
     \ 'dnsmasq': ['/etc/dnsmasq.conf', '/etc/dnsmasq.d/file', 'any/etc/dnsmasq.conf', 'any/etc/dnsmasq.d/file'],
     \ 'dockerfile': ['Containerfile', 'Dockerfile', 'file.Dockerfile', 'Dockerfile.debian', 'Containerfile.something'],
     \ 'dosbatch': ['file.bat'],
-    \ 'dosini': ['.editorconfig', '/etc/pacman.conf', '/etc/yum.conf', 'file.ini', 'npmrc', '.npmrc', 'php.ini', 'php.ini-5', 'php.ini-file', '/etc/yum.repos.d/file', 'any/etc/pacman.conf', 'any/etc/yum.conf', 'any/etc/yum.repos.d/file', 'file.wrap'],
+    \ 'dosini': ['.editorconfig', '/etc/yum.conf', 'file.ini', 'npmrc', '.npmrc', 'php.ini', 'php.ini-5', 'php.ini-file', '/etc/yum.repos.d/file', 'any/etc/yum.conf', 'any/etc/yum.repos.d/file', 'file.wrap'],
     \ 'dot': ['file.dot', 'file.gv'],
     \ 'dracula': ['file.drac', 'file.drc', 'filelvs', 'filelpe', 'drac.file', 'lpe', 'lvs', 'some-lpe', 'some-lvs'],
     \ 'dtd': ['file.dtd'],
@@ -166,7 +166,7 @@ let s:filename_checks = {
     \ 'edif': ['file.edf', 'file.edif', 'file.edo'],
     \ 'elinks': ['elinks.conf'],
     \ 'elixir': ['file.ex', 'file.exs', 'mix.lock'],
-    \ 'eelixir': ['file.eex', 'file.heex', 'file.leex', 'file.sface'],
+    \ 'eelixir': ['file.eex', 'file.leex'],
     \ 'elm': ['file.elm'],
     \ 'elmfilt': ['filter-rules'],
     \ 'elvish': ['file.elv'],
@@ -237,6 +237,7 @@ let s:filename_checks = {
     \ 'hb': ['file.hb'],
     \ 'hcl': ['file.hcl'],
     \ 'hercules': ['file.vc', 'file.ev', 'file.sum', 'file.errsum'],
+    \ 'heex': ['file.heex'],
     \ 'hex': ['file.hex', 'file.h32'],
     \ 'hgcommit': ['hg-editor-file.txt'],
     \ 'hjson': ['file.hjson'],
@@ -382,6 +383,7 @@ let s:filename_checks = {
     \ 'omnimark': ['file.xom', 'file.xin'],
     \ 'opam': ['opam', 'file.opam', 'file.opam.template'],
     \ 'openroad': ['file.or'],
+    \ 'openscad': ['file.scad'],
     \ 'ora': ['file.ora'],
     \ 'org': ['file.org', 'file.org_archive'],
     \ 'pamconf': ['/etc/pam.conf', '/etc/pam.d/file', 'any/etc/pam.conf', 'any/etc/pam.d/file'],
@@ -462,12 +464,11 @@ let s:filename_checks = {
     \ 'sass': ['file.sass'],
     \ 'sather': ['file.sa'],
     \ 'sbt': ['file.sbt'],
-    \ 'scala': ['file.scala', 'file.sc'],
+    \ 'scala': ['file.scala'],
     \ 'scheme': ['file.scm', 'file.ss', 'file.sld', 'file.rkt', 'file.rktd', 'file.rktl'],
     \ 'scilab': ['file.sci', 'file.sce'],
     \ 'screen': ['.screenrc', 'screenrc'],
     \ 'sexplib': ['file.sexp'],
-    \ 'scdoc': ['file.scd'],
     \ 'scss': ['file.scss'],
     \ 'sd': ['file.sd'],
     \ 'sdc': ['file.sdc'],
@@ -515,6 +516,8 @@ let s:filename_checks = {
     \ 'stata': ['file.ado', 'file.do', 'file.imata', 'file.mata'],
     \ 'stp': ['file.stp'],
     \ 'sudoers': ['any/etc/sudoers', 'sudoers.tmp', '/etc/sudoers', 'any/etc/sudoers.d/file'],
+    \ 'supercollider': ['file.quark'], 
+    \ 'surface': ['file.sface'],
     \ 'svg': ['file.svg'],
     \ 'svn': ['svn-commitfile.tmp', 'svn-commit-file.tmp', 'svn-commit.tmp'],
     \ 'swift': ['file.swift'],
@@ -741,7 +744,7 @@ func Test_setfiletype_completion()
 endfunc
 
 """""""""""""""""""""""""""""""""""""""""""""""""
-" Tests for specific extentions and filetypes.
+" Tests for specific extensions and filetypes.
 " Keep sorted.
 """""""""""""""""""""""""""""""""""""""""""""""""
 
@@ -875,23 +878,34 @@ endfunc
 func Test_dat_file()
   filetype on
 
+  " KRL header start with "&WORD", but is not always present.
   call writefile(['&ACCESS'], 'datfile.dat')
   split datfile.dat
   call assert_equal('krl', &filetype)
   bwipe!
   call delete('datfile.dat')
 
+  " KRL defdat with leading spaces, for KRL file extension is not case
+  " sensitive.
   call writefile(['  DEFDAT datfile'], 'datfile.Dat')
   split datfile.Dat
   call assert_equal('krl', &filetype)
   bwipe!
   call delete('datfile.Dat')
 
-  call writefile(['', 'defdat  datfile'], 'datfile.DAT')
+  " KRL defdat with embedded spaces, file starts with empty line(s).
+  call writefile(['', 'defdat  datfile  public'], 'datfile.DAT')
   split datfile.DAT
   call assert_equal('krl', &filetype)
   bwipe!
+
+  " User may overrule file inspection
+  let g:filetype_dat = 'dat'
+  split datfile.DAT
+  call assert_equal('dat', &filetype)
+  bwipe!
   call delete('datfile.DAT')
+  unlet g:filetype_dat
 
   filetype off
 endfunc
@@ -1158,12 +1172,12 @@ func Test_hook_file()
 
   call writefile(['[Trigger]', 'this is pacman config'], 'Xfile.hook')
   split Xfile.hook
-  call assert_equal('dosini', &filetype)
+  call assert_equal('conf', &filetype)
   bwipe!
 
   call writefile(['not pacman'], 'Xfile.hook')
   split Xfile.hook
-  call assert_notequal('dosini', &filetype)
+  call assert_notequal('conf', &filetype)
   bwipe!
 
   call delete('Xfile.hook')
@@ -1457,26 +1471,86 @@ func Test_prg_file()
   filetype off
 endfunc
 
+" Test dist#ft#FTsc()
+func Test_sc_file()
+  filetype on
+
+  " SC file methods are defined 'Class : Method'
+  call writefile(['SCNvimDocRenderer : SCDocHTMLRenderer {'], 'srcfile.sc')
+  split srcfile.sc
+  call assert_equal('supercollider', &filetype)
+  bwipe!
+  call delete('srcfile.sc')
+
+  " SC classes are defined with '+ Class {}'
+  call writefile(['+ SCNvim {', '*methodArgs {|method|'], 'srcfile.sc')
+  split srcfile.sc
+  call assert_equal('supercollider', &filetype)
+  bwipe!
+  call delete('srcfile.sc')
+
+  " Some SC class files start with comment and define methods many lines later
+  call writefile(['// Query', '//Method','^this {'], 'srcfile.sc')
+  split srcfile.sc
+  call assert_equal('supercollider', &filetype)
+  bwipe!
+  call delete('srcfile.sc')
+
+  " Some SC class files put comments between method declaration after class
+  call writefile(['PingPong {', '//comment','*ar { arg'], 'srcfile.sc')
+  split srcfile.sc
+  call assert_equal('supercollider', &filetype)
+  bwipe!
+  call delete('srcfile.sc')
+
+  filetype off
+endfunc
+
+" Test dist#ft#FTscd()
+func Test_scd_file()
+  filetype on
+
+  call writefile(['ijq(1)'], 'srcfile.scd')
+  split srcfile.scd
+  call assert_equal('scdoc', &filetype)
+  bwipe!
+  call delete('srcfile.scd')
+
+  filetype off
+endfunc
+
 func Test_src_file()
   filetype on
 
+  " KRL header start with "&WORD", but is not always present.
   call writefile(['&ACCESS'], 'srcfile.src')
   split srcfile.src
   call assert_equal('krl', &filetype)
   bwipe!
   call delete('srcfile.src')
 
+  " KRL def with leading spaces, for KRL file extension is not case sensitive.
   call writefile(['  DEF srcfile()'], 'srcfile.Src')
   split srcfile.Src
   call assert_equal('krl', &filetype)
   bwipe!
   call delete('srcfile.Src')
 
-  call writefile(['', 'global  def  srcfile()'], 'srcfile.SRC')
+  " KRL global deffct with embedded spaces, file starts with empty line(s).
+  for text in ['global  def  srcfile()', 'global  deffct  srcfile()']
+    call writefile(['', text], 'srcfile.SRC')
+    split srcfile.SRC
+    call assert_equal('krl', &filetype, text)
+    bwipe!
+  endfor
+
+  " User may overrule file inspection
+  let g:filetype_src = 'src'
   split srcfile.SRC
-  call assert_equal('krl', &filetype)
+  call assert_equal('src', &filetype)
   bwipe!
   call delete('srcfile.SRC')
+  unlet g:filetype_src
 
   filetype off
 endfunc
@@ -1488,6 +1562,13 @@ func Test_sys_file()
   call writefile(['looks like dos batch'], 'sysfile.sys')
   split sysfile.sys
   call assert_equal('bat', &filetype)
+  bwipe!
+
+  " Users preference set by g:filetype_sys
+  let g:filetype_sys = 'sys'
+  split sysfile.sys
+  call assert_equal('sys', &filetype)
+  unlet g:filetype_sys
   bwipe!
 
   " RAPID header start with a line containing only "%%%", 

@@ -202,12 +202,12 @@ au BufNewFile,BufRead *.iba,*.ibi		setf ibasic
 au BufNewFile,BufRead *.fb			setf freebasic
 
 " Batch file for MSDOS. See dist#ft#FTsys for *.sys
-au BufNewFile,BufRead *.bat 			setf dosbatch
+au BufNewFile,BufRead *.bat			setf dosbatch
 " *.cmd is close to a Batch file, but on OS/2 Rexx files also use *.cmd.
 au BufNewFile,BufRead *.cmd
 	\ if getline(1) =~ '^/\*' | setf rexx | else | setf dosbatch | endif
 " ABB RAPID or Batch file for MSDOS.
-au BufNewFile,BufRead *.sys\c 			call dist#ft#FTsys()
+au BufNewFile,BufRead *.sys\c			call dist#ft#FTsys()
 
 " Batch file for 4DOS
 au BufNewFile,BufRead *.btm			call dist#ft#FTbtm()
@@ -412,9 +412,9 @@ au BufNewFile,BufRead *Eterm/*.cfg		setf eterm
 " Elixir or Euphoria
 au BufNewFile,BufRead *.ex call dist#ft#ExCheck()
 
-" Elixir, also used for HEEx and Surface
+" Elixir
 au BufRead,BufNewFile mix.lock,*.exs setf elixir
-au BufRead,BufNewFile *.eex,*.heex,*.leex,*.sface setf eelixir
+au BufRead,BufNewFile *.eex,*.leex setf eelixir
 
 " Elvish
 au BufRead,BufNewFile *.elv setf elvish
@@ -793,6 +793,9 @@ au BufRead,BufNewFile *.hcl			setf hcl
 " Hercules
 au BufNewFile,BufRead *.vc,*.ev,*.sum,*.errsum	setf hercules
 
+" HEEx
+au BufRead,BufNewFile *.heex			setf heex
+
 " HEX (Intel)
 au BufNewFile,BufRead *.hex,*.h32		setf hex
 
@@ -1137,7 +1140,7 @@ au BufNewFile,BufRead *.mms			call dist#ft#FTmms()
 au BufNewFile,BufRead *.mmp			setf mmp
 
 " ABB Rapid, Modula-2, Modsim III or LambdaProlog
-au BufNewFile,BufRead *.mod\c 			call dist#ft#FTmod()
+au BufNewFile,BufRead *.mod\c			call dist#ft#FTmod()
 
 " Modula-2  (.md removed in favor of Markdown, see dist#ft#FTmod for *.MOD)
 au BufNewFile,BufRead *.m2,*.DEF,*.mi		setf modula2
@@ -1268,6 +1271,9 @@ au BufNewFile,BufRead *.or			setf openroad
 " OPL
 au BufNewFile,BufRead *.[Oo][Pp][Ll]		setf opl
 
+" OpenSCAD
+au BufNewFile,BufRead *.scad		setf openscad		
+
 " Oracle config file
 au BufNewFile,BufRead *.ora			setf ora
 
@@ -1277,13 +1283,13 @@ au BufNewFile,BufRead *.org,*.org_archive	setf org
 " Packet filter conf
 au BufNewFile,BufRead pf.conf			setf pf
 
-" Pacman Config (close enough to dosini)
-au BufNewFile,BufRead */etc/pacman.conf		setf dosini
+" Pacman config
+au BufNewFile,BufRead */etc/pacman.conf		setf conf
 
 " Pacman hooks
 au BufNewFile,BufRead *.hook
 	\ if getline(1) == '[Trigger]' |
-	\   setf dosini |
+	\   setf conf |
 	\ endif
 
 " Pam conf
@@ -1627,16 +1633,22 @@ au BufNewFile,BufRead *.sass			setf sass
 au BufNewFile,BufRead *.sa			setf sather
 
 " Scala
-au BufNewFile,BufRead *.scala,*.sc		setf scala
+au BufNewFile,BufRead *.scala			setf scala
 
 " SBT - Scala Build Tool
 au BufNewFile,BufRead *.sbt			setf sbt
 
+" SuperCollider
+au BufNewFile,BufRead *.sc			call dist#ft#FTsc()
+
+au BufNewFile,BufRead *.quark			setf supercollider
+
+" scdoc
+au BufNewFile,BufRead *.scd			call dist#ft#FTscd()
+
 " Scilab
 au BufNewFile,BufRead *.sci,*.sce		setf scilab
 
-" scdoc
-au BufNewFile,BufRead *.scd			setf scdoc
 
 " SCSS
 au BufNewFile,BufRead *.scss			setf scss
@@ -1897,6 +1909,9 @@ au BufNewFile,BufRead */etc/sudoers,sudoers.tmp	setf sudoers
 
 " SVG (Scalable Vector Graphics)
 au BufNewFile,BufRead *.svg			setf svg
+
+" Surface
+au BufRead,BufNewFile *.sface			setf surface
 
 " Tads (or Nroff or Perl test file)
 au BufNewFile,BufRead *.t
