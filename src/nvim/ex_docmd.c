@@ -44,8 +44,8 @@
 #include "nvim/keymap.h"
 #include "nvim/lua/executor.h"
 #include "nvim/main.h"
-#include "nvim/match.h"
 #include "nvim/mark.h"
+#include "nvim/match.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -76,6 +76,7 @@
 #include "nvim/terminal.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
+#include "nvim/undo_defs.h"
 #include "nvim/version.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -2662,9 +2663,9 @@ static char_u *find_command(exarg_T *eap, int *full)
 
       // Use a precomputed index for fast look-up in cmdnames[]
       // taking into account the first 2 letters of eap->cmd.
-      eap->cmdidx = cmdidxs1[CharOrdLow(c1)];
+      eap->cmdidx = cmdidxs1[CHAR_ORD_LOW(c1)];
       if (ASCII_ISLOWER(c2)) {
-        eap->cmdidx += cmdidxs2[CharOrdLow(c1)][CharOrdLow(c2)];
+        eap->cmdidx += cmdidxs2[CHAR_ORD_LOW(c1)][CHAR_ORD_LOW(c2)];
       }
     } else {
       eap->cmdidx = CMD_bang;
@@ -3615,8 +3616,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
       // EX_XFILE: file names are handled above.
       if (!(ea.argt & EX_XFILE)) {
         if (context == EXPAND_MENUS) {
-          return (const char *)set_context_in_menu_cmd(xp, cmd,
-                                                       (char_u *)arg, forceit);
+          return (const char *)set_context_in_menu_cmd(xp, cmd, (char *)arg, forceit);
         } else if (context == EXPAND_COMMANDS) {
           return arg;
         } else if (context == EXPAND_MAPPINGS) {
@@ -3722,7 +3722,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
   case CMD_tunmenu:
   case CMD_popup:
   case CMD_emenu:
-    return (const char *)set_context_in_menu_cmd(xp, cmd, (char_u *)arg, forceit);
+    return (const char *)set_context_in_menu_cmd(xp, cmd, (char *)arg, forceit);
 
   case CMD_colorscheme:
     xp->xp_context = EXPAND_COLORS;
@@ -4519,7 +4519,7 @@ int expand_filename(exarg_T *eap, char_u **cmdlinep, char **errormsgp)
     if ((eap->usefilter
          || eap->cmdidx == CMD_bang
          || eap->cmdidx == CMD_terminal)
-        && vim_strpbrk(repl, (char_u *)"!") != NULL) {
+        && strpbrk((char *)repl, "!") != NULL) {
       char_u *l;
 
       l = vim_strsave_escaped(repl, (char_u *)"!");
@@ -8231,10 +8231,39 @@ static void ex_bang(exarg_T *eap)
 /// ":undo".
 static void ex_undo(exarg_T *eap)
 {
-  if (eap->addr_count == 1) {       // :undo 123
-    undo_time(eap->line2, false, false, true);
-  } else {
-    u_undo(1);
+  if (eap->addr_count != 1) {
+    if (eap->forceit) {
+      u_undo_and_forget(1);         // :undo!
+    } else {
+      u_undo(1);                    // :undo
+    }
+    return;
+  }
+
+  long step = eap->line2;
+
+  if (eap->forceit) {             // undo! 123
+    // change number for "undo!" must be lesser than current change number
+    if (step >= curbuf->b_u_seq_cur) {
+      emsg(_(e_undobang_cannot_redo_or_move_branch));
+      return;
+    }
+    // ensure that target change number is in same branch
+    // while also counting the amount of undoes it'd take to reach target
+    u_header_T *uhp;
+    int count = 0;
+
+    for (uhp = curbuf->b_u_curhead ? curbuf->b_u_curhead : curbuf->b_u_newhead;
+         uhp != NULL && uhp->uh_seq > step;
+         uhp = uhp->uh_next.ptr, ++count) {
+    }
+    if (step != 0 && (uhp == NULL || uhp->uh_seq < step)) {
+      emsg(_(e_undobang_cannot_redo_or_move_branch));
+      return;
+    }
+    u_undo_and_forget(count);
+  } else {                        // :undo 123
+    undo_time(step, false, false, true);
   }
 }
 

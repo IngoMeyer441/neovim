@@ -379,6 +379,7 @@ static void au_cleanup(void)
 
 // Get the first AutoPat for a particular event.
 AutoPat *au_get_autopat_for_event(event_T event)
+  FUNC_ATTR_PURE
 {
   return first_autopat[(int)event];
 }
@@ -1143,6 +1144,7 @@ int autocmd_register(int64_t id, event_T event, char_u *pat, int patlen, int gro
 }
 
 size_t aucmd_pattern_length(char_u *pat)
+  FUNC_ATTR_PURE
 {
   if (*pat == NUL) {
     return 0;
@@ -1175,6 +1177,7 @@ size_t aucmd_pattern_length(char_u *pat)
 }
 
 char_u *aucmd_next_pattern(char_u *pat, size_t patlen)
+  FUNC_ATTR_PURE
 {
   pat = pat + patlen;
   if (*pat == ',') {
@@ -2356,7 +2359,7 @@ bool au_exists(const char *const arg) FUNC_ATTR_WARN_UNUSED_RESULT
   }
 
   // if pattern is "<buffer>", special handling is needed which uses curbuf
-  // for pattern "<buffer=N>, fnamecmp() will work fine
+  // for pattern "<buffer=N>, FNAMECMP() will work fine
   if (pattern != NULL && STRICMP(pattern, "<buffer>") == 0) {
     buflocal_buf = curbuf;
   }
@@ -2364,12 +2367,12 @@ bool au_exists(const char *const arg) FUNC_ATTR_WARN_UNUSED_RESULT
   // Check if there is an autocommand with the given pattern.
   for (; ap != NULL; ap = ap->next) {
     // only use a pattern when it has not been removed and has commands.
-    // For buffer-local autocommands, fnamecmp() works fine.
+    // For buffer-local autocommands, FNAMECMP() works fine.
     if (ap->pat != NULL && ap->cmds != NULL
         && (group == AUGROUP_ALL || ap->group == group)
         && (pattern == NULL
             || (buflocal_buf == NULL
-                ? fnamecmp(ap->pat, (char_u *)pattern) == 0
+                ? FNAMECMP(ap->pat, (char_u *)pattern) == 0
                 : ap->buflocal_nr == buflocal_buf->b_fnum))) {
       retval = true;
       break;
@@ -2383,6 +2386,7 @@ theend:
 
 // Checks if a pattern is buflocal
 bool aupat_is_buflocal(char_u *pat, int patlen)
+  FUNC_ATTR_PURE
 {
   return patlen >= 8
          && STRNCMP(pat, "<buffer", 7) == 0
@@ -2445,7 +2449,7 @@ bool autocmd_delete_id(int64_t id)
 
   // Note that since multiple AutoCmd objects can have the same ID, we need to do a full scan.
   FOR_ALL_AUEVENTS(event) {
-    FOR_ALL_AUPATS_IN_EVENT(event, ap) {
+    FOR_ALL_AUPATS_IN_EVENT(event, ap) {  // -V756
       for (AutoCmd *ac = ap->cmds; ac != NULL; ac = ac->next) {
         if (ac->id == id) {
           aucmd_del(ac);
@@ -2492,6 +2496,7 @@ char *aucmd_exec_default_desc(AucmdExecutable acc)
 }
 
 char *aucmd_exec_to_string(AutoCmd *ac, AucmdExecutable acc)
+  FUNC_ATTR_PURE
 {
   switch (acc.type) {
   case CALLABLE_EX:
@@ -2542,6 +2547,7 @@ AucmdExecutable aucmd_exec_copy(AucmdExecutable src)
 }
 
 bool aucmd_exec_is_deleted(AucmdExecutable acc)
+  FUNC_ATTR_PURE
 {
   switch (acc.type) {
   case CALLABLE_EX:
@@ -2556,6 +2562,7 @@ bool aucmd_exec_is_deleted(AucmdExecutable acc)
 }
 
 bool au_event_is_empty(event_T event)
+  FUNC_ATTR_PURE
 {
   return first_autopat[event] == NULL;
 }
