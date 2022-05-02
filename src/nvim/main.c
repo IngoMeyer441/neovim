@@ -835,8 +835,8 @@ static uint64_t server_connect(char *server_addr, const char **errmsg)
 }
 
 /// Handle remote subcommands
-static void remote_request(mparm_T *params, int remote_args,
-                           char *server_addr, int argc, char **argv)
+static void remote_request(mparm_T *params, int remote_args, char *server_addr, int argc,
+                           char **argv)
 {
   const char *connect_error = NULL;
   uint64_t chan = server_connect(server_addr, &connect_error);
@@ -884,7 +884,7 @@ static void remote_request(mparm_T *params, int remote_args,
   TriState should_exit = kNone;
   TriState tabbed = kNone;
 
-  for (size_t i = 0; i < rvobj.data.dictionary.size ; i++) {
+  for (size_t i = 0; i < rvobj.data.dictionary.size; i++) {
     if (strcmp(rvobj.data.dictionary.items[i].key.data, "errmsg") == 0) {
       if (rvobj.data.dictionary.items[i].value.type != kObjectTypeString) {
         mch_errmsg("vim._cs_remote returned an unexpected type for 'errmsg'\n");
@@ -1376,7 +1376,7 @@ scripterror:
       int alist_fnum_flag = edit_stdin(had_stdin_file, parmp)
                             ? 1   // add buffer nr after exp.
                             : 2;  // add buffer number now and use curbuf
-      alist_add(&global_alist, p, alist_fnum_flag);
+      alist_add(&global_alist, (char *)p, alist_fnum_flag);
     }
 
     // If there are no more letters after the current "-", go to next argument.
@@ -1510,7 +1510,7 @@ static void handle_quickfix(mparm_T *paramp)
       set_string_option_direct("ef", -1, paramp->use_ef, OPT_FREE, SID_CARG);
     }
     vim_snprintf((char *)IObuff, IOSIZE, "cfile %s", p_ef);
-    if (qf_init(NULL, p_ef, p_efm, true, IObuff, p_menc) < 0) {
+    if (qf_init(NULL, (char *)p_ef, p_efm, true, (char *)IObuff, (char *)p_menc) < 0) {
       msg_putchar('\n');
       os_exit(3);
     }
@@ -1748,8 +1748,8 @@ static void edit_buffers(mparm_T *parmp, char_u *cwd)
       // at the ATTENTION prompt close the window.
       swap_exists_did_quit = false;
       (void)do_ecmd(0, arg_idx < GARGCOUNT
-          ? alist_name(&GARGLIST[arg_idx]) : NULL,
-                    NULL, NULL, ECMD_LASTL, ECMD_HIDE, curwin);
+                    ? (char *)alist_name(&GARGLIST[arg_idx])
+                    : NULL, NULL, NULL, ECMD_LASTL, ECMD_HIDE, curwin);
       if (swap_exists_did_quit) {
         // abort or quit selected
         if (got_int || only_one_window()) {

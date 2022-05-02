@@ -972,8 +972,7 @@ void ml_recover(bool checkext)
   if (b0p->b0_flags & B0_HAS_FENC) {
     int fnsize = B0_FNAME_SIZE_NOCRYPT;
 
-    for (p = b0p->b0_fname + fnsize; p > b0p->b0_fname && p[-1] != NUL; p--) {
-    }
+    for (p = b0p->b0_fname + fnsize; p > b0p->b0_fname && p[-1] != NUL; p--) {}
     b0_fenc = vim_strnsave(p, b0p->b0_fname + fnsize - p);
   }
 
@@ -994,7 +993,7 @@ void ml_recover(bool checkext)
    */
   if (curbuf->b_ffname != NULL) {
     orig_file_status = readfile(curbuf->b_ffname, NULL, (linenr_T)0,
-                                (linenr_T)0, (linenr_T)MAXLNUM, NULL, READ_NEW);
+                                (linenr_T)0, (linenr_T)MAXLNUM, NULL, READ_NEW, false);
   }
 
   // Use the 'fileformat' and 'fileencoding' as stored in the swap file.
@@ -1069,7 +1068,7 @@ void ml_recover(bool checkext)
               line_count = pp->pb_pointer[idx].pe_line_count;
               if (readfile(curbuf->b_ffname, NULL, lnum,
                            pp->pb_pointer[idx].pe_old_lnum - 1, line_count,
-                           NULL, 0) != OK) {
+                           NULL, 0, false) != OK) {
                 cannot_open = true;
               } else {
                 lnum += line_count;
@@ -2438,8 +2437,8 @@ void ml_add_deleted_len_buf(buf_T *buf, char_u *ptr, ssize_t len)
   if (len == -1) {
     len = STRLEN(ptr);
   }
-  curbuf->deleted_bytes += len+1;
-  curbuf->deleted_bytes2 += len+1;
+  curbuf->deleted_bytes += len + 1;
+  curbuf->deleted_bytes2 += len + 1;
   if (curbuf->update_need_codepoints) {
     mb_utflen(ptr, len, &curbuf->deleted_codepoints,
               &curbuf->deleted_codeunits);
@@ -2585,7 +2584,7 @@ static int ml_delete_int(buf_T *buf, linenr_T lnum, bool message)
   // Line should always have an NL char internally (represented as NUL),
   // even if 'noeol' is set.
   assert(line_size >= 1);
-  ml_add_deleted_len_buf(buf, (char_u *)dp + line_start, line_size-1);
+  ml_add_deleted_len_buf(buf, (char_u *)dp + line_start, line_size - 1);
 
   /*
    * special case: If there is only one line in the data block it becomes empty.

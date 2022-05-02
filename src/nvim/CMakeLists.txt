@@ -16,8 +16,8 @@ if(WIN32)
   # tell MinGW compiler to enable wmain
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -municode")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -framework CoreFoundation")
-  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -framework CoreFoundation")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -framework CoreServices")
+  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -framework CoreServices")
 endif()
 
 set(TOUCHES_DIR ${PROJECT_BINARY_DIR}/touches)
@@ -159,10 +159,7 @@ list(REMOVE_ITEM NVIM_SOURCES ${to_remove})
 set(CONV_SOURCES
   edit.c
   eval.c
-  eval/funcs.c
-  eval/userfunc.c
   ex_cmds.c
-  ex_docmd.c
   fileio.c
   lua/treesitter.c
   mbyte.c
@@ -174,7 +171,6 @@ set(CONV_SOURCES
   spell.c
   spellfile.c
   syntax.c
-  tag.c
   window.c)
 foreach(sfile ${CONV_SOURCES})
   if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/${sfile}")
@@ -468,7 +464,6 @@ endif()
 
 if(WIN32)
   list(APPEND NVIM_LINK_LIBRARIES netapi32)
-  list(APPEND NVIM_LINK_LIBRARIES ${WINPTY_LIBRARIES})
 endif()
 
 # Use "luv" as imported library, to work around CMake using "-lluv" for
@@ -555,8 +550,6 @@ if(WIN32)
                       diff.exe
                       tee.exe
                       win32yank.exe
-                      winpty-agent.exe
-                      winpty.dll
                       xxd.exe
 
                       # Dependencies for neovim-qt

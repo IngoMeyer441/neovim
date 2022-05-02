@@ -71,7 +71,7 @@ typedef struct {
   int top, bot, left, right;
 } Rect;
 
-typedef struct {
+struct TUIData {
   UIBridgeData *bridge;
   Loop *loop;
   unibi_var_t params[9];
@@ -132,9 +132,10 @@ typedef struct {
     int set_underline_style;
     int set_underline_color;
     int enable_extended_keys, disable_extended_keys;
+    int get_extkeys;
   } unibi_ext;
   char *space_buf;
-} TUIData;
+};
 
 static bool volatile got_winch = false;
 static bool did_user_set_dimensions = false;
@@ -177,6 +178,32 @@ UI *tui_start(void)
   ui->ui_ext[kUITermColors] = true;
 
   return ui_bridge_attach(ui, tui_main, tui_scheduler);
+}
+
+void tui_enable_extkeys(TUIData *data)
+{
+  TermInput input = data->input;
+  unibi_term *ut = data->ut;
+  UI *ui = data->bridge->ui;
+
+  switch (input.extkeys_type) {
+  case kExtkeysCSIu:
+    data->unibi_ext.enable_extended_keys = (int)unibi_add_ext_str(ut, "ext.enable_extended_keys",
+                                                                  "\x1b[>1u");
+    data->unibi_ext.disable_extended_keys = (int)unibi_add_ext_str(ut, "ext.disable_extended_keys",
+                                                                   "\x1b[<1u");
+    break;
+  case kExtkeysXterm:
+    data->unibi_ext.enable_extended_keys = (int)unibi_add_ext_str(ut, "ext.enable_extended_keys",
+                                                                  "\x1b[>4;2m");
+    data->unibi_ext.disable_extended_keys = (int)unibi_add_ext_str(ut, "ext.disable_extended_keys",
+                                                                   "\x1b[>4;0m");
+    break;
+  default:
+    break;
+  }
+
+  unibi_out_ext(ui, data->unibi_ext.enable_extended_keys);
 }
 
 static size_t unibi_pre_fmt_str(TUIData *data, unsigned int unibi_index, char *buf, size_t len)
@@ -228,8 +255,10 @@ static void terminfo_start(UI *ui)
   data->unibi_ext.set_underline_color = -1;
   data->unibi_ext.enable_extended_keys = -1;
   data->unibi_ext.disable_extended_keys = -1;
+  data->unibi_ext.get_extkeys = -1;
   data->out_fd = STDOUT_FILENO;
   data->out_isatty = os_isatty(data->out_fd);
+  data->input.tui_data = data;
 
   const char *term = os_getenv("TERM");
 #ifdef WIN32
@@ -311,8 +340,9 @@ static void terminfo_start(UI *ui)
   // Enable bracketed paste
   unibi_out_ext(ui, data->unibi_ext.enable_bracketed_paste);
 
-  // Enable extended keys (also known as 'modifyOtherKeys' or CSI u)
-  unibi_out_ext(ui, data->unibi_ext.enable_extended_keys);
+  // Query the terminal to see if it supports CSI u
+  data->input.waiting_for_csiu_response = 5;
+  unibi_out_ext(ui, data->unibi_ext.get_extkeys);
 
   int ret;
   uv_loop_init(&data->write_loop);
@@ -361,6 +391,8 @@ static void terminfo_stop(UI *ui)
   // Reset cursor to normal before exiting alternate screen.
   unibi_out(ui, unibi_cursor_normal);
   unibi_out(ui, unibi_keypad_local);
+  // Disable extended keys before exiting alternate screen.
+  unibi_out_ext(ui, data->unibi_ext.disable_extended_keys);
   unibi_out(ui, unibi_exit_ca_mode);
   // Restore title/icon from the "stack". #4063
   unibi_out_ext(ui, data->unibi_ext.restore_title);
@@ -371,8 +403,6 @@ static void terminfo_stop(UI *ui)
   unibi_out_ext(ui, data->unibi_ext.disable_bracketed_paste);
   // Disable focus reporting
   unibi_out_ext(ui, data->unibi_ext.disable_focus_reporting);
-  // Disable extended keys
-  unibi_out_ext(ui, data->unibi_ext.disable_extended_keys);
   flush_buf(ui);
   uv_tty_reset_mode();
   uv_close((uv_handle_t *)&data->output_handle, NULL);
@@ -867,7 +897,7 @@ static void clear_region(UI *ui, int top, int bot, int left, int right, int attr
       unibi_out(ui, unibi_clr_eos);
     }
   } else {
-    int width = right-left;
+    int width = right - left;
 
     // iterate through each line and clear
     for (int row = top; row < bot; row++) {
@@ -1156,12 +1186,12 @@ static void tui_grid_scroll(UI *ui, Integer g, Integer startrow,  // -V751
 {
   TUIData *data = ui->data;
   UGrid *grid = &data->grid;
-  int top = (int)startrow, bot = (int)endrow-1;
-  int left = (int)startcol, right = (int)endcol-1;
+  int top = (int)startrow, bot = (int)endrow - 1;
+  int left = (int)startcol, right = (int)endcol - 1;
 
-  bool fullwidth = left == 0 && right == ui->width-1;
+  bool fullwidth = left == 0 && right == ui->width - 1;
   data->scroll_region_is_full_screen = fullwidth
-                                       && top == 0 && bot == ui->height-1;
+                                       && top == 0 && bot == ui->height - 1;
 
   ugrid_scroll(grid, top, bot, left, right, (int)rows);
 
@@ -1264,10 +1294,10 @@ static void tui_flush(UI *ui)
     assert(r.bot <= grid->height && r.right <= grid->width);
 
     for (int row = r.top; row < r.bot; row++) {
-      int clear_attr = grid->cells[row][r.right-1].attr;
+      int clear_attr = grid->cells[row][r.right - 1].attr;
       int clear_col;
       for (clear_col = r.right; clear_col > 0; clear_col--) {
-        UCell *cell = &grid->cells[row][clear_col-1];
+        UCell *cell = &grid->cells[row][clear_col - 1];
         if (!(cell->data[0] == ' ' && cell->data[1] == NUL
               && cell->attr == clear_attr)) {
           break;
@@ -1279,7 +1309,7 @@ static void tui_flush(UI *ui)
         print_cell(ui, cell);
       });
       if (clear_col < r.right) {
-        clear_region(ui, row, row+1, clear_col, r.right, clear_attr);
+        clear_region(ui, row, row + 1, clear_col, r.right, clear_attr);
       }
     }
   }
@@ -1359,8 +1389,7 @@ static void tui_set_title(UI *ui, String title)
 }
 
 static void tui_set_icon(UI *ui, String icon)
-{
-}
+{}
 
 static void tui_screenshot(UI *ui, String path)
 {
@@ -1408,9 +1437,9 @@ static void tui_raw_line(UI *ui, Integer g, Integer linerow, Integer startcol, I
   TUIData *data = ui->data;
   UGrid *grid = &data->grid;
   for (Integer c = startcol; c < endcol; c++) {
-    memcpy(grid->cells[linerow][c].data, chunk[c-startcol], sizeof(schar_T));
-    assert((size_t)attrs[c-startcol] < kv_size(data->attrs));
-    grid->cells[linerow][c].attr = attrs[c-startcol];
+    memcpy(grid->cells[linerow][c].data, chunk[c - startcol], sizeof(schar_T));
+    assert((size_t)attrs[c - startcol] < kv_size(data->attrs));
+    grid->cells[linerow][c].attr = attrs[c - startcol];
   }
   UGRID_FOREACH_CELL(grid, (int)linerow, (int)startcol, (int)endcol, {
     cursor_goto(ui, (int)linerow, curcol);
@@ -1420,7 +1449,7 @@ static void tui_raw_line(UI *ui, Integer g, Integer linerow, Integer startcol, I
   if (clearcol > endcol) {
     ugrid_clear_chunk(grid, (int)linerow, (int)endcol, (int)clearcol,
                       (sattr_T)clearattr);
-    clear_region(ui, (int)linerow, (int)linerow+1, (int)endcol, (int)clearcol,
+    clear_region(ui, (int)linerow, (int)linerow + 1, (int)endcol, (int)clearcol,
                  (int)clearattr);
   }
 
@@ -1810,6 +1839,12 @@ static void patch_terminfo_bugs(TUIData *data, const char *term, const char *col
   data->unibi_ext.get_bg = (int)unibi_add_ext_str(ut, "ext.get_bg",
                                                   "\x1b]11;?\x07");
 
+  // Query the terminal to see if it supports CSI u key encoding by writing CSI
+  // ? u followed by a request for the primary device attributes (CSI c)
+  // See https://sw.kovidgoyal.net/kitty/keyboard-protocol/#detection-of-support-for-this-protocol
+  data->unibi_ext.get_extkeys = (int)unibi_add_ext_str(ut, "ext.get_extkeys",
+                                                       "\x1b[?u\x1b[c");
+
   // Terminals with 256-colour SGR support despite what terminfo says.
   if (unibi_get_num(ut, unibi_max_colors) < 256) {
     // See http://fedoraproject.org/wiki/Features/256_Color_Terminals
@@ -2082,15 +2117,9 @@ static void augment_terminfo(TUIData *data, const char *term, long vte_version, 
                                                                  "\x1b[58:2::%p1%d:%p2%d:%p3%dm");
   }
 
-  data->unibi_ext.enable_extended_keys = unibi_find_ext_str(ut, "Eneks");
-  data->unibi_ext.disable_extended_keys = unibi_find_ext_str(ut, "Dseks");
-  if (data->unibi_ext.enable_extended_keys == -1) {
-    if (!kitty && (vte_version == 0 || vte_version >= 5400)) {
-      data->unibi_ext.enable_extended_keys = (int)unibi_add_ext_str(ut, "ext.enable_extended_keys",
-                                                                    "\x1b[>4;2m");
-      data->unibi_ext.disable_extended_keys = (int)unibi_add_ext_str(ut, "ext.disable_extended_keys",
-                                                                     "\x1b[>4m");
-    }
+  if (!kitty && (vte_version == 0 || vte_version >= 5400)) {
+    // Fallback to Xterm's modifyOtherKeys if terminal does not support CSI u
+    data->input.extkeys_type = kExtkeysXterm;
   }
 }
 

@@ -32,6 +32,7 @@
 #include "nvim/quickfix.h"
 #include "nvim/strings.h"
 #include "nvim/tag.h"
+#include "nvim/window.h"
 #if defined(UNIX)
 # include <sys/wait.h>
 #endif
@@ -459,9 +460,9 @@ staterr:
   if (S_ISDIR(file_info.stat.st_mode)) {
     fname2 = (char *)xmalloc(strlen(CSCOPE_DBFILE) + strlen(fname) + 2);
 
-    while (fname[strlen(fname)-1] == '/'
+    while (fname[strlen(fname) - 1] == '/'
            ) {
-      fname[strlen(fname)-1] = '\0';
+      fname[strlen(fname) - 1] = '\0';
       if (fname[0] == '\0') {
         break;
       }
@@ -1039,8 +1040,8 @@ static bool cs_find_common(char *opt, char *pat, int forceit, int verbose, bool 
         wp = curwin;
       }
       // '-' starts a new error list
-      if (qf_init(wp, tmp, (char_u *)"%f%*\\t%l%*\\t%m",
-                  *qfpos == '-', cmdline, NULL) > 0) {
+      if (qf_init(wp, (char *)tmp, "%f%*\\t%l%*\\t%m",
+                  *qfpos == '-', (char *)cmdline, NULL) > 0) {
         if (postponed_split != 0) {
           (void)win_split(postponed_split > 0 ? postponed_split : 0,
                           postponed_split_flags);
@@ -1443,8 +1444,7 @@ retry:
 
   // If the line's too long for the buffer, discard it.
   if ((p = strchr(buf, '\n')) == NULL) {
-    while ((ch = getc(csinfo[cnumber].fr_fp)) != EOF && ch != '\n') {
-    }
+    while ((ch = getc(csinfo[cnumber].fr_fp)) != EOF && ch != '\n') {}
     return NULL;
   }
   *p = '\0';
@@ -1593,8 +1593,7 @@ static char *cs_pathcomponents(char *path)
 
   char *s = path + strlen(path) - 1;
   for (int i = 0; i < p_cspc; i++) {
-    while (s > path && *--s != '/') {
-    }
+    while (s > path && *--s != '/') {}
   }
   if ((s > path && *s == '/')) {
     s++;

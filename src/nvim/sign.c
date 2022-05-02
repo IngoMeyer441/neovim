@@ -5,7 +5,6 @@
 // sign.c: functions for managing with signs
 //
 
-
 #include "nvim/ascii.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
@@ -20,6 +19,7 @@
 #include "nvim/sign.h"
 #include "nvim/syntax.h"
 #include "nvim/vim.h"
+#include "nvim/window.h"
 
 /// Struct to hold the sign properties.
 typedef struct sign sign_T;
@@ -1698,8 +1698,7 @@ void free_signs(void)
   }
 }
 
-static enum
-{
+static enum {
   EXP_SUBCMD,   // expand :sign sub-commands
   EXP_DEFINE,   // expand :sign define {name} args
   EXP_PLACE,    // expand :sign place {id} args

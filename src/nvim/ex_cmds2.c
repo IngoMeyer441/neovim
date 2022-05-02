@@ -554,7 +554,7 @@ void dialog_changed(buf_T *buf, bool checkall)
     .forceit = false,
   };
 
-  dialog_msg(buff, _("Save changes to \"%s\"?"), buf->b_fname);
+  dialog_msg((char *)buff, _("Save changes to \"%s\"?"), (char *)buf->b_fname);
   if (checkall) {
     ret = vim_dialog_yesnoallcancel(VIM_QUESTION, NULL, buff, 1);
   } else {
@@ -565,8 +565,8 @@ void dialog_changed(buf_T *buf, bool checkall)
     if (buf->b_fname != NULL
         && check_overwrite(&ea,
                            buf,
-                           buf->b_fname,
-                           buf->b_ffname,
+                           (char *)buf->b_fname,
+                           (char *)buf->b_ffname,
                            false) == OK) {
       // didn't hit Cancel
       (void)buf_write_all(buf, false);
@@ -583,8 +583,8 @@ void dialog_changed(buf_T *buf, bool checkall)
         set_bufref(&bufref, buf2);
 
         if (buf2->b_fname != NULL
-            && check_overwrite(&ea, buf2, buf2->b_fname,
-                               buf2->b_ffname, false) == OK) {
+            && check_overwrite(&ea, buf2, (char *)buf2->b_fname,
+                               (char *)buf2->b_ffname, false) == OK) {
           // didn't hit Cancel
           (void)buf_write_all(buf2, false);
         }
@@ -610,8 +610,8 @@ bool dialog_close_terminal(buf_T *buf)
 {
   char_u buff[DIALOG_MSG_SIZE];
 
-  dialog_msg(buff, _("Close \"%s\"?"),
-             (buf->b_fname != NULL) ? buf->b_fname : (char_u *)"?");
+  dialog_msg((char *)buff, _("Close \"%s\"?"),
+             (buf->b_fname != NULL) ? (char *)buf->b_fname : "?");
 
   int ret = vim_dialog_yesnocancel(VIM_QUESTION, NULL, buff, 1);
 
@@ -972,7 +972,7 @@ static int do_arglist(char_u *str, int what, int after, bool will_edit)
       xfree(exp_files);
     } else {
       assert(what == AL_SET);
-      alist_set(ALIST(curwin), exp_count, exp_files, will_edit, NULL, 0);
+      alist_set(ALIST(curwin), exp_count, (char **)exp_files, will_edit, NULL, 0);
     }
   }
 
@@ -1166,7 +1166,7 @@ void do_argfile(exarg_T *eap, int argn)
     // Edit the file; always use the last known line number.
     // When it fails (e.g. Abort for already edited file) restore the
     // argument index.
-    if (do_ecmd(0, alist_name(&ARGLIST[curwin->w_arg_idx]), NULL,
+    if (do_ecmd(0, (char *)alist_name(&ARGLIST[curwin->w_arg_idx]), NULL,
                 eap, ECMD_LAST,
                 (buf_hide(curwin->w_buffer) ? ECMD_HIDE : 0)
                 + (eap->forceit ? ECMD_FORCEIT : 0), curwin) == FAIL) {
@@ -1427,8 +1427,7 @@ void ex_listdo(exarg_T *eap)
       i++;
       // execute the command
       if (execute) {
-        do_cmdline(eap->arg, eap->getline, eap->cookie,
-                   DOCMD_VERBOSE + DOCMD_NOWAIT);
+        do_cmdline((char *)eap->arg, eap->getline, eap->cookie, DOCMD_VERBOSE + DOCMD_NOWAIT);
       }
 
       if (eap->cmdidx == CMD_bufdo) {
@@ -2086,7 +2085,7 @@ int do_source(char *fname, int check_other, int is_vimrc)
     sourcing_lnum = sourcing_lnum_backup;
   } else {
     // Call do_cmdline, which will call getsourceline() to get the lines.
-    do_cmdline(firstline, getsourceline, (void *)&cookie,
+    do_cmdline((char *)firstline, getsourceline, (void *)&cookie,
                DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_REPEAT);
   }
   retval = OK;

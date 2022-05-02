@@ -25,7 +25,6 @@
 #include <string.h>
 
 #include "nvim/api/private/helpers.h"
-#include "nvim/api/vim.h"
 #include "nvim/ascii.h"
 #include "nvim/assert.h"
 #include "nvim/buffer.h"
@@ -50,7 +49,6 @@
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
 #include "nvim/hashtab.h"
-#include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
@@ -64,13 +62,11 @@
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/time.h"
-#include "nvim/os_unix.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
 #include "nvim/screen.h"
-#include "nvim/shada.h"
 #include "nvim/sign.h"
 #include "nvim/spell.h"
 #include "nvim/strings.h"
@@ -109,6 +105,7 @@ static int read_buffer(int read_stdin, exarg_T *eap, int flags)
 {
   int retval = OK;
   linenr_T line_count;
+  bool silent = shortmess(SHM_FILEINFO);
 
   // Read from the buffer which the text is already filled in and append at
   // the end.  This makes it possible to retry when 'fileformat' or
@@ -117,7 +114,7 @@ static int read_buffer(int read_stdin, exarg_T *eap, int flags)
   retval = readfile(read_stdin ? NULL : curbuf->b_ffname,
                     read_stdin ? NULL : curbuf->b_fname,
                     line_count, (linenr_T)0, (linenr_T)MAXLNUM, eap,
-                    flags | READ_BUFFER);
+                    flags | READ_BUFFER, silent);
   if (retval == OK) {
     // Delete the binary lines.
     while (--line_count >= 0) {
@@ -162,6 +159,7 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags)
   bufref_T old_curbuf;
   long old_tw = curbuf->b_p_tw;
   int read_fifo = false;
+  bool silent = shortmess(SHM_FILEINFO);
 
   // The 'readonly' flag is only set when BF_NEVERLOADED is being reset.
   // When re-entering the same buffer, it should not change, because the
@@ -212,7 +210,6 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags)
   curwin->w_valid = 0;
 
   if (curbuf->b_ffname != NULL) {
-    int old_msg_silent = msg_silent;
 #ifdef UNIX
     int save_bin = curbuf->b_p_bin;
     int perm;
@@ -231,13 +228,10 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags)
       curbuf->b_p_bin = true;
     }
 #endif
-    if (shortmess(SHM_FILEINFO)) {
-      msg_silent = 1;
-    }
 
     retval = readfile(curbuf->b_ffname, curbuf->b_fname,
                       (linenr_T)0, (linenr_T)0, (linenr_T)MAXLNUM, eap,
-                      flags | READ_NEW | (read_fifo ? READ_FIFO : 0));
+                      flags | READ_NEW | (read_fifo ? READ_FIFO : 0), silent);
 #ifdef UNIX
     if (read_fifo) {
       curbuf->b_p_bin = save_bin;
@@ -246,7 +240,6 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags)
       }
     }
 #endif
-    msg_silent = old_msg_silent;
 
     // Help buffer is filtered.
     if (bt_help(curbuf)) {
@@ -262,7 +255,7 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags)
     curbuf->b_p_bin = true;
     retval = readfile(NULL, NULL, (linenr_T)0,
                       (linenr_T)0, (linenr_T)MAXLNUM, NULL,
-                      flags | (READ_NEW + READ_STDIN));
+                      flags | (READ_NEW + READ_STDIN), silent);
     curbuf->b_p_bin = save_bin;
     if (retval == OK) {
       retval = read_buffer(true, eap, flags);
@@ -903,14 +896,7 @@ void handle_swap_exists(bufref_T *old_curbuf)
       buf = old_curbuf->br_buf;
     }
     if (buf != NULL) {
-      int old_msg_silent = msg_silent;
-
-      if (shortmess(SHM_FILEINFO)) {
-        msg_silent = 1;  // prevent fileinfo message
-      }
       enter_buffer(buf);
-      // restore msg_silent, so that the command line will be shown
-      msg_silent = old_msg_silent;
 
       if (old_tw != curbuf->b_p_tw) {
         check_colorcolumn(curwin);
@@ -2357,9 +2343,9 @@ int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options)
     // if the current buffer is first in the list, place it at the end
     if (matches[0].buf == curbuf) {
       for (int i = 1; i < count; i++) {
-        (*file)[i-1] = matches[i].match;
+        (*file)[i - 1] = matches[i].match;
       }
-      (*file)[count-1] = matches[0].match;
+      (*file)[count - 1] = matches[0].match;
     } else {
       for (int i = 0; i < count; i++) {
         (*file)[i] = matches[i].match;
@@ -4884,7 +4870,7 @@ void do_arg_all(int count, int forceit, int keep_tabs)
         new_curwin = curwin;
         new_curtab = curtab;
       }
-      (void)do_ecmd(0, alist_name(&AARGLIST(alist)[i]), NULL, NULL, ECMD_ONE,
+      (void)do_ecmd(0, (char *)alist_name(&AARGLIST(alist)[i]), NULL, NULL, ECMD_ONE,
                     ((buf_hide(curwin->w_buffer)
                       || bufIsChanged(curwin->w_buffer))
                      ? ECMD_HIDE : 0) + ECMD_OLDBUF,
@@ -5424,8 +5410,8 @@ static int buf_signcols_inner(buf_T *buf, int maximum)
     if (sign->se_lnum > curline) {
       // Counted all signs, now add extmark signs
       if (curline > 0) {
-        linesum += decor_signcols(buf, &decor_state, (int)curline-1, (int)curline-1,
-                                  maximum-linesum);
+        linesum += decor_signcols(buf, &decor_state, (int)curline - 1, (int)curline - 1,
+                                  maximum - linesum);
       }
       curline = sign->se_lnum;
       if (linesum > signcols) {
@@ -5443,7 +5429,8 @@ static int buf_signcols_inner(buf_T *buf, int maximum)
   }
 
   if (curline > 0) {
-    linesum += decor_signcols(buf, &decor_state, (int)curline-1, (int)curline-1, maximum-linesum);
+    linesum += decor_signcols(buf, &decor_state, (int)curline - 1, (int)curline - 1,
+                              maximum - linesum);
   }
   if (linesum > signcols) {
     signcols = linesum;
@@ -5453,7 +5440,7 @@ static int buf_signcols_inner(buf_T *buf, int maximum)
   }
 
   // Check extmarks between signs
-  linesum = decor_signcols(buf, &decor_state, 0, (int)buf->b_ml.ml_line_count-1, maximum);
+  linesum = decor_signcols(buf, &decor_state, 0, (int)buf->b_ml.ml_line_count - 1, maximum);
 
   if (linesum > signcols) {
     signcols = linesum;
@@ -5525,8 +5512,8 @@ void buf_signcols_add_check(buf_T *buf, sign_entry_T *added)
   for (; s->se_next && s->se_lnum == s->se_next->se_lnum; s = s->se_next) {
     linesum++;
   }
-  linesum += decor_signcols(buf, &decor_state, (int)s->se_lnum-1, (int)s->se_lnum-1,
-                            SIGN_SHOW_MAX-linesum);
+  linesum += decor_signcols(buf, &decor_state, (int)s->se_lnum - 1, (int)s->se_lnum - 1,
+                            SIGN_SHOW_MAX - linesum);
 
   if (linesum > buf->b_signcols.size) {
     buf->b_signcols.size = linesum;
@@ -5611,7 +5598,7 @@ bool buf_contents_changed(buf_T *buf)
   if (ml_open(curbuf) == OK
       && readfile(buf->b_ffname, buf->b_fname,
                   (linenr_T)0, (linenr_T)0, (linenr_T)MAXLNUM,
-                  &ea, READ_NEW | READ_DUMMY) == OK) {
+                  &ea, READ_NEW | READ_DUMMY, false) == OK) {
     // compare the two files line by line
     if (buf->b_ml.ml_line_count == curbuf->b_ml.ml_line_count) {
       differ = false;
