@@ -392,9 +392,9 @@ static int get_equi_class(char_u **pp)
   char_u      *p = *pp;
 
   if (p[1] == '=' && p[2] != NUL) {
-    l = utfc_ptr2len(p + 2);
+    l = utfc_ptr2len((char *)p + 2);
     if (p[l + 2] == '=' && p[l + 3] == ']') {
-      c = utf_ptr2char(p + 2);
+      c = utf_ptr2char((char *)p + 2);
       *pp += l + 4;
       return c;
     }
@@ -416,9 +416,9 @@ static int get_coll_element(char_u **pp)
   char_u      *p = *pp;
 
   if (p[0] != NUL && p[1] == '.' && p[2] != NUL) {
-    l = utfc_ptr2len(p + 2);
+    l = utfc_ptr2len((char *)p + 2);
     if (p[l + 2] == '.' && p[l + 3] == ']') {
-      c = utf_ptr2char(p + 2);
+      c = utf_ptr2char((char *)p + 2);
       *pp += l + 4;
       return c;
     }
@@ -449,7 +449,7 @@ static char_u *skip_anyof(char_u *p)
     p++;
   }
   while (*p != NUL && *p != ']') {
-    if ((l = utfc_ptr2len(p)) > 1) {
+    if ((l = utfc_ptr2len((char *)p)) > 1) {
       p += l;
     } else if (*p == '-')  {
       p++;
@@ -719,13 +719,13 @@ static int peekchr(void)
        * Next character can never be (made) magic?
        * Then backslashing it won't do anything.
        */
-      curchr = utf_ptr2char(regparse + 1);
+      curchr = utf_ptr2char((char *)regparse + 1);
     }
     break;
   }
 
   default:
-    curchr = utf_ptr2char(regparse);
+    curchr = utf_ptr2char((char *)regparse);
   }
 
   return curchr;
@@ -744,7 +744,7 @@ static void skipchr(void)
   }
   if (regparse[prevchr_len] != NUL) {
     // Exclude composing chars that utfc_ptr2len does include.
-    prevchr_len += utf_ptr2len(regparse + prevchr_len);
+    prevchr_len += utf_ptr2len((char *)regparse + prevchr_len);
   }
   regparse += prevchr_len;
   prev_at_start = at_start;
@@ -1463,8 +1463,8 @@ static inline char_u *cstrchr(const char_u *const s, const int c)
   // expected to be highly optimized.
   if (c > 0x80) {
     const int folded_c = utf_fold(c);
-    for (const char_u *p = s; *p != NUL; p += utfc_ptr2len(p)) {
-      if (utf_fold(utf_ptr2char(p)) == folded_c) {
+    for (const char_u *p = s; *p != NUL; p += utfc_ptr2len((char *)p)) {
+      if (utf_fold(utf_ptr2char((char *)p)) == folded_c) {
         return (char_u *)p;
       }
     }
@@ -1571,7 +1571,7 @@ char_u *regtilde(char_u *source, int magic, bool preview)
       if (*p == '\\' && p[1]) {         // skip escaped characters
         p++;
       }
-      p += utfc_ptr2len(p) - 1;
+      p += utfc_ptr2len((char *)p) - 1;
     }
   }
 
@@ -1629,7 +1629,7 @@ static int fill_submatch_list(int argc FUNC_ATTR_UNUSED, typval_T *argv,
       s = vim_strnsave(s, rsm.sm_match->endp[i] - s);
     }
     TV_LIST_ITEM_TV(li)->v_type = VAR_STRING;
-    TV_LIST_ITEM_TV(li)->vval.v_string = s;
+    TV_LIST_ITEM_TV(li)->vval.v_string = (char *)s;
     li = TV_LIST_ITEM_NEXT(argv->vval.v_list, li);
   }
   return argskip + 1;
@@ -1785,12 +1785,12 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest,
         funcexe.argv_func = fill_submatch_list;
         funcexe.evaluate = true;
         if (expr->v_type == VAR_FUNC) {
-          s = expr->vval.v_string;
+          s = (char_u *)expr->vval.v_string;
           call_func(s, -1, &rettv, 1, argv, &funcexe);
         } else if (expr->v_type == VAR_PARTIAL) {
           partial_T *partial = expr->vval.v_partial;
 
-          s = partial_name(partial);
+          s = (char_u *)partial_name(partial);
           funcexe.partial = partial;
           call_func(s, -1, &rettv, 1, argv, &funcexe);
         }
@@ -1810,7 +1810,7 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest,
         }
         tv_clear(&rettv);
       } else {
-        eval_result = eval_to_string(source + 2, NULL, true);
+        eval_result = (char_u *)eval_to_string((char *)source + 2, NULL, true);
       }
 
       if (eval_result != NULL) {
@@ -1914,7 +1914,7 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest,
             c = *src++;
           }
         } else {
-          c = utf_ptr2char(src - 1);
+          c = utf_ptr2char((char *)src - 1);
         }
         // Write to buffer, if copy is set.
         if (func_one != NULL) {
@@ -1926,13 +1926,13 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest,
           cc = c;
         }
 
-        int totlen = utfc_ptr2len(src - 1);
+        int totlen = utfc_ptr2len((char *)src - 1);
 
         if (copy) {
           utf_char2bytes(cc, dst);
         }
         dst += utf_char2len(cc) - 1;
-        int clen = utf_ptr2len(src - 1);
+        int clen = utf_ptr2len((char *)src - 1);
 
         // If the character length is shorter than "totlen", there
         // are composing characters; copy them as-is.
@@ -2005,7 +2005,7 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest,
                 }
                 dst += 2;
               } else {
-                c = utf_ptr2char(s);
+                c = utf_ptr2char((char *)s);
 
                 if (func_one != (fptr_T)NULL) {
                   // Turbo C complains without the typecast
@@ -2022,7 +2022,7 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest,
 
                   // Copy composing characters separately, one
                   // at a time.
-                  l = utf_ptr2len(s) - 1;
+                  l = utf_ptr2len((char *)s) - 1;
 
                   s += l;
                   len -= l;

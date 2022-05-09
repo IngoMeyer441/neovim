@@ -245,7 +245,7 @@ void ex_align(exarg_T *eap)
     }
   }
 
-  width = atoi((char *)eap->arg);
+  width = atoi(eap->arg);
   save_curpos = curwin->w_cursor;
   if (eap->cmdidx == CMD_left) {    // width is used for new indent
     if (width >= 0) {
@@ -484,7 +484,7 @@ void ex_sort(exarg_T *eap)
   size_t format_found = 0;
   bool change_occurred = false;   // Buffer contents changed.
 
-  for (p = (char *)eap->arg; *p != NUL; p++) {
+  for (p = eap->arg; *p != NUL; p++) {
     if (ascii_iswhite(*p)) {
       // Skip
     } else if (*p == 'i') {
@@ -514,7 +514,7 @@ void ex_sort(exarg_T *eap)
       // comment start
       break;
     } else if (check_nextcmd((char_u *)p) != NULL) {
-      eap->nextcmd = check_nextcmd((char_u *)p);
+      eap->nextcmd = (char *)check_nextcmd((char_u *)p);
       break;
     } else if (!ASCII_ISALPHA(*p) && regmatch.regprog == NULL) {
       s = (char *)skip_regexp((char_u *)p + 1, *p, true, NULL);
@@ -669,7 +669,7 @@ void ex_sort(exarg_T *eap)
       // Copy the line into a buffer, it may become invalid in
       // ml_append(). And it's needed for "unique".
       STRCPY(sortbuf1, s);
-      if (ml_append(lnum++, (char_u *)sortbuf1, (colnr_T)0, false) == FAIL) {
+      if (ml_append(lnum++, sortbuf1, (colnr_T)0, false) == FAIL) {
         break;
       }
       new_count += bytelen;
@@ -746,8 +746,8 @@ void ex_retab(exarg_T *eap)
   save_list = curwin->w_p_list;
   curwin->w_p_list = 0;             // don't want list mode here
 
-  new_ts_str = (char *)eap->arg;
-  if (!tabstop_set(eap->arg, &new_vts_array)) {
+  new_ts_str = eap->arg;
+  if (!tabstop_set((char_u *)eap->arg, &new_vts_array)) {
     return;
   }
   while (ascii_isdigit(*(eap->arg)) || *(eap->arg) == ',') {
@@ -761,7 +761,7 @@ void ex_retab(exarg_T *eap)
     new_vts_array = curbuf->b_p_vts_array;
     new_ts_str = NULL;
   } else {
-    new_ts_str = xstrnsave(new_ts_str, eap->arg - (char_u *)new_ts_str);
+    new_ts_str = xstrnsave(new_ts_str, eap->arg - new_ts_str);
   }
   for (lnum = eap->line1; !got_int && lnum <= eap->line2; lnum++) {
     ptr = (char *)ml_get(lnum);
@@ -825,7 +825,7 @@ void ex_retab(exarg_T *eap)
             for (col = 0; col < len; col++) {
               ptr[col] = (col < num_tabs) ? '\t' : ' ';
             }
-            if (ml_replace(lnum, (char_u *)new_line, false) == OK) {
+            if (ml_replace(lnum, new_line, false) == OK) {
               // "new_line" may have been copied
               new_line = (char *)curbuf->b_ml.ml_line_ptr;
               extmark_splice_cols(curbuf, lnum - 1, 0, (colnr_T)old_len,
@@ -850,7 +850,7 @@ void ex_retab(exarg_T *eap)
         emsg(_(e_resulting_text_too_long));
         break;
       }
-      col += utfc_ptr2len((char_u *)ptr + col);
+      col += utfc_ptr2len(ptr + col);
     }
     if (new_line == NULL) {                 // out of memory
       break;
@@ -947,7 +947,7 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
   }
   for (extra = 0, l = line1; l <= line2; l++) {
     str = (char *)vim_strsave(ml_get(l + extra));
-    ml_append(dest + l - line1, (char_u *)str, (colnr_T)0, false);
+    ml_append(dest + l - line1, str, (colnr_T)0, false);
     xfree(str);
     if (dest < line1) {
       extra++;
@@ -1088,7 +1088,7 @@ void ex_copy(linenr_T line1, linenr_T line2, linenr_T n)
     // need to use vim_strsave() because the line will be unlocked within
     // ml_append()
     p = (char *)vim_strsave(ml_get(line1));
-    ml_append(curwin->w_cursor.lnum, (char_u *)p, (colnr_T)0, false);
+    ml_append(curwin->w_cursor.lnum, p, (colnr_T)0, false);
     xfree(p);
 
     // situation 2: skip already copied lines
@@ -1129,7 +1129,7 @@ void free_prev_shellcmd(void)
 void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out)
   FUNC_ATTR_NONNULL_ALL
 {
-  char *arg = (char *)eap->arg;             // command
+  char *arg = eap->arg;             // command
   linenr_T line1 = eap->line1;        // start of range
   linenr_T line2 = eap->line2;        // end of range
   char *newcmd = NULL;              // the new command
@@ -1755,7 +1755,7 @@ void ex_file(exarg_T *eap)
   }
 
   if (*eap->arg != NUL || eap->addr_count == 1) {
-    if (rename_buffer((char *)eap->arg) == FAIL) {
+    if (rename_buffer(eap->arg) == FAIL) {
       return;
     }
     redraw_tabline = true;
@@ -1811,7 +1811,7 @@ int do_write(exarg_T *eap)
     return FAIL;
   }
 
-  ffname = (char *)eap->arg;
+  ffname = eap->arg;
   if (*ffname == NUL) {
     if (eap->cmdidx == CMD_saveas) {
       emsg(_(e_argreq));
@@ -1919,7 +1919,7 @@ int do_write(exarg_T *eap)
       // If 'filetype' was empty try detecting it now.
       if (*curbuf->b_p_ft == NUL) {
         if (augroup_exists("filetypedetect")) {
-          (void)do_doautocmd((char_u *)"filetypedetect BufRead", true, NULL);
+          (void)do_doautocmd("filetypedetect BufRead", true, NULL);
         }
         do_modelines(0);
       }
@@ -2307,7 +2307,7 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
   long *so_ptr = curwin->w_p_so >= 0 ? &curwin->w_p_so : &p_so;
 
   if (eap != NULL) {
-    command = (char *)eap->do_ecmd_cmd;
+    command = eap->do_ecmd_cmd;
   }
 
   set_bufref(&old_curbuf, curbuf);
@@ -2961,15 +2961,15 @@ void ex_append(exarg_T *eap)
       if (eap->nextcmd == NULL || *eap->nextcmd == NUL) {
         break;
       }
-      p = (char *)vim_strchr(eap->nextcmd, NL);
+      p = (char *)vim_strchr((char_u *)eap->nextcmd, NL);
       if (p == NULL) {
-        p = (char *)eap->nextcmd + STRLEN(eap->nextcmd);
+        p = eap->nextcmd + STRLEN(eap->nextcmd);
       }
-      theline = (char *)vim_strnsave(eap->nextcmd, (char_u *)p - eap->nextcmd);
+      theline = xstrnsave(eap->nextcmd, p - eap->nextcmd);
       if (*p != NUL) {
         p++;
       }
-      eap->nextcmd = (char_u *)p;
+      eap->nextcmd = p;
     } else {
       // Set State to avoid the cursor shape to be set to INSERT mode
       // when getline() returns.
@@ -3008,7 +3008,7 @@ void ex_append(exarg_T *eap)
     }
 
     did_undo = true;
-    ml_append(lnum, (char_u *)theline, (colnr_T)0, false);
+    ml_append(lnum, theline, (colnr_T)0, false);
     if (empty) {
       // there are no marks below the inserted lines
       appended_lines(lnum, 1L);
@@ -3105,7 +3105,7 @@ void ex_z(exarg_T *eap)
     bigness = 1;
   }
 
-  x = (char *)eap->arg;
+  x = eap->arg;
   kind = x;
   if (*kind == '-' || *kind == '+' || *kind == '='
       || *kind == '^' || *kind == '.') {
@@ -3463,7 +3463,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
   bool got_quit = false;
   bool got_match = false;
   int which_pat;
-  char *cmd = (char *)eap->arg;
+  char *cmd = eap->arg;
   linenr_T first_line = 0;  // first changed line
   linenr_T last_line= 0;    // below last changed line AFTER the change
   linenr_T old_line_count = curbuf->b_ml.ml_line_count;
@@ -3519,7 +3519,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
       which_pat = RE_LAST;                  // use last used regexp
       delimiter = (char_u)(*cmd++);                   // remember delimiter character
       pat = cmd;                            // remember start of search pat
-      cmd = (char *)skip_regexp((char_u *)cmd, delimiter, p_magic, &eap->arg);
+      cmd = (char *)skip_regexp((char_u *)cmd, delimiter, p_magic, (char_u **)&eap->arg);
       if (cmd[0] == delimiter) {            // end delimiter found
         *cmd++ = NUL;                       // replace it with a NUL
         has_second_delim = true;
@@ -3592,7 +3592,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
    */
   cmd = (char *)skipwhite((char_u *)cmd);
   if (*cmd && *cmd != '"') {        // if not end-of-line or comment
-    eap->nextcmd = check_nextcmd((char_u *)cmd);
+    eap->nextcmd = (char *)check_nextcmd((char_u *)cmd);
     if (eap->nextcmd == NULL) {
       emsg(_(e_trailing));
       return NULL;
@@ -3785,7 +3785,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
             skip_match = true;
           } else {
             // search for a match at next column
-            matchcol += utfc_ptr2len((char_u *)sub_firstline + matchcol);
+            matchcol += utfc_ptr2len(sub_firstline + matchcol);
           }
           // match will be pushed to preview_lines, bring it into a proper state
           current_match.start.col = matchcol;
@@ -3912,7 +3912,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
                 // before the cursor.
                 len_change = (int)STRLEN(new_line) - (int)STRLEN(orig_line);
                 curwin->w_cursor.col += len_change;
-                ml_replace(lnum, (char_u *)new_line, false);
+                ml_replace(lnum, new_line, false);
               }
 
               search_match_lines = regmatch.endpos[0].lnum
@@ -3959,7 +3959,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
 
               // restore the line
               if (orig_line != NULL) {
-                ml_replace(lnum, (char_u *)orig_line, false);
+                ml_replace(lnum, orig_line, false);
               }
             }
 
@@ -4156,7 +4156,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
             } else if (*p1 == CAR) {
               if (u_inssub(lnum) == OK) {             // prepare for undo
                 *p1 = NUL;                            // truncate up to the CR
-                ml_append(lnum - 1, (char_u *)new_start,
+                ml_append(lnum - 1, new_start,
                           (colnr_T)(p1 - new_start + 1), false);
                 mark_adjust(lnum + 1, (linenr_T)MAXLNUM, 1L, 0L, kExtmarkNOOP);
 
@@ -4179,7 +4179,7 @@ static buf_T *do_sub(exarg_T *eap, proftime_T timeout, bool do_buf_event, handle
                 p1 = new_start - 1;
               }
             } else {
-              p1 += utfc_ptr2len((char_u *)p1) - 1;
+              p1 += utfc_ptr2len(p1) - 1;
             }
           }
           size_t new_endcol = STRLEN(new_start);
@@ -4250,7 +4250,7 @@ skip:
             if (u_savesub(lnum) != OK) {
               break;
             }
-            ml_replace(lnum, (char_u *)new_start, true);
+            ml_replace(lnum, new_start, true);
 
             if (nmatch_tl > 0) {
               /*
@@ -4467,7 +4467,7 @@ skip:
   return preview_buf;
 #undef ADJUST_SUB_FIRSTLNUM
 #undef PUSH_PREVIEW_LINES
-}  // NOLINT(readability/fn_size)
+}
 
 /// Give message for number of substitutions.
 /// Can also be used after a ":global" command.
@@ -4570,7 +4570,7 @@ void ex_global(exarg_T *eap)
   } else {
     type = (uint8_t)(*eap->cmd);
   }
-  cmd = (char *)eap->arg;
+  cmd = eap->arg;
   which_pat = RE_LAST;              // default: use last used regexp
 
   /*
@@ -4600,7 +4600,7 @@ void ex_global(exarg_T *eap)
     delim = *cmd;               // get the delimiter
     cmd++;                      // skip delimiter if there is one
     pat = cmd;                  // remember start of pattern
-    cmd = (char *)skip_regexp((char_u *)cmd, delim, p_magic, &eap->arg);
+    cmd = (char *)skip_regexp((char_u *)cmd, delim, p_magic, (char_u **)&eap->arg);
     if (cmd[0] == delim) {                  // end delimiter found
       *cmd++ = NUL;                         // replace it with a NUL
     }
@@ -4776,15 +4776,15 @@ void ex_help(exarg_T *eap)
      * A ":help" command ends at the first LF, or at a '|' that is
      * followed by some text.  Set nextcmd to the following command.
      */
-    for (arg = (char *)eap->arg; *arg; arg++) {
+    for (arg = eap->arg; *arg; arg++) {
       if (*arg == '\n' || *arg == '\r'
           || (*arg == '|' && arg[1] != NUL && arg[1] != '|')) {
         *arg++ = NUL;
-        eap->nextcmd = (char_u *)arg;
+        eap->nextcmd = arg;
         break;
       }
     }
-    arg = (char *)eap->arg;
+    arg = eap->arg;
 
     if (eap->forceit && *arg == NUL && !curbuf->b_help) {
       emsg(_("E478: Don't panic!"));
@@ -5023,37 +5023,59 @@ static int help_compare(const void *s1, const void *s2)
 int find_help_tags(const char *arg, int *num_matches, char ***matches, bool keep_lang)
 {
   int i;
-  static const char *(mtable[]) = {
-    "*", "g*", "[*", "]*",
-    "/*", "/\\*", "\"*", "**",
-    "/\\(\\)", "/\\%(\\)",
-    "?", ":?", "?<CR>", "g?", "g?g?", "g??",
-    "-?", "q?", "v_g?",
-    "/\\?", "/\\z(\\)", "\\=", ":s\\=",
-    "[count]", "[quotex]",
-    "[range]", ":[range]",
-    "[pattern]", "\\|", "\\%$",
-    "s/\\~", "s/\\U", "s/\\L",
-    "s/\\1", "s/\\2", "s/\\3", "s/\\9"
+
+  // Specific tags that either have a specific replacement or won't go
+  // throught the generic rules.
+  static char *(except_tbl[][2]) = {
+    { "*",           "star" },
+    { "g*",          "gstar" },
+    { "[*",          "[star" },
+    { "]*",          "]star" },
+    { ":*",          ":star" },
+    { "/*",          "/star" },  // NOLINT
+    { "/\\*",        "/\\\\star" },
+    { "\"*",         "quotestar" },
+    { "**",          "starstar" },
+    { "cpo-*",       "cpo-star" },
+    { "/\\(\\)",     "/\\\\(\\\\)" },
+    { "/\\%(\\)",    "/\\\\%(\\\\)" },
+    { "?",           "?" },
+    { "??",          "??" },
+    { ":?",          ":?" },
+    { "?<CR>",       "?<CR>" },
+    { "g?",          "g?" },
+    { "g?g?",        "g?g?" },
+    { "g??",         "g??" },
+    { "-?",          "-?" },
+    { "q?",          "q?" },
+    { "v_g?",        "v_g?" },
+    { "/\\?",        "/\\\\?" },
+    { "/\\z(\\)",    "/\\\\z(\\\\)" },
+    { "\\=",         "\\\\=" },
+    { ":s\\=",       ":s\\\\=" },
+    { "[count]",     "\\[count]" },
+    { "[quotex]",    "\\[quotex]" },
+    { "[range]",     "\\[range]" },
+    { ":[range]",    ":\\[range]" },
+    { "[pattern]",   "\\[pattern]" },
+    { "\\|",         "\\\\bar" },
+    { "\\%$",        "/\\\\%\\$" },
+    { "s/\\~",       "s/\\\\\\~" },
+    { "s/\\U",       "s/\\\\U" },
+    { "s/\\L",       "s/\\\\L" },
+    { "s/\\1",       "s/\\\\1" },
+    { "s/\\2",       "s/\\\\2" },
+    { "s/\\3",       "s/\\\\3" },
+    { "s/\\9",       "s/\\\\9" },
+    { NULL, NULL }
   };
-  static const char *(rtable[]) = {
-    "star", "gstar", "[star", "]star",
-    "/star", "/\\\\star", "quotestar", "starstar",
-    "/\\\\(\\\\)", "/\\\\%(\\\\)",
-    "?", ":?", "?<CR>", "g?", "g?g?", "g??",
-    "-?", "q?", "v_g?",
-    "/\\\\?", "/\\\\z(\\\\)", "\\\\=", ":s\\\\=",
-    "\\[count]", "\\[quotex]",
-    "\\[range]", ":\\[range]",
-    "\\[pattern]", "\\\\bar", "/\\\\%\\$",
-    "s/\\\\\\~", "s/\\\\U", "s/\\\\L",
-    "s/\\\\1", "s/\\\\2", "s/\\\\3", "s/\\\\9"
-  };
+
   static const char *(expr_table[]) = {
     "!=?", "!~?", "<=?", "<?", "==?", "=~?",
     ">=?", ">?", "is?", "isnot?"
   };
   char *d = (char *)IObuff;       // assume IObuff is long enough!
+  d[0] = NUL;
 
   if (STRNICMP(arg, "expr-", 5) == 0) {
     // When the string starting with "expr-" and containing '?' and matches
@@ -5075,16 +5097,16 @@ int find_help_tags(const char *arg, int *num_matches, char ***matches, bool keep
     }
   } else {
     // Recognize a few exceptions to the rule.  Some strings that contain
-    // '*' with "star".  Otherwise '*' is recognized as a wildcard.
-    for (i = (int)ARRAY_SIZE(mtable); --i >= 0;) {
-      if (STRCMP(arg, mtable[i]) == 0) {
-        STRCPY(d, rtable[i]);
+    // '*'are changed to "star", otherwise '*' is recognized as a wildcard.
+    for (i = 0; except_tbl[i][0] != NULL; i++) {
+      if (STRCMP(arg, except_tbl[i][0]) == 0) {
+        STRCPY(d, except_tbl[i][1]);
         break;
       }
     }
   }
 
-  if (i < 0) {  // no match in table
+  if (d[0] == NUL) {  // no match in table
     // Replace "\S" with "/\\S", etc.  Otherwise every tag is matched.
     // Also replace "\%^" and "\%(", they match every tag too.
     // Also "\zs", "\z1", etc.
@@ -5442,7 +5464,7 @@ void fix_help_buffer(void)
                   // illegal byte sequence is found.
                   if ((char_u)(*s) >= 0x80 && this_utf != kFalse) {
                     this_utf = kTrue;
-                    const int l = utf_ptr2len((char_u *)s);
+                    const int l = utf_ptr2len(s);
                     if (l == 1) {
                       this_utf = kFalse;
                     }
@@ -5470,7 +5492,7 @@ void fix_help_buffer(void)
                 }
                 convert_setup(&vc, NULL, NULL);
 
-                ml_append(lnum, (char_u *)cp, (colnr_T)0, false);
+                ml_append(lnum, cp, (colnr_T)0, false);
                 if ((char_u *)cp != IObuff) {
                   xfree(cp);
                 }
@@ -5591,7 +5613,7 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
         for (s = (char *)IObuff; *s != NUL; s++) {
           if ((char_u)(*s) >= 0x80) {
             this_utf8 = kTrue;
-            const int l = utf_ptr2len((char_u *)s);
+            const int l = utf_ptr2len(s);
             if (l == 1) {
               // Illegal UTF-8 byte sequence.
               this_utf8 = kFalse;
@@ -5813,7 +5835,7 @@ void ex_helptags(exarg_T *eap)
   // Check for ":helptags ++t {dir}".
   if (STRNCMP(eap->arg, "++t", 3) == 0 && ascii_iswhite(eap->arg[3])) {
     add_help_tags = true;
-    eap->arg = skipwhite(eap->arg + 3);
+    eap->arg = (char *)skipwhite((char_u *)eap->arg + 3);
   }
 
   if (STRCMP(eap->arg, "ALL") == 0) {
@@ -5821,7 +5843,7 @@ void ex_helptags(exarg_T *eap)
   } else {
     ExpandInit(&xpc);
     xpc.xp_context = EXPAND_DIRECTORIES;
-    dirname = (char *)ExpandOne(&xpc, eap->arg, NULL,
+    dirname = (char *)ExpandOne(&xpc, (char_u *)eap->arg, NULL,
                                 WILD_LIST_NOTFOUND|WILD_SILENT, WILD_EXPAND_FREE);
     if (dirname == NULL || !os_isdir((char_u *)dirname)) {
       semsg(_("E150: Not a directory: %s"), eap->arg);
@@ -5976,9 +5998,9 @@ static buf_T *show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines
         snprintf(str, line_size, "|%*ld| %s", col_width - 3,
                  next_linenr, line);
         if (linenr_preview == 0) {
-          ml_replace(1, (char_u *)str, true);
+          ml_replace(1, str, true);
         } else {
-          ml_append(linenr_preview, (char_u *)str, (colnr_T)line_size, false);
+          ml_append(linenr_preview, str, (colnr_T)line_size, false);
         }
         linenr_preview += 1;
       }
@@ -6038,7 +6060,7 @@ void ex_substitute(exarg_T *eap)
 
   block_autocmds();           // Disable events during command preview.
 
-  char *save_eap = (char *)eap->arg;
+  char *save_eap = eap->arg;
   garray_T save_view;
   win_size_save(&save_view);  // Save current window sizes.
   save_search_patterns();
@@ -6079,7 +6101,7 @@ void ex_substitute(exarg_T *eap)
   curbuf->b_p_ul = save_b_p_ul;
   curwin->w_p_cul = save_w_p_cul;   // Restore 'cursorline'
   curwin->w_p_cuc = save_w_p_cuc;   // Restore 'cursorcolumn'
-  eap->arg = (char_u *)save_eap;
+  eap->arg = save_eap;
   restore_search_patterns();
   win_size_restore(&save_view);
   ga_clear(&save_view);
@@ -6182,7 +6204,7 @@ void ex_oldfiles(exarg_T *eap)
           return;
         }
         char *const s = (char *)expand_env_save((char_u *)p);
-        eap->arg = (char_u *)s;
+        eap->arg = s;
         eap->cmdidx = CMD_edit;
         cmdmod.browse = false;
         do_exedit(eap, NULL);

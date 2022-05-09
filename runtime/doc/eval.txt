@@ -455,8 +455,8 @@ only appear once.  Examples: >
 A key is always a String.  You can use a Number, it will be converted to a
 String automatically.  Thus the String '4' and the number 4 will find the same
 entry.  Note that the String '04' and the Number 04 are different, since the
-Number will be converted to the String '4'.  The empty string can also be used
-as a key.
+Number will be converted to the String '4', leading zeros are dropped.  The
+empty string can also be used as a key.
 						*literal-Dict*
 To avoid having to put quotes around every key the #{} form can be used.  This
 does require the key to consist only of ASCII letters, digits, '-' and '_'.
@@ -2138,9 +2138,19 @@ v:scrollstart	String describing the script or function that caused the
 					*v:servername* *servername-variable*
 v:servername	Primary listen-address of the current Nvim instance, the first
 		item returned by |serverlist()|.  Can be set by |--listen| or
-		|$NVIM_LISTEN_ADDRESS| at startup. |serverstart()| |serverstop()|
+		|$NVIM_LISTEN_ADDRESS| (deprecated) at startup.
+		See also |serverstart()| |serverstop()|.
 		Read-only.
 
+								       *$NVIM*
+		$NVIM is set by |terminal| and |jobstart()|, and is thus
+		a hint that the current environment is a subprocess of Nvim.
+		Example: >
+		    if $NVIM
+		      echo nvim_get_chan_info(v:parent)
+		    endif
+
+<		Note the contents of $NVIM may change in the future.
 
 v:searchforward			*v:searchforward* *searchforward-variable*
 		Search direction:  1 after a forward search, 0 after a

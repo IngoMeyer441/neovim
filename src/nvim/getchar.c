@@ -700,7 +700,7 @@ static int read_redo(bool init, bool old_redo)
     buf[i] = (char_u)c;
     if (i == n - 1) {         // last byte of a character
       if (n != 1) {
-        c = utf_ptr2char(buf);
+        c = utf_ptr2char((char *)buf);
       }
       break;
     }
@@ -1624,7 +1624,7 @@ int vgetc(void)
           }
         }
         no_mapping--;
-        c = utf_ptr2char(buf);
+        c = utf_ptr2char((char *)buf);
       }
 
       if (vgetc_char == 0) {
@@ -1935,7 +1935,7 @@ static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
         char_u *p1 = mp->m_keys;
         char_u *p2 = (char_u *)mb_unescape((const char **)&p1);
 
-        if (p2 != NULL && MB_BYTE2LEN(tb_c1) > utfc_ptr2len(p2)) {
+        if (p2 != NULL && MB_BYTE2LEN(tb_c1) > utfc_ptr2len((char *)p2)) {
           mlen = 0;
         }
 
@@ -2450,7 +2450,7 @@ static int vgetorpeek(bool advance)
                     curwin->w_wcol = vcol;
                   }
                   vcol += lbr_chartabsize(ptr, ptr + col, vcol);
-                  col += utfc_ptr2len(ptr + col);
+                  col += utfc_ptr2len((char *)ptr + col);
                 }
                 curwin->w_wrow = curwin->w_cline_row
                                  + curwin->w_wcol / curwin->w_width_inner;
@@ -2471,7 +2471,7 @@ static int vgetorpeek(bool advance)
               // of a double-wide character.
               ptr = get_cursor_line_ptr();
               col -= utf_head_off(ptr, ptr + col);
-              if (utf_ptr2cells(ptr + col) > 1) {
+              if (utf_ptr2cells((char *)ptr + col) > 1) {
                 curwin->w_wcol--;
               }
             }
@@ -2856,13 +2856,13 @@ int fix_input_buffer(char_u *buf, int len)
 /// @param[in] orig_rhs_len   `strlen` of orig_rhs.
 /// @param[in] cpo_flags  See param docs for @ref replace_termcodes.
 /// @param[out] mapargs   MapArguments struct holding the replaced strings.
-void set_maparg_lhs_rhs(const char_u *const orig_lhs, const size_t orig_lhs_len,
-                        const char_u *const orig_rhs, const size_t orig_rhs_len,
-                        const LuaRef rhs_lua, const int cpo_flags, MapArguments *const mapargs)
+void set_maparg_lhs_rhs(const char *const orig_lhs, const size_t orig_lhs_len,
+                        const char *const orig_rhs, const size_t orig_rhs_len, const LuaRef rhs_lua,
+                        const int cpo_flags, MapArguments *const mapargs)
 {
-  char_u *lhs_buf = NULL;
-  char_u *alt_lhs_buf = NULL;
-  char_u *rhs_buf = NULL;
+  char *lhs_buf = NULL;
+  char *alt_lhs_buf = NULL;
+  char *rhs_buf = NULL;
 
   // If mapping has been given as ^V<C_UP> say, then replace the term codes
   // with the appropriate two bytes. If it is a shifted special key, unshift
@@ -2874,13 +2874,15 @@ void set_maparg_lhs_rhs(const char_u *const orig_lhs, const size_t orig_lhs_len,
   // If something like <C-H> is simplified to 0x08 then mark it as simplified.
   bool did_simplify = false;
   const int flags = REPTERM_FROM_PART | REPTERM_DO_LT;
-  char_u *replaced = replace_termcodes(orig_lhs, orig_lhs_len, &lhs_buf, flags, &did_simplify,
-                                       cpo_flags);
+  char *replaced = (char *)replace_termcodes((char_u *)orig_lhs, orig_lhs_len, (char_u **)&lhs_buf,
+                                             flags, &did_simplify,
+                                             cpo_flags);
   mapargs->lhs_len = STRLEN(replaced);
   STRLCPY(mapargs->lhs, replaced, sizeof(mapargs->lhs));
   if (did_simplify) {
-    replaced = replace_termcodes(orig_lhs, orig_lhs_len, &alt_lhs_buf, flags | REPTERM_NO_SIMPLIFY,
-                                 NULL, cpo_flags);
+    replaced = (char *)replace_termcodes((char_u *)orig_lhs, orig_lhs_len, (char_u **)&alt_lhs_buf,
+                                         flags | REPTERM_NO_SIMPLIFY,
+                                         NULL, cpo_flags);
     mapargs->alt_lhs_len = STRLEN(replaced);
     STRLCPY(mapargs->alt_lhs, replaced, sizeof(mapargs->alt_lhs));
   } else {
@@ -2899,10 +2901,11 @@ void set_maparg_lhs_rhs(const char_u *const orig_lhs, const size_t orig_lhs_len,
       mapargs->rhs_len = 0;
       mapargs->rhs_is_noop = true;
     } else {
-      replaced = replace_termcodes(orig_rhs, orig_rhs_len, &rhs_buf,
-                                   REPTERM_DO_LT | REPTERM_NO_SIMPLIFY, NULL, cpo_flags);
+      replaced = (char *)replace_termcodes((char_u *)orig_rhs, orig_rhs_len, (char_u **)&rhs_buf,
+                                           REPTERM_DO_LT | REPTERM_NO_SIMPLIFY, NULL, cpo_flags);
       mapargs->rhs_len = STRLEN(replaced);
-      mapargs->rhs_is_noop = false;
+      // XXX: even when orig_rhs is non-empty, replace_termcodes may produce an empty string.
+      mapargs->rhs_is_noop = orig_rhs[0] != NUL && mapargs->rhs_len == 0;
       mapargs->rhs = xcalloc(mapargs->rhs_len + 1, sizeof(char_u));
       STRLCPY(mapargs->rhs, replaced, mapargs->rhs_len + 1);
     }
@@ -3026,8 +3029,8 @@ int str_to_mapargs(const char_u *strargs, bool is_unmap, MapArguments *mapargs)
   STRLCPY(lhs_to_replace, to_parse, orig_lhs_len + 1);
 
   size_t orig_rhs_len = STRLEN(rhs_start);
-  set_maparg_lhs_rhs(lhs_to_replace, orig_lhs_len,
-                     rhs_start, orig_rhs_len, LUA_NOREF,
+  set_maparg_lhs_rhs((char *)lhs_to_replace, orig_lhs_len,
+                     (char *)rhs_start, orig_rhs_len, LUA_NOREF,
                      CPO_TO_CPO_FLAGS, &parsed_args);
 
   xfree(lhs_to_replace);
@@ -3134,7 +3137,7 @@ int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev, buf_T 
 
         const int first = vim_iswordp(lhs);
         int last = first;
-        p = lhs + utfc_ptr2len(lhs);
+        p = lhs + utfc_ptr2len((char *)lhs);
         n = 1;
         while (p < lhs + len) {
           n++;                                  // nr of (multi-byte) chars
@@ -3142,7 +3145,7 @@ int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev, buf_T 
           if (same == -1 && last != first) {
             same = n - 1;                       // count of same char type
           }
-          p += utfc_ptr2len(p);
+          p += utfc_ptr2len((char *)p);
         }
         if (last && n > 2 && same >= 0 && same < n - 1) {
           retval = 1;
@@ -3540,14 +3543,14 @@ static void validate_maphash(void)
 /*
  * Get the mapping mode from the command name.
  */
-int get_map_mode(char_u **cmdp, bool forceit)
+int get_map_mode(char **cmdp, bool forceit)
 {
-  char_u *p;
+  char *p;
   int modec;
   int mode;
 
   p = *cmdp;
-  modec = *p++;
+  modec = (uint8_t)(*p++);
   if (modec == 'i') {
     mode = INSERT;                              // :imap
   } else if (modec == 'l') {
@@ -3594,7 +3597,7 @@ void map_clear_mode(char_u *cmdp, char_u *arg, int forceit, int abbr)
     return;
   }
 
-  mode = get_map_mode(&cmdp, forceit);
+  mode = get_map_mode((char **)&cmdp, forceit);
   map_clear_int(curbuf, mode,
                 local,
                 abbr);
@@ -3765,12 +3768,7 @@ static void showmap(mapblock_T *mp, bool local)
   } else if (mp->m_str[0] == NUL) {
     msg_puts_attr("<Nop>", HL_ATTR(HLF_8));
   } else {
-    // Remove escaping of K_SPECIAL, because "m_str" is in a format to be used
-    // as typeahead.
-    char_u *s = vim_strsave(mp->m_str);
-    vim_unescape_ks(s);
-    msg_outtrans_special(s, false, 0);
-    xfree(s);
+    msg_outtrans_special(mp->m_str, false, 0);
   }
 
   if (mp->m_desc != NULL) {
@@ -3896,7 +3894,7 @@ char_u *set_context_in_map_cmd(expand_T *xp, char_u *cmd, char_u *arg, bool forc
     xp->xp_context = EXPAND_NOTHING;
   } else {
     if (isunmap) {
-      expand_mapmodes = get_map_mode(&cmd, forceit || isabbrev);
+      expand_mapmodes = get_map_mode((char **)&cmd, forceit || isabbrev);
     } else {
       expand_mapmodes = INSERT + CMDLINE;
       if (!isabbrev) {
@@ -3938,7 +3936,7 @@ char_u *set_context_in_map_cmd(expand_T *xp, char_u *cmd, char_u *arg, bool forc
       }
       break;
     }
-    xp->xp_pattern = arg;
+    xp->xp_pattern = (char *)arg;
   }
 
   return NULL;
@@ -4119,7 +4117,7 @@ bool check_abbr(int c, char_u *ptr, int col, int mincol)
     while (p > ptr + mincol) {
       p = mb_prevptr(ptr, p);
       if (ascii_isspace(*p) || (!vim_abbr && is_id != vim_iswordp(p))) {
-        p += utfc_ptr2len(p);
+        p += utfc_ptr2len((char *)p);
         break;
       }
       ++clen;
@@ -4275,7 +4273,7 @@ static char_u *eval_map_expr(mapblock_T *mp, int c)
       api_clear_error(&err);
     }
   } else {
-    p = eval_to_string(expr, NULL, false);
+    p = (char_u *)eval_to_string((char *)expr, NULL, false);
     xfree(expr);
   }
   textlock--;
@@ -4312,8 +4310,8 @@ char_u *vim_strsave_escape_ks(char_u *p)
     } else {
       // Add character, possibly multi-byte to destination, escaping
       // K_SPECIAL. Be careful, it can be an illegal byte!
-      d = add_char2buf(utf_ptr2char(s), d);
-      s += utf_ptr2len(s);
+      d = add_char2buf(utf_ptr2char((char *)s), d);
+      s += utf_ptr2len((char *)s);
     }
   }
   *d = NUL;

@@ -147,12 +147,12 @@ include(ExternalProject)
 set(LIBUV_URL https://github.com/libuv/libuv/archive/v1.44.1.tar.gz)
 set(LIBUV_SHA256 e91614e6dc2dd0bfdd140ceace49438882206b7a6fb00b8750914e67a9ed6d6b)
 
-set(MSGPACK_URL https://github.com/msgpack/msgpack-c/releases/download/cpp-3.0.0/msgpack-3.0.0.tar.gz)
-set(MSGPACK_SHA256 bfbb71b7c02f806393bc3cbc491b40523b89e64f83860c58e3e54af47de176e4)
+set(MSGPACK_URL https://github.com/msgpack/msgpack-c/releases/download/c-4.0.0/msgpack-c-4.0.0.tar.gz)
+set(MSGPACK_SHA256 420fe35e7572f2a168d17e660ef981a589c9cbe77faa25eb34a520e1fcc032c8)
 
 # https://github.com/LuaJIT/LuaJIT/tree/v2.1
-set(LUAJIT_URL https://github.com/LuaJIT/LuaJIT/archive/5e3c45c43bb0e0f1f2917d432e9d2dba12c42a6e.tar.gz)
-set(LUAJIT_SHA256 72294770c73ff2ed03deb9c81a38253c45fd634917583c6ae39f5143c9adc1e1)
+set(LUAJIT_URL https://github.com/LuaJIT/LuaJIT/archive/91bc6b8ad1f373c1ce9003dc024b2e21fad0e444.tar.gz)
+set(LUAJIT_SHA256 81895031fdb87602c7dde52280259c60b1ffd1b5a8a3c2792d3e2390481163fa)
 
 set(LUA_URL https://www.lua.org/ftp/lua-5.1.5.tar.gz)
 set(LUA_SHA256 2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333)

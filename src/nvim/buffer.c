@@ -2622,7 +2622,7 @@ void buflist_list(exarg_T *eap)
   garray_T buflist;
   buf_T **buflist_data = NULL;
 
-  if (vim_strchr(eap->arg, 't')) {
+  if (vim_strchr((char_u *)eap->arg, 't')) {
     ga_init(&buflist, sizeof(buf_T *), 50);
     for (buf = firstbuf; buf != NULL; buf = buf->b_next) {
       ga_grow(&buflist, 1);
@@ -2645,21 +2645,21 @@ void buflist_list(exarg_T *eap)
     const bool job_running = buf->terminal && terminal_running(buf->terminal);
 
     // skip unspecified buffers
-    if ((!buf->b_p_bl && !eap->forceit && !vim_strchr(eap->arg, 'u'))
-        || (vim_strchr(eap->arg, 'u') && buf->b_p_bl)
-        || (vim_strchr(eap->arg, '+')
+    if ((!buf->b_p_bl && !eap->forceit && !vim_strchr((char_u *)eap->arg, 'u'))
+        || (vim_strchr((char_u *)eap->arg, 'u') && buf->b_p_bl)
+        || (vim_strchr((char_u *)eap->arg, '+')
             && ((buf->b_flags & BF_READERR) || !bufIsChanged(buf)))
-        || (vim_strchr(eap->arg, 'a')
+        || (vim_strchr((char_u *)eap->arg, 'a')
             && (buf->b_ml.ml_mfp == NULL || buf->b_nwindows == 0))
-        || (vim_strchr(eap->arg, 'h')
+        || (vim_strchr((char_u *)eap->arg, 'h')
             && (buf->b_ml.ml_mfp == NULL || buf->b_nwindows != 0))
-        || (vim_strchr(eap->arg, 'R') && (!is_terminal || !job_running))
-        || (vim_strchr(eap->arg, 'F') && (!is_terminal || job_running))
-        || (vim_strchr(eap->arg, '-') && buf->b_p_ma)
-        || (vim_strchr(eap->arg, '=') && !buf->b_p_ro)
-        || (vim_strchr(eap->arg, 'x') && !(buf->b_flags & BF_READERR))
-        || (vim_strchr(eap->arg, '%') && buf != curbuf)
-        || (vim_strchr(eap->arg, '#')
+        || (vim_strchr((char_u *)eap->arg, 'R') && (!is_terminal || !job_running))
+        || (vim_strchr((char_u *)eap->arg, 'F') && (!is_terminal || job_running))
+        || (vim_strchr((char_u *)eap->arg, '-') && buf->b_p_ma)
+        || (vim_strchr((char_u *)eap->arg, '=') && !buf->b_p_ro)
+        || (vim_strchr((char_u *)eap->arg, 'x') && !(buf->b_flags & BF_READERR))
+        || (vim_strchr((char_u *)eap->arg, '%') && buf != curbuf)
+        || (vim_strchr((char_u *)eap->arg, '#')
             && (buf == curbuf || curwin->w_alt_fnum != buf->b_fnum))) {
       continue;
     }
@@ -2700,7 +2700,7 @@ void buflist_list(exarg_T *eap)
     do {
       IObuff[len++] = ' ';
     } while (--i > 0 && len < IOSIZE - 18);
-    if (vim_strchr(eap->arg, 't') && buf->b_last_used) {
+    if (vim_strchr((char_u *)eap->arg, 't') && buf->b_last_used) {
       undo_fmt_time(IObuff + len, (size_t)(IOSIZE - len), buf->b_last_used);
     } else {
       vim_snprintf((char *)IObuff + len, (size_t)(IOSIZE - len), _("line %" PRId64),
@@ -3421,7 +3421,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     };
     set_var(S_LEN("g:statusline_winid"), &tv, false);
 
-    usefmt = eval_to_string_safe(fmt + 2, NULL, use_sandbox);
+    usefmt = (char_u *)eval_to_string_safe((char *)fmt + 2, NULL, use_sandbox);
     if (usefmt == NULL) {
       usefmt = fmt;
     }
@@ -3456,7 +3456,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     wp->w_cursor.coladd = 0;
     byteval = 0;
   } else {
-    byteval = utf_ptr2char(line_ptr + wp->w_cursor.col);
+    byteval = utf_ptr2char((char *)line_ptr + wp->w_cursor.col);
   }
 
   int groupdepth = 0;
@@ -3616,7 +3616,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         long n = 0;
         while (group_len >= stl_items[stl_groupitems[groupdepth]].maxwid) {
           group_len -= ptr2cells(t + n);
-          n += utfc_ptr2len(t + n);
+          n += utfc_ptr2len((char *)t + n);
         }
         // }
 
@@ -3878,9 +3878,9 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
 
       // Store the current buffer number as a string variable
       vim_snprintf(buf_tmp, sizeof(buf_tmp), "%d", curbuf->b_fnum);
-      set_internal_string_var("g:actual_curbuf", (char_u *)buf_tmp);
+      set_internal_string_var("g:actual_curbuf", buf_tmp);
       vim_snprintf((char *)win_tmp, sizeof(win_tmp), "%d", curwin->handle);
-      set_internal_string_var("g:actual_curwin", win_tmp);
+      set_internal_string_var("g:actual_curwin", (char *)win_tmp);
 
       buf_T *const save_curbuf = curbuf;
       win_T *const save_curwin = curwin;
@@ -3893,7 +3893,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       }
 
       // Note: The result stored in `t` is unused.
-      str = (char *)eval_to_string_safe(out_p, &t, use_sandbox);
+      str = eval_to_string_safe((char *)out_p, (char **)&t, use_sandbox);
 
       curwin = save_curwin;
       curbuf = save_curbuf;
@@ -4176,7 +4176,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       if (l > maxwid) {
         while (l >= maxwid) {
           l -= ptr2cells(t);
-          t += utfc_ptr2len(t);
+          t += utfc_ptr2len((char *)t);
         }
 
         // Early out if there isn't enough room for the truncation marker
@@ -4374,7 +4374,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
 
         // Note: Only advance the pointer if the next
         //       character will fit in the available output space
-        trunc_p += utfc_ptr2len(trunc_p);
+        trunc_p += utfc_ptr2len((char *)trunc_p);
       }
 
       // Ignore any items in the statusline that occur after
@@ -4396,7 +4396,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       long trunc_len = 0;
       while (width >= maxwidth) {
         width     -= ptr2cells(trunc_p + trunc_len);
-        trunc_len += utfc_ptr2len(trunc_p + trunc_len);
+        trunc_len += utfc_ptr2len((char *)trunc_p + trunc_len);
       }
       // }
 
@@ -4544,7 +4544,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
   }
 
   return width;
-}  // NOLINT(readability/fn_size)
+}
 
 /// Get relative cursor position in window into "buf[buflen]", in the form 99%,
 /// using "Top", "Bot" or "All" when appropriate.

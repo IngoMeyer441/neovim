@@ -750,10 +750,10 @@ static int diff_write_buffer(buf_T *buf, diffin_T *din)
           c = NUL;
         } else {
           // xdiff doesn't support ignoring case, fold-case the text.
-          c = utf_ptr2char(s);
+          c = utf_ptr2char((char *)s);
           c = utf_fold(c);
         }
-        const int orig_len = utfc_ptr2len(s);
+        const int orig_len = utfc_ptr2len((char *)s);
         if (utf_char2bytes(c, cbuf) != orig_len) {
           // TODO(Bram): handle byte length difference
           memmove(ptr + len, s, (size_t)orig_len);
@@ -1186,9 +1186,9 @@ void ex_diffpatch(exarg_T *eap)
 
 #ifdef UNIX
   // Get the absolute path of the patchfile, changing directory below.
-  fullname = FullName_save((char *)eap->arg, false);
+  fullname = FullName_save(eap->arg, false);
   esc_name =
-    vim_strsave_shellescape((fullname != NULL ? (char_u *)fullname : eap->arg), true, true);
+    vim_strsave_shellescape((char_u *)(fullname != NULL ? fullname : eap->arg), true, true);
 #else
   esc_name = vim_strsave_shellescape(eap->arg, true, true);
 #endif
@@ -1219,7 +1219,7 @@ void ex_diffpatch(exarg_T *eap)
     // Use 'patchexpr' to generate the new file.
 #ifdef UNIX
     eval_patch((char *)tmp_orig,
-               (fullname != NULL ? fullname : (char *)eap->arg),
+               (fullname != NULL ? fullname : eap->arg),
                (char *)tmp_new);
 #else
     eval_patch((char *)tmp_orig, (char *)eap->arg, (char *)tmp_new);
@@ -1268,7 +1268,7 @@ void ex_diffpatch(exarg_T *eap)
     if (win_split(0, (diff_flags & DIFF_VERTICAL) ? WSP_VERT : 0) != FAIL) {
       // Pretend it was a ":split fname" command
       eap->cmdidx = CMD_split;
-      eap->arg = tmp_new;
+      eap->arg = (char *)tmp_new;
       do_exedit(eap, old_curwin);
 
       // check that split worked and editing tmp_new
@@ -1279,7 +1279,7 @@ void ex_diffpatch(exarg_T *eap)
 
         if (newname != NULL) {
           // do a ":file filename.new" on the patched buffer
-          eap->arg = newname;
+          eap->arg = (char *)newname;
           ex_file(eap);
 
           // Do filetype detection with the new name.
@@ -1937,15 +1937,15 @@ static bool diff_equal_entry(diff_T *dp, int idx1, int idx2)
 // ignoring case) return true and set "len" to the number of bytes.
 static bool diff_equal_char(const char_u *const p1, const char_u *const p2, int *const len)
 {
-  const int l = utfc_ptr2len(p1);
+  const int l = utfc_ptr2len((char *)p1);
 
-  if (l != utfc_ptr2len(p2)) {
+  if (l != utfc_ptr2len((char *)p2)) {
     return false;
   }
   if (l > 1) {
     if (STRNCMP(p1, p2, l) != 0
         && (!(diff_flags & DIFF_ICASE)
-            || utf_fold(utf_ptr2char(p1)) != utf_fold(utf_ptr2char(p2)))) {
+            || utf_fold(utf_ptr2char((char *)p1)) != utf_fold(utf_ptr2char((char *)p2)))) {
       return false;
     }
     *len = l;
@@ -2469,10 +2469,10 @@ void nv_diffgetput(bool put, size_t count)
     return;
   }
   if (count == 0) {
-    ea.arg = (char_u *)"";
+    ea.arg = "";
   } else {
     vim_snprintf(buf, sizeof(buf), "%zu", count);
-    ea.arg = (char_u *)buf;
+    ea.arg = buf;
   }
 
   if (put) {
@@ -2553,18 +2553,18 @@ void ex_diffgetput(exarg_T *eap)
     }
   } else {
     // Buffer number or pattern given. Ignore trailing white space.
-    p = eap->arg + STRLEN(eap->arg);
-    while (p > eap->arg && ascii_iswhite(p[-1])) {
+    p = (char_u *)eap->arg + STRLEN(eap->arg);
+    while (p > (char_u *)eap->arg && ascii_iswhite(p[-1])) {
       p--;
     }
 
-    for (i = 0; ascii_isdigit(eap->arg[i]) && eap->arg + i < p; i++) {}
+    for (i = 0; ascii_isdigit(eap->arg[i]) && (char_u *)eap->arg + i < p; i++) {}
 
-    if (eap->arg + i == p) {
+    if ((char_u *)eap->arg + i == p) {
       // digits only
-      i = (int)atol((char *)eap->arg);
+      i = (int)atol(eap->arg);
     } else {
-      i = buflist_findpat(eap->arg, p, false, true, false);
+      i = buflist_findpat((char_u *)eap->arg, p, false, true, false);
 
       if (i < 0) {
         // error message already given
@@ -2706,7 +2706,7 @@ void ex_diffgetput(exarg_T *eap)
           break;
         }
         p = vim_strsave(ml_get_buf(curtab->tp_diffbuf[idx_from], nr, false));
-        ml_append(lnum + i - 1, p, 0, false);
+        ml_append(lnum + i - 1, (char *)p, 0, false);
         xfree(p);
         added++;
         if (buf_empty && (curbuf->b_ml.ml_line_count == 2)) {

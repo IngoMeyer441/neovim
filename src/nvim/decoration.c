@@ -1,6 +1,7 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
+#include "nvim/api/ui.h"
 #include "nvim/buffer.h"
 #include "nvim/decoration.h"
 #include "nvim/extmark.h"
@@ -73,7 +74,7 @@ void decor_redraw(buf_T *buf, int row1, int row2, Decoration *decor)
     }
   }
 
-  if (decor && kv_size(decor->virt_text)) {
+  if (decor && decor_virt_pos(*decor)) {
     redraw_buf_line_later(buf, row1 + 1);
   }
 
@@ -173,6 +174,12 @@ Decoration get_decor(mtkey_t mark)
   }
 }
 
+/// @return true if decor has a virtual position (virtual text or ui_watched)
+static bool decor_virt_pos(Decoration decor)
+{
+  return kv_size(decor.virt_text) || decor.ui_watched;
+}
+
 
 bool decor_redraw_start(buf_T *buf, int top_row, DecorState *state)
 {
@@ -194,33 +201,25 @@ bool decor_redraw_start(buf_T *buf, int top_row, DecorState *state)
 
     Decoration decor = get_decor(mark);
 
-    // Exclude non-paired marks unless they contain virt_text or a sign
-    if (!mt_paired(mark)
-        && !kv_size(decor.virt_text)
-        && !decor_has_sign(&decor)) {
-      goto next_mark;
-    }
-
     mtpos_t altpos = marktree_get_altpos(buf->b_marktree, mark, NULL);
 
     // Exclude start marks if the end mark position is above the top row
     // Exclude end marks if we have already added the start mark
-    if ((mt_start(mark) && altpos.row < top_row
-         && !kv_size(decor.virt_text))
+    if ((mt_start(mark) && altpos.row < top_row && !decor_virt_pos(decor))
         || (mt_end(mark) && altpos.row >= top_row)) {
       goto next_mark;
     }
 
     if (mt_end(mark)) {
       decor_add(state, altpos.row, altpos.col, mark.pos.row, mark.pos.col,
-                &decor, false);
+                &decor, false, mark.ns, mark.id);
     } else {
       if (altpos.row == -1) {
         altpos.row = mark.pos.row;
         altpos.col = mark.pos.col;
       }
       decor_add(state, mark.pos.row, mark.pos.col, altpos.row, altpos.col,
-                &decor, false);
+                &decor, false, mark.ns, mark.id);
     }
 
 next_mark:
@@ -246,13 +245,13 @@ bool decor_redraw_line(buf_T *buf, int row, DecorState *state)
 }
 
 static void decor_add(DecorState *state, int start_row, int start_col, int end_row, int end_col,
-                      Decoration *decor, bool owned)
+                      Decoration *decor, bool owned, uint64_t ns_id, uint64_t mark_id)
 {
   int attr_id = decor->hl_id > 0 ? syn_id2attr(decor->hl_id) : 0;
 
   DecorRange range = { start_row, start_col, end_row, end_col,
                        *decor, attr_id,
-                       kv_size(decor->virt_text) && owned, -1 };
+                       kv_size(decor->virt_text) && owned, -1, ns_id, mark_id };
 
   kv_pushp(state->active);
   size_t index;
@@ -296,15 +295,8 @@ int decor_redraw_col(buf_T *buf, int col, int win_col, bool hidden, DecorState *
       endpos = mark.pos;
     }
 
-    if (endpos.row < mark.pos.row
-        || (endpos.row == mark.pos.row && endpos.col <= mark.pos.col)) {
-      if (!kv_size(decor.virt_text)) {
-        goto next_mark;
-      }
-    }
-
     decor_add(state, mark.pos.row, mark.pos.col, endpos.row, endpos.col,
-              &decor, false);
+              &decor, false, mark.ns, mark.id);
 
 next_mark:
     marktree_itr_next(buf->b_marktree, state->itr);
@@ -321,7 +313,7 @@ next_mark:
     bool active = false, keep = true;
     if (item.end_row < state->row
         || (item.end_row == state->row && item.end_col <= col)) {
-      if (!(item.start_row >= state->row && kv_size(item.decor.virt_text))) {
+      if (!(item.start_row >= state->row && decor_virt_pos(item.decor))) {
         keep = false;
       }
     } else {
@@ -349,7 +341,7 @@ next_mark:
       }
     }
     if ((item.start_row == state->row && item.start_col <= col)
-        && kv_size(item.decor.virt_text)
+        && decor_virt_pos(item.decor)
         && item.decor.virt_text_pos == kVTOverlay && item.win_col == -1) {
       item.win_col = (item.decor.virt_text_hide && hidden) ? -2 : win_col;
     }
@@ -517,7 +509,7 @@ bool decor_redraw_eol(buf_T *buf, DecorState *state, int *eol_attr, int eol_col)
   bool has_virttext = false;
   for (size_t i = 0; i < kv_size(state->active); i++) {
     DecorRange item = kv_A(state->active, i);
-    if (item.start_row == state->row && kv_size(item.decor.virt_text)) {
+    if (item.start_row == state->row && decor_virt_pos(item.decor)) {
       has_virttext = true;
     }
 
@@ -528,13 +520,14 @@ bool decor_redraw_eol(buf_T *buf, DecorState *state, int *eol_attr, int eol_col)
   return has_virttext;
 }
 
-void decor_add_ephemeral(int start_row, int start_col, int end_row, int end_col, Decoration *decor)
+void decor_add_ephemeral(int start_row, int start_col, int end_row, int end_col, Decoration *decor,
+                         uint64_t ns_id, uint64_t mark_id)
 {
   if (end_row == -1) {
     end_row = start_row;
     end_col = start_col;
   }
-  decor_add(&decor_state, start_row, start_col, end_row, end_col, decor, true);
+  decor_add(&decor_state, start_row, start_col, end_row, end_col, decor, true, ns_id, mark_id);
 }
 
 

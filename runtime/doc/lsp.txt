@@ -750,7 +750,9 @@ omnifunc({findstart}, {base})                             *vim.lsp.omnifunc()*
 set_log_level({level})                               *vim.lsp.set_log_level()*
                 Sets the global log level for LSP logging.
 
-                Levels by name: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"
+                Levels by name: "TRACE", "DEBUG", "INFO", "WARN", "ERROR",
+                "OFF"
+
                 Level numbers begin with "TRACE" at 0
 
                 Use `lsp.log_levels` for reverse lookup.
@@ -785,6 +787,13 @@ start_client({config})                                *vim.lsp.start_client()*
 
                  { "PRODUCTION=true"; "TEST=123"; PORT = 8080; HOST = "0.0.0.0"; }
 <
+                    {detached}           (boolean, default true) Daemonize the
+                                         server process so that it runs in a
+                                         separate process group from Nvim.
+                                         Nvim will shutdown the process on
+                                         exit, but if Nvim fails to exit
+                                         cleanly this could leave behind
+                                         orphaned server processes.
                     {workspace_folders}  (table) List of workspace folders
                                          passed to the language server. For
                                          backwards compatibility rootUri and
@@ -1214,13 +1223,21 @@ remove_workspace_folder({workspace_folder})
                 {path} is not provided, the user will be prompted for a path
                 using |input()|.
 
-rename({new_name})                                      *vim.lsp.buf.rename()*
+rename({new_name}, {options})                           *vim.lsp.buf.rename()*
                 Renames all references to the symbol under the cursor.
 
                 Parameters: ~
-                    {new_name}  (string) If not provided, the user will be
+                    {new_name}  string|nil If not provided, the user will be
                                 prompted for a new name using
                                 |vim.ui.input()|.
+                    {options}   table|nil additional options
+                                • filter (function|nil): Predicate to filter
+                                  clients used for rename. Receives the
+                                  attached clients as argument and must return
+                                  a list of clients.
+                                • name (string|nil): Restrict clients used for
+                                  rename to ones where client.name matches
+                                  this field.
 
 server_ready()                                    *vim.lsp.buf.server_ready()*
                 Checks whether the language servers attached to the current
@@ -1693,7 +1710,7 @@ open_floating_preview({contents}, {syntax}, {opts})
                                 • width: (number) width of floating window
                                 • wrap: (boolean, default true) wrap long
                                   lines
-                                • wrap_at: (string) character to wrap at for
+                                • wrap_at: (number) character to wrap at for
                                   computing height when wrap is enabled
                                 • max_width: (number) maximal width of
                                   floating window

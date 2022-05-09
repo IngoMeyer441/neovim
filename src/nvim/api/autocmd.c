@@ -23,9 +23,9 @@
 // Copy string or array of strings into an empty array.
 // Get the event number, unless it is an error. Then goto `goto_name`.
 #define GET_ONE_EVENT(event_nr, event_str, goto_name) \
-  char_u *__next_ev; \
+  char *__next_ev; \
   event_T event_nr = \
-    event_name2nr((char_u *)event_str.data.string.data, &__next_ev); \
+    event_name2nr(event_str.data.string.data, &__next_ev); \
   if (event_nr >= NUM_EVENTS) { \
     api_set_error(err, kErrorTypeValidation, "unexpected event"); \
     goto goto_name; \
@@ -64,6 +64,7 @@ static int64_t next_autocmd_id = 1;
 ///         containing the following fields:
 ///             - id (number): the autocommand id (only when defined with the API).
 ///             - group (integer): the autocommand group id.
+///             - group_name (string): the autocommand group name.
 ///             - desc (string): the autocommand description.
 ///             - event (string): the autocommand event.
 ///             - command (string): the autocommand command.
@@ -78,8 +79,8 @@ Array nvim_get_autocmds(Dict(get_autocmds) *opts, Error *err)
   // TODO(tjdevries): Would be cool to add nvim_get_autocmds({ id = ... })
 
   Array autocmd_list = ARRAY_DICT_INIT;
-  char_u *pattern_filters[AUCMD_MAX_PATTERNS];
-  char_u pattern_buflocal[BUFLOCAL_PAT_LEN];
+  char *pattern_filters[AUCMD_MAX_PATTERNS];
+  char pattern_buflocal[BUFLOCAL_PAT_LEN];
 
   Array buffers = ARRAY_DICT_INIT;
 
@@ -148,7 +149,7 @@ Array nvim_get_autocmds(Dict(get_autocmds) *opts, Error *err)
   if (opts->pattern.type != kObjectTypeNil) {
     Object v = opts->pattern;
     if (v.type == kObjectTypeString) {
-      pattern_filters[pattern_filter_count] = (char_u *)v.data.string.data;
+      pattern_filters[pattern_filter_count] = v.data.string.data;
       pattern_filter_count += 1;
     } else if (v.type == kObjectTypeArray) {
       if (v.data.array.size > AUCMD_MAX_PATTERNS) {
@@ -164,7 +165,7 @@ Array nvim_get_autocmds(Dict(get_autocmds) *opts, Error *err)
           goto cleanup;
         }
 
-        pattern_filters[pattern_filter_count] = (char_u *)item.data.string.data;
+        pattern_filters[pattern_filter_count] = item.data.string.data;
         pattern_filter_count += 1;
       });
     } else {
@@ -211,7 +212,7 @@ Array nvim_get_autocmds(Dict(get_autocmds) *opts, Error *err)
   }
 
   FOREACH_ITEM(buffers, bufnr, {
-    pattern_filters[pattern_filter_count] = (char_u *)bufnr.data.string.data;
+    pattern_filters[pattern_filter_count] = bufnr.data.string.data;
     pattern_filter_count += 1;
   });
 
@@ -237,7 +238,7 @@ Array nvim_get_autocmds(Dict(get_autocmds) *opts, Error *err)
           assert(i < AUCMD_MAX_PATTERNS);
           assert(pattern_filters[i]);
 
-          char_u *pat = pattern_filters[i];
+          char *pat = pattern_filters[i];
           int patlen = (int)STRLEN(pat);
 
           if (aupat_is_buflocal(pat, patlen)) {
@@ -249,7 +250,7 @@ Array nvim_get_autocmds(Dict(get_autocmds) *opts, Error *err)
             pat = pattern_buflocal;
           }
 
-          if (strequal((char *)ap->pat, (char *)pat)) {
+          if (strequal(ap->pat, pat)) {
             passed = true;
             break;
           }
@@ -269,6 +270,7 @@ Array nvim_get_autocmds(Dict(get_autocmds) *opts, Error *err)
 
         if (ap->group != AUGROUP_DEFAULT) {
           PUT(autocmd_info, "group", INTEGER_OBJ(ap->group));
+          PUT(autocmd_info, "group_name", CSTR_TO_OBJ(augroup_name(ap->group)));
         }
 
         if (ac->id > 0) {
@@ -460,7 +462,7 @@ Integer nvim_create_autocmd(uint64_t channel_id, Object event, Dict(create_autoc
       cb.data.luaref = api_new_luaref(callback->data.luaref);
     } else if (callback->type == kObjectTypeString) {
       cb.type = kCallbackFuncref;
-      cb.data.funcref = vim_strsave((char_u *)callback->data.string.data);
+      cb.data.funcref = string_to_cstr(callback->data.string);
     } else {
       api_set_error(err,
                     kErrorTypeException,
@@ -474,7 +476,7 @@ Integer nvim_create_autocmd(uint64_t channel_id, Object event, Dict(create_autoc
     Object *command = &opts->command;
     if (command->type == kObjectTypeString) {
       aucmd.type = CALLABLE_EX;
-      aucmd.callable.cmd = vim_strsave((char_u *)command->data.string.data);
+      aucmd.callable.cmd = string_to_cstr(command->data.string);
     } else {
       api_set_error(err,
                     kErrorTypeValidation,
@@ -531,7 +533,7 @@ Integer nvim_create_autocmd(uint64_t channel_id, Object event, Dict(create_autoc
       WITH_SCRIPT_CONTEXT(channel_id, {
         retval = autocmd_register(autocmd_id,
                                   event_nr,
-                                  (char_u *)pat.data.string.data,
+                                  pat.data.string.data,
                                   (int)pat.data.string.size,
                                   au_group,
                                   is_once,
@@ -635,8 +637,8 @@ void nvim_clear_autocmds(Dict(clear_autocmds) *opts, Error *err)
   if (event_array.size == 0) {
     FOR_ALL_AUEVENTS(event) {
       FOREACH_ITEM(patterns, pat_object, {
-        char_u *pat = (char_u *)pat_object.data.string.data;
-        if (!clear_autocmd(event, pat, au_group, err)) {
+        char *pat = pat_object.data.string.data;
+        if (!clear_autocmd(event, (char *)pat, au_group, err)) {
           goto cleanup;
         }
       });
@@ -646,8 +648,8 @@ void nvim_clear_autocmds(Dict(clear_autocmds) *opts, Error *err)
       GET_ONE_EVENT(event_nr, event_str, cleanup);
 
       FOREACH_ITEM(patterns, pat_object, {
-        char_u *pat = (char_u *)pat_object.data.string.data;
-        if (!clear_autocmd(event_nr, pat, au_group, err)) {
+        char *pat = pat_object.data.string.data;
+        if (!clear_autocmd(event_nr, (char *)pat, au_group, err)) {
           goto cleanup;
         }
       });
@@ -657,8 +659,6 @@ void nvim_clear_autocmds(Dict(clear_autocmds) *opts, Error *err)
 cleanup:
   api_free_array(event_array);
   api_free_array(patterns);
-
-  return;
 }
 
 /// Create or get an autocommand group |autocmd-groups|.
@@ -759,7 +759,7 @@ void nvim_exec_autocmds(Object event, Dict(exec_autocmds) *opts, Error *err)
   buf_T *buf = curbuf;
   bool set_buf = false;
 
-  char_u *pattern = NULL;
+  char *pattern = NULL;
   bool set_pattern = false;
 
   Array event_array = ARRAY_DICT_INIT;
@@ -814,7 +814,7 @@ void nvim_exec_autocmds(Object event, Dict(exec_autocmds) *opts, Error *err)
       goto cleanup;
     }
 
-    pattern = vim_strsave((char_u *)opts->pattern.data.string.data);
+    pattern = string_to_cstr(opts->pattern.data.string);
     set_pattern = true;
   }
 
@@ -922,7 +922,7 @@ static int get_augroup_from_object(Object group, Error *err)
 static bool get_patterns_from_pattern_or_buf(Array *patterns, Object pattern, Object buffer,
                                              Error *err)
 {
-  const char_u pattern_buflocal[BUFLOCAL_PAT_LEN];
+  const char pattern_buflocal[BUFLOCAL_PAT_LEN];
 
   if (pattern.type != kObjectTypeNil && buffer.type != kObjectTypeNil) {
     api_set_error(err, kErrorTypeValidation,
@@ -932,7 +932,7 @@ static bool get_patterns_from_pattern_or_buf(Array *patterns, Object pattern, Ob
     Object *v = &pattern;
 
     if (v->type == kObjectTypeString) {
-      char_u *pat = (char_u *)v->data.string.data;
+      char *pat = v->data.string.data;
       size_t patlen = aucmd_pattern_length(pat);
       while (patlen) {
         ADD(*patterns, STRING_OBJ(cbuf_to_string((char *)pat, patlen)));
@@ -947,7 +947,7 @@ static bool get_patterns_from_pattern_or_buf(Array *patterns, Object pattern, Ob
 
       Array array = v->data.array;
       for (size_t i = 0; i < array.size; i++) {
-        char_u *pat = (char_u *)array.items[i].data.string.data;
+        char *pat = array.items[i].data.string.data;
         size_t patlen = aucmd_pattern_length(pat);
         while (patlen) {
           ADD(*patterns, STRING_OBJ(cbuf_to_string((char *)pat, patlen)));
@@ -982,9 +982,9 @@ static bool get_patterns_from_pattern_or_buf(Array *patterns, Object pattern, Ob
   return true;
 }
 
-static bool clear_autocmd(event_T event, char_u *pat, int au_group, Error *err)
+static bool clear_autocmd(event_T event, char *pat, int au_group, Error *err)
 {
-  if (do_autocmd_event(event, pat, false, false, (char_u *)"", true, au_group) == FAIL) {
+  if (do_autocmd_event(event, pat, false, false, "", true, au_group) == FAIL) {
     api_set_error(err, kErrorTypeException, "Failed to clear autocmd");
     return false;
   }

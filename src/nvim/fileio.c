@@ -176,7 +176,7 @@ void filemess(buf_T *buf, char_u *name, char_u *s, int attr)
 int readfile(char_u *fname, char_u *sfname, linenr_T from, linenr_T lines_to_skip,
              linenr_T lines_to_read, exarg_T *eap, int flags, bool silent)
 {
-  int fd = 0;
+  int fd = stdin_fd >= 0 ? stdin_fd : 0;
   int newfile = (flags & READ_NEW);
   int check_readonly;
   int filtering = (flags & READ_FILTER);
@@ -1377,7 +1377,7 @@ retry:
             } else {
               len = utf_head_off(ptr, p);
               p -= len;
-              u8c = utf_ptr2char(p);
+              u8c = utf_ptr2char((char *)p);
               if (len == 0) {
                 // Not a valid UTF-8 character, retry with
                 // another fenc when possible, otherwise just
@@ -1584,7 +1584,7 @@ rewind_retry:
           if (skip_count == 0) {
             *ptr = NUL;                     // end of line
             len = (colnr_T)(ptr - line_start + 1);
-            if (ml_append(lnum, line_start, len, newfile) == FAIL) {
+            if (ml_append(lnum, (char *)line_start, len, newfile) == FAIL) {
               error = true;
               break;
             }
@@ -1640,7 +1640,7 @@ rewind_retry:
                 ff_error = EOL_DOS;
               }
             }
-            if (ml_append(lnum, line_start, len, newfile) == FAIL) {
+            if (ml_append(lnum, (char *)line_start, len, newfile) == FAIL) {
               error = true;
               break;
             }
@@ -1688,7 +1688,7 @@ failed:
     }
     *ptr = NUL;
     len = (colnr_T)(ptr - line_start + 1);
-    if (ml_append(lnum, line_start, len, newfile) == FAIL) {
+    if (ml_append(lnum, (char *)line_start, len, newfile) == FAIL) {
       error = true;
     } else {
       if (read_undo_file) {
@@ -1722,17 +1722,19 @@ failed:
   xfree(buffer);
 
   if (read_stdin) {
-    close(0);
+    close(fd);
+    if (stdin_fd < 0) {
 #ifndef WIN32
-    // On Unix, use stderr for stdin, makes shell commands work.
-    vim_ignored = dup(2);
+      // On Unix, use stderr for stdin, makes shell commands work.
+      vim_ignored = dup(2);
 #else
-    // On Windows, use the console input handle for stdin.
-    HANDLE conin = CreateFile("CONIN$", GENERIC_READ | GENERIC_WRITE,
-                              FILE_SHARE_READ, (LPSECURITY_ATTRIBUTES)NULL,
-                              OPEN_EXISTING, 0, (HANDLE)NULL);
-    vim_ignored = _open_osfhandle(conin, _O_RDONLY);
+      // On Windows, use the console input handle for stdin.
+      HANDLE conin = CreateFile("CONIN$", GENERIC_READ | GENERIC_WRITE,
+                                FILE_SHARE_READ, (LPSECURITY_ATTRIBUTES)NULL,
+                                OPEN_EXISTING, 0, (HANDLE)NULL);
+      vim_ignored = _open_osfhandle(conin, _O_RDONLY);
 #endif
+    }
   }
 
   if (tmpname != NULL) {
@@ -3795,7 +3797,7 @@ static int set_rw_fname(char_u *fname, char_u *sfname)
   // Do filetype detection now if 'filetype' is empty.
   if (*curbuf->b_p_ft == NUL) {
     if (augroup_exists("filetypedetect")) {
-      (void)do_doautocmd((char_u *)"filetypedetect BufRead", false, NULL);
+      (void)do_doautocmd("filetypedetect BufRead", false, NULL);
     }
     do_modelines(0);
   }
@@ -3980,7 +3982,7 @@ static int buf_write_bytes(struct bw_info *ip)
             break;
           }
           if (n > 1) {
-            c = utf_ptr2char(ip->bw_rest);
+            c = utf_ptr2char((char *)ip->bw_rest);
           } else {
             c = ip->bw_rest[0];
           }
@@ -4008,7 +4010,7 @@ static int buf_write_bytes(struct bw_info *ip)
             break;
           }
           if (n > 1) {
-            c = utf_ptr2char(buf + wlen);
+            c = utf_ptr2char((char *)buf + wlen);
           } else {
             c = buf[wlen];
           }
@@ -4870,7 +4872,7 @@ static int move_lines(buf_T *frombuf, buf_T *tobuf)
   curbuf = tobuf;
   for (lnum = 1; lnum <= frombuf->b_ml.ml_line_count; lnum++) {
     p = vim_strsave(ml_get_buf(frombuf, lnum, false));
-    if (ml_append(lnum - 1, p, 0, false) == FAIL) {
+    if (ml_append(lnum - 1, (char *)p, 0, false) == FAIL) {
       xfree(p);
       retval = FAIL;
       break;

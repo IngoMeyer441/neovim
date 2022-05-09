@@ -881,7 +881,7 @@ static int nlua_debug(lua_State *lstate)
     {
       .v_lock = VAR_FIXED,
       .v_type = VAR_STRING,
-      .vval.v_string = (char_u *)"lua_debug> ",
+      .vval.v_string = "lua_debug> ",
     },
     {
       .v_type = VAR_UNKNOWN,
@@ -1195,8 +1195,8 @@ void nlua_call_user_expand_func(expand_T *xp, typval_T *ret_tv)
   lua_State *const lstate = global_lstate;
 
   nlua_pushref(lstate, xp->xp_luaref);
-  lua_pushstring(lstate, (char *)xp->xp_pattern);
-  lua_pushstring(lstate, (char *)xp->xp_line);
+  lua_pushstring(lstate, xp->xp_pattern);
+  lua_pushstring(lstate, xp->xp_line);
   lua_pushinteger(lstate, xp->xp_col);
 
   if (nlua_pcall(lstate, 3, 1)) {
@@ -1495,7 +1495,7 @@ void ex_luado(exarg_T *const eap)
           new_line_transformed[i] = '\n';
         }
       }
-      ml_replace(l, (char_u *)new_line_transformed, false);
+      ml_replace(l, new_line_transformed, false);
       inserted_bytes(l, 0, (int)old_line_len, (int)new_line_len);
     }
     lua_pop(lstate, 1);
@@ -1647,9 +1647,7 @@ int nlua_expand_pat(expand_T *xp, char_u *pat, int *num_results, char_u ***resul
       goto cleanup_array;
     }
 
-    GA_APPEND(char_u *,
-              &result_array,
-              vim_strsave((char_u *)v.data.string.data));
+    GA_APPEND(char_u *, &result_array, (char_u *)string_to_cstr(v.data.string));
   }
 
   xp->xp_pattern += prefix_len;
@@ -1875,7 +1873,7 @@ void nlua_do_ucmd(ucmd_T *cmd, exarg_T *eap)
     char *buf = xcalloc(length, sizeof(char));
     bool done = false;
     while (!done) {
-      done = uc_split_args_iter(eap->arg, length, &end, buf, &len);
+      done = uc_split_args_iter((char_u *)eap->arg, length, &end, buf, &len);
       if (len > 0) {
         lua_pushlstring(lstate, buf, len);
         lua_rawseti(lstate, -2, i);

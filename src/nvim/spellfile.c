@@ -2504,19 +2504,19 @@ static afffile_T *spell_read_aff(spellinfo_T *spin, char_u *fname)
             // be empty or start with the same letter.
             if (aff_entry->ae_chop != NULL
                 && aff_entry->ae_add != NULL
-                && aff_entry->ae_chop[utfc_ptr2len(aff_entry->ae_chop)] ==
+                && aff_entry->ae_chop[utfc_ptr2len((char *)aff_entry->ae_chop)] ==
                 NUL) {
               int c, c_up;
 
-              c = utf_ptr2char(aff_entry->ae_chop);
+              c = utf_ptr2char((char *)aff_entry->ae_chop);
               c_up = SPELL_TOUPPER(c);
               if (c_up != c
                   && (aff_entry->ae_cond == NULL
-                      || utf_ptr2char(aff_entry->ae_cond) == c)) {
+                      || utf_ptr2char((char *)aff_entry->ae_cond) == c)) {
                 p = aff_entry->ae_add
                     + STRLEN(aff_entry->ae_add);
                 MB_PTR_BACK(aff_entry->ae_add, p);
-                if (utf_ptr2char(p) == c_up) {
+                if (utf_ptr2char((char *)p) == c_up) {
                   upper = true;
                   aff_entry->ae_chop = NULL;
                   *p = NUL;
@@ -4874,7 +4874,7 @@ void ex_mkspell(exarg_T *eap)
 {
   int fcount;
   char_u **fnames;
-  char_u *arg = eap->arg;
+  char_u *arg = (char_u *)eap->arg;
   bool ascii = false;
 
   if (STRNCMP(arg, "-ascii", 6) == 0) {
@@ -5501,7 +5501,7 @@ static void spell_message(const spellinfo_T *spin, char_u *str)
 // ":[count]spellrare  {word}"
 void ex_spell(exarg_T *eap)
 {
-  spell_add_word(eap->arg, (int)STRLEN(eap->arg),
+  spell_add_word((char_u *)eap->arg, (int)STRLEN(eap->arg),
                  eap->cmdidx == CMD_spellwrong ? SPELL_ADD_BAD :
                  eap->cmdidx == CMD_spellrare ? SPELL_ADD_RARE : SPELL_ADD_GOOD,
                  eap->forceit ? 0 : (int)eap->line2,

@@ -456,7 +456,7 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
 
   -- Remove final line if needed
   local fix_eol = has_eol_text_edit
-  fix_eol = fix_eol and (api.nvim_buf_get_option(bufnr, 'eol') or (api.nvim_buf_get_option(bufnr, 'fixeol') and not api.nvim_buf_get_option('binary')))
+  fix_eol = fix_eol and (api.nvim_buf_get_option(bufnr, 'eol') or (api.nvim_buf_get_option(bufnr, 'fixeol') and not api.nvim_buf_get_option(bufnr, 'binary')))
   fix_eol = fix_eol and get_line(bufnr, max - 1) == ''
   if fix_eol then
     vim.api.nvim_buf_set_lines(bufnr, -2, -1, false, {})
@@ -1384,7 +1384,7 @@ end
 ---             - height: (number) height of floating window
 ---             - width: (number) width of floating window
 ---             - wrap: (boolean, default true) wrap long lines
----             - wrap_at: (string) character to wrap at for computing height when wrap is enabled
+---             - wrap_at: (number) character to wrap at for computing height when wrap is enabled
 ---             - max_width: (number) maximal width of floating window
 ---             - max_height: (number) maximal height of floating window
 ---             - pad_top: (number) number of lines to pad contents at top

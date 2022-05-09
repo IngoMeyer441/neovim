@@ -69,7 +69,8 @@ void extmark_set(buf_T *buf, uint32_t ns_id, uint32_t *idp, int row, colnr_T col
   if (decor) {
     if (kv_size(decor->virt_text)
         || kv_size(decor->virt_lines)
-        || decor_has_sign(decor)) {
+        || decor_has_sign(decor)
+        || decor->ui_watched) {
       decor_full = true;
       decor = xmemdup(decor, sizeof *decor);
     }
@@ -426,7 +427,7 @@ void u_extmark_copy(buf_T *buf, int l_row, colnr_T l_col, int u_row, colnr_T u_c
   ExtmarkUndoObject undo;
 
   MarkTreeIter itr[1] = { 0 };
-  marktree_itr_get(buf->b_marktree, l_row, l_col, itr);
+  marktree_itr_get(buf->b_marktree, (int32_t)l_row, l_col, itr);
   while (true) {
     mtkey_t mark = marktree_itr_current(itr);
     if (mark.pos.row < 0
@@ -593,7 +594,7 @@ void extmark_splice_impl(buf_T *buf, int start_row, colnr_T start_col, bcount_t 
   }
 
 
-  marktree_splice(buf->b_marktree, start_row, start_col,
+  marktree_splice(buf->b_marktree, (int32_t)start_row, start_col,
                   old_row, old_col,
                   new_row, new_col);
 
