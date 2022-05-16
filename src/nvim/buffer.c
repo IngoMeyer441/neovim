@@ -111,8 +111,8 @@ static int read_buffer(int read_stdin, exarg_T *eap, int flags)
   // the end.  This makes it possible to retry when 'fileformat' or
   // 'fileencoding' was guessed wrong.
   line_count = curbuf->b_ml.ml_line_count;
-  retval = readfile(read_stdin ? NULL : curbuf->b_ffname,
-                    read_stdin ? NULL : curbuf->b_fname,
+  retval = readfile(read_stdin ? NULL : (char *)curbuf->b_ffname,
+                    read_stdin ? NULL : (char *)curbuf->b_fname,
                     line_count, (linenr_T)0, (linenr_T)MAXLNUM, eap,
                     flags | READ_BUFFER, silent);
   if (retval == OK) {
@@ -229,7 +229,7 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags)
     }
 #endif
 
-    retval = readfile(curbuf->b_ffname, curbuf->b_fname,
+    retval = readfile((char *)curbuf->b_ffname, (char *)curbuf->b_fname,
                       (linenr_T)0, (linenr_T)0, (linenr_T)MAXLNUM, eap,
                       flags | READ_NEW | (read_fifo ? READ_FIFO : 0), silent);
 #ifdef UNIX
@@ -979,7 +979,7 @@ char *do_bufdel(int command, char_u *arg, int addr_count, int start_bnr, int end
           break;
         }
       } else {    // addr_count == 1
-        arg = skipwhite(arg);
+        arg = (char_u *)skipwhite((char *)arg);
         if (*arg == NUL) {
           break;
         }
@@ -1476,7 +1476,7 @@ void set_curbuf(buf_T *buf, int action)
       // Do not sync when in Insert mode and the buffer is open in
       // another window, might be a timer doing something in another
       // window.
-      if (prevbuf == curbuf && ((State & INSERT) == 0 || curbuf->b_nwindows <= 1)) {
+      if (prevbuf == curbuf && ((State & MODE_INSERT) == 0 || curbuf->b_nwindows <= 1)) {
         u_sync(false);
       }
       close_buffer(prevbuf == curwin->w_buffer ? curwin : NULL,
@@ -2366,7 +2366,7 @@ static char_u *buflist_match(regmatch_T *rmp, buf_T *buf, bool ignore_case)
 {
   // First try the short file name, then the long file name.
   char_u *match = fname_match(rmp, buf->b_sfname, ignore_case);
-  if (match == NULL) {
+  if (match == NULL && rmp->regprog != NULL) {
     match = fname_match(rmp, buf->b_ffname, ignore_case);
   }
   return match;
@@ -2387,7 +2387,7 @@ static char_u *fname_match(regmatch_T *rmp, char_u *name, bool ignore_case)
     rmp->rm_ic = p_fic || ignore_case;
     if (vim_regexec(rmp, name, (colnr_T)0)) {
       match = name;
-    } else {
+    } else if (rmp->regprog != NULL) {
       // Replace $(HOME) with '~' and try matching again.
       p = home_replace_save(NULL, name);
       if (vim_regexec(rmp, p, (colnr_T)0)) {
@@ -3151,8 +3151,8 @@ void maketitle(void)
 
         use_sandbox = was_set_insecurely(curwin, "titlestring", 0);
         called_emsg = false;
-        build_stl_str_hl(curwin, (char_u *)buf, sizeof(buf),
-                         p_titlestring, use_sandbox,
+        build_stl_str_hl(curwin, buf, sizeof(buf),
+                         (char *)p_titlestring, use_sandbox,
                          0, maxlen, NULL, NULL);
         title_str = (char_u *)buf;
         if (called_emsg) {
@@ -3175,7 +3175,7 @@ void maketitle(void)
                                      SPACE_FOR_FNAME + 1);
         buf_p += MIN(size, SPACE_FOR_FNAME);
       } else {
-        buf_p += transstr_buf((const char *)path_tail(curbuf->b_fname),
+        buf_p += transstr_buf((const char *)path_tail((char *)curbuf->b_fname),
                               buf_p, SPACE_FOR_FNAME + 1, true);
       }
 
@@ -3269,8 +3269,8 @@ void maketitle(void)
 
         use_sandbox = was_set_insecurely(curwin, "iconstring", 0);
         called_emsg = false;
-        build_stl_str_hl(curwin, icon_str, sizeof(buf),
-                         p_iconstring, use_sandbox,
+        build_stl_str_hl(curwin, (char *)icon_str, sizeof(buf),
+                         (char *)p_iconstring, use_sandbox,
                          0, 0, NULL, NULL);
         if (called_emsg) {
           set_string_option_direct("iconstring", -1,
@@ -3285,7 +3285,7 @@ void maketitle(void)
       if (buf_spname(curbuf) != NULL) {
         buf_p = buf_spname(curbuf);
       } else {                        // use file name only in icon
-        buf_p = path_tail(curbuf->b_ffname);
+        buf_p = (char_u *)path_tail((char *)curbuf->b_ffname);
       }
       *icon_str = NUL;
       // Truncate name at 100 bytes.
@@ -3383,8 +3383,8 @@ typedef enum {
 /// @param tabtab  Tab clicks definition (can be NULL).
 ///
 /// @return  The final width of the statusline
-int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use_sandbox,
-                     int fillchar, int maxwidth, stl_hlrec_t **hltab, StlClickRecord **tabtab)
+int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, int use_sandbox, int fillchar,
+                     int maxwidth, stl_hlrec_t **hltab, StlClickRecord **tabtab)
 {
   static size_t stl_items_len = 20;  // Initial value, grows as needed.
   static stl_item_t *stl_items = NULL;
@@ -3395,8 +3395,8 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
 
 #define TMPLEN 70
   char buf_tmp[TMPLEN];
-  char_u win_tmp[TMPLEN];
-  char_u *usefmt = fmt;
+  char win_tmp[TMPLEN];
+  char *usefmt = fmt;
   const int save_must_redraw = must_redraw;
   const int save_redr_type = curwin->w_redr_type;
 
@@ -3421,7 +3421,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     };
     set_var(S_LEN("g:statusline_winid"), &tv, false);
 
-    usefmt = (char_u *)eval_to_string_safe((char *)fmt + 2, NULL, use_sandbox);
+    usefmt = eval_to_string_safe(fmt + 2, NULL, use_sandbox);
     if (usefmt == NULL) {
       usefmt = fmt;
     }
@@ -3467,17 +3467,17 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
   bool prevchar_isitem = false;
 
   // out_p is the current position in the output buffer
-  char_u *out_p = out;
+  char *out_p = out;
 
   // out_end_p is the last valid character in the output buffer
   // Note: The null termination character must occur here or earlier,
   //       so any user-visible characters must occur before here.
-  char_u *out_end_p = (out + outlen) - 1;
+  char *out_end_p = (out + outlen) - 1;
 
 
   // Proceed character by character through the statusline format string
   // fmt_p is the current position in the input buffer
-  for (char_u *fmt_p = usefmt; *fmt_p;) {
+  for (char *fmt_p = usefmt; *fmt_p;) {
     if (curitem == (int)stl_items_len) {
       size_t new_len = stl_items_len * 3 / 2;
 
@@ -3534,7 +3534,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         continue;
       }
       stl_items[curitem].type = Separate;
-      stl_items[curitem++].start = out_p;
+      stl_items[curitem++].start = (char_u *)out_p;
       continue;
     }
 
@@ -3542,7 +3542,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     if (*fmt_p == STL_TRUNCMARK) {
       fmt_p++;
       stl_items[curitem].type = Trunc;
-      stl_items[curitem++].start = out_p;
+      stl_items[curitem++].start = (char_u *)out_p;
       continue;
     }
 
@@ -3591,7 +3591,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         }
         if (n == curitem && group_start_userhl == group_end_userhl) {
           // empty group
-          out_p = t;
+          out_p = (char *)t;
           group_len = 0;
           for (n = stl_groupitems[groupdepth] + 1; n < curitem; n++) {
             // do not use the highlighting from the removed group
@@ -3601,7 +3601,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
             // adjust the start position of TabPage to the next
             // item position
             if (stl_items[n].type == TabPage) {
-              stl_items[n].start = out_p;
+              stl_items[n].start = (char_u *)out_p;
             }
           }
         }
@@ -3624,7 +3624,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         *t = '<';
 
         // { Move the truncated output
-        memmove(t + 1, t + n, (size_t)(out_p - (t + n)));
+        memmove(t + 1, t + n, (size_t)((char_u *)out_p - (t + n)));
         out_p = out_p - n + 1;
         // Fill up space left over by half a double-wide char.
         while (++group_len < stl_items[stl_groupitems[groupdepth]].minwid) {
@@ -3635,7 +3635,8 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         // correct the start of the items for the truncation
         for (int idx = stl_groupitems[groupdepth] + 1; idx < curitem; idx++) {
           // Shift everything back by the number of removed bytes
-          stl_items[idx].start -= n;
+          // Minus one for the leading '<' added above.
+          stl_items[idx].start -= n - 1;
 
           // If the item was partially or completely truncated, set its
           // start to the start of the group
@@ -3657,7 +3658,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         } else {
           // { Move the group to the right
           group_len = (min_group_width - group_len) * utf_char2len(fillchar);
-          memmove(t + group_len, t, (size_t)(out_p - t));
+          memmove(t + group_len, t, (size_t)((char_u *)out_p - t));
           if (out_p + group_len >= (out_end_p + 1)) {
             group_len = (long)(out_end_p - out_p);
           }
@@ -3696,14 +3697,14 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
 
     // The first digit group is the item's min width
     if (ascii_isdigit(*fmt_p)) {
-      minwid = getdigits_int(&fmt_p, false, 0);
+      minwid = getdigits_int((char_u **)&fmt_p, false, 0);
     }
 
     // User highlight groups override the min width field
     // to denote the styling to use.
     if (*fmt_p == STL_USER_HL) {
       stl_items[curitem].type = Highlight;
-      stl_items[curitem].start = out_p;
+      stl_items[curitem].start = (char_u *)out_p;
       stl_items[curitem].minwid = minwid > 9 ? 1 : minwid;
       fmt_p++;
       curitem++;
@@ -3749,7 +3750,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         }
       }
       stl_items[curitem].type = TabPage;
-      stl_items[curitem].start = out_p;
+      stl_items[curitem].start = (char_u *)out_p;
       stl_items[curitem].minwid = minwid;
       fmt_p++;
       curitem++;
@@ -3758,7 +3759,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
 
     if (*fmt_p == STL_CLICK_FUNC) {
       fmt_p++;
-      char *t = (char *)fmt_p;
+      char *t = fmt_p;
       while (*fmt_p != STL_CLICK_FUNC && *fmt_p) {
         fmt_p++;
       }
@@ -3766,8 +3767,8 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         break;
       }
       stl_items[curitem].type = ClickFunc;
-      stl_items[curitem].start = out_p;
-      stl_items[curitem].cmd = xmemdupz(t, (size_t)(((char *)fmt_p - t)));
+      stl_items[curitem].start = (char_u *)out_p;
+      stl_items[curitem].cmd = xmemdupz(t, (size_t)(fmt_p - t));
       stl_items[curitem].minwid = minwid;
       fmt_p++;
       curitem++;
@@ -3779,7 +3780,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     if (*fmt_p == '.') {
       fmt_p++;
       if (ascii_isdigit(*fmt_p)) {
-        maxwid = getdigits_int(&fmt_p, false, 50);
+        maxwid = getdigits_int((char_u **)&fmt_p, false, 50);
       }
     }
 
@@ -3791,7 +3792,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     if (*fmt_p == '(') {
       stl_groupitems[groupdepth++] = curitem;
       stl_items[curitem].type = Group;
-      stl_items[curitem].start = out_p;
+      stl_items[curitem].start = (char_u *)out_p;
       stl_items[curitem].minwid = minwid;
       stl_items[curitem].maxwid = maxwid;
       fmt_p++;
@@ -3814,7 +3815,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     }
 
     // The status line item type
-    char_u opt = *fmt_p++;
+    char opt = *fmt_p++;
 
     // OK - now for the real work
     NumberBase base = kNumBaseDecimal;
@@ -3840,12 +3841,12 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       if (opt != STL_FILENAME) {
         str = (char *)NameBuff;
       } else {
-        str = (char *)path_tail(NameBuff);
+        str = path_tail((char *)NameBuff);
       }
       break;
     case STL_VIM_EXPR:     // '{'
     {
-      char_u *block_start = fmt_p - 1;
+      char *block_start = fmt_p - 1;
       int reevaluate = (*fmt_p == '%');
       itemisflag = true;
 
@@ -3855,7 +3856,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
 
       // Attempt to copy the expression to evaluate into
       // the output buffer as a null-terminated string.
-      char_u *t = out_p;
+      char *t = out_p;
       while ((*fmt_p != '}' || (reevaluate && fmt_p[-1] != '%'))
              && *fmt_p != NUL && out_p < out_end_p) {
         *out_p++ = *fmt_p++;
@@ -3893,7 +3894,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       }
 
       // Note: The result stored in `t` is unused.
-      str = eval_to_string_safe((char *)out_p, (char **)&t, use_sandbox);
+      str = eval_to_string_safe(out_p, &t, use_sandbox);
 
       curwin = save_curwin;
       curbuf = save_curbuf;
@@ -3908,7 +3909,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       // Check if the evaluated result is a number.
       // If so, convert the number to an int and free the string.
       if (str != NULL && *str != 0) {
-        if (*skipdigits((char_u *)str) == NUL) {
+        if (*skipdigits(str) == NUL) {
           num = atoi(str);
           XFREE_CLEAR(str);
           itemisflag = false;
@@ -3943,7 +3944,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
           xfree(usefmt);
         }
         XFREE_CLEAR(str);
-        usefmt = new_fmt;
+        usefmt = (char *)new_fmt;
         fmt_p = usefmt + parsed_usefmt;
         evaldepth++;
         continue;
@@ -3961,8 +3962,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       break;
 
     case STL_COLUMN:
-      num = !(State & INSERT) && empty_line
-            ? 0 : (int)wp->w_cursor.col + 1;
+      num = (State & MODE_INSERT) == 0 && empty_line ? 0 : (int)wp->w_cursor.col + 1;
       break;
 
     case STL_VIRTCOL:
@@ -3970,7 +3970,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       colnr_T virtcol = wp->w_virtcol + 1;
       // Don't display %V if it's the same as %c.
       if (opt == STL_VIRTCOL_ALT
-          && (virtcol == (colnr_T)(!(State & INSERT) && empty_line
+          && (virtcol == (colnr_T)((State & MODE_INSERT) == 0 && empty_line
                                    ? 0 : (int)wp->w_cursor.col + 1))) {
         break;
       }
@@ -4028,7 +4028,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       long l = ml_find_line_or_offset(wp->w_buffer, wp->w_cursor.lnum, NULL,
                                       false);
       num = (wp->w_buffer->b_ml.ml_flags & ML_EMPTY) || l < 0 ?
-            0L : l + 1 + (!(State & INSERT) && empty_line ?
+            0L : l + 1 + ((State & MODE_INSERT) == 0 && empty_line ?
                           0 : (int)wp->w_cursor.col);
       break;
     }
@@ -4125,7 +4125,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
 
     case STL_HIGHLIGHT: {
       // { The name of the highlight is surrounded by `#`
-      char_u *t = fmt_p;
+      char *t = fmt_p;
       while (*fmt_p != '#' && *fmt_p != NUL) {
         fmt_p++;
       }
@@ -4134,8 +4134,8 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       // Create a highlight item based on the name
       if (*fmt_p == '#') {
         stl_items[curitem].type = Highlight;
-        stl_items[curitem].start = out_p;
-        stl_items[curitem].minwid = -syn_name2id_len(t, (size_t)(fmt_p - t));
+        stl_items[curitem].start = (char_u *)out_p;
+        stl_items[curitem].minwid = -syn_name2id_len((char_u *)t, (size_t)(fmt_p - t));
         curitem++;
         fmt_p++;
       }
@@ -4146,14 +4146,14 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     // If we made it this far, the item is normal and starts at
     // our current position in the output buffer.
     // Non-normal items would have `continued`.
-    stl_items[curitem].start = out_p;
+    stl_items[curitem].start = (char_u *)out_p;
     stl_items[curitem].type = Normal;
 
     // Copy the item string into the output buffer
     if (str != NULL && *str) {
       // { Skip the leading `,` or ` ` if the item is a flag
       //  and the proper conditions are met
-      char_u *t = (char_u *)str;
+      char *t = str;
       if (itemisflag) {
         if ((t[0] && t[1])
             && ((!prevchar_isitem && *t == ',')
@@ -4164,7 +4164,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       }
       // }
 
-      long l = vim_strsize(t);
+      long l = vim_strsize((char_u *)t);
 
       // If this item is non-empty, record that the last thing
       // we put in the output buffer was an item
@@ -4175,8 +4175,8 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
       // If the item is too wide, truncate it from the beginning
       if (l > maxwid) {
         while (l >= maxwid) {
-          l -= ptr2cells(t);
-          t += utfc_ptr2len((char *)t);
+          l -= ptr2cells((char_u *)t);
+          t += utfc_ptr2len(t);
         }
 
         // Early out if there isn't enough room for the truncation marker
@@ -4292,11 +4292,9 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
         *++t = 0;
         // }
 
-        vim_snprintf((char *)out_p, remaining_buf_len, (char *)nstr,
-                     0, num, n);
+        vim_snprintf(out_p, remaining_buf_len, (char *)nstr, 0, num, n);
       } else {
-        vim_snprintf((char *)out_p, remaining_buf_len, (char *)nstr,
-                     minwid, num);
+        vim_snprintf(out_p, remaining_buf_len, (char *)nstr, minwid, num);
       }
 
       // Advance the output buffer position to the end of the
@@ -4333,7 +4331,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
   // We have now processed the entire statusline format string.
   // What follows is post-processing to handle alignment and highlighting.
 
-  int width = vim_strsize(out);
+  int width = vim_strsize((char_u *)out);
   if (maxwidth > 0 && width > maxwidth) {
     // Result is too long, must truncate somewhere.
     int item_idx = 0;
@@ -4341,7 +4339,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
 
     // If there are no items, truncate from beginning
     if (itemcnt == 0) {
-      trunc_p = out;
+      trunc_p = (char_u *)out;
 
       // Otherwise, look for the truncation item
     } else {
@@ -4364,7 +4362,7 @@ int build_stl_str_hl(win_T *wp, char_u *out, size_t outlen, char_u *fmt, int use
     if (width - vim_strsize(trunc_p) >= maxwidth) {
       // Walk from the beginning of the
       // string to find the last character that will fit.
-      trunc_p = out;
+      trunc_p = (char_u *)out;
       width = 0;
       for (;;) {
         width += ptr2cells(trunc_p);
@@ -5179,7 +5177,7 @@ static int chk_modeline(linenr_T lnum, int flags)
 
         if (*e == ':'
             && (s[0] != 'V'
-                || STRNCMP(skipwhite(e + 1), "set", 3) == 0)
+                || STRNCMP(skipwhite((char *)e + 1), "set", 3) == 0)
             && (s[3] == ':'
                 || (VIM_VERSION_100 >= vers && isdigit(s[3]))
                 || (VIM_VERSION_100 < vers && s[3] == '<')
@@ -5203,13 +5201,13 @@ static int chk_modeline(linenr_T lnum, int flags)
   s = linecopy = vim_strsave(s);      // copy the line, it will change
 
   save_sourcing_lnum = sourcing_lnum;
-  save_sourcing_name = sourcing_name;
+  save_sourcing_name = (char_u *)sourcing_name;
   sourcing_lnum = lnum;               // prepare for emsg()
-  sourcing_name = (char_u *)"modelines";
+  sourcing_name = "modelines";
 
   end = false;
   while (end == false) {
-    s = skipwhite(s);
+    s = (char_u *)skipwhite((char *)s);
     if (*s == NUL) {
       break;
     }
@@ -5261,7 +5259,7 @@ static int chk_modeline(linenr_T lnum, int flags)
   }
 
   sourcing_lnum = save_sourcing_lnum;
-  sourcing_name = save_sourcing_name;
+  sourcing_name = (char *)save_sourcing_name;
 
   xfree(linecopy);
 
@@ -5596,7 +5594,7 @@ bool buf_contents_changed(buf_T *buf)
   aucmd_prepbuf(&aco, newbuf);
 
   if (ml_open(curbuf) == OK
-      && readfile(buf->b_ffname, buf->b_fname,
+      && readfile((char *)buf->b_ffname, (char *)buf->b_fname,
                   (linenr_T)0, (linenr_T)0, (linenr_T)MAXLNUM,
                   &ea, READ_NEW | READ_DUMMY, false) == OK) {
     // compare the two files line by line

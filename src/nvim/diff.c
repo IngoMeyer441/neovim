@@ -744,7 +744,7 @@ static int diff_write_buffer(buf_T *buf, diffin_T *din)
     for (char_u *s = ml_get_buf(buf, lnum, false); *s != NUL;) {
       if (diff_flags & DIFF_ICASE) {
         int c;
-        char_u cbuf[MB_MAXBYTES + 1];
+        char cbuf[MB_MAXBYTES + 1];
 
         if (*s == NL) {
           c = NUL;
@@ -754,7 +754,7 @@ static int diff_write_buffer(buf_T *buf, diffin_T *din)
           c = utf_fold(c);
         }
         const int orig_len = utfc_ptr2len((char *)s);
-        if (utf_char2bytes(c, cbuf) != orig_len) {
+        if (utf_char2bytes(c, (char *)cbuf) != orig_len) {
           // TODO(Bram): handle byte length difference
           memmove(ptr + len, s, (size_t)orig_len);
         } else {
@@ -794,7 +794,7 @@ static int diff_write(buf_T *buf, diffin_T *din)
   // Writing the buffer is an implementation detail of performing the diff,
   // so it shouldn't update the '[ and '] marks.
   cmdmod.lockmarks = true;
-  int r = buf_write(buf, din->din_fname, NULL,
+  int r = buf_write(buf, (char *)din->din_fname, NULL,
                     (linenr_T)1, buf->b_ml.ml_line_count,
                     NULL, false, false, false, true);
   cmdmod.lockmarks = save_lockmarks;
@@ -1178,7 +1178,7 @@ void ex_diffpatch(exarg_T *eap)
   }
 
   // Write the current buffer to "tmp_orig".
-  if (buf_write(curbuf, tmp_orig, NULL,
+  if (buf_write(curbuf, (char *)tmp_orig, NULL,
                 (linenr_T)1, curbuf->b_ml.ml_line_count,
                 NULL, false, false, false, true) == FAIL) {
     goto theend;
@@ -1970,7 +1970,7 @@ static bool diff_equal_char(const char_u *const p1, const char_u *const p2, int 
 static int diff_cmp(char_u *s1, char_u *s2)
 {
   if ((diff_flags & DIFF_IBLANK)
-      && (*skipwhite(s1) == NUL || *skipwhite(s2) == NUL)) {
+      && (*(char_u *)skipwhite((char *)s1) == NUL || *skipwhite((char *)s2) == NUL)) {
     return 0;
   }
 
@@ -1982,8 +1982,8 @@ static int diff_cmp(char_u *s1, char_u *s2)
     return mb_stricmp((const char *)s1, (const char *)s2);
   }
 
-  char_u *p1 = s1;
-  char_u *p2 = s2;
+  char *p1 = (char *)s1;
+  char *p2 = (char *)s2;
 
   // Ignore white space changes and possibly ignore case.
   while (*p1 != NUL && *p2 != NUL) {
@@ -1995,7 +1995,7 @@ static int diff_cmp(char_u *s1, char_u *s2)
       p2 = skipwhite(p2);
     } else {
       int l;
-      if (!diff_equal_char(p1, p2, &l)) {
+      if (!diff_equal_char((char_u *)p1, (char_u *)p2, &l)) {
         break;
       }
       p1 += l;
@@ -2334,8 +2334,8 @@ bool diff_find_change(win_T *wp, linenr_T lnum, int *startp, int *endp)
             || ((diff_flags & DIFF_IWHITEALL)
                 && (ascii_iswhite(line_org[si_org])
                     || ascii_iswhite(line_new[si_new])))) {
-          si_org = (int)(skipwhite(line_org + si_org) - line_org);
-          si_new = (int)(skipwhite(line_new + si_new) - line_new);
+          si_org = (int)((char_u *)skipwhite((char *)line_org + si_org) - line_org);
+          si_new = (int)((char_u *)skipwhite((char *)line_new + si_new) - line_new);
         } else {
           if (!diff_equal_char(line_org + si_org, line_new + si_new, &l)) {
             break;

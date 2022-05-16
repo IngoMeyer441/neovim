@@ -185,19 +185,16 @@ if(NOT MSVC)
   set_source_files_properties(
     ${EXTERNAL_SOURCES} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion -Wno-missing-noreturn -Wno-missing-format-attribute -Wno-double-promotion")
 
-  # gperf generates ANSI-C with incorrect linkage, ignore it.
-  check_c_compiler_flag(-Wstatic-in-inline HAS_WSTATIC_IN_INLINE)
-  if(HAS_WSTATIC_IN_INLINE)
-    set_source_files_properties(
-      eval/funcs.c PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-static-in-inline -Wno-conversion")
-  else()
-    set_source_files_properties(
-      eval/funcs.c PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion")
-  endif()
+  set_source_files_properties(
+    eval/funcs.c PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion")
 endif()
 
 if(NOT "${MIN_LOG_LEVEL}" MATCHES "^$")
   add_definitions(-DMIN_LOG_LEVEL=${MIN_LOG_LEVEL})
+endif()
+
+if(DEBUG OR CLANG_ASAN_UBSAN OR CLANG_MSAN OR CLANG_TSAN)
+  add_definitions(-DEXITFREE)
 endif()
 
 get_directory_property(gen_cdefs COMPILE_DEFINITIONS)
@@ -206,9 +203,6 @@ foreach(gen_cdef ${gen_cdefs} DO_NOT_DEFINE_EMPTY_ATTRIBUTES)
     list(APPEND gen_cflags "-D${gen_cdef}")
   endif()
 endforeach()
-if(CLANG_ASAN_UBSAN OR CLANG_MSAN OR CLANG_TSAN)
-  list(APPEND gen_cflags "-DEXITFREE")
-endif()
 
 get_directory_property(gen_includes INCLUDE_DIRECTORIES)
 foreach(gen_include ${gen_includes} ${LUA_PREFERRED_INCLUDE_DIRS})
@@ -408,14 +402,9 @@ add_custom_command(OUTPUT ${GENERATED_EX_CMDS_ENUM} ${GENERATED_EX_CMDS_DEFS}
   DEPENDS ${EX_CMDS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/ex_cmds.lua
 )
 
-if(NOT GPERF_PRG)
-  message(FATAL_ERROR "gperf was not found.")
-endif()
 add_custom_command(OUTPUT ${GENERATED_FUNCS} ${FUNCS_DATA}
   COMMAND ${LUA_PRG} ${FUNCS_GENERATOR}
-      ${CMAKE_CURRENT_LIST_DIR} ${GENERATED_DIR} ${API_METADATA} ${FUNCS_DATA}
-  COMMAND ${GPERF_PRG}
-      ${GENERATED_DIR}/funcs.generated.h.gperf --output-file=${GENERATED_FUNCS}
+      ${CMAKE_CURRENT_LIST_DIR} ${LUA_SHARED_MODULE_SOURCE} ${GENERATED_DIR} ${API_METADATA} ${FUNCS_DATA}
   DEPENDS ${FUNCS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/eval.lua ${API_METADATA}
 )
 list(APPEND NVIM_GENERATED_FOR_SOURCES
@@ -701,17 +690,14 @@ if(CLANG_ASAN_UBSAN)
       set(SANITIZE_RECOVER -fno-sanitize-recover)      # Clang 3.5-
     endif()
   endif()
-  set_property(TARGET nvim APPEND PROPERTY COMPILE_DEFINITIONS EXITFREE)
   set_property(TARGET nvim APPEND PROPERTY COMPILE_OPTIONS ${SANITIZE_RECOVER} -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address -fsanitize=undefined -fsanitize-blacklist=${PROJECT_SOURCE_DIR}/src/.asan-blacklist)
   set_property(TARGET nvim APPEND_STRING PROPERTY LINK_FLAGS "-fsanitize=address -fsanitize=undefined ")
 elseif(CLANG_MSAN)
   message(STATUS "Enabling Clang memory sanitizer for nvim.")
-  set_property(TARGET nvim APPEND PROPERTY COMPILE_DEFINITIONS EXITFREE)
   set_property(TARGET nvim APPEND PROPERTY COMPILE_OPTIONS -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -fno-optimize-sibling-calls)
   set_property(TARGET nvim APPEND_STRING PROPERTY LINK_FLAGS "-fsanitize=memory -fsanitize-memory-track-origins ")
 elseif(CLANG_TSAN)
   message(STATUS "Enabling Clang thread sanitizer for nvim.")
-  set_property(TARGET nvim APPEND PROPERTY COMPILE_DEFINITIONS EXITFREE)
   set_property(TARGET nvim APPEND PROPERTY COMPILE_OPTIONS -fsanitize=thread)
   set_property(TARGET nvim APPEND PROPERTY COMPILE_OPTIONS -fPIE)
   set_property(TARGET nvim APPEND_STRING PROPERTY LINK_FLAGS "-fsanitize=thread ")

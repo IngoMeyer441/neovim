@@ -49,7 +49,7 @@
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent_c.h"
-#include "nvim/keymap.h"
+#include "nvim/keycodes.h"
 #include "nvim/macros.h"
 #include "nvim/mbyte.h"
 #include "nvim/memfile.h"
@@ -491,17 +491,17 @@ void set_init_1(bool clean_arg)
 #endif
                      false);
 
-  char *backupdir = stdpaths_user_data_subpath("backup", 2, true);
+  char *backupdir = stdpaths_user_state_subpath("backup", 2, true);
   const size_t backupdir_len = strlen(backupdir);
   backupdir = xrealloc(backupdir, backupdir_len + 3);
   memmove(backupdir + 2, backupdir, backupdir_len + 1);
   memmove(backupdir, ".,", 2);
   set_string_default("backupdir", backupdir, true);
-  set_string_default("viewdir", stdpaths_user_data_subpath("view", 2, true),
+  set_string_default("viewdir", stdpaths_user_state_subpath("view", 2, true),
                      true);
-  set_string_default("directory", stdpaths_user_data_subpath("swap", 2, true),
+  set_string_default("directory", stdpaths_user_state_subpath("swap", 2, true),
                      true);
-  set_string_default("undodir", stdpaths_user_data_subpath("undo", 2, true),
+  set_string_default("undodir", stdpaths_user_state_subpath("undo", 2, true),
                      true);
   // Set default for &runtimepath. All necessary expansions are performed in
   // this function.
@@ -1714,7 +1714,7 @@ skip:
             arg++;
           }
         }
-        arg = skipwhite(arg);
+        arg = (char_u *)skipwhite((char *)arg);
         if (*arg != '=') {
           break;
         }
@@ -1741,7 +1741,7 @@ skip:
       return FAIL;
     }
 
-    arg = skipwhite(arg);
+    arg = (char_u *)skipwhite((char *)arg);
   }
 
 theend:
@@ -1963,13 +1963,10 @@ static char_u *option_expand(int opt_idx, char_u *val)
   return NameBuff;
 }
 
-// After setting various option values: recompute variables that depend on
-// option values.
-static void didset_options(void)
+/// After setting various option values: recompute variables that depend on
+/// option values.
+static void didset_string_options(void)
 {
-  // initialize the table for 'iskeyword' et.al.
-  (void)init_chartab();
-
   (void)opt_strings_flags(p_cmp, p_cmp_values, &cmp_flags, true);
   (void)opt_strings_flags(p_bkc, p_bkc_values, &bkc_flags, true);
   (void)opt_strings_flags(p_bo, p_bo_values, &bo_flags, true);
@@ -1981,8 +1978,20 @@ static void didset_options(void)
   (void)opt_strings_flags(p_tc, p_tc_values, &tc_flags, false);
   (void)opt_strings_flags(p_tpf, p_tpf_values, &tpf_flags, true);
   (void)opt_strings_flags(p_ve, p_ve_values, &ve_flags, true);
+  (void)opt_strings_flags(p_swb, p_swb_values, &swb_flags, true);
   (void)opt_strings_flags(p_wop, p_wop_values, &wop_flags, true);
   (void)opt_strings_flags(p_jop, p_jop_values, &jop_flags, true);
+}
+
+/// After setting various option values: recompute variables that depend on
+/// option values.
+static void didset_options(void)
+{
+  // initialize the table for 'iskeyword' et.al.
+  (void)init_chartab();
+
+  didset_string_options();
+
   (void)spell_check_msm();
   (void)spell_check_sps();
   (void)compile_cap_prog(curwin->w_s);
@@ -3015,7 +3024,9 @@ ambw_end:
   } else if (varp == &p_pt) {
     // 'pastetoggle': translate key codes like in a mapping
     if (*p_pt) {
-      (void)replace_termcodes(p_pt, STRLEN(p_pt), &p, REPTERM_FROM_PART | REPTERM_DO_LT, NULL,
+      (void)replace_termcodes((char *)p_pt,
+                              STRLEN(p_pt),
+                              (char **)&p, REPTERM_FROM_PART | REPTERM_DO_LT, NULL,
                               CPO_TO_CPO_FLAGS);
       if (p != NULL) {
         if (new_value_alloced) {
@@ -4051,7 +4062,7 @@ static char *set_bool_option(const int opt_idx, char_u *const varp, const int va
   } else if ((int *)varp == &p_im) {
     // when 'insertmode' is set from an autocommand need to do work here
     if (p_im) {
-      if ((State & INSERT) == 0) {
+      if ((State & MODE_INSERT) == 0) {
         need_start_insertmode = true;
       }
       stop_insert_mode = false;
@@ -4960,9 +4971,9 @@ static int findoption(const char *const arg)
 /// Hidden Number or Toggle option: -1.
 ///           hidden String option: -2.
 ///                 unknown option: -3.
-int get_option_value(const char *name, long *numval, char_u **stringval, int opt_flags)
+int get_option_value(const char *name, long *numval, char **stringval, int opt_flags)
 {
-  if (get_tty_option(name, (char **)stringval)) {
+  if (get_tty_option(name, stringval)) {
     return 0;
   }
 
@@ -4978,7 +4989,11 @@ int get_option_value(const char *name, long *numval, char_u **stringval, int opt
       return -2;
     }
     if (stringval != NULL) {
-      *stringval = vim_strsave(*(char_u **)(varp));
+      if ((char_u **)varp == &p_pt) {  // 'pastetoggle'
+        *stringval = str2special_save(*(char **)(varp), false, false);
+      } else {
+        *stringval = xstrdup(*(char **)(varp));
+      }
     }
     return 0;
   }
@@ -5193,7 +5208,7 @@ char *set_option_value(const char *const name, const long number, const char *co
           numval = -1;
         } else {
           char *s = NULL;
-          (void)get_option_value(name, &numval, (char_u **)&s, OPT_GLOBAL);
+          (void)get_option_value(name, &numval, &s, OPT_GLOBAL);
         }
       }
       if (flags & P_NUM) {
@@ -8155,13 +8170,13 @@ size_t copy_option_part(char_u **option, char_u *buf, size_t maxlen, char *sep_c
 /// Return true when 'shell' has "csh" in the tail.
 int csh_like_shell(void)
 {
-  return strstr((char *)path_tail(p_sh), "csh") != NULL;
+  return strstr(path_tail((char *)p_sh), "csh") != NULL;
 }
 
 /// Return true when 'shell' has "fish" in the tail.
 bool fish_like_shell(void)
 {
-  return strstr((char *)path_tail(p_sh), "fish") != NULL;
+  return strstr(path_tail((char *)p_sh), "fish") != NULL;
 }
 
 /// Return the number of requested sign columns, based on current
@@ -8254,7 +8269,7 @@ dict_T *get_winbuf_options(const int bufopt)
 long get_scrolloff_value(win_T *wp)
 {
   // Disallow scrolloff in terminal-mode. #11915
-  if (State & TERM_FOCUS) {
+  if (State & MODE_TERMINAL) {
     return 0;
   }
   return wp->w_p_so < 0 ? p_so : wp->w_p_so;

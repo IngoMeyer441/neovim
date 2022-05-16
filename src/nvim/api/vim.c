@@ -126,22 +126,43 @@ Dictionary nvim__get_hl_defs(Integer ns_id, Error *err)
 
 /// Sets a highlight group.
 ///
-/// Note: Unlike the `:highlight` command which can update a highlight group,
-/// this function completely replaces the definition. For example:
-/// ``nvim_set_hl(0, 'Visual', {})`` will clear the highlight group 'Visual'.
+/// @note Unlike the `:highlight` command which can update a highlight group,
+///       this function completely replaces the definition. For example:
+///       ``nvim_set_hl(0, 'Visual', {})`` will clear the highlight group
+///       'Visual'.
+///
+/// @note The fg and bg keys also accept the string values `"fg"` or `"bg"`
+///       which act as aliases to the corresponding foreground and background
+///       values of the Normal group. If the Normal group has not been defined,
+///       using these values results in an error.
 ///
 /// @param ns_id Namespace id for this highlight |nvim_create_namespace()|.
 ///              Use 0 to set a highlight group globally |:highlight|.
 /// @param name  Highlight group name, e.g. "ErrorMsg"
-/// @param val   Highlight definition map, like |synIDattr()|. In
-///              addition, the following keys are recognized:
+/// @param val   Highlight definition map, accepts the following keys:
+///                - fg (or foreground): color name or "#RRGGBB", see note.
+///                - bg (or background): color name or "#RRGGBB", see note.
+///                - sp (or special): color name or "#RRGGBB"
+///                - blend: integer between 0 and 100
+///                - bold: boolean
+///                - standout: boolean
+///                - underline: boolean
+///                - underlineline: boolean
+///                - undercurl: boolean
+///                - underdot: boolean
+///                - underdash: boolean
+///                - strikethrough: boolean
+///                - italic: boolean
+///                - reverse: boolean
+///                - nocombine: boolean
+///                - link: name of another highlight group to link to, see |:hi-link|.
+///              Additionally, the following keys are recognized:
 ///                - default: Don't override existing definition |:hi-default|
 ///                - ctermfg: Sets foreground of cterm color |highlight-ctermfg|
 ///                - ctermbg: Sets background of cterm color |highlight-ctermbg|
-///                - cterm: cterm attribute map, like
-///                  |highlight-args|.
-///                  Note: Attributes default to those set for `gui`
-///                        if not set.
+///                - cterm: cterm attribute map, like |highlight-args|. If not set,
+///                         cterm attributes will match those from the attribute map
+///                         documented above.
 /// @param[out] err Error details, if any
 ///
 // TODO(bfredl): val should take update vs reset flag
@@ -245,11 +266,11 @@ void nvim_feedkeys(String keys, String mode, Boolean escape_ks)
   if (escape_ks) {
     // Need to escape K_SPECIAL before putting the string in the
     // typeahead buffer.
-    keys_esc = (char *)vim_strsave_escape_ks((char_u *)keys.data);
+    keys_esc = vim_strsave_escape_ks(keys.data);
   } else {
     keys_esc = keys.data;
   }
-  ins_typebuf((char_u *)keys_esc, (remap ? REMAP_YES : REMAP_NONE),
+  ins_typebuf(keys_esc, (remap ? REMAP_YES : REMAP_NONE),
               insert ? 0 : typebuf.tb_len, !typed, false);
   if (vgetc_busy) {
     typebuf_was_filled = true;
@@ -416,7 +437,7 @@ String nvim_replace_termcodes(String str, Boolean from_part, Boolean do_lt, Bool
   }
 
   char *ptr = NULL;
-  replace_termcodes((char_u *)str.data, str.size, (char_u **)&ptr, flags, NULL, CPO_TO_CPO_FLAGS);
+  replace_termcodes(str.data, str.size, &ptr, flags, NULL, CPO_TO_CPO_FLAGS);
   return cstr_as_string(ptr);
 }
 
@@ -513,14 +534,13 @@ ArrayOf(String) nvim_get_runtime_file(String name, Boolean all, Error *err)
 
   TRY_WRAP({
     try_start();
-    do_in_runtimepath((char_u *)(name.size ? name.data : ""),
-                      flags, find_runtime_cb, &rv);
+    do_in_runtimepath((name.size ? name.data : ""), flags, find_runtime_cb, &rv);
     try_end(err);
   });
   return rv;
 }
 
-static void find_runtime_cb(char_u *fname, void *cookie)
+static void find_runtime_cb(char *fname, void *cookie)
 {
   Array *rv = (Array *)cookie;
   if (fname != NULL) {
@@ -563,13 +583,13 @@ void nvim_set_current_dir(String dir, Error *err)
     return;
   }
 
-  char_u string[MAXPATHL];
+  char string[MAXPATHL];
   memcpy(string, dir.data, dir.size);
   string[dir.size] = NUL;
 
   try_start();
 
-  if (!changedir_func((char *)string, kCdScopeGlobal)) {
+  if (!changedir_func(string, kCdScopeGlobal)) {
     if (!try_end(err)) {
       api_set_error(err, kErrorTypeException, "Failed to change directory");
     }
@@ -722,7 +742,7 @@ Object nvim_get_option_value(String name, Dict(option) *opts, Error *err)
 
   long numval = 0;
   char *stringval = NULL;
-  switch (get_option_value(name.data, &numval, (char_u **)&stringval, scope)) {
+  switch (get_option_value(name.data, &numval, &stringval, scope)) {
   case 0:
     rv = STRING_OBJ(cstr_as_string(stringval));
     break;
@@ -1328,25 +1348,25 @@ Boolean nvim_paste(String data, Boolean crlf, Integer phase, Error *err)
     draining = true;
     goto theend;
   }
-  if (!(State & (CMDLINE | INSERT)) && (phase == -1 || phase == 1)) {
+  if (!(State & (MODE_CMDLINE | MODE_INSERT)) && (phase == -1 || phase == 1)) {
     ResetRedobuff();
     AppendCharToRedobuff('a');  // Dot-repeat.
   }
   // vim.paste() decides if client should cancel.  Errors do NOT cancel: we
   // want to drain remaining chunks (rather than divert them to main input).
   cancel = (rv.type == kObjectTypeBoolean && !rv.data.boolean);
-  if (!cancel && !(State & CMDLINE)) {  // Dot-repeat.
+  if (!cancel && !(State & MODE_CMDLINE)) {  // Dot-repeat.
     for (size_t i = 0; i < lines.size; i++) {
       String s = lines.items[i].data.string;
       assert(s.size <= INT_MAX);
-      AppendToRedobuffLit((char_u *)s.data, (int)s.size);
+      AppendToRedobuffLit(s.data, (int)s.size);
       // readfile()-style: "\n" is indicated by presence of N+1 item.
       if (i + 1 < lines.size) {
         AppendCharToRedobuff(NL);
       }
     }
   }
-  if (!(State & (CMDLINE | INSERT)) && (phase == -1 || phase == 3)) {
+  if (!(State & (MODE_CMDLINE | MODE_INSERT)) && (phase == -1 || phase == 3)) {
     AppendCharToRedobuff(ESC);  // Dot-repeat.
   }
 theend:
@@ -1392,7 +1412,7 @@ void nvim_put(ArrayOf(String) lines, String type, Boolean after, Boolean follow,
       goto cleanup;
     }
     String line = lines.items[i].data.string;
-    reg->y_array[i] = (char_u *)xmemdupz(line.data, line.size);
+    reg->y_array[i] = xmemdupz(line.data, line.size);
     memchrsub(reg->y_array[i], NUL, NL, line.size);
   }
 
@@ -1602,12 +1622,13 @@ ArrayOf(Dictionary) nvim_get_keymap(uint64_t channel_id, String mode)
 ///               or "!" for |:map!|, or empty string for |:map|.
 /// @param  lhs   Left-hand-side |{lhs}| of the mapping.
 /// @param  rhs   Right-hand-side |{rhs}| of the mapping.
-/// @param  opts  Optional parameters map. Accepts all |:map-arguments|
-///               as keys excluding |<buffer>| but including |noremap| and "desc".
-///               "desc" can be used to give a description to keymap.
-///               When called from Lua, also accepts a "callback" key that takes
-///               a Lua function to call when the mapping is executed.
-///               Values are Booleans. Unknown key is an error.
+/// @param  opts  Optional parameters map: keys are |:map-arguments|, values
+///               are booleans (default false). Accepts all |:map-arguments| as
+///               keys excluding |<buffer>| but including |noremap| and "desc".
+///               Unknown key is an error. "desc" can be used to give a
+///               description to the mapping. When called from Lua, also accepts a
+///               "callback" key that takes a Lua function to call when the
+///               mapping is executed.
 /// @param[out]   err   Error details, if any.
 void nvim_set_keymap(uint64_t channel_id, String mode, String lhs, String rhs, Dict(keymap) *opts,
                      Error *err)
@@ -2276,6 +2297,14 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
   bool use_tabline = false;
   bool highlights = false;
 
+  if (str.size < 2 || memcmp(str.data, "%!", 2)) {
+    const char *const errmsg = check_stl_option((char_u *)str.data);
+    if (errmsg) {
+      api_set_error(err, kErrorTypeValidation, "%s", errmsg);
+      return result;
+    }
+  }
+
   if (HAS_KEY(opts->winid)) {
     if (opts->winid.type != kObjectTypeInteger) {
       api_set_error(err, kErrorTypeValidation, "winid must be an integer");
@@ -2352,9 +2381,9 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
   ewp->w_p_crb = false;
 
   int width = build_stl_str_hl(ewp,
-                               (char_u *)buf,
+                               buf,
                                sizeof(buf),
-                               (char_u *)str.data,
+                               str.data,
                                false,
                                fillchar,
                                maxwidth,

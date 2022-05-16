@@ -56,7 +56,7 @@
 #include "nvim/getchar.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
-#include "nvim/keymap.h"
+#include "nvim/keycodes.h"
 #include "nvim/log.h"
 #include "nvim/macros.h"
 #include "nvim/main.h"
@@ -381,7 +381,7 @@ void terminal_check_size(Terminal *term)
   invalidate_terminal(term, -1, -1);
 }
 
-/// Implements TERM_FOCUS mode. :help Terminal-mode
+/// Implements MODE_TERMINAL state. :help Terminal-mode
 void terminal_enter(void)
 {
   buf_T *buf = curbuf;
@@ -398,13 +398,13 @@ void terminal_enter(void)
 
   int save_state = State;
   s->save_rd = RedrawingDisabled;
-  State = TERM_FOCUS;
-  mapped_ctrl_c |= TERM_FOCUS;  // Always map CTRL-C to avoid interrupt.
+  State = MODE_TERMINAL;
+  mapped_ctrl_c |= MODE_TERMINAL;  // Always map CTRL-C to avoid interrupt.
   RedrawingDisabled = false;
 
   // Disable these options in terminal-mode. They are nonsense because cursor is
   // placed at end of buffer to "follow" output. #11072
-  win_T *save_curwin = curwin;
+  handle_T save_curwin = curwin->handle;
   bool save_w_p_cul = curwin->w_p_cul;
   char_u *save_w_p_culopt = NULL;
   char_u save_w_p_culopt_flags = curwin->w_p_culopt_flags;
@@ -442,7 +442,7 @@ void terminal_enter(void)
   RedrawingDisabled = s->save_rd;
   apply_autocmds(EVENT_TERMLEAVE, NULL, NULL, false, curbuf);
 
-  if (save_curwin == curwin) {  // save_curwin may be invalid (window closed)!
+  if (save_curwin == curwin->handle) {  // Else: window was closed.
     curwin->w_p_cul = save_w_p_cul;
     if (save_w_p_culopt) {
       xfree(curwin->w_p_culopt);
@@ -1377,8 +1377,7 @@ static void fetch_row(Terminal *term, int row, int end_col)
     int cell_len = 0;
     if (cell.chars[0]) {
       for (int i = 0; cell.chars[i]; i++) {
-        cell_len += utf_char2bytes((int)cell.chars[i],
-                                   (uint8_t *)ptr + cell_len);
+        cell_len += utf_char2bytes((int)cell.chars[i], ptr + cell_len);
       }
     } else {
       *ptr = ' ';
@@ -1638,7 +1637,7 @@ static int linenr_to_row(Terminal *term, int linenr)
 
 static bool is_focused(Terminal *term)
 {
-  return State & TERM_FOCUS && curbuf->terminal == term;
+  return State & MODE_TERMINAL && curbuf->terminal == term;
 }
 
 static char *get_config_string(char *key)

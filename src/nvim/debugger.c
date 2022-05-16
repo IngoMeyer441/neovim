@@ -60,7 +60,7 @@ void do_debug(char_u *cmd)
   int save_ignore_script = 0;
   int n;
   char_u *cmdline = NULL;
-  char_u *p;
+  char *p;
   char *tail = NULL;
   static int last_cmd = 0;
 #define CMD_CONT        1
@@ -83,7 +83,7 @@ void do_debug(char_u *cmd)
   emsg_silent = false;          // display error messages
   redir_off = true;             // don't redirect debug commands
 
-  State = NORMAL;
+  State = MODE_NORMAL;
   debug_mode = true;
 
   if (!debug_did_msg) {
@@ -141,7 +141,7 @@ void do_debug(char_u *cmd)
       // If this is a debug command, set "last_cmd".
       // If not, reset "last_cmd".
       // For a blank line use previous command.
-      p = skipwhite(cmdline);
+      p = skipwhite((char *)cmdline);
       if (*p != NUL) {
         switch (*p) {
         case 'c':
@@ -200,7 +200,7 @@ void do_debug(char_u *cmd)
         if (last_cmd != 0) {
           // Check that the tail matches.
           p++;
-          while (*p != NUL && *p == (char_u)(*tail)) {
+          while (*p != NUL && *p == *tail) {
             p++;
             tail++;
           }
@@ -243,7 +243,7 @@ void do_debug(char_u *cmd)
             do_showbacktrace(cmd);
           } else {
             p = skipwhite(p);
-            do_setdebugtracelevel(p);
+            do_setdebugtracelevel((char_u *)p);
           }
           continue;
         case CMD_UP:
@@ -501,14 +501,14 @@ static int dbg_parsearg(char_u *arg, garray_T *gap)
     semsg(_(e_invarg2), p);
     return FAIL;
   }
-  p = skipwhite(p + 4);
+  p = (char_u *)skipwhite((char *)p + 4);
 
   // Find optional line number.
   if (here) {
     bp->dbg_lnum = curwin->w_cursor.lnum;
   } else if (gap != &prof_ga && ascii_isdigit(*p)) {
     bp->dbg_lnum = getdigits_long(&p, true, 0);
-    p = skipwhite(p);
+    p = (char_u *)skipwhite((char *)p);
   } else {
     bp->dbg_lnum = 0;
   }

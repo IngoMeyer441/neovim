@@ -2376,7 +2376,7 @@ static void leaving_window(win_T *const win)
   // When leaving the window (or closing the window) was done from a
   // callback we need to break out of the Insert mode loop and restart Insert
   // mode when entering the window again.
-  if (State & INSERT) {
+  if (State & MODE_INSERT) {
     stop_insert_mode = true;
     if (win->w_buffer->b_prompt_insert == NUL) {
       win->w_buffer->b_prompt_insert = 'A';
@@ -2400,7 +2400,7 @@ void entering_window(win_T *const win)
 
   // When entering the prompt window restart Insert mode if we were in Insert
   // mode when we left it and not already in Insert mode.
-  if ((State & INSERT) == 0) {
+  if ((State & MODE_INSERT) == 0) {
     restart_edit = win->w_buffer->b_prompt_insert;
   }
 }
@@ -6477,7 +6477,7 @@ char_u *file_name_at_cursor(int options, long count, linenr_T *file_lnum)
 char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u *rel_fname,
                           linenr_T *file_lnum)
 {
-  char_u *ptr;
+  char *ptr;
   size_t len;
   bool in_type = true;
   bool is_url = false;
@@ -6485,7 +6485,7 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
   /*
    * search forward for what could be the start of a file name
    */
-  ptr = line + col;
+  ptr = (char *)line + col;
   while (*ptr != NUL && !vim_isfilec(*ptr)) {
     MB_PTR_ADV(ptr);
   }
@@ -6500,11 +6500,10 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
    * Search backward for first char of the file name.
    * Go one char back to ":" before "//" even when ':' is not in 'isfname'.
    */
-  while (ptr > line) {
-    if ((len = (size_t)(utf_head_off(line, ptr - 1))) > 0) {
+  while ((char_u *)ptr > line) {
+    if ((len = (size_t)(utf_head_off(line, (char_u *)ptr - 1))) > 0) {
       ptr -= len + 1;
-    } else if (vim_isfilec(ptr[-1])
-               || ((options & FNAME_HYP) && path_is_url((char *)ptr - 1))) {
+    } else if (vim_isfilec(ptr[-1]) || ((options & FNAME_HYP) && path_is_url(ptr - 1))) {
       ptr--;
     } else {
       break;
@@ -6517,13 +6516,13 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
    */
   len = 0;
   while (vim_isfilec(ptr[len]) || (ptr[len] == '\\' && ptr[len + 1] == ' ')
-         || ((options & FNAME_HYP) && path_is_url((char *)ptr + len))
+         || ((options & FNAME_HYP) && path_is_url(ptr + len))
          || (is_url && vim_strchr((char_u *)":?&=", ptr[len]) != NULL)) {
     // After type:// we also include :, ?, & and = as valid characters, so that
     // http://google.com:8080?q=this&that=ok works.
     if ((ptr[len] >= 'A' && ptr[len] <= 'Z')
         || (ptr[len] >= 'a' && ptr[len] <= 'z')) {
-      if (in_type && path_is_url((char *)ptr + len + 1)) {
+      if (in_type && path_is_url(ptr + len + 1)) {
         is_url = true;
       }
     } else {
@@ -6534,7 +6533,7 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
       // Skip over the "\" in "\ ".
       ++len;
     }
-    len += (size_t)(utfc_ptr2len((char *)ptr + len));
+    len += (size_t)(utfc_ptr2len(ptr + len));
   }
 
   /*
@@ -6547,7 +6546,7 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
   }
 
   if (file_lnum != NULL) {
-    char_u *p;
+    char *p;
     const char *line_english = " line ";
     const char *line_transl = _(line_msg);
 
@@ -6568,12 +6567,12 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
       }
       p = skipwhite(p);
       if (isdigit(*p)) {
-        *file_lnum = getdigits_long(&p, false, 0);
+        *file_lnum = getdigits_long((char_u **)&p, false, 0);
       }
     }
   }
 
-  return find_file_name_in_path(ptr, len, options, count, rel_fname);
+  return find_file_name_in_path((char_u *)ptr, len, options, count, rel_fname);
 }
 
 /// Add or remove a status line from window(s), according to the

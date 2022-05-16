@@ -1172,7 +1172,7 @@ static void sign_define_cmd(char_u *sign_name, char_u *cmdline)
 
   // set values for a defined sign.
   for (;;) {
-    arg = skipwhite(p);
+    arg = (char_u *)skipwhite((char *)p);
     if (*arg == NUL) {
       break;
     }
@@ -1343,7 +1343,7 @@ static int parse_sign_cmd_args(int cmd, char_u *arg, char_u **sign_name, int *si
       *signid = -1;
       arg = arg1;
     } else {
-      arg = skipwhite(arg);
+      arg = (char_u *)skipwhite((char *)arg);
     }
   }
 
@@ -1391,7 +1391,7 @@ static int parse_sign_cmd_args(int cmd, char_u *arg, char_u **sign_name, int *si
       arg += 7;
       filename = arg;
       *buf = buflist_findnr(getdigits_int(&arg, true, 0));
-      if (*skipwhite(arg) != NUL) {
+      if (*skipwhite((char *)arg) != NUL) {
         emsg(_(e_trailing));
       }
       break;
@@ -1399,7 +1399,7 @@ static int parse_sign_cmd_args(int cmd, char_u *arg, char_u **sign_name, int *si
       emsg(_(e_invarg));
       return FAIL;
     }
-    arg = skipwhite(arg);
+    arg = (char_u *)skipwhite((char *)arg);
   }
 
   if (filename != NULL && *buf == NULL) {
@@ -1431,7 +1431,7 @@ void ex_sign(exarg_T *eap)
     semsg(_("E160: Unknown sign command: %s"), arg);
     return;
   }
-  arg = skipwhite(p);
+  arg = (char_u *)skipwhite((char *)p);
 
   if (idx <= SIGNCMD_LIST) {
     // Define, undefine or list signs.
@@ -1742,33 +1742,33 @@ static char_u *get_nth_sign_group_name(int idx)
 
 /// Function given to ExpandGeneric() to obtain the sign command
 /// expansion.
-char_u *get_sign_name(expand_T *xp, int idx)
+char *get_sign_name(expand_T *xp, int idx)
 {
   switch (expand_what) {
   case EXP_SUBCMD:
-    return (char_u *)cmds[idx];
+    return cmds[idx];
   case EXP_DEFINE: {
     char *define_arg[] = { "culhl=", "icon=", "linehl=", "numhl=", "text=", "texthl=",
                            NULL };
-    return (char_u *)define_arg[idx];
+    return define_arg[idx];
   }
   case EXP_PLACE: {
     char *place_arg[] = { "line=", "name=", "group=", "priority=", "file=",
                           "buffer=", NULL };
-    return (char_u *)place_arg[idx];
+    return place_arg[idx];
   }
   case EXP_LIST: {
     char *list_arg[] = { "group=", "file=", "buffer=", NULL };
-    return (char_u *)list_arg[idx];
+    return list_arg[idx];
   }
   case EXP_UNPLACE: {
     char *unplace_arg[] = { "group=", "file=", "buffer=", NULL };
-    return (char_u *)unplace_arg[idx];
+    return unplace_arg[idx];
   }
   case EXP_SIGN_NAMES:
-    return get_nth_sign_name(idx);
+    return (char *)get_nth_sign_name(idx);
   case EXP_SIGN_GROUPS:
-    return get_nth_sign_group_name(idx);
+    return (char *)get_nth_sign_group_name(idx);
   default:
     return NULL;
   }
@@ -1799,7 +1799,7 @@ void set_context_in_sign_cmd(expand_T *xp, char_u *arg)
   // :sign {subcmd} {subcmd_args}
   //                |
   //                begin_subcmd_args
-  begin_subcmd_args = skipwhite(end_subcmd);
+  begin_subcmd_args = (char_u *)skipwhite((char *)end_subcmd);
 
   // Expand last argument of subcmd.
   //
@@ -1810,7 +1810,7 @@ void set_context_in_sign_cmd(expand_T *xp, char_u *arg)
   // Loop until reaching last argument.
   char_u *p = begin_subcmd_args;
   do {
-    p = skipwhite(p);
+    p = (char_u *)skipwhite((char *)p);
     last = p;
     p = skiptowhite(p);
   } while (*p != NUL);

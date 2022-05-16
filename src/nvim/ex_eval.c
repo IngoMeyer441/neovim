@@ -479,7 +479,7 @@ static int throw_exception(void *value, except_type_T type, char *cmdname)
   }
 
   excp->type = type;
-  excp->throw_name = (char *)vim_strsave(sourcing_name == NULL ? (char_u *)"" : sourcing_name);
+  excp->throw_name = xstrdup(sourcing_name == NULL ? "" : sourcing_name);
   excp->throw_lnum = sourcing_lnum;
 
   if (p_verbose >= 13 || debug_break_level > 0) {
@@ -1342,7 +1342,7 @@ void ex_catch(exarg_T *eap)
      */
     if (!skip && (cstack->cs_flags[idx] & CSF_THROWN)
         && !(cstack->cs_flags[idx] & CSF_CAUGHT)) {
-      if (end != NULL && *end != NUL && !ends_excmd(*skipwhite((char_u *)end + 1))) {
+      if (end != NULL && *end != NUL && !ends_excmd(*skipwhite(end + 1))) {
         emsg(_(e_trailing));
         return;
       }

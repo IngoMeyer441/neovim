@@ -121,7 +121,7 @@ struct aucmd_executable_t {
 
 #define AUCMD_EXECUTABLE_INIT { .type = CALLABLE_NONE }
 
-typedef char_u *(*LineGetter)(int, void *, int, bool);
+typedef char *(*LineGetter)(int, void *, int, bool);
 
 /// Structure for command definition.
 typedef struct cmdname {
@@ -175,6 +175,9 @@ enum {
 /// Arguments used for Ex commands.
 struct exarg {
   char *arg;                    ///< argument of the command
+  char **args;                  ///< starting position of command arguments
+  size_t *arglens;              ///< length of command arguments
+  size_t argc;                  ///< number of command arguments
   char *nextcmd;                ///< next command (NULL if none)
   char *cmd;                    ///< the name of the command (except for :make)
   char **cmdlinep;              ///< pointer to pointer of allocated cmdline

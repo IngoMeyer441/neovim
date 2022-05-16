@@ -31,6 +31,26 @@ func Test_isfname()
   set isfname&
 endfunc
 
+" Test for getting the value of 'pastetoggle'
+func Test_pastetoggle()
+  " character with K_SPECIAL byte
+  let &pastetoggle = '…'
+  call assert_equal('…', &pastetoggle)
+  call assert_equal("\n  pastetoggle=…", execute('set pastetoggle?'))
+
+  " modified character with K_SPECIAL byte
+  let &pastetoggle = '<M-…>'
+  call assert_equal('<M-…>', &pastetoggle)
+  call assert_equal("\n  pastetoggle=<M-…>", execute('set pastetoggle?'))
+
+  " illegal bytes
+  let str = ":\x7f:\x80:\x90:\xd0:"
+  let &pastetoggle = str
+  call assert_equal(str, &pastetoggle)
+  call assert_equal("\n  pastetoggle=" .. strtrans(str), execute('set pastetoggle?'))
+  unlet str
+endfunc
+
 func Test_wildchar()
   " Empty 'wildchar' used to access invalid memory.
   call assert_fails('set wildchar=', 'E521:')
@@ -810,6 +830,19 @@ func Test_opt_cdhome()
   call assert_equal(path, getcwd())
 
   set cdhome&
+endfunc
+
+func Test_switchbuf_reset()
+  set switchbuf=useopen
+  sblast
+  call assert_equal(1, winnr('$'))
+  set all&
+  " Nvim has a different default for 'switchbuf'
+  " call assert_equal('', &switchbuf)
+  call assert_equal('uselast', &switchbuf)
+  sblast
+  call assert_equal(2, winnr('$'))
+  only!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

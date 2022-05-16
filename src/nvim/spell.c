@@ -385,7 +385,7 @@ size_t spell_check(win_T *wp, char_u *ptr, hlf_T *attrp, int *capcol, bool docou
     } else if (*ptr == '0' && (ptr[1] == 'x' || ptr[1] == 'X')) {
       mi.mi_end = skiphex(ptr + 2);
     } else {
-      mi.mi_end = skipdigits(ptr);
+      mi.mi_end = (char_u *)skipdigits((char *)ptr);
     }
     nrlen = (size_t)(mi.mi_end - ptr);
   }
@@ -1086,7 +1086,7 @@ static bool can_compound(slang_T *slang, const char_u *word, const char_u *flags
   // Need to convert the single byte flags to utf8 characters.
   char_u *p = uflags;
   for (int i = 0; flags[i] != NUL; i++) {
-    p += utf_char2bytes(flags[i], p);
+    p += utf_char2bytes(flags[i], (char *)p);
   }
   *p = NUL;
   p = uflags;
@@ -1615,7 +1615,7 @@ size_t spell_move_to(win_T *wp, int dir, bool allwords, bool curline, hlf_T *att
       --capcol;
 
       // But after empty line check first word in next line
-      if (*skipwhite(line) == NUL) {
+      if (*skipwhite((char *)line) == NUL) {
         capcol = 0;
       }
     }
@@ -1636,9 +1636,9 @@ void spell_cat_line(char_u *buf, char_u *line, int maxlen)
   char_u *p;
   int n;
 
-  p = skipwhite(line);
+  p = (char_u *)skipwhite((char *)line);
   while (vim_strchr((char_u *)"*#/\"\t", *p) != NULL) {
-    p = skipwhite(p + 1);
+    p = (char_u *)skipwhite((char *)p + 1);
   }
 
   if (*p != NUL) {
@@ -1656,7 +1656,7 @@ void spell_cat_line(char_u *buf, char_u *line, int maxlen)
 // "lang" must be the language without the region: e.g., "en".
 static void spell_load_lang(char_u *lang)
 {
-  char_u fname_enc[85];
+  char fname_enc[85];
   int r;
   spelload_T sl;
   int round;
@@ -1673,13 +1673,13 @@ static void spell_load_lang(char_u *lang)
     // Find the first spell file for "lang" in 'runtimepath' and load it.
     vim_snprintf((char *)fname_enc, sizeof(fname_enc) - 5,
                  "spell/%s.%s.spl", lang, spell_enc());
-    r = do_in_runtimepath(fname_enc, 0, spell_load_cb, &sl);
+    r = do_in_runtimepath((char *)fname_enc, 0, spell_load_cb, &sl);
 
     if (r == FAIL && *sl.sl_lang != NUL) {
       // Try loading the ASCII version.
       vim_snprintf((char *)fname_enc, sizeof(fname_enc) - 5,
                    "spell/%s.ascii.spl", lang);
-      r = do_in_runtimepath(fname_enc, 0, spell_load_cb, &sl);
+      r = do_in_runtimepath((char *)fname_enc, 0, spell_load_cb, &sl);
 
       if (r == FAIL && *sl.sl_lang != NUL && round == 1
           && apply_autocmds(EVENT_SPELLFILEMISSING, lang,
@@ -1707,7 +1707,7 @@ static void spell_load_lang(char_u *lang)
   } else if (sl.sl_slang != NULL) {
     // At least one file was loaded, now load ALL the additions.
     STRCPY(fname_enc + STRLEN(fname_enc) - 3, "add.spl");
-    do_in_runtimepath(fname_enc, DIP_ALL, spell_load_cb, &sl);
+    do_in_runtimepath((char *)fname_enc, DIP_ALL, spell_load_cb, &sl);
   }
 }
 
@@ -1846,12 +1846,12 @@ void slang_clear_sug(slang_T *lp)
 
 // Load one spell file and store the info into a slang_T.
 // Invoked through do_in_runtimepath().
-static void spell_load_cb(char_u *fname, void *cookie)
+static void spell_load_cb(char *fname, void *cookie)
 {
   spelload_T *slp = (spelload_T *)cookie;
   slang_T *slang;
 
-  slang = spell_load_file(fname, slp->sl_lang, NULL, false);
+  slang = spell_load_file((char_u *)fname, slp->sl_lang, NULL, false);
   if (slang != NULL) {
     // When a previously loaded file has NOBREAK also use it for the
     // ".add" files.
@@ -2105,7 +2105,7 @@ char *did_set_spelllang(win_T *wp)
       filename = true;
 
       // Locate a region and remove it from the file name.
-      p = vim_strchr(path_tail(lang), '_');
+      p = vim_strchr((char_u *)path_tail((char *)lang), '_');
       if (p != NULL && ASCII_ISALPHA(p[1]) && ASCII_ISALPHA(p[2])
           && !ASCII_ISALPHA(p[3])) {
         STRLCPY(region_cp, p + 1, 3);
@@ -2247,7 +2247,7 @@ char *did_set_spelllang(win_T *wp)
       if (round == 0) {
         STRCPY(lang, "internal wordlist");
       } else {
-        STRLCPY(lang, path_tail(spf_name), MAXWLEN + 1);
+        STRLCPY(lang, path_tail((char *)spf_name), MAXWLEN + 1);
         p = vim_strchr(lang, '.');
         if (p != NULL) {
           *p = NUL;             // truncate at ".encoding.add"
@@ -2779,7 +2779,7 @@ int spell_casefold(const win_T *wp, char_u *str, int len, char_u *buf, int bufle
       c = SPELL_TOFOLD(c);
     }
 
-    outi += utf_char2bytes(c, buf + outi);
+    outi += utf_char2bytes(c, (char *)buf + outi);
   }
   buf[outi] = NUL;
 
@@ -3058,7 +3058,7 @@ void spell_suggest(int count)
     // For redo we use a change-word command.
     ResetRedobuff();
     AppendToRedobuff("ciw");
-    AppendToRedobuffLit(p + c,
+    AppendToRedobuffLit((char *)p + c,
                         stp->st_wordlen + sug.su_badlen - stp->st_orglen);
     AppendCharToRedobuff(ESC);
 
@@ -3100,7 +3100,7 @@ static bool check_need_cap(linenr_T lnum, colnr_T col)
       need_cap = true;
     } else {
       line = ml_get(lnum - 1);
-      if (*skipwhite(line) == NUL) {
+      if (*skipwhite((char *)line) == NUL) {
         need_cap = true;
       } else {
         // Append a space in place of the line break.
@@ -3547,7 +3547,7 @@ void onecap_copy(char_u *word, char_u *wcopy, bool upper)
   } else {
     c = SPELL_TOFOLD(c);
   }
-  int l = utf_char2bytes(c, wcopy);
+  int l = utf_char2bytes(c, (char *)wcopy);
   STRLCPY(wcopy + l, p, MAXWLEN - l);
 }
 
@@ -3572,7 +3572,7 @@ static void allcap_copy(char_u *word, char_u *wcopy)
     if (d - wcopy >= MAXWLEN - MB_MAXBYTES) {
       break;
     }
-    d += utf_char2bytes(c, d);
+    d += utf_char2bytes(c, (char *)d);
   }
   *d = NUL;
 }
@@ -3588,7 +3588,7 @@ static void suggest_try_special(suginfo_T *su)
   // Recognize a word that is repeated: "the the".
   p = skiptowhite(su->su_fbadword);
   len = p - su->su_fbadword;
-  p = skipwhite(p);
+  p = (char_u *)skipwhite((char *)p);
   if (STRLEN(p) == len && STRNCMP(su->su_fbadword, p, len) == 0) {
     // Include badflags: if the badword is onecap or allcap
     // use that for the goodword too: "The the" -> "The".
@@ -3977,7 +3977,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
           if (compound_ok) {
             p = preword;
             while (*skiptowhite(p) != NUL) {
-              p = skipwhite(skiptowhite(p));
+              p = (char_u *)skipwhite((char *)skiptowhite(p));
             }
             if (fword_ends && !can_compound(slang, p,
                                             compflags + sp->ts_compsplit)) {
@@ -4199,7 +4199,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
             }
             p = preword;
             while (*skiptowhite(p) != NUL) {
-              p = skipwhite(skiptowhite(p));
+              p = (char_u *)skipwhite((char *)skiptowhite(p));
             }
             if (sp->ts_complen > sp->ts_compsplit
                 && !can_compound(slang, p,
@@ -4647,7 +4647,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
         depth++;
         fl = utf_char2len(c2);
         memmove(p, p + n, fl);
-        utf_char2bytes(c, p + fl);
+        utf_char2bytes(c, (char *)p + fl);
         stack[depth].ts_fidxtry = sp->ts_fidx + n + fl;
       } else {
         // If this swap doesn't work then SWAP3 won't either.
@@ -4662,7 +4662,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
       n = utfc_ptr2len((char *)p);
       c = utf_ptr2char((char *)p + n);
       memmove(p + utfc_ptr2len((char *)p + n), p, n);
-      utf_char2bytes(c, p);
+      utf_char2bytes(c, (char *)p);
 
       FALLTHROUGH;
 
@@ -4703,8 +4703,8 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
         depth++;
         tl = utf_char2len(c3);
         memmove(p, p + n + fl, tl);
-        utf_char2bytes(c2, p + tl);
-        utf_char2bytes(c, p + fl + tl);
+        utf_char2bytes(c2, (char *)p + tl);
+        utf_char2bytes(c, (char *)p + fl + tl);
         stack[depth].ts_fidxtry = sp->ts_fidx + n + fl + tl;
       } else {
         PROF_STORE(sp->ts_state)
@@ -4721,8 +4721,8 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
       c = utf_ptr2char((char *)p + n + fl);
       tl = utfc_ptr2len((char *)p + n + fl);
       memmove(p + fl + tl, p, n);
-      utf_char2bytes(c, p);
-      utf_char2bytes(c2, p + tl);
+      utf_char2bytes(c, (char *)p);
+      utf_char2bytes(c2, (char *)p + tl);
       p = p + tl;
 
       if (!soundfold && !spell_iswordp(p, curwin)) {
@@ -4752,7 +4752,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
         fl = utf_ptr2len((char *)p + n);
         fl += utf_ptr2len((char *)p + n + fl);
         memmove(p, p + n, fl);
-        utf_char2bytes(c, p + fl);
+        utf_char2bytes(c, (char *)p + fl);
         stack[depth].ts_fidxtry = sp->ts_fidx + n + fl;
       } else {
         PROF_STORE(sp->ts_state)
@@ -4768,7 +4768,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
       c = utf_ptr2char((char *)p + n);
       tl = utfc_ptr2len((char *)p + n);
       memmove(p + tl, p, n);
-      utf_char2bytes(c, p);
+      utf_char2bytes(c, (char *)p);
 
       // Rotate three bytes right: "123" -> "312".  We change "fword"
       // here, it's changed back afterwards at STATE_UNROT3R.
@@ -4789,7 +4789,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
         c = utf_ptr2char((char *)p + n);
         tl = utf_ptr2len((char *)p + n);
         memmove(p + tl, p, n);
-        utf_char2bytes(c, p);
+        utf_char2bytes(c, (char *)p);
         stack[depth].ts_fidxtry = sp->ts_fidx + n + tl;
       } else {
         PROF_STORE(sp->ts_state)
@@ -4805,7 +4805,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char_u *fword, bool so
       n = utfc_ptr2len((char *)p + tl);
       n += utfc_ptr2len((char *)p + tl + n);
       memmove(p, p + tl, n);
-      utf_char2bytes(c, p + n);
+      utf_char2bytes(c, (char *)p + n);
 
       FALLTHROUGH;
 
@@ -5652,12 +5652,12 @@ static void make_case_word(char_u *fword, char_u *cword, int flags)
 static bool similar_chars(slang_T *slang, int c1, int c2)
 {
   int m1, m2;
-  char_u buf[MB_MAXBYTES + 1];
+  char buf[MB_MAXBYTES + 1];
   hashitem_T *hi;
 
   if (c1 >= 256) {
-    buf[utf_char2bytes(c1, buf)] = 0;
-    hi = hash_find(&slang->sl_map_hash, buf);
+    buf[utf_char2bytes(c1, (char *)buf)] = 0;
+    hi = hash_find(&slang->sl_map_hash, (char_u *)buf);
     if (HASHITEM_EMPTY(hi)) {
       m1 = 0;
     } else {
@@ -5671,8 +5671,8 @@ static bool similar_chars(slang_T *slang, int c1, int c2)
   }
 
   if (c2 >= 256) {
-    buf[utf_char2bytes(c2, buf)] = 0;
-    hi = hash_find(&slang->sl_map_hash, buf);
+    buf[utf_char2bytes(c2, (char *)buf)] = 0;
+    hi = hash_find(&slang->sl_map_hash, (char_u *)buf);
     if (HASHITEM_EMPTY(hi)) {
       m2 = 0;
     } else {
@@ -6034,7 +6034,7 @@ static void spell_soundfold_sofo(slang_T *slang, char_u *inword, char_u *res)
     }
 
     if (c != NUL && c != prevc) {
-      ri += utf_char2bytes(c, res + ri);
+      ri += utf_char2bytes(c, (char *)res + ri);
       if (ri + MB_MAXBYTES > MAXWLEN) {
         break;
       }
@@ -6339,7 +6339,7 @@ static void spell_soundfold_wsal(slang_T *slang, char_u *inword, char_u *res)
   // Convert wide characters in "wres" to a multi-byte string in "res".
   l = 0;
   for (n = 0; n < reslen; n++) {
-    l += utf_char2bytes(wres[n], res + l);
+    l += utf_char2bytes(wres[n], (char *)res + l);
     if (l + MB_MAXBYTES > MAXWLEN) {
       break;
     }
@@ -6871,7 +6871,7 @@ void ex_spellinfo(exarg_T *eap)
 // ":spelldump"
 void ex_spelldump(exarg_T *eap)
 {
-  char_u *spl;
+  char *spl;
   long dummy;
 
   if (no_spell_checking(curwin)) {
@@ -6884,7 +6884,7 @@ void ex_spelldump(exarg_T *eap)
 
   // enable spelling locally in the new window
   set_option_value("spell", true, "", OPT_LOCAL);
-  set_option_value("spl",  dummy, (char *)spl, OPT_LOCAL);
+  set_option_value("spl",  dummy, spl, OPT_LOCAL);
   xfree(spl);
 
   if (!buf_is_empty(curbuf)) {

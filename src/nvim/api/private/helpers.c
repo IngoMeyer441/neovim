@@ -19,6 +19,7 @@
 #include "nvim/decoration.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/extmark.h"
 #include "nvim/fileio.h"
 #include "nvim/getchar.h"
@@ -657,8 +658,7 @@ void modify_keymap(uint64_t channel_id, Buffer buffer, bool is_unmap, String mod
     mode_val = get_map_mode(&p, true);  // mapmode-ic
   } else {
     mode_val = get_map_mode(&p, false);
-    if ((mode_val == VISUAL + SELECTMODE + NORMAL + OP_PENDING)
-        && mode.size > 0) {
+    if (mode_val == (MODE_VISUAL | MODE_SELECT | MODE_NORMAL | MODE_OP_PENDING) && mode.size > 0) {
       // get_map_mode() treats unrecognized mode shortnames as ":map".
       // This is an error unless the given shortname was empty string "".
       api_set_error(err, kErrorTypeValidation, "Invalid mode shortname: \"%s\"", p);
@@ -1690,4 +1690,137 @@ int init_sign_text(char **sign_text, char *text)
   }
 
   return OK;
+}
+
+/// Check if a string contains only whitespace characters.
+bool string_iswhite(String str)
+{
+  for (size_t i = 0; i < str.size; i++) {
+    if (!ascii_iswhite(str.data[i])) {
+      // Found a non-whitespace character
+      return false;
+    } else if (str.data[i] == NUL) {
+      // Terminate at first occurence of a NUL character
+      break;
+    }
+  }
+  return true;
+}
+
+/// Build cmdline string for command, used by `nvim_cmd()`.
+///
+/// @return OK or FAIL.
+void build_cmdline_str(char **cmdlinep, exarg_T *eap, CmdParseInfo *cmdinfo, char **args,
+                       size_t argc)
+{
+  StringBuilder cmdline = KV_INITIAL_VALUE;
+
+  // Add command modifiers
+  if (cmdinfo->cmdmod.tab != 0) {
+    kv_printf(cmdline, "%dtab ", cmdinfo->cmdmod.tab - 1);
+  }
+  if (cmdinfo->verbose != -1) {
+    kv_printf(cmdline, "%ldverbose ", cmdinfo->verbose);
+  }
+
+  if (cmdinfo->emsg_silent) {
+    kv_concat(cmdline, "silent! ");
+  } else if (cmdinfo->silent) {
+    kv_concat(cmdline, "silent ");
+  }
+
+  switch (cmdinfo->cmdmod.split & (WSP_ABOVE | WSP_BELOW | WSP_TOP | WSP_BOT)) {
+  case WSP_ABOVE:
+    kv_concat(cmdline, "aboveleft ");
+    break;
+  case WSP_BELOW:
+    kv_concat(cmdline, "belowright ");
+    break;
+  case WSP_TOP:
+    kv_concat(cmdline, "topleft ");
+    break;
+  case WSP_BOT:
+    kv_concat(cmdline, "botright ");
+    break;
+  default:
+    break;
+  }
+
+#define CMDLINE_APPEND_IF(cond, str) \
+  do { \
+    if (cond) { \
+      kv_concat(cmdline, str); \
+    } \
+  } while (0)
+
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.split & WSP_VERT, "vertical ");
+  CMDLINE_APPEND_IF(cmdinfo->sandbox, "sandbox ");
+  CMDLINE_APPEND_IF(cmdinfo->noautocmd, "noautocmd ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.browse, "browse ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.confirm, "confirm ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.hide, "hide ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.keepalt, "keepalt ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.keepjumps, "keepjumps ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.keepmarks, "keepmarks ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.keeppatterns, "keeppatterns ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.lockmarks, "lockmarks ");
+  CMDLINE_APPEND_IF(cmdinfo->cmdmod.noswapfile, "noswapfile ");
+#undef CMDLINE_APPEND_IF
+
+  // Command range / count.
+  if (eap->argt & EX_RANGE) {
+    if (eap->addr_count == 1) {
+      kv_printf(cmdline, "%ld", eap->line2);
+    } else if (eap->addr_count > 1) {
+      kv_printf(cmdline, "%ld,%ld", eap->line1, eap->line2);
+      eap->addr_count = 2;  // Make sure address count is not greater than 2
+    }
+  }
+
+  // Keep the index of the position where command name starts, so eap->cmd can point to it.
+  size_t cmdname_idx = cmdline.size;
+  kv_printf(cmdline, "%s", eap->cmd);
+
+  // Command bang.
+  if (eap->argt & EX_BANG && eap->forceit) {
+    kv_printf(cmdline, "!");
+  }
+
+  // Command register.
+  if (eap->argt & EX_REGSTR && eap->regname) {
+    kv_printf(cmdline, " %c", eap->regname);
+  }
+
+  // Iterate through each argument and store the starting index and length of each argument
+  size_t *argidx = xcalloc(argc, sizeof(size_t));
+  eap->argc = argc;
+  eap->arglens = xcalloc(argc, sizeof(size_t));
+  for (size_t i = 0; i < argc; i++) {
+    argidx[i] = cmdline.size + 1;  // add 1 to account for the space.
+    eap->arglens[i] = STRLEN(args[i]);
+    kv_printf(cmdline, " %s", args[i]);
+  }
+
+  // Now that all the arguments are appended, use the command index and argument indices to set the
+  // values of eap->cmd, eap->arg and eap->args.
+  eap->cmd = cmdline.items + cmdname_idx;
+  eap->args = xcalloc(argc, sizeof(char *));
+  for (size_t i = 0; i < argc; i++) {
+    eap->args[i] = cmdline.items + argidx[i];
+  }
+  // If there isn't an argument, make eap->arg point to end of cmdline.
+  eap->arg = argc > 0 ? eap->args[0] : cmdline.items + cmdline.size;
+
+  // Finally, make cmdlinep point to the cmdline string.
+  *cmdlinep = cmdline.items;
+  xfree(argidx);
+
+  // Replace, :make and :grep with 'makeprg' and 'grepprg'.
+  char *p = replace_makeprg(eap, eap->arg, cmdlinep);
+  if (p != eap->arg) {
+    // If replace_makeprg modified the cmdline string, correct the argument pointers.
+    assert(argc == 1);
+    eap->arg = p;
+    eap->args[0] = p;
+  }
 }

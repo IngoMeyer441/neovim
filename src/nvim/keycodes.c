@@ -9,7 +9,7 @@
 #include "nvim/charset.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
-#include "nvim/keymap.h"
+#include "nvim/keycodes.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/mouse.h"
@@ -17,12 +17,10 @@
 #include "nvim/vim.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "keymap.c.generated.h"
+# include "keycodes.c.generated.h"
 #endif
 
-/*
- * Some useful tables.
- */
+// Some useful tables.
 
 static const struct modmasktable {
   uint16_t mod_mask;  ///< Bit-mask for particular key modifier.
@@ -43,10 +41,9 @@ static const struct modmasktable {
   // NOTE: when adding an entry, update MAX_KEY_NAME_LEN!
 };
 
-/*
- * Shifted key terminal codes and their unshifted equivalent.
- * Don't add mouse codes here, they are handled separately!
- */
+// Shifted key terminal codes and their unshifted equivalent.
+// Don't add mouse codes here, they are handled separately!
+
 #define MOD_KEYS_ENTRY_SIZE 5
 
 static char_u modifier_keys_table[] =
@@ -461,10 +458,7 @@ int handle_x_keys(const int key)
   return key;
 }
 
-/*
- * Return a string which contains the name of the given key when the given
- * modifiers are down.
- */
+/// @return  a string which contains the name of the given key when the given modifiers are down.
 char_u *get_special_key_name(int c, int modifiers)
 {
   static char_u string[MAX_KEY_NAME_LEN + 1];
@@ -481,10 +475,8 @@ char_u *get_special_key_name(int c, int modifiers)
     c = KEY2TERMCAP1(c);
   }
 
-  /*
-   * Translate shifted special keys into unshifted keys and set modifier.
-   * Same for CTRL and ALT modifiers.
-   */
+  // Translate shifted special keys into unshifted keys and set modifier.
+  // Same for CTRL and ALT modifiers.
   if (IS_SPECIAL(c)) {
     for (i = 0; modifier_keys_table[i] != 0; i += MOD_KEYS_ENTRY_SIZE) {
       if (KEY2TERMCAP0(c) == (int)modifier_keys_table[i + 1]
@@ -500,10 +492,8 @@ char_u *get_special_key_name(int c, int modifiers)
   // try to find the key in the special key table
   table_idx = find_special_key_in_table(c);
 
-  /*
-   * When not a known special key, and not a printable character, try to
-   * extract modifiers.
-   */
+  // When not a known special key, and not a printable character, try to
+  // extract modifiers.
   if (c > 0
       && utf_char2len(c) == 1) {
     if (table_idx < 0
@@ -538,7 +528,7 @@ char_u *get_special_key_name(int c, int modifiers)
     } else {
       // Not a special key, only modifiers, output directly.
       if (utf_char2len(c) > 1) {
-        idx += utf_char2bytes(c, string + idx);
+        idx += utf_char2bytes(c, (char *)string + idx);
       } else if (vim_isprintc(c)) {
         string[idx++] = (char_u)c;
       } else {
@@ -611,7 +601,7 @@ unsigned int special_to_buf(int key, int modifiers, bool escape_ks, char_u *dst)
     assert(after >= dst && (uintmax_t)(after - dst) <= UINT_MAX);
     dlen = (unsigned int)(after - dst);
   } else {
-    dlen += (unsigned int)utf_char2bytes(key, dst + dlen);
+    dlen += (unsigned int)utf_char2bytes(key, (char *)dst + dlen);
   }
 
   return dlen;
@@ -798,10 +788,8 @@ static int extract_modifiers(int key, int *modp, const bool simplify, bool *cons
   return key;
 }
 
-/*
- * Try to find key "c" in the special key table.
- * Return the index when found, -1 when not found.
- */
+/// Try to find key "c" in the special key table.
+/// @return  the index when found, -1 when not found.
 int find_special_key_in_table(int c)
 {
   int i;
@@ -844,10 +832,8 @@ int get_special_key_code(const char_u *name)
   return 0;
 }
 
-/*
- * Look up the given mouse code to return the relevant information in the other
- * arguments.  Return which button is down or was released.
- */
+/// Look up the given mouse code to return the relevant information in the other arguments.
+/// @return  which button is down or was released.
 int get_mouse_button(int code, bool *is_click, bool *is_drag)
 {
   int i;
@@ -884,8 +870,8 @@ int get_mouse_button(int code, bool *is_click, bool *is_drag)
 /// @param[in]  cpo_flags  Relevant flags derived from p_cpo, see CPO_TO_CPO_FLAGS.
 ///
 /// @return  Pointer to an allocated memory, which is also saved to "bufp".
-char_u *replace_termcodes(const char_u *const from, const size_t from_len, char_u **const bufp,
-                          const int flags, bool *const did_simplify, const int cpo_flags)
+char *replace_termcodes(const char *const from, const size_t from_len, char **const bufp,
+                        const int flags, bool *const did_simplify, const int cpo_flags)
   FUNC_ATTR_NONNULL_ARG(1, 3)
 {
   ssize_t i;
@@ -893,7 +879,7 @@ char_u *replace_termcodes(const char_u *const from, const size_t from_len, char_
   char_u key;
   size_t dlen = 0;
   const char_u *src;
-  const char_u *const end = from + from_len - 1;
+  const char_u *const end = (char_u *)from + from_len - 1;
   char_u *result;          // buffer for resulting string
 
   const bool do_backslash = !(cpo_flags & FLAG_CPO_BSLASH);  // backslash is a special character
@@ -904,7 +890,7 @@ char_u *replace_termcodes(const char_u *const from, const size_t from_len, char_
   const size_t buf_len = from_len * 6 + 1;
   result = xmalloc(buf_len);
 
-  src = from;
+  src = (char_u *)from;
 
   // Check for #n at start only: function key n
   if ((flags & REPTERM_FROM_PART) && from_len > 1 && src[0] == '#'
@@ -1009,7 +995,7 @@ char_u *replace_termcodes(const char_u *const from, const size_t from_len, char_
       } else {
         result[dlen++] = *src;
       }
-      ++src;
+      src++;
     }
   }
   result[dlen] = NUL;

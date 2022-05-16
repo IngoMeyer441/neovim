@@ -27,7 +27,7 @@
 #include "nvim/fold.h"
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
-#include "nvim/keymap.h"
+#include "nvim/keycodes.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
 #include "nvim/os/input.h"
@@ -930,7 +930,7 @@ void ex_mkrc(exarg_T *eap)
     viewFile = fname;
     using_vdir = true;
   } else if (*eap->arg != NUL) {
-    fname = (char *)eap->arg;
+    fname = eap->arg;
   } else if (eap->cmdidx == CMD_mkvimrc) {
     fname = VIMRC_FILE;
   } else if (eap->cmdidx == CMD_mksession) {
@@ -1012,15 +1012,6 @@ void ex_mkrc(exarg_T *eap)
             emsg(_(e_prev_dir));
           }
           shorten_fnames(true);
-          // restore original dir
-          if (*dirnow != NUL && ((ssop_flags & SSOP_SESDIR)
-                                 || ((ssop_flags & SSOP_CURDIR) && globaldir !=
-                                     NULL))) {
-            if (os_chdir((char *)dirnow) != 0) {
-              emsg(_(e_prev_dir));
-            }
-            shorten_fnames(true);
-          }
         }
         xfree(dirnow);
       } else {

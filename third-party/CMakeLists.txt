@@ -39,7 +39,6 @@ set(DEPS_DOWNLOAD_DIR "${DEPS_BUILD_DIR}/downloads" CACHE PATH "Dependencies dow
 
 option(USE_BUNDLED "Use bundled dependencies." ON)
 
-option(USE_BUNDLED_GPERF "Use the bundled version of gperf." ${USE_BUNDLED})
 option(USE_BUNDLED_UNIBILIUM "Use the bundled unibilium." ${USE_BUNDLED})
 option(USE_BUNDLED_LIBTERMKEY "Use the bundled libtermkey." ${USE_BUNDLED})
 option(USE_BUNDLED_LIBVTERM "Use the bundled libvterm." ${USE_BUNDLED})
@@ -94,23 +93,10 @@ if(CMAKE_GENERATOR MATCHES "Makefiles")
   set(MAKE_PRG "$(MAKE)")
 endif()
 
-if(MINGW AND CMAKE_GENERATOR MATCHES "Ninja")
-  find_program(MAKE_PRG NAMES mingw32-make)
-  if(NOT MAKE_PRG)
-    message(FATAL_ERROR "GNU Make for mingw32 is required to build the dependencies.")
-  else()
-    message(STATUS "Found GNU Make for mingw32: ${MAKE_PRG}")
-  endif()
-endif()
-
 if(CMAKE_C_COMPILER_ARG1)
   set(DEPS_C_COMPILER "${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1}")
 else()
   set(DEPS_C_COMPILER "${CMAKE_C_COMPILER}")
-endif()
-
-if(USE_BUNDLED_GPERF)
-  enable_language(CXX)
 endif()
 
 if(CMAKE_CXX_COMPILER)
@@ -170,14 +156,11 @@ set(LIBVTERM_URL https://www.leonerd.org.uk/code/libvterm/libvterm-0.1.4.tar.gz)
 set(LIBVTERM_SHA256 bc70349e95559c667672fc8c55b9527d9db9ada0fb80a3beda533418d782d3dd)
 
 set(LUV_VERSION 1.43.0-0)
-set(LUV_URL https://github.com/luvit/luv/archive/${LUV_VERSION}.tar.gz)
-set(LUV_SHA256 a36865f34db029e2caa01245a41341a067038c09e94459b50db1346d9fdf82f0)
+set(LUV_URL https://github.com/luvit/luv/archive/c51e7052ec4f0a25058f70c1b4ee99dd36180e59.tar.gz)
+set(LUV_SHA256 cabb7e650f35992686eb95ae167c71614e281cd2979fc804e4e70f8051555728)
 
 set(LUA_COMPAT53_URL https://github.com/keplerproject/lua-compat-5.3/archive/v0.9.tar.gz)
 set(LUA_COMPAT53_SHA256 ad05540d2d96a48725bb79a1def35cf6652a4e2ec26376e2617c8ce2baa6f416)
-
-set(GPERF_URL https://github.com/neovim/deps/raw/ff5b4b18a87397a8564016071ae64f64bcd8c635/opt/gperf-3.1.tar.gz)
-set(GPERF_SHA256 588546b945bba4b70b6a3a616e80b4ab466e3f33024a352fc2198112cdbb3ae2)
 
 # cat.exe curl.exe curl-ca-bundle.crt diff.exe tee.exe xxd.exe
 set(WINTOOLS_URL https://github.com/neovim/deps/raw/d66e306abf5b846484b4f2adffd896bce7e065d2/opt/win32tools.zip)
@@ -240,10 +223,6 @@ endif()
 
 if(USE_BUNDLED_LUV)
   include(BuildLuv)
-endif()
-
-if(USE_BUNDLED_GPERF)
-  include(BuildGperf)
 endif()
 
 if(USE_BUNDLED_GETTEXT)

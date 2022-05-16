@@ -579,13 +579,13 @@ size_t mb_string2cells(const char *str)
 ///            string.
 /// @param size maximum length of string. It will terminate on earlier NUL.
 /// @return The number of cells occupied by string `str`
-size_t mb_string2cells_len(const char_u *str, size_t size)
+size_t mb_string2cells_len(const char *str, size_t size)
   FUNC_ATTR_NONNULL_ARG(1)
 {
   size_t clen = 0;
 
-  for (const char_u *p = str; *p != NUL && p < str + size;
-       p += utfc_ptr2len_len(p, size + (p - str))) {
+  for (const char_u *p = (char_u *)str; *p != NUL && p < (char_u *)str + size;
+       p += utfc_ptr2len_len(p, size + (p - (char_u *)str))) {
     clen += utf_ptr2cells((char *)p);
   }
 
@@ -1007,7 +1007,7 @@ int utf_char2len(const int c)
 /// @param c character to convert to \p buf
 /// @param[out] buf UTF-8 string generated from \p c, does not add \0
 /// @return Number of bytes (1-6).
-int utf_char2bytes(const int c, char_u *const buf)
+int utf_char2bytes(const int c, char *const buf)
 {
   if (c < 0x80) {  // 7 bits
     buf[0] = c;
@@ -1332,7 +1332,7 @@ bool mb_isalpha(int a)
 static int utf_strnicmp(const char_u *s1, const char_u *s2, size_t n1, size_t n2)
 {
   int c1, c2, cdiff;
-  char_u buffer[6];
+  char buffer[6];
 
   for (;;) {
     c1 = utf_safe_read_char_adv(&s1, &n1);
@@ -1370,11 +1370,11 @@ static int utf_strnicmp(const char_u *s1, const char_u *s2, size_t n1, size_t n2
   // to fold just one character to determine the result of comparison.
 
   if (c1 != -1 && c2 == -1) {
-    n1 = utf_char2bytes(utf_fold(c1), buffer);
-    s1 = buffer;
+    n1 = utf_char2bytes(utf_fold(c1), (char *)buffer);
+    s1 = (char_u *)buffer;
   } else if (c2 != -1 && c1 == -1) {
-    n2 = utf_char2bytes(utf_fold(c2), buffer);
-    s2 = buffer;
+    n2 = utf_char2bytes(utf_fold(c2), (char *)buffer);
+    s2 = (char_u *)buffer;
   }
 
   while (n1 > 0 && n2 > 0 && *s1 != NUL && *s2 != NUL) {
@@ -1992,6 +1992,31 @@ theend:
   convert_setup(&vimconv, NULL, NULL);
 }
 
+/// @return  true if string "s" is a valid utf-8 string.
+/// When "end" is NULL stop at the first NUL.
+/// When "end" is positive stop there.
+bool utf_valid_string(const char_u *s, const char_u *end)
+{
+  const char_u *p = s;
+
+  while (end == NULL ? *p != NUL : p < end) {
+    int l = utf8len_tab_zero[*p];
+    if (l == 0) {
+      return false;  // invalid lead byte
+    }
+    if (end != NULL && p + l > end) {
+      return false;  // incomplete byte sequence
+    }
+    p++;
+    while (--l > 0) {
+      if ((*p++ & 0xc0) != 0x80) {
+        return false;  // invalid trail byte
+      }
+    }
+  }
+  return true;
+}
+
 /*
  * If the cursor moves on an trail byte, set the cursor on the lead byte.
  * Thus it moves left if necessary.
@@ -2588,7 +2613,7 @@ char_u *string_convert_ext(const vimconv_T *const vcp, char_u *ptr, size_t *lenp
       case 0xbe:
         c = 0x0178; break;                 // Y
       }
-      d += utf_char2bytes(c, d);
+      d += utf_char2bytes(c, (char *)d);
     }
     *d = NUL;
     if (lenp != NULL) {
