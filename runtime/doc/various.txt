@@ -30,10 +30,10 @@ CTRL-L			Clears and redraws the screen.  The redraw may happen
 			function (or a mapping if 'lazyredraw' set).
 
 						*:redraws* *:redrawstatus*
-:redraws[tatus][!]	Redraws the status line of the current window, or all
-			status lines if "!" is included.
-			Useful if 'statusline' includes an item that doesn't
-			cause automatic updating.
+:redraws[tatus][!]	Redraws the status line and window bar of the current
+			window, or all status lines and window bars if "!" is
+			included. Useful if 'statusline' or 'winbar' includes
+			an item that doesn't cause automatic updating.
 
 						*:redrawt* *:redrawtabline*
 :redrawt[abline]	Redraw the tabline.  Useful to update the tabline when
@@ -207,8 +207,6 @@ g8			Print the hex values of the bytes used in the
 
 			{commands} cannot start with a space.  Put a count of
 			1 (one) before it, "1 " is one space.
-
-			The 'insertmode' option is ignored for {commands}.
 
 			This command cannot be followed by another command,
 			since any '|' is considered part of the command.

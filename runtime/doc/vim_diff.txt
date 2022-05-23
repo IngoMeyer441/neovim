@@ -543,16 +543,25 @@ Options:
   *'imactivatefunc'* *'imaf'*
   *'imactivatekey'* *'imak'*
   *'imstatusfunc'* *'imsf'*
+  *'insertmode'* *'im'* Use the following script to emulate 'insertmode':
+>
+      autocmd VimEnter,CmdlineLeave,WinEnter,WinScrolled,BufEnter * silent! if &modifiable | startinsert | endif
+      inoremap <Esc> <Nop>
+      inoremap <C-L> <Esc>
+      nnoremap <Esc> i
+<
   *'macatsui'*
   'maxmem' Nvim delegates memory-management to the OS.
   'maxmemtot' Nvim delegates memory-management to the OS.
   'maxcombine' (6 is always used)
   *'prompt'* *'noprompt'*
+  *'remap'* *'noremap'*
   *'restorescreen'* *'rs'* *'norestorescreen'* *'nors'*
   'shelltype'
   *'shortname'* *'sn'* *'noshortname'* *'nosn'*
   *'swapsync'* *'sws'*
   *'termencoding'* *'tenc'* (Vim 7.4.852 also removed this for Windows)
+  *'terse'* *'noterse'* (Add "s" to 'shortmess' instead)
   'textauto'
   'textmode'
   *'toolbar'* *'tb'*

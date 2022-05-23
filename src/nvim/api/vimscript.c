@@ -34,7 +34,7 @@
 /// Unlike |nvim_command()| this function supports heredocs, script-scope (s:),
 /// etc.
 ///
-/// On execution error: fails with VimL error, does not update v:errmsg.
+/// On execution error: fails with VimL error, updates v:errmsg.
 ///
 /// @see |execute()|
 /// @see |nvim_command()|
@@ -98,7 +98,7 @@ theend:
 
 /// Executes an Ex command.
 ///
-/// On execution error: fails with VimL error, does not update v:errmsg.
+/// On execution error: fails with VimL error, updates v:errmsg.
 ///
 /// Prefer using |nvim_cmd()| or |nvim_exec()| over this. To evaluate multiple lines of Vim script
 /// or an Ex command directly, use |nvim_exec()|. To construct an Ex command using a structured
@@ -118,7 +118,7 @@ void nvim_command(String command, Error *err)
 /// Evaluates a VimL |expression|.
 /// Dictionaries and Lists are recursively expanded.
 ///
-/// On execution error: fails with VimL error, does not update v:errmsg.
+/// On execution error: fails with VimL error, updates v:errmsg.
 ///
 /// @param expr     VimL expression string
 /// @param[out] err Error details, if any
@@ -226,7 +226,7 @@ free_vim_args:
 
 /// Calls a VimL function with the given arguments.
 ///
-/// On execution error: fails with VimL error, does not update v:errmsg.
+/// On execution error: fails with VimL error, updates v:errmsg.
 ///
 /// @param fn       Function to call
 /// @param args     Function arguments packed in an Array
@@ -240,7 +240,7 @@ Object nvim_call_function(String fn, Array args, Error *err)
 
 /// Calls a VimL |Dictionary-function| with the given arguments.
 ///
-/// On execution error: fails with VimL error, does not update v:errmsg.
+/// On execution error: fails with VimL error, updates v:errmsg.
 ///
 /// @param dict Dictionary, or String evaluating to a VimL |self| dict
 /// @param fn Name of the function defined on the VimL dict
@@ -996,6 +996,8 @@ end:
 /// such as having spaces inside a command argument, expanding filenames in a command that otherwise
 /// doesn't expand filenames, etc.
 ///
+/// On execution error: fails with VimL error, updates v:errmsg.
+///
 /// @see |nvim_exec()|
 /// @see |nvim_command()|
 ///
@@ -1058,7 +1060,7 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
   if (p != NULL && ea.cmdidx == CMD_SIZE && ASCII_ISUPPER(*ea.cmd)
       && has_event(EVENT_CMDUNDEFINED)) {
     p = xstrdup(cmdname);
-    int ret = apply_autocmds(EVENT_CMDUNDEFINED, (char_u *)p, (char_u *)p, true, NULL);
+    int ret = apply_autocmds(EVENT_CMDUNDEFINED, p, p, true, NULL);
     xfree(p);
     // If the autocommands did something and didn't cause an error, try
     // finding the command again.
@@ -1302,20 +1304,23 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
     capture_ga = &capture_local;
   }
 
-  try_start();
-  if (output) {
-    msg_silent++;
-  }
+  TRY_WRAP({
+    try_start();
+    if (output) {
+      msg_silent++;
+    }
 
-  WITH_SCRIPT_CONTEXT(channel_id, {
-    execute_cmd(&ea, &cmdinfo);
+    WITH_SCRIPT_CONTEXT(channel_id, {
+      execute_cmd(&ea, &cmdinfo);
+    });
+
+    if (output) {
+      capture_ga = save_capture_ga;
+      msg_silent = save_msg_silent;
+    }
+
+    try_end(err);
   });
-
-  if (output) {
-    capture_ga = save_capture_ga;
-    msg_silent = save_msg_silent;
-  }
-  try_end(err);
 
   if (ERROR_SET(err)) {
     goto clear_ga;

@@ -63,26 +63,45 @@ function M.hover()
   request('textDocument/hover', params)
 end
 
+---@private
+local function request_with_options(name, params, options)
+  local req_handler
+  if options then
+    req_handler = function(err, result, ctx, config)
+      local client = vim.lsp.get_client_by_id(ctx.client_id)
+      local handler = client.handlers[name] or vim.lsp.handlers[name]
+      handler(err, result, ctx, vim.tbl_extend('force', config or {}, options))
+    end
+  end
+  request(name, params, req_handler)
+end
+
 --- Jumps to the declaration of the symbol under the cursor.
 ---@note Many servers do not implement this method. Generally, see |vim.lsp.buf.definition()| instead.
 ---
-function M.declaration()
+---@param options table|nil additional options
+---     - reuse_win: (boolean) Jump to existing window if buffer is already open.
+function M.declaration(options)
   local params = util.make_position_params()
-  request('textDocument/declaration', params)
+  request_with_options('textDocument/declaration', params, options)
 end
 
 --- Jumps to the definition of the symbol under the cursor.
 ---
-function M.definition()
+---@param options table|nil additional options
+---     - reuse_win: (boolean) Jump to existing window if buffer is already open.
+function M.definition(options)
   local params = util.make_position_params()
-  request('textDocument/definition', params)
+  request_with_options('textDocument/definition', params, options)
 end
 
 --- Jumps to the definition of the type of the symbol under the cursor.
 ---
-function M.type_definition()
+---@param options table|nil additional options
+---     - reuse_win: (boolean) Jump to existing window if buffer is already open.
+function M.type_definition(options)
   local params = util.make_position_params()
-  request('textDocument/typeDefinition', params)
+  request_with_options('textDocument/typeDefinition', params, options)
 end
 
 --- Lists all the implementations for the symbol under the cursor in the
@@ -844,7 +863,8 @@ function M.code_action(options)
   end
   local context = options.context or {}
   if not context.diagnostics then
-    context.diagnostics = vim.lsp.diagnostic.get_line_diagnostics()
+    local bufnr = vim.api.nvim_get_current_buf()
+    context.diagnostics = vim.lsp.diagnostic.get_line_diagnostics(bufnr)
   end
   local params = util.make_range_params()
   params.context = context
@@ -870,7 +890,8 @@ function M.range_code_action(context, start_pos, end_pos)
   validate({ context = { context, 't', true } })
   context = context or {}
   if not context.diagnostics then
-    context.diagnostics = vim.lsp.diagnostic.get_line_diagnostics()
+    local bufnr = vim.api.nvim_get_current_buf()
+    context.diagnostics = vim.lsp.diagnostic.get_line_diagnostics(bufnr)
   end
   local params = util.make_given_range_params(start_pos, end_pos)
   params.context = context

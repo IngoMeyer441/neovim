@@ -209,6 +209,10 @@ static void changed_common(linenr_T lnum, colnr_T col, linenr_T lnume, long xtra
     curwin->w_changelistidx = curbuf->b_changelistlen;
   }
 
+  if (VIsual_active) {
+    check_visual_pos();
+  }
+
   FOR_ALL_TAB_WINDOWS(tp, wp) {
     if (wp->w_buffer == curbuf) {
       // Mark this window to be redrawn later.
@@ -1029,8 +1033,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
 
   // If 'autoindent' and/or 'smartindent' is set, try to figure out what
   // indent to use for the new line.
-  if (curbuf->b_p_ai
-      || do_si) {
+  if (curbuf->b_p_ai || do_si) {
     // count white space on current line
     newindent = get_indent_str_vtab(saved_line,
                                     curbuf->b_p_ts,
@@ -1478,8 +1481,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
         }
 
         // Recompute the indent, it may have changed.
-        if (curbuf->b_p_ai
-            || do_si) {
+        if (curbuf->b_p_ai || do_si) {
           newindent = get_indent_str_vtab(leader,
                                           curbuf->b_p_ts,
                                           curbuf->b_p_vts_array, false);
@@ -1498,7 +1500,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
         while (off > 0 && lead_len > 0
                && leader[lead_len - 1] == ' ') {
           // Don't do it when there is a tab before the space
-          if (vim_strchr((char_u *)skipwhite((char *)leader), '\t') != NULL) {
+          if (vim_strchr(skipwhite((char *)leader), '\t') != NULL) {
             break;
           }
           lead_len--;
@@ -1522,15 +1524,13 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
 
       // if a new indent will be set below, remove the indent that
       // is in the comment leader
-      if (newindent
-          || did_si) {
+      if (newindent || did_si) {
         while (lead_len && ascii_iswhite(*leader)) {
           lead_len--;
           newcol--;
           leader++;
         }
       }
-
       did_si = can_si = false;
     } else if (comment_end != NULL) {
       // We have finished a comment, so we don't use the leader.
@@ -1642,8 +1642,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
   }
 
   inhibit_delete_count++;
-  if (newindent
-      || did_si) {
+  if (newindent || did_si) {
     curwin->w_cursor.lnum++;
     if (did_si) {
       int sw = get_sw_value(curbuf);
@@ -1760,6 +1759,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
   } else {
     vreplace_mode = 0;
   }
+
   // May do lisp indenting.
   if (!p_paste
       && leader == NULL
@@ -1768,11 +1768,13 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
     fixthisline(get_lisp_indent);
     ai_col = (colnr_T)getwhitecols_curline();
   }
+
   // May do indenting after opening a new line.
   if (do_cindent) {
     do_c_expr_indent();
     ai_col = (colnr_T)getwhitecols_curline();
   }
+
   if (vreplace_mode != 0) {
     State = vreplace_mode;
   }
@@ -1878,7 +1880,7 @@ int get_leader_len(char_u *line, char_u **flags, bool backward, bool include_spa
 {
   int j;
   int got_com = false;
-  char_u part_buf[COM_MAX_LEN];         // buffer for one option part
+  char part_buf[COM_MAX_LEN];         // buffer for one option part
   char_u *string;                  // pointer to comment string
   char_u *list;
   int middle_match_len = 0;
@@ -1902,8 +1904,8 @@ int get_leader_len(char_u *line, char_u **flags, bool backward, bool include_spa
         *flags = list;              // remember where flags started
       }
       prev_list = list;
-      (void)copy_option_part(&list, part_buf, COM_MAX_LEN, ",");
-      string = vim_strchr(part_buf, ':');
+      (void)copy_option_part(&list, (char_u *)part_buf, COM_MAX_LEN, ",");
+      string = (char_u *)vim_strchr(part_buf, ':');
       if (string == NULL) {         // missing ':', ignore this part
         continue;
       }
@@ -2025,7 +2027,7 @@ int get_last_leader_offset(char_u *line, char_u **flags)
   char_u *com_leader;
   char_u *com_flags;
   char_u *list;
-  char_u part_buf[COM_MAX_LEN];         // buffer for one option part
+  char part_buf[COM_MAX_LEN];         // buffer for one option part
 
   // Repeat to match several nested comment strings.
   int i = (int)STRLEN(line);
@@ -2037,8 +2039,8 @@ int get_last_leader_offset(char_u *line, char_u **flags)
 
       // Get one option part into part_buf[].  Advance list to next one.
       // put string at start of string.
-      (void)copy_option_part(&list, part_buf, COM_MAX_LEN, ",");
-      string = vim_strchr(part_buf, ':');
+      (void)copy_option_part(&list, (char_u *)part_buf, COM_MAX_LEN, ",");
+      string = (char_u *)vim_strchr(part_buf, ':');
       if (string == NULL) {  // If everything is fine, this cannot actually
                              // happen.
         continue;
@@ -2096,7 +2098,7 @@ int get_last_leader_offset(char_u *line, char_u **flags)
     }
 
     if (found_one) {
-      char_u part_buf2[COM_MAX_LEN];            // buffer for one option part
+      char part_buf2[COM_MAX_LEN];            // buffer for one option part
       int len1, len2, off;
 
       result = i;
@@ -2120,11 +2122,11 @@ int get_last_leader_offset(char_u *line, char_u **flags)
       for (list = curbuf->b_p_com; *list;) {
         char_u *flags_save = list;
 
-        (void)copy_option_part(&list, part_buf2, COM_MAX_LEN, ",");
+        (void)copy_option_part(&list, (char_u *)part_buf2, COM_MAX_LEN, ",");
         if (flags_save == com_flags) {
           continue;
         }
-        string = vim_strchr(part_buf2, ':');
+        string = (char_u *)vim_strchr(part_buf2, ':');
         string++;
         while (ascii_iswhite(*string)) {
           string++;

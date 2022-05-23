@@ -802,7 +802,7 @@ int start_redo_ins(void)
 
   // skip the count and the command character
   while ((c = read_redo(false, false)) != NUL) {
-    if (vim_strchr((char_u *)"AaIiRrOo", c) != NULL) {
+    if (vim_strchr("AaIiRrOo", c) != NULL) {
       if (c == 'O' || c == 'o') {
         add_buff(&readbuf2, NL_STR, -1L);
       }
@@ -1352,14 +1352,12 @@ void openscript(char_u *name, bool directly)
     int oldcurscript;
     int save_State = State;
     int save_restart_edit = restart_edit;
-    int save_insertmode = p_im;
     int save_finish_op = finish_op;
     int save_msg_scroll = msg_scroll;
 
     State = MODE_NORMAL;
     msg_scroll = false;         // no msg scrolling in Normal mode
     restart_edit = 0;           // don't go to Insert mode
-    p_im = false;               // don't use 'insertmode'
     clear_oparg(&oa);
     finish_op = false;
 
@@ -1373,7 +1371,6 @@ void openscript(char_u *name, bool directly)
     State = save_State;
     msg_scroll = save_msg_scroll;
     restart_edit = save_restart_edit;
-    p_im = save_insertmode;
     finish_op = save_finish_op;
   }
 }
@@ -1881,8 +1878,7 @@ static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
   if (no_mapping == 0 && maphash_valid
       && (no_zero_mapping == 0 || tb_c1 != '0')
       && (typebuf.tb_maplen == 0 || is_plug_map
-          || (p_remap
-              && !(typebuf.tb_noremap[typebuf.tb_off] & (RM_NONE|RM_ABBR))))
+          || (!(typebuf.tb_noremap[typebuf.tb_off] & (RM_NONE|RM_ABBR))))
       && !(p_paste && (State & (MODE_INSERT | MODE_CMDLINE)))
       && !(State == MODE_HITRETURN && (tb_c1 == CAR || tb_c1 == ' '))
       && State != MODE_ASKMORE
@@ -2514,16 +2510,12 @@ static int vgetorpeek(bool advance)
             timedout = true;
             continue;
           }
-          // When 'insertmode' is set, ESC just beeps in Insert
-          // mode.  Use CTRL-L to make edit() return.
           // In Ex-mode \n is compatible with original Vim behaviour.
           // For the command line only CTRL-C always breaks it.
           // For the cmdline window: Alternate between ESC and
           // CTRL-C: ESC for most situations and CTRL-C to close the
           // cmdline window.
-          if (p_im && (State & MODE_INSERT)) {
-            c = Ctrl_L;
-          } else if ((State & MODE_CMDLINE) || (cmdwin_type > 0 && tc == ESC)) {
+          if ((State & MODE_CMDLINE) || (cmdwin_type > 0 && tc == ESC)) {
             c = Ctrl_C;
           } else {
             c = ESC;
@@ -4736,9 +4728,9 @@ char_u *check_map(char_u *keys, int mode, int exact, int ign_mod, int abbr, mapb
 void add_map(char_u *map, int mode, bool nore)
 {
   char_u *s;
-  char_u *cpo_save = p_cpo;
+  char *cpo_save = p_cpo;
 
-  p_cpo = (char_u *)"";         // Allow <> notation
+  p_cpo = "";         // Allow <> notation
   // Need to put string in allocated memory, because do_map() will modify it.
   s = vim_strsave(map);
   (void)do_map(nore ? 2 : 0, s, mode, false);

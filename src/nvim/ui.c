@@ -344,7 +344,7 @@ void vim_beep(unsigned val)
     // When 'debug' contains "beep" produce a message.  If we are sourcing
     // a script or executing a function give the user a hint where the beep
     // comes from.
-    if (vim_strchr(p_debug, 'e') != NULL) {
+    if (vim_strchr((char *)p_debug, 'e') != NULL) {
       msg_source(HL_ATTR(HLF_W));
       msg_attr(_("Beep!"), HL_ATTR(HLF_W));
     }
@@ -436,7 +436,7 @@ void ui_set_ext_option(UI *ui, UIExtension ext, bool active)
 void ui_line(ScreenGrid *grid, int row, int startcol, int endcol, int clearcol, int clearattr,
              bool wrap)
 {
-  assert(0 <= row && row < grid->Rows);
+  assert(0 <= row && row < grid->rows);
   LineFlags flags = wrap ? kLineFlagWrap : 0;
   if (startcol == -1) {
     startcol = 0;
@@ -453,7 +453,7 @@ void ui_line(ScreenGrid *grid, int row, int startcol, int endcol, int clearcol, 
   if (p_wd && !(rdb_flags & RDB_COMPOSITOR)) {
     // If 'writedelay' is active, set the cursor to indicate what was drawn.
     ui_call_grid_cursor_goto(grid->handle, row,
-                             MIN(clearcol, (int)grid->Columns - 1));
+                             MIN(clearcol, (int)grid->cols - 1));
     ui_call_flush();
     uint64_t wd = (uint64_t)labs(p_wd);
     os_microdelay(wd * 1000u, true);
@@ -567,7 +567,7 @@ void ui_check_mouse(void)
   for (char_u *p = p_mouse; *p; p++) {
     switch (*p) {
     case 'a':
-      if (vim_strchr((char_u *)MOUSE_A, checkfor) != NULL) {
+      if (vim_strchr(MOUSE_A, checkfor) != NULL) {
         has_mouse = true;
         return;
       }

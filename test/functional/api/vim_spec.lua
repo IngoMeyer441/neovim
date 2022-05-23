@@ -3102,6 +3102,19 @@ describe('API', function()
             'TextWithNoHighlight%#WarningMsg#TextWithWarningHighlight',
             { use_tabline = true, highlights = true }))
       end)
+      it('works with winbar', function()
+        eq({
+            str = 'TextWithNoHighlightTextWithWarningHighlight',
+            width = 43,
+            highlights = {
+              { start = 0, group = 'WinBar' },
+              { start = 19, group = 'WarningMsg' }
+            }
+          },
+          meths.eval_statusline(
+            'TextWithNoHighlight%#WarningMsg#TextWithWarningHighlight',
+            { use_winbar = true, highlights = true }))
+      end)
     end)
   end)
   describe('nvim_parse_cmd', function()
@@ -3622,6 +3635,14 @@ describe('API', function()
     it('works with empty arguments list', function()
       meths.cmd({ cmd = "update" }, {})
       meths.cmd({ cmd = "buffer", count = 0 }, {})
+    end)
+    it('doesn\'t suppress errors when used in keymapping', function()
+      meths.exec_lua([[
+        vim.keymap.set("n", "[l",
+                       function() vim.api.nvim_cmd({ cmd = "echo", args = {"foo"} }, {}) end)
+      ]], {})
+      feed("[l")
+      neq(nil, string.find(eval("v:errmsg"), "E5108:"))
     end)
   end)
 end)

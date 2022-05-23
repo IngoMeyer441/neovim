@@ -84,7 +84,7 @@ EXTERN struct nvim_stats_s {
 //                      0          not starting anymore
 
 // Number of Rows and Columns in the screen.
-// Note: Use default_grid.Rows and default_grid.Columns to access items in
+// Note: Use default_grid.rows and default_grid.cols to access items in
 // default_grid.chars[]. They may have different values when the screen
 // wasn't (re)allocated yet after setting Rows or Columns (e.g., when starting
 // up).
@@ -420,10 +420,6 @@ EXTERN vimmenu_T *root_menu INIT(= NULL);
 // While defining the system menu, sys_menu is true.  This avoids
 // overruling of menus that the user already defined.
 EXTERN int sys_menu INIT(= false);
-
-// While redrawing the screen this flag is set.  It means the screen size
-// ('lines' and 'rows') must not be changed.
-EXTERN int updating_screen INIT(= 0);
 
 // All windows are linked in a list. firstwin points to the first entry,
 // lastwin to the last entry (can be the same as firstwin) and curwin to the
@@ -811,7 +807,7 @@ extern char_u *compiled_sys;
 // When a window has a local directory, the absolute path of the global
 // current directory is stored here (in allocated memory).  If the current
 // directory is not a local directory, globaldir is NULL.
-EXTERN char_u *globaldir INIT(= NULL);
+EXTERN char *globaldir INIT(= NULL);
 
 EXTERN char *last_chdir_reason INIT(= NULL);
 
@@ -877,7 +873,8 @@ EXTERN char e_api_spawn_failed[] INIT(= N_("E903: Could not spawn API job"));
 EXTERN char e_argreq[] INIT(= N_("E471: Argument required"));
 EXTERN char e_backslash[] INIT(= N_("E10: \\ should be followed by /, ? or &"));
 EXTERN char e_cmdwin[] INIT(= N_("E11: Invalid in command-line window; <CR> executes, CTRL-C quits"));
-EXTERN char e_curdir[] INIT(= N_( "E12: Command not allowed from exrc/vimrc in current dir or tag search"));
+EXTERN char e_curdir[] INIT(= N_("E12: Command not allowed from exrc/vimrc in current dir or tag search"));
+EXTERN char e_command_too_recursive[] INIT(= N_("E169: Command too recursive"));
 EXTERN char e_endif[] INIT(= N_("E171: Missing :endif"));
 EXTERN char e_endtry[] INIT(= N_("E600: Missing :endtry"));
 EXTERN char e_endwhile[] INIT(= N_("E170: Missing :endwhile"));

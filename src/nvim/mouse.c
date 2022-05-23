@@ -68,12 +68,12 @@ bool is_mouse_key(int c)
 /// mouse was previously on a status line, then the status line may be dragged.
 ///
 /// If flags has MOUSE_MAY_VIS, then VIsual mode will be started before the
-/// cursor is moved unless the cursor was on a status line.
+/// cursor is moved unless the cursor was on a status line or window bar.
 /// This function returns one of IN_UNKNOWN, IN_BUFFER, IN_STATUS_LINE or
 /// IN_SEP_LINE depending on where the cursor was clicked.
 ///
 /// If flags has MOUSE_MAY_STOP_VIS, then Visual mode will be stopped, unless
-/// the mouse is on the status line of the same window.
+/// the mouse is on the status line or window bar of the same window.
 ///
 /// If flags has MOUSE_DID_MOVE, nothing is done if the mouse didn't move since
 /// the last call.
@@ -87,6 +87,7 @@ int jump_to_mouse(int flags, bool *inclusive, int which_button)
 {
   static int on_status_line = 0;        // #lines below bottom of window
   static int on_sep_line = 0;           // on separator right of window
+  static bool on_winbar = false;
   static int prev_row = -1;
   static int prev_col = -1;
   static win_T *dragwin = NULL;         // window being dragged
@@ -126,6 +127,9 @@ retnomove:
     if (on_sep_line) {
       return IN_SEP_LINE;
     }
+    if (on_winbar) {
+      return IN_OTHER_WIN | MOUSE_WINBAR;
+    }
     if (flags & MOUSE_MAY_STOP_VIS) {
       end_visual_mode();
       redraw_curbuf_later(INVERTED);            // delete the inversion
@@ -156,13 +160,15 @@ retnomove:
     dragwin = NULL;
 
     if (row == -1) {
-      return IN_OTHER_WIN;
+      on_winbar = wp->w_winbar_height != 0;
+      return IN_OTHER_WIN | (on_winbar ? MOUSE_WINBAR : 0);
     }
+    on_winbar = false;
 
     // winpos and height may change in win_enter()!
-    if (grid == DEFAULT_GRID_HANDLE && row >= wp->w_height) {
+    if (grid == DEFAULT_GRID_HANDLE && row + wp->w_winbar_height >= wp->w_height) {
       // In (or below) status line
-      on_status_line = row - wp->w_height + 1;
+      on_status_line = row + wp->w_winbar_height - wp->w_height + 1;
       dragwin = wp;
     } else {
       on_status_line = 0;
@@ -253,6 +259,9 @@ retnomove:
       did_drag |= count;
     }
     return IN_SEP_LINE;                         // Cursor didn't move
+  } else if (on_winbar) {
+    // After a click on the window bar don't start Visual mode.
+    return IN_OTHER_WIN | MOUSE_WINBAR;
   } else {
     // keep_window_focus must be true
     // before moving the cursor for a left click, stop Visual mode
@@ -264,6 +273,9 @@ retnomove:
     if (grid == 0) {
       row -= curwin->w_grid_alloc.comp_row + curwin->w_grid.row_offset;
       col -= curwin->w_grid_alloc.comp_col + curwin->w_grid.col_offset;
+    } else if (grid != DEFAULT_GRID_HANDLE) {
+      row -= curwin->w_grid.row_offset;
+      col -= curwin->w_grid.col_offset;
     }
 
     // When clicking beyond the end of the window, scroll the screen.
@@ -497,6 +509,7 @@ win_T *mouse_find_win(int *gridp, int *rowp, int *colp)
   // exist.
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     if (wp == fp->fr_win) {
+      *rowp -= wp->w_winbar_height;
       return wp;
     }
   }
@@ -512,8 +525,8 @@ static win_T *mouse_find_grid_win(int *gridp, int *rowp, int *colp)
     win_T *wp = get_win_by_grid_handle(*gridp);
     if (wp && wp->w_grid_alloc.chars
         && !(wp->w_floating && !wp->w_float_config.focusable)) {
-      *rowp = MIN(*rowp - wp->w_grid.row_offset, wp->w_grid.Rows - 1);
-      *colp = MIN(*colp - wp->w_grid.col_offset, wp->w_grid.Columns - 1);
+      *rowp = MIN(*rowp - wp->w_grid.row_offset, wp->w_grid.rows - 1);
+      *colp = MIN(*colp - wp->w_grid.col_offset, wp->w_grid.cols - 1);
       return wp;
     }
   } else if (*gridp == 0) {
@@ -784,8 +797,8 @@ int mouse_check_fold(void)
 
   wp = mouse_find_win(&click_grid, &click_row, &click_col);
   if (wp && multigrid) {
-    max_row = wp->w_grid_alloc.Rows;
-    max_col = wp->w_grid_alloc.Columns;
+    max_row = wp->w_grid_alloc.rows;
+    max_col = wp->w_grid_alloc.cols;
   }
 
   if (wp && mouse_row >= 0 && mouse_row < max_row

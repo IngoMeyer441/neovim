@@ -266,7 +266,7 @@ enum {
   STL_CLICK_FUNC      = '@',  ///< Click region start.
 };
 /// C string containing all 'statusline' option flags
-#define STL_ALL ((char_u[]) { \
+#define STL_ALL ((char[]) { \
     STL_FILEPATH, STL_FULLPATH, STL_FILENAME, STL_COLUMN, STL_VIRTCOL, \
     STL_VIRTCOL_ALT, STL_LINE, STL_NUMLINES, STL_BUFNO, STL_KEYMAP, STL_OFFSET, \
     STL_OFFSET_X, STL_BYTEVAL, STL_BYTEVAL_X, STL_ROFLAG, STL_ROFLAG_ALT, \
@@ -334,9 +334,9 @@ EXTERN unsigned bo_flags;
 #ifdef IN_OPTION_C
 static char *(p_bo_values[]) = { "all", "backspace", "cursor", "complete",
                                  "copy", "ctrlg", "error", "esc", "ex",
-                                 "hangul", "insertmode", "lang", "mess",
-                                 "showmatch", "operator", "register", "shell",
-                                 "spell", "wildmode", NULL };
+                                 "hangul", "lang", "mess", "showmatch",
+                                 "operator", "register", "shell", "spell",
+                                 "wildmode", NULL };
 #endif
 
 // values for the 'belloff' option
@@ -392,7 +392,7 @@ EXTERN char_u *p_csl;         // 'completeslash'
 EXTERN long p_pb;               // 'pumblend'
 EXTERN long p_ph;               // 'pumheight'
 EXTERN long p_pw;               // 'pumwidth'
-EXTERN char_u *p_cpo;         // 'cpoptions'
+EXTERN char *p_cpo;             // 'cpoptions'
 EXTERN char_u *p_csprg;       // 'cscopeprg'
 EXTERN int p_csre;              // 'cscoperelative'
 EXTERN char_u *p_csqf;        // 'cscopequickfix'
@@ -434,7 +434,7 @@ EXTERN char_u *p_gp;          // 'grepprg'
 EXTERN char_u *p_ei;          // 'eventignore'
 EXTERN int p_exrc;              // 'exrc'
 EXTERN char_u *p_fencs;       // 'fileencodings'
-EXTERN char_u *p_ffs;         // 'fileformats'
+EXTERN char *p_ffs;           // 'fileformats'
 EXTERN int p_fic;               // 'fileignorecase'
 EXTERN char_u *p_fcl;         // 'foldclose'
 EXTERN long p_fdls;             // 'foldlevelstart'
@@ -485,7 +485,6 @@ EXTERN char_u *p_iconstring;  // 'iconstring'
 EXTERN int p_ic;                // 'ignorecase'
 EXTERN int p_is;                // 'incsearch'
 EXTERN char_u *p_icm;         // 'inccommand'
-EXTERN int p_im;                // 'insertmode'
 EXTERN char_u *p_isf;         // 'isfname'
 EXTERN char_u *p_isi;         // 'isident'
 EXTERN char_u *p_isp;         // 'isprint'
@@ -557,7 +556,6 @@ static char *(p_rdb_values[]) = {
 #define RDB_NODELTA            0x008
 
 EXTERN long p_rdt;              // 'redrawtime'
-EXTERN int p_remap;             // 'remap'
 EXTERN long p_re;               // 'regexpengine'
 EXTERN long p_report;           // 'report'
 EXTERN long p_pvh;              // 'previewheight'
@@ -571,7 +569,7 @@ EXTERN char_u *p_rtp;         // 'runtimepath'
 EXTERN long p_scbk;             // 'scrollback'
 EXTERN long p_sj;               // 'scrolljump'
 EXTERN long p_so;               // 'scrolloff'
-EXTERN char_u *p_sbo;         // 'scrollopt'
+EXTERN char *p_sbo;             // 'scrollopt'
 EXTERN char_u *p_sections;    // 'sections'
 EXTERN int p_secure;            // 'secure'
 EXTERN char_u *p_sel;         // 'selection'
@@ -618,6 +616,7 @@ EXTERN int p_stmp;              // 'shelltemp'
 EXTERN int p_ssl;               // 'shellslash'
 #endif
 EXTERN char_u *p_stl;         // 'statusline'
+EXTERN char *p_wbr;         // 'winbar'
 EXTERN int p_sr;                // 'shiftround'
 EXTERN char_u *p_shm;         // 'shortmess'
 EXTERN char_u *p_sbr;         // 'showbreak'
@@ -678,7 +677,6 @@ EXTERN int p_tr;                ///< 'tagrelative'
 EXTERN char_u *p_tags;          ///< 'tags'
 EXTERN int p_tgst;              ///< 'tagstack'
 EXTERN int p_tbidi;             ///< 'termbidi'
-EXTERN int p_terse;             ///< 'terse'
 EXTERN int p_to;                ///< 'tildeop'
 EXTERN int p_timeout;           ///< 'timeout'
 EXTERN long p_tm;               ///< 'timeoutlen'
@@ -897,6 +895,7 @@ enum {
   WV_FCS,
   WV_LCS,
   WV_WINBL,
+  WV_WBR,
   WV_COUNT,  // must be the last one
 };
 

@@ -181,6 +181,10 @@ static bool ses_do_frame(const frame_T *fr)
 /// @return  non-zero if window "wp" is to be stored in the Session.
 static int ses_do_win(win_T *wp)
 {
+  // Skip floating windows to avoid issues when restoring the Session. #18432
+  if (wp->w_floating) {
+    return false;
+  }
   if (wp->w_buffer->b_fname == NULL
       // When 'buftype' is "nofile" can't restore the window contents.
       || (!wp->w_buffer->terminal && bt_nofile(wp->w_buffer))) {
@@ -571,7 +575,7 @@ static int makeopens(FILE *fd, char_u *dirnow)
   if (ssop_flags & SSOP_SESDIR) {
     PUTLINE_FAIL("exe \"cd \" . escape(expand(\"<sfile>:p:h\"), ' ')");
   } else if (ssop_flags & SSOP_CURDIR) {
-    sname = home_replace_save(NULL, globaldir != NULL ? globaldir : dirnow);
+    sname = home_replace_save(NULL, globaldir != NULL ? (char_u *)globaldir : dirnow);
     char *fname_esc = ses_escape_fname((char *)sname, &ssop_flags);
     if (fprintf(fd, "cd %s\n", fname_esc) < 0) {
       xfree(fname_esc);
@@ -598,9 +602,14 @@ static int makeopens(FILE *fd, char_u *dirnow)
     PUTLINE_FAIL("let s:shortmess_save = &shortmess");
   }
 
-  // Now save the current files, current buffer first.
-  PUTLINE_FAIL("set shortmess=aoO");
+  // set 'shortmess' for the following.  Add the 'A' flag if it was there
+  PUTLINE_FAIL("if &shortmess =~ 'A'");
+  PUTLINE_FAIL("  set shortmess=aoOA");
+  PUTLINE_FAIL("else");
+  PUTLINE_FAIL("  set shortmess=aoO");
+  PUTLINE_FAIL("endif");
 
+  // Now save the current files, current buffer first.
   // Put all buffers into the buffer list.
   // Do it very early to preserve buffer order after loading session (which
   // can be disrupted by prior `edit` or `tabedit` calls).
@@ -997,7 +1006,7 @@ void ex_mkrc(exarg_T *eap)
           }
         } else if (*dirnow != NUL
                    && (ssop_flags & SSOP_CURDIR) && globaldir != NULL) {
-          if (os_chdir((char *)globaldir) == 0) {
+          if (os_chdir(globaldir) == 0) {
             shorten_fnames(true);
           }
         }

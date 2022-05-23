@@ -304,13 +304,25 @@ describe('ui/ext_messages', function()
       {1:~                        }|
       {1:~                        }|
       {1:~                        }|
-    ]], messages={
+    ]], msg_history={
       {kind="echoerr", content={{"raa", 2}}},
       {kind="echoerr", content={{"bork", 2}}},
       {kind="echoerr", content={{"fail", 2}}},
       {kind="echoerr", content={{"extrafail", 2}}},
       {kind="echoerr", content={{"problem", 2}}}
-    }}
+    }, messages={{
+      content = {{ "Press ENTER or type command to continue", 4 }},
+      kind = "return_prompt"
+    }}}
+
+    feed '<cr>'
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]]}
   end)
 
   it('shortmess-=S', function()
@@ -455,11 +467,14 @@ describe('ui/ext_messages', function()
       alphpabe^t                |
       {1:~                        }|
       {1:~                        }|
-    ]], messages={
-      {kind="echomsg", content={{"stuff"}}},
-    }, showmode={
-      { "-- INSERT --", 3 }
-    }}
+    ]], msg_history={{
+      content = {{ "stuff" }},
+      kind = "echomsg",
+    }}, showmode={{ "-- INSERT --", 3 }},
+      messages={{
+        content = {{ "Press ENTER or type command to continue", 4}},
+        kind = "return_prompt"
+    }}}
   end)
 
   it('&showmode with macro-recording message', function()
@@ -685,12 +700,15 @@ describe('ui/ext_messages', function()
       {1:~                        }|
       {1:~                        }|
       {1:~                        }|
-    ]], messages={
+    ]], msg_history={
       {kind="echomsg", content={{"howdy"}}},
       {kind="", content={{"Type  :qa  and press <Enter> to exit Nvim"}}},
       {kind="echoerr", content={{"bork", 2}}},
       {kind="emsg", content={{"E117: Unknown function: nosuchfunction", 2}}}
-    }}
+    }, messages={{
+      content = {{ "Press ENTER or type command to continue", 4}},
+      kind = "return_prompt"
+    }}}
   end)
 
   it('implies ext_cmdline and ignores cmdheight', function()
@@ -1209,7 +1227,6 @@ describe('ui/ext_messages', function()
   it('supports global statusline', function()
     feed(":set laststatus=3<cr>")
     feed(":sp<cr>")
-    feed("<c-l>")
     feed(":set cmdheight<cr>")
     screen:expect({grid=[[
       ^                                                                                |
@@ -1241,8 +1258,7 @@ describe('ui/ext_messages', function()
     }})
 
     feed("<c-w>+")
-    feed("<c-l>")
-    feed(":set cmdheight<cr>")
+    feed(":set laststatus<cr>")
     screen:expect({grid=[[
       ^                                                                                |
       {1:~                                                                               }|
@@ -1269,7 +1285,7 @@ describe('ui/ext_messages', function()
       {1:~                                                                               }|
       {7:[No Name]                                                                       }|
     ]], messages={
-      {content = { { "  cmdheight=0" } }, kind = "" }
+      {content = { { "  laststatus=3" } }, kind = "" }
     }})
 
     feed(":set mouse=a<cr>")
@@ -1312,7 +1328,6 @@ end)
 
 describe('ui/msg_puts_printf', function()
   it('output multibyte characters correctly', function()
-    if helpers.pending_win32(pending) then return end
     local screen
     local cmd = ''
     local locale_dir = test_build_dir..'/share/locale/ja/LC_MESSAGES'

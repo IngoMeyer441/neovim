@@ -1418,14 +1418,14 @@ bool set_mark(buf_T *buf, String name, Integer line, Integer col, Error *err)
 }
 
 /// Get default statusline highlight for window
-const char *get_default_stl_hl(win_T *wp)
+const char *get_default_stl_hl(win_T *wp, bool use_winbar)
 {
   if (wp == NULL) {
     return "TabLineFill";
-  } else if (wp == curwin) {
-    return "StatusLine";
+  } else if (use_winbar) {
+    return (wp == curwin) ? "WinBar" : "WinBarNC";
   } else {
-    return "StatusLineNC";
+    return (wp == curwin) ? "StatusLine" : "StatusLineNC";
   }
 }
 
@@ -1616,7 +1616,7 @@ void create_user_command(String name, Object command, Dict(user_command) *opts, 
   if (uc_add_command(name.data, name.size, rep, argt, def, flags, compl, compl_arg, compl_luaref,
                      addr_type_arg, luaref, force) != OK) {
     api_set_error(err, kErrorTypeException, "Failed to create user command");
-    goto err;
+    // Do not goto err, since uc_add_command now owns luaref, compl_luaref, and compl_arg
   }
 
   return;
@@ -1624,6 +1624,7 @@ void create_user_command(String name, Object command, Dict(user_command) *opts, 
 err:
   NLUA_CLEAR_REF(luaref);
   NLUA_CLEAR_REF(compl_luaref);
+  xfree(compl_arg);
 }
 
 int find_sid(uint64_t channel_id)

@@ -189,7 +189,7 @@ int search_regcomp(char_u *pat, int pat_save, int pat_use, int options, regmmatc
 
   regmatch->rmm_ic = ignorecase(pat);
   regmatch->rmm_maxcol = 0;
-  regmatch->regprog = vim_regcomp(pat, magic ? RE_MAGIC : 0);
+  regmatch->regprog = vim_regcomp((char *)pat, magic ? RE_MAGIC : 0);
   if (regmatch->regprog == NULL) {
     return FAIL;
   }
@@ -202,31 +202,6 @@ int search_regcomp(char_u *pat, int pat_save, int pat_use, int options, regmmatc
 char_u *get_search_pat(void)
 {
   return mr_pattern;
-}
-
-/*
- * Reverse text into allocated memory.
- * Returns the allocated string.
- *
- * TODO(philix): move reverse_text() to strings.c
- */
-char_u *reverse_text(char_u *s) FUNC_ATTR_NONNULL_RET
-{
-  /*
-   * Reverse the pattern.
-   */
-  size_t len = STRLEN(s);
-  char_u *rev = xmalloc(len + 1);
-  size_t rev_i = len;
-  for (size_t s_i = 0; s_i < len; s_i++) {
-    const int mb_len = utfc_ptr2len((char *)s + s_i);
-    rev_i -= mb_len;
-    memmove(rev + rev_i, s + s_i, mb_len);
-    s_i += mb_len - 1;
-  }
-  rev[len] = NUL;
-
-  return rev;
 }
 
 void save_re_pat(int idx, char_u *pat, int magic)
@@ -1055,7 +1030,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char_u *pat, long count,
    * A line offset is not remembered, this is vi compatible.
    */
   if (spats[0].off.line && vim_strchr(p_cpo, CPO_LINEOFF) != NULL) {
-    spats[0].off.line = FALSE;
+    spats[0].off.line = false;
     spats[0].off.off = 0;
   }
 
@@ -1979,7 +1954,7 @@ pos_T *findmatchlimit(oparg_T *oap, int initc, int flags, int64_t maxtravel)
 
   // This is just guessing: when 'rightleft' is set, search for a matching
   // paren/brace in the other direction.
-  if (curwin->w_p_rl && vim_strchr((char_u *)"()[]{}<>", initc) != NULL) {
+  if (curwin->w_p_rl && vim_strchr("()[]{}<>", initc) != NULL) {
     backwards = !backwards;
   }
 
@@ -1990,13 +1965,13 @@ pos_T *findmatchlimit(oparg_T *oap, int initc, int flags, int64_t maxtravel)
   clearpos(&match_pos);
 
   // backward search: Check if this line contains a single-line comment
-  if ((backwards && comment_dir)
-      || lisp) {
+  if ((backwards && comment_dir) || lisp) {
     comment_col = check_linecomment(linep);
   }
   if (lisp && comment_col != MAXCOL && pos.col > (colnr_T)comment_col) {
     lispcomm = true;        // find match inside this comment
   }
+
   while (!got_int) {
     /*
      * Go to the next position, forward or backward. We could use
@@ -2023,8 +1998,7 @@ pos_T *findmatchlimit(oparg_T *oap, int initc, int flags, int64_t maxtravel)
         line_breakcheck();
 
         // Check if this line contains a single-line comment
-        if (comment_dir
-            || lisp) {
+        if (comment_dir || lisp) {
           comment_col = check_linecomment(linep);
         }
         // skip comment
@@ -2038,7 +2012,7 @@ pos_T *findmatchlimit(oparg_T *oap, int initc, int flags, int64_t maxtravel)
     } else {                          // forward search
       if (linep[pos.col] == NUL
           // at end of line, go to next one
-          // don't search for match in comment
+          // For lisp don't search for match in comment
           || (lisp && comment_col != MAXCOL
               && pos.col == (colnr_T)comment_col)) {
         if (pos.lnum == curbuf->b_ml.ml_line_count          // end of file
@@ -2092,7 +2066,7 @@ pos_T *findmatchlimit(oparg_T *oap, int initc, int flags, int64_t maxtravel)
         } else if (raw_string) {
           if (linep[pos.col - 1] == 'R'
               && linep[pos.col] == '"'
-              && vim_strchr(linep + pos.col + 1, '(') != NULL) {
+              && vim_strchr((char *)linep + pos.col + 1, '(') != NULL) {
             // Possible start of raw string. Now that we have the
             // delimiter we can check if it ends before where we
             // started searching, or before the previously found
@@ -2273,7 +2247,7 @@ pos_T *findmatchlimit(oparg_T *oap, int initc, int flags, int64_t maxtravel)
        * (actually, we skip #\( et al)
        */
       if (curbuf->b_p_lisp
-          && vim_strchr((char_u *)"(){}[]", c) != NULL
+          && vim_strchr("(){}[]", c) != NULL
           && pos.col > 1
           && check_prevcol(linep, pos.col, '\\', NULL)
           && check_prevcol(linep, pos.col - 1, '#', NULL)) {
@@ -2321,7 +2295,7 @@ int check_linecomment(const char_u *line)
   const char_u *p = line;  // scan from start
   // skip Lispish one-line comments
   if (curbuf->b_p_lisp) {
-    if (vim_strchr(p, ';') != NULL) {   // there may be comments
+    if (vim_strchr((char *)p, ';') != NULL) {   // there may be comments
       bool in_str = false;       // inside of string
 
       while ((p = (char_u *)strpbrk((char *)p, "\";")) != NULL) {
@@ -2346,10 +2320,10 @@ int check_linecomment(const char_u *line)
       p = NULL;
     }
   } else {
-    while ((p = vim_strchr(p, '/')) != NULL) {
+    while ((p = (char_u *)vim_strchr((char *)p, '/')) != NULL) {
       // Accept a double /, unless it's preceded with * and followed by *,
-      // because * / / * is an end and start of a C comment.
-      // Only accept the position if it is not inside a string.
+      // because * / / * is an end and start of a C comment.  Only
+      // accept the position if it is not inside a string.
       if (p[1] == '/' && (p == line || p[-1] != '*' || p[2] != '*')
           && !is_pos_in_string(line, (colnr_T)(p - line))) {
         break;
@@ -2507,7 +2481,7 @@ int findsent(Direction dir, long count)
     // go back to the previous non-white non-punctuation character
     bool found_dot = false;
     while (c = gchar_pos(&pos), ascii_iswhite(c)
-           || vim_strchr((char_u *)".!?)]\"'", c) != NULL) {
+           || vim_strchr(".!?)]\"'", c) != NULL) {
       tpos = pos;
       if (decl(&tpos) == -1 || (LINEEMPTY(tpos.lnum) && dir == FORWARD)) {
         break;
@@ -2515,11 +2489,11 @@ int findsent(Direction dir, long count)
       if (found_dot) {
         break;
       }
-      if (vim_strchr((char_u *)".!?", c) != NULL) {
+      if (vim_strchr(".!?", c) != NULL) {
         found_dot = true;
       }
-      if (vim_strchr((char_u *)")]\"'", c) != NULL
-          && vim_strchr((char_u *)".!?)]\"'", gchar_pos(&tpos)) == NULL) {
+      if (vim_strchr(")]\"'", c) != NULL
+          && vim_strchr(".!?)]\"'", gchar_pos(&tpos)) == NULL) {
         break;
       }
       decl(&pos);
@@ -2543,7 +2517,7 @@ int findsent(Direction dir, long count)
           if ((c = inc(&tpos)) == -1) {
             break;
           }
-        } while (vim_strchr((char_u *)")]\"'", c = gchar_pos(&tpos))
+        } while (vim_strchr(")]\"'", c = gchar_pos(&tpos))
                  != NULL);
         if (c == -1 || (!cpo_J && (c == ' ' || c == '\t')) || c == NUL
             || (cpo_J && (c == ' ' && inc(&tpos) >= 0
@@ -3399,7 +3373,7 @@ int current_block(oparg_T *oap, long count, int include, int what, int other)
   pos_T start_pos;
   pos_T *end_pos;
   pos_T old_start, old_end;
-  char_u *save_cpo;
+  char *save_cpo;
   bool sol = false;                      // '{' at start of line
 
   old_pos = curwin->w_cursor;
@@ -3434,7 +3408,7 @@ int current_block(oparg_T *oap, long count, int include, int what, int other)
   // Ignore quotes here.  Keep the "M" flag in 'cpo', as that is what the
   // user wants.
   save_cpo = p_cpo;
-  p_cpo = (char_u *)(vim_strchr(p_cpo, CPO_MATCHBSL) != NULL ? "%M" : "%");
+  p_cpo = vim_strchr(p_cpo, CPO_MATCHBSL) != NULL ? "%M" : "%";
   if ((pos = findmatch(NULL, what)) != NULL) {
     while (count-- > 0) {
       if ((pos = findmatch(NULL, what)) == NULL) {
@@ -3967,7 +3941,7 @@ static int find_next_quote(char_u *line, int col, int quotechar, char_u *escape)
     c = line[col];
     if (c == NUL) {
       return -1;
-    } else if (escape != NULL && vim_strchr(escape, c)) {
+    } else if (escape != NULL && vim_strchr((char *)escape, c)) {
       col++;
       if (line[col] == NUL) {
         return -1;
@@ -3996,7 +3970,7 @@ static int find_prev_quote(char_u *line, int col_start, int quotechar, char_u *e
     col_start -= utf_head_off(line, line + col_start);
     n = 0;
     if (escape != NULL) {
-      while (col_start - n > 0 && vim_strchr(escape,
+      while (col_start - n > 0 && vim_strchr((char *)escape,
                                              line[col_start - n - 1]) != NULL) {
         ++n;
       }
@@ -5332,7 +5306,7 @@ void find_pattern_in_path(char_u *ptr, Direction dir, size_t len, bool whole, bo
 
   char_u *pat;
   char_u *new_fname;
-  char_u *curr_fname = curbuf->b_fname;
+  char_u *curr_fname = (char_u *)curbuf->b_fname;
   char_u *prev_fname = NULL;
   linenr_T lnum;
   int depth;
@@ -5372,7 +5346,7 @@ void find_pattern_in_path(char_u *ptr, Direction dir, size_t len, bool whole, bo
     sprintf((char *)pat, whole ? "\\<%.*s\\>" : "%.*s", (int)len, ptr);
     // ignore case according to p_ic, p_scs and pat
     regmatch.rm_ic = ignorecase(pat);
-    regmatch.regprog = vim_regcomp(pat, p_magic ? RE_MAGIC : 0);
+    regmatch.regprog = vim_regcomp((char *)pat, p_magic ? RE_MAGIC : 0);
     xfree(pat);
     if (regmatch.regprog == NULL) {
       goto fpip_end;
@@ -5380,7 +5354,7 @@ void find_pattern_in_path(char_u *ptr, Direction dir, size_t len, bool whole, bo
   }
   inc_opt = (*curbuf->b_p_inc == NUL) ? p_inc : curbuf->b_p_inc;
   if (*inc_opt != NUL) {
-    incl_regmatch.regprog = vim_regcomp(inc_opt, p_magic ? RE_MAGIC : 0);
+    incl_regmatch.regprog = vim_regcomp((char *)inc_opt, p_magic ? RE_MAGIC : 0);
     if (incl_regmatch.regprog == NULL) {
       goto fpip_end;
     }
@@ -5388,7 +5362,8 @@ void find_pattern_in_path(char_u *ptr, Direction dir, size_t len, bool whole, bo
   }
   if (type == FIND_DEFINE && (*curbuf->b_p_def != NUL || *p_def != NUL)) {
     def_regmatch.regprog = vim_regcomp(*curbuf->b_p_def == NUL
-        ? p_def : curbuf->b_p_def, p_magic ? RE_MAGIC : 0);
+                                       ? (char *)p_def : (char *)curbuf->b_p_def,
+                                       p_magic ? RE_MAGIC : 0);
     if (def_regmatch.regprog == NULL) {
       goto fpip_end;
     }
@@ -5410,7 +5385,7 @@ void find_pattern_in_path(char_u *ptr, Direction dir, size_t len, bool whole, bo
   for (;;) {
     if (incl_regmatch.regprog != NULL
         && vim_regexec(&incl_regmatch, line, (colnr_T)0)) {
-      char_u *p_fname = (curr_fname == curbuf->b_fname)
+      char_u *p_fname = (curr_fname == (char_u *)curbuf->b_fname)
                         ? curbuf->b_ffname : curr_fname;
 
       if (inc_opt != NULL && strstr((char *)inc_opt, "\\zs") != NULL) {
@@ -5737,7 +5712,8 @@ search_line:
         }
 
         const int add_r = ins_compl_add_infercase(aux, i, p_ic,
-                                                  curr_fname == curbuf->b_fname ? NULL : curr_fname,
+                                                  curr_fname == (char_u *)curbuf->b_fname
+                                                  ? NULL : curr_fname,
                                                   dir, cont_s_ipos);
         if (add_r == OK) {
           // if dir was BACKWARD then honor it just once
@@ -5865,8 +5841,8 @@ exit_matched:
       --old_files;
       files[old_files].name = files[depth].name;
       files[old_files].matched = files[depth].matched;
-      --depth;
-      curr_fname = (depth == -1) ? curbuf->b_fname
+      depth--;
+      curr_fname = (depth == -1) ? (char_u *)curbuf->b_fname
                                  : files[depth].name;
       if (depth < depth_displayed) {
         depth_displayed = depth;

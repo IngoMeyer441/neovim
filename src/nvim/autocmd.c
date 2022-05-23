@@ -190,7 +190,18 @@ static void aupat_show(AutoPat *ap, event_T event, int previous_group)
     if (got_int) {
       return;
     }
-    msg_outtrans((char_u *)aucmd_exec_to_string(ac, ac->exec));
+
+    char *exec_to_string = aucmd_exec_to_string(ac, ac->exec);
+    if (ac->desc != NULL) {
+      size_t msglen = 100;
+      char *msg = (char *)xmallocz(msglen);
+      snprintf(msg, msglen, "%s [%s]", exec_to_string, ac->desc);
+      msg_outtrans((char_u *)msg);
+      XFREE_CLEAR(msg);
+    } else {
+      msg_outtrans((char_u *)exec_to_string);
+    }
+    XFREE_CLEAR(exec_to_string);
     if (p_verbose > 0) {
       last_set_msg(ac->script_ctx);
     }
@@ -796,13 +807,13 @@ void do_autocmd(char *arg_in, int forceit)
 
     // Expand environment variables in the pattern.  Set 'shellslash', we want
     // forward slashes here.
-    if (vim_strchr((char_u *)pat, '$') != NULL || vim_strchr((char_u *)pat, '~') != NULL) {
+    if (vim_strchr(pat, '$') != NULL || vim_strchr(pat, '~') != NULL) {
 #ifdef BACKSLASH_IN_FILENAME
       int p_ssl_save = p_ssl;
 
       p_ssl = true;
 #endif
-      envpat = (char *)expand_env_save((char_u *)pat);
+      envpat = expand_env_save(pat);
 #ifdef BACKSLASH_IN_FILENAME
       p_ssl = p_ssl_save;
 #endif
@@ -1070,10 +1081,9 @@ int autocmd_register(int64_t id, event_T event, char *pat, int patlen, int group
       char *reg_pat;
 
       ap->buflocal_nr = 0;
-      reg_pat = (char *)file_pat_to_reg_pat((char_u *)pat, (char_u *)pat + patlen, &ap->allow_dirs,
-                                            true);
+      reg_pat = file_pat_to_reg_pat(pat, pat + patlen, &ap->allow_dirs, true);
       if (reg_pat != NULL) {
-        ap->reg_prog = vim_regcomp((char_u *)reg_pat, RE_MAGIC);
+        ap->reg_prog = vim_regcomp(reg_pat, RE_MAGIC);
       }
       xfree(reg_pat);
       if (reg_pat == NULL || ap->reg_prog == NULL) {
@@ -1137,8 +1147,6 @@ int autocmd_register(int64_t id, event_T event, char *pat, int patlen, int group
   // perhaps: <lua>DESCRIPTION or similar
   if (desc != NULL) {
     ac->desc = xstrdup(desc);
-  } else {
-    ac->desc = aucmd_exec_default_desc(aucmd);
   }
 
   return OK;
@@ -1221,7 +1229,7 @@ int do_doautocmd(char *arg_start, bool do_msg, bool *did_something)
   // Loop over the events.
   while (*arg && !ends_excmd(*arg) && !ascii_iswhite(*arg)) {
     if (apply_autocmds_group(event_name2nr(arg, &arg), fname, NULL, true, group,
-                             curbuf, NULL)) {
+                             curbuf, NULL, NULL)) {
       nothing_done = false;
     }
   }
@@ -1241,8 +1249,8 @@ void ex_doautoall(exarg_T *eap)
 {
   int retval = OK;
   aco_save_T aco;
-  char_u *arg = (char_u *)eap->arg;
-  int call_do_modelines = check_nomodeline((char **)&arg);
+  char *arg = eap->arg;
+  int call_do_modelines = check_nomodeline(&arg);
   bufref_T bufref;
   bool did_aucmd;
 
@@ -1261,7 +1269,7 @@ void ex_doautoall(exarg_T *eap)
     set_bufref(&bufref, buf);
 
     // execute the autocommands for this buffer
-    retval = do_doautocmd((char *)arg, false, &did_aucmd);
+    retval = do_doautocmd(arg, false, &did_aucmd);
 
     if (call_do_modelines && did_aucmd) {
       // Execute the modeline settings, but don't set window-local
@@ -1282,7 +1290,7 @@ void ex_doautoall(exarg_T *eap)
 
   // Execute autocommands for the current buffer last.
   if (retval == OK) {
-    (void)do_doautocmd((char *)arg, false, &did_aucmd);
+    (void)do_doautocmd(arg, false, &did_aucmd);
     if (call_do_modelines && did_aucmd) {
       do_modelines(0);
     }
@@ -1364,7 +1372,7 @@ void aucmd_prepbuf(aco_save_T *aco, buf_T *buf)
     // Make sure w_localdir and globaldir are NULL to avoid a chdir() in
     // win_enter_ext().
     XFREE_CLEAR(aucmd_win->w_localdir);
-    aco->globaldir = (char *)globaldir;
+    aco->globaldir = globaldir;
     globaldir = NULL;
 
     block_autocmds();  // We don't want BufEnter/WinEnter autocommands.
@@ -1451,7 +1459,7 @@ win_found:
     hash_init(&aucmd_win->w_vars->dv_hashtab);          // re-use the hashtab
 
     xfree(globaldir);
-    globaldir = (char_u *)aco->globaldir;
+    globaldir = aco->globaldir;
 
     // the buffer contents may have changed
     check_cursor();
@@ -1504,10 +1512,9 @@ win_found:
 /// @param buf Buffer for <abuf>
 ///
 /// @return true if some commands were executed.
-bool apply_autocmds(event_T event, char_u *fname, char_u *fname_io, bool force, buf_T *buf)
+bool apply_autocmds(event_T event, char *fname, char *fname_io, bool force, buf_T *buf)
 {
-  return apply_autocmds_group(event, (char *)fname, (char *)fname_io, force, AUGROUP_ALL, buf,
-                              NULL);
+  return apply_autocmds_group(event, fname, fname_io, force, AUGROUP_ALL, buf, NULL, NULL);
 }
 
 /// Like apply_autocmds(), but with extra "eap" argument.  This takes care of
@@ -1524,7 +1531,7 @@ bool apply_autocmds(event_T event, char_u *fname, char_u *fname_io, bool force, 
 bool apply_autocmds_exarg(event_T event, char *fname, char *fname_io, bool force, buf_T *buf,
                           exarg_T *eap)
 {
-  return apply_autocmds_group(event, fname, fname_io, force, AUGROUP_ALL, buf, eap);
+  return apply_autocmds_group(event, fname, fname_io, force, AUGROUP_ALL, buf, eap, NULL);
 }
 
 /// Like apply_autocmds(), but handles the caller's retval.  If the script
@@ -1548,7 +1555,7 @@ bool apply_autocmds_retval(event_T event, char *fname, char *fname_io, bool forc
   }
 
   bool did_cmd = apply_autocmds_group(event, fname, fname_io, force,
-                                      AUGROUP_ALL, buf, NULL);
+                                      AUGROUP_ALL, buf, NULL, NULL);
   if (did_cmd && aborting()) {
     *retval = FAIL;
   }
@@ -1597,7 +1604,7 @@ bool trigger_cursorhold(void) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 ///
 /// @return true if some commands were executed.
 bool apply_autocmds_group(event_T event, char *fname, char *fname_io, bool force, int group,
-                          buf_T *buf, exarg_T *eap)
+                          buf_T *buf, exarg_T *eap, Object *data)
 {
   char *sfname = NULL;  // short file name
   bool retval = false;
@@ -1812,6 +1819,9 @@ bool apply_autocmds_group(event_T event, char *fname, char *fname_io, bool force
     // add to active_apc_list
     patcmd.next = active_apc_list;
     active_apc_list = &patcmd;
+
+    // Attach data to command
+    patcmd.data = data;
 
     // set v:cmdarg (only when there is a matching pattern)
     save_cmdbang = (long)get_vim_var_nr(VV_CMDBANG);
@@ -2028,6 +2038,10 @@ static bool call_autocmd_callback(const AutoCmd *ac, const AutoPatCmd *apc)
     PUT(data, "file", CSTR_TO_OBJ((char *)autocmd_fname));
     PUT(data, "buf", INTEGER_OBJ(autocmd_bufnr));
 
+    if (apc->data) {
+      PUT(data, "data", copy_object(*apc->data));
+    }
+
     int group = apc->curpat->group;
     switch (group) {
     case AUGROUP_ERROR:
@@ -2113,8 +2127,10 @@ char *getnextac(int c, void *cookie, int indent, bool do_concat)
 
   if (p_verbose >= 9) {
     verbose_enter_scroll();
-    smsg(_("autocommand %s"), aucmd_exec_to_string(ac, ac->exec));
+    char *exec_to_string = aucmd_exec_to_string(ac, ac->exec);
+    smsg(_("autocommand %s"), exec_to_string);
     msg_puts("\n");  // don't overwrite this either
+    XFREE_CLEAR(exec_to_string);
     verbose_leave_scroll();
   }
 
@@ -2465,45 +2481,42 @@ bool autocmd_delete_id(int64_t id)
 // ===========================================================================
 //  AucmdExecutable Functions
 // ===========================================================================
-char *aucmd_exec_default_desc(AucmdExecutable acc)
-{
-  size_t msglen = 100;
 
-  switch (acc.type) {
-  case CALLABLE_CB:
-    switch (acc.callable.cb.type) {
-    case kCallbackLua: {
-      char *msg = (char *)xmallocz(msglen);
-      snprintf(msg, msglen, "<Lua function %d>", acc.callable.cb.data.luaref);
-      return msg;
-    }
-    case kCallbackFuncref: {
-      // TODO(tjdevries): Is this enough space for this?
-      char *msg = (char *)xmallocz(msglen);
-      snprintf(msg, msglen, "<vim function: %s>", acc.callable.cb.data.funcref);
-      return msg;
-    }
-    case kCallbackPartial: {
-      char *msg = (char *)xmallocz(msglen);
-      snprintf(msg, msglen, "<vim partial: %s>", acc.callable.cb.data.partial->pt_name);
-      return msg;
-    }
-    default:
-      return NULL;
-    }
+/// Generate a string description of a callback
+static char *aucmd_callback_to_string(Callback cb)
+{
+  // NOTE: this function probably belongs in a helper
+
+  size_t msglen = 100;
+  char *msg = (char *)xmallocz(msglen);
+
+  switch (cb.type) {
+  case kCallbackLua:
+    snprintf(msg, msglen, "<lua: %d>", cb.data.luaref);
+    break;
+  case kCallbackFuncref:
+    // TODO(tjdevries): Is this enough space for this?
+    snprintf(msg, msglen, "<vim function: %s>", cb.data.funcref);
+    break;
+  case kCallbackPartial:
+    snprintf(msg, msglen, "<vim partial: %s>", cb.data.partial->pt_name);
+    break;
   default:
-    return NULL;
+    snprintf(msg, msglen, "%s", "");
+    break;
   }
+  return msg;
 }
 
+/// Generate a string description for the command/callback of an autocmd
 char *aucmd_exec_to_string(AutoCmd *ac, AucmdExecutable acc)
   FUNC_ATTR_PURE
 {
   switch (acc.type) {
   case CALLABLE_EX:
-    return acc.callable.cmd;
+    return xstrdup(acc.callable.cmd);
   case CALLABLE_CB:
-    return ac->desc;
+    return aucmd_callback_to_string(acc.callable.cb);
   case CALLABLE_NONE:
     return "This is not possible";
   }

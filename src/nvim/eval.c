@@ -1407,7 +1407,7 @@ static void ex_let_const(exarg_T *eap, const bool is_const)
     argend--;
   }
   expr = skipwhite(argend);
-  if (*expr != '=' && !((vim_strchr((char_u *)"+-*/%.", *expr) != NULL
+  if (*expr != '=' && !((vim_strchr("+-*/%.", *expr) != NULL
                          && expr[1] == '=') || STRNCMP(expr, "..=", 3) == 0)) {
     // ":let" without "=": list variables
     if (*arg == '[') {
@@ -1443,7 +1443,7 @@ static void ex_let_const(exarg_T *eap, const bool is_const)
     op[0] = '=';
     op[1] = NUL;
     if (*expr != '=') {
-      if (vim_strchr((char_u *)"+-*/%.", *expr) != NULL) {
+      if (vim_strchr("+-*/%.", *expr) != NULL) {
         op[0] = *expr;  // +=, -=, *=, /=, %= or .=
         if (expr[0] == '.' && expr[1] == '.') {  // ..=
           expr++;
@@ -1809,10 +1809,10 @@ static char *ex_let_one(char *arg, typval_T *const tv, const bool copy, const bo
     if (len == 0) {
       semsg(_(e_invarg2), name - 1);
     } else {
-      if (op != NULL && vim_strchr((char_u *)"+-*/%", *op) != NULL) {
+      if (op != NULL && vim_strchr("+-*/%", *op) != NULL) {
         semsg(_(e_letwrong), op);
       } else if (endchars != NULL
-                 && vim_strchr((char_u *)endchars, *skipwhite(arg)) == NULL) {
+                 && vim_strchr(endchars, *skipwhite(arg)) == NULL) {
         emsg(_(e_letunexp));
       } else if (!check_secure()) {
         const char c1 = name[len];
@@ -1855,7 +1855,7 @@ static char *ex_let_one(char *arg, typval_T *const tv, const bool copy, const bo
     char *const p = (char *)find_option_end((const char **)&arg, &opt_flags);
     if (p == NULL
         || (endchars != NULL
-            && vim_strchr((char_u *)endchars, *skipwhite(p)) == NULL)) {
+            && vim_strchr(endchars, *skipwhite(p)) == NULL)) {
       emsg(_(e_letunexp));
     } else {
       int opt_type;
@@ -1914,10 +1914,10 @@ static char *ex_let_one(char *arg, typval_T *const tv, const bool copy, const bo
       return NULL;
     }
     arg++;
-    if (op != NULL && vim_strchr((char_u *)"+-*/%", *op) != NULL) {
+    if (op != NULL && vim_strchr("+-*/%", *op) != NULL) {
       semsg(_(e_letwrong), op);
     } else if (endchars != NULL
-               && vim_strchr((char_u *)endchars, *skipwhite(arg + 1)) == NULL) {
+               && vim_strchr(endchars, *skipwhite(arg + 1)) == NULL) {
       emsg(_(e_letunexp));
     } else {
       char *s;
@@ -1949,7 +1949,7 @@ static char *ex_let_one(char *arg, typval_T *const tv, const bool copy, const bo
 
     char *const p = get_lval(arg, tv, &lv, false, false, 0, FNE_CHECK_START);
     if (p != NULL && lv.ll_name != NULL) {
-      if (endchars != NULL && vim_strchr((char_u *)endchars, *skipwhite(p)) == NULL) {
+      if (endchars != NULL && vim_strchr(endchars, *skipwhite(p)) == NULL) {
         emsg(_(e_letunexp));
       } else {
         set_var_lval(&lv, p, tv, copy, is_const, op);
@@ -2752,7 +2752,7 @@ void set_context_for_expression(expand_T *xp, char *arg, cmdidx_T cmdidx)
       break;
     } else if ((c == '<' || c == '#')
                && xp->xp_context == EXPAND_FUNCTIONS
-               && vim_strchr((char_u *)xp->xp_pattern, '(') == NULL) {
+               && vim_strchr(xp->xp_pattern, '(') == NULL) {
       // Function name can start with "<SNR>" and contain '#'.
       break;
     } else if (cmdidx != CMD_let || got_eq) {
@@ -3263,15 +3263,15 @@ int pattern_match(char *pat, char *text, bool ic)
   regmatch_T regmatch;
 
   // avoid 'l' flag in 'cpoptions'
-  char *save_cpo = (char *)p_cpo;
-  p_cpo = (char_u *)"";
-  regmatch.regprog = vim_regcomp((char_u *)pat, RE_MAGIC + RE_STRING);
+  char *save_cpo = p_cpo;
+  p_cpo = "";
+  regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
   if (regmatch.regprog != NULL) {
     regmatch.rm_ic = ic;
     matches = vim_regexec_nl(&regmatch, (char_u *)text, (colnr_T)0);
     vim_regfree(regmatch.regprog);
   }
-  p_cpo = (char_u *)save_cpo;
+  p_cpo = save_cpo;
   return matches;
 }
 
@@ -5872,7 +5872,7 @@ static int get_env_tv(char **arg, typval_T *rettv, int evaluate)
       xfree(string);
 
       // Next try expanding things like $VIM and ${HOME}.
-      string = (char *)expand_env_save((char_u *)name - 1);
+      string = expand_env_save(name - 1);
       if (string != NULL && *string == '$') {
         XFREE_CLEAR(string);
       }
@@ -6141,7 +6141,7 @@ void common_function(typval_T *argvars, typval_T *rettv, bool is_funcref, FunPtr
     use_string = true;
   }
 
-  if ((use_string && vim_strchr((char_u *)s, AUTOLOAD_CHAR) == NULL) || is_funcref) {
+  if ((use_string && vim_strchr(s, AUTOLOAD_CHAR) == NULL) || is_funcref) {
     name = s;
     trans_name = (char *)trans_function_name((char_u **)&name, false,
                                              TFN_INT | TFN_QUIET | TFN_NO_AUTOLOAD
@@ -6405,7 +6405,7 @@ dict_T *get_win_info(win_T *wp, int16_t tpnr, int16_t winnr)
   tv_dict_add_nr(dict, S_LEN("winrow"), wp->w_winrow + 1);
   tv_dict_add_nr(dict, S_LEN("topline"), wp->w_topline);
   tv_dict_add_nr(dict, S_LEN("botline"), wp->w_botline - 1);
-  tv_dict_add_nr(dict, S_LEN("winbar"), 0);
+  tv_dict_add_nr(dict, S_LEN("winbar"), wp->w_winbar_height);
   tv_dict_add_nr(dict, S_LEN("width"), wp->w_width);
   tv_dict_add_nr(dict, S_LEN("bufnr"), wp->w_buffer->b_fnum);
   tv_dict_add_nr(dict, S_LEN("wincol"), wp->w_wincol + 1);
@@ -6865,8 +6865,8 @@ void screenchar_adjust_grid(ScreenGrid **grid, int *row, int *col)
   // have its own buffer, this should just read from it instead.
   msg_scroll_flush();
   if (msg_grid.chars && msg_grid.comp_index > 0 && *row >= msg_grid.comp_row
-      && *row < (msg_grid.Rows + msg_grid.comp_row)
-      && *col < msg_grid.Columns) {
+      && *row < (msg_grid.rows + msg_grid.comp_row)
+      && *col < msg_grid.cols) {
     *grid = &msg_grid;
     *row -= msg_grid.comp_row;
   }
@@ -6886,6 +6886,7 @@ void set_buffer_lines(buf_T *buf, linenr_T lnum_arg, bool append, const typval_T
   buf_T *curbuf_save = NULL;
   win_T *curwin_save = NULL;
   const bool is_curbuf = buf == curbuf;
+  const bool save_VIsual_active = VIsual_active;
 
   // When using the current buffer ml_mfp will be set if needed.  Useful when
   // setline() is used on startup.  For other buffers the buffer must be
@@ -6896,6 +6897,7 @@ void set_buffer_lines(buf_T *buf, linenr_T lnum_arg, bool append, const typval_T
   }
 
   if (!is_curbuf) {
+    VIsual_active = false;
     curbuf_save = curbuf;
     curwin_save = curwin;
     curbuf = buf;
@@ -6986,6 +6988,7 @@ void set_buffer_lines(buf_T *buf, linenr_T lnum_arg, bool append, const typval_T
   if (!is_curbuf) {
     curbuf = curbuf_save;
     curwin = curwin_save;
+    VIsual_active = save_VIsual_active;
   }
 }
 
@@ -7958,7 +7961,7 @@ int get_id_len(const char **const arg)
       // slice "[n:]". Also "xx:" is not a namespace.
       len = (int)(p - *arg);
       if (len > 1
-          || (len == 1 && vim_strchr((char_u *)namespace_char, **arg) == NULL)) {
+          || (len == 1 && vim_strchr(namespace_char, **arg) == NULL)) {
         break;
       }
     }
@@ -8089,7 +8092,7 @@ const char *find_name_end(const char *arg, const char **expr_start, const char *
       // slice "[n:]".  Also "xx:" is not a namespace. But {ns}: is.
       len = (int)(p - arg);
       if ((len > 1 && p[-1] != '}')
-          || (len == 1 && vim_strchr((char_u *)namespace_char, *arg) == NULL)) {
+          || (len == 1 && vim_strchr(namespace_char, *arg) == NULL)) {
         break;
       }
     }
@@ -9279,7 +9282,7 @@ bool var_check_func_name(const char *const name, const bool new_var)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
   // Allow for w: b: s: and t:.
-  if (!(vim_strchr((char_u *)"wbst", name[0]) != NULL && name[1] == ':')
+  if (!(vim_strchr("wbst", name[0]) != NULL && name[1] == ':')
       && !ASCII_ISUPPER((name[0] != NUL && name[1] == ':')
                         ? name[2] : name[0])) {
     semsg(_("E704: Funcref variable name must start with a capital: %s"), name);
@@ -10110,7 +10113,7 @@ repeat:
             || (*fnamep)[1] == NUL)
 #endif
         && !(tilde_file && (*fnamep)[1] == NUL)) {
-      *fnamep = (char *)expand_env_save((char_u *)(*fnamep));
+      *fnamep = expand_env_save(*fnamep);
       xfree(*bufp);          // free any allocated file name
       *bufp = *fnamep;
       if (*fnamep == NULL) {
@@ -10163,7 +10166,7 @@ repeat:
     // Need full path first (use expand_env() to remove a "~/")
     if (!has_fullname && !has_homerelative) {
       if (**fnamep == '~') {
-        p = pbuf = (char *)expand_env_save((char_u *)(*fnamep));
+        p = pbuf = expand_env_save(*fnamep);
       } else {
         p = pbuf = FullName_save(*fnamep, false);
       }
@@ -10325,12 +10328,12 @@ repeat:
     sep = (char_u)(*s++);
     if (sep) {
       // find end of pattern
-      p = (char *)vim_strchr((char_u *)s, sep);
+      p = vim_strchr(s, sep);
       if (p != NULL) {
         char *const pat = xstrnsave(s, p - s);
         s = p + 1;
         // find end of substitution
-        p = (char *)vim_strchr((char_u *)s, sep);
+        p = vim_strchr(s, sep);
         if (p != NULL) {
           char *const sub = xstrnsave(s, p - s);
           char *const str = xstrnsave(*fnamep, *fnamelen);
@@ -10389,15 +10392,15 @@ char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, char *flags
   char *zero_width = NULL;
 
   // Make 'cpoptions' empty, so that the 'l' flag doesn't work here
-  save_cpo = (char *)p_cpo;
-  p_cpo = empty_option;
+  save_cpo = p_cpo;
+  p_cpo = (char *)empty_option;
 
   ga_init(&ga, 1, 200);
 
   do_all = (flags[0] == 'g');
 
   regmatch.rm_ic = p_ic;
-  regmatch.regprog = vim_regcomp((char_u *)pat, RE_MAGIC + RE_STRING);
+  regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
   if (regmatch.regprog != NULL) {
     tail = str;
     end = str + STRLEN(str);
@@ -10449,8 +10452,8 @@ char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, char *flags
 
   char *ret = xstrdup(ga.ga_data == NULL ? str : ga.ga_data);
   ga_clear(&ga);
-  if (p_cpo == empty_option) {
-    p_cpo = (char_u *)save_cpo;
+  if ((char_u *)p_cpo == empty_option) {
+    p_cpo = save_cpo;
   } else {
     // Darn, evaluating {sub} expression or {expr} changed the value.
     free_string_option((char_u *)save_cpo);

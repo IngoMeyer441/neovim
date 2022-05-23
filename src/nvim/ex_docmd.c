@@ -345,7 +345,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
   // here.  The value of 200 allows nested function calls, ":source", etc.
   // Allow 200 or 'maxfuncdepth', whatever is larger.
   if (call_depth >= 200 && call_depth >= p_mfd) {
-    emsg(_("E169: Command too recursive"));
+    emsg(_(e_command_too_recursive));
     // When converting to an exception, we do not include the command name
     // since this is not an error of the specific command.
     do_errthrow((cstack_T *)NULL, NULL);
@@ -1583,13 +1583,14 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
 /// @param cmdinfo Command parse information
 void execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo)
 {
+  char *errormsg = NULL;
+
 #define ERROR(msg) \
   do { \
-    emsg(msg); \
+    errormsg = msg; \
     goto end; \
   } while (0)
 
-  char *errormsg = NULL;
   cmdmod_T save_cmdmod = cmdmod;
   cmdmod = cmdinfo->cmdmod;
 
@@ -1648,7 +1649,7 @@ void execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo)
   // If filename expansion is enabled, expand filenames
   if (cmdinfo->magic.file) {
     if (expand_filename(eap, (char_u **)eap->cmdlinep, &errormsg) == FAIL) {
-      ERROR(errormsg);
+      goto end;
     }
   }
 
@@ -1683,14 +1684,13 @@ void execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo)
                                    (eap->argt & EX_BUFUNL) != 0, false, false);
       eap->addr_count = 1;
       // Shift each argument by 1
-      if (eap->args != NULL) {
-        for (size_t i = 0; i < eap->argc - 1; i++) {
-          eap->args[i] = eap->args[i + 1];
-        }
-        // Make the last argument point to the NUL terminator at the end of string
-        eap->args[eap->argc - 1] = eap->args[eap->argc - 1] + eap->arglens[eap->argc - 1];
-        eap->argc -= 1;
+      for (size_t i = 0; i < eap->argc - 1; i++) {
+        eap->args[i] = eap->args[i + 1];
       }
+      // Make the last argument point to the NUL terminator at the end of string
+      eap->args[eap->argc - 1] = eap->args[eap->argc - 1] + eap->arglens[eap->argc - 1];
+      eap->argc -= 1;
+
       eap->arg = eap->args[0];
     }
     if (eap->line2 < 0) {  // failed
@@ -1707,14 +1707,20 @@ void execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo)
     eap->errmsg = NULL;
     (cmdnames[eap->cmdidx].cmd_func)(eap);
     if (eap->errmsg != NULL) {
-      ERROR(_(eap->errmsg));
+      errormsg = _(eap->errmsg);
     }
   }
+
 end:
+  if (errormsg != NULL && *errormsg != NUL) {
+    emsg(errormsg);
+  }
   // Undo command modifiers
   undo_cmdmod(eap, msg_scroll);
   cmdmod = save_cmdmod;
-
+  if (eap->did_sandbox) {
+    sandbox--;
+  }
 #undef ERROR
 }
 
@@ -1927,7 +1933,7 @@ static char *do_one_cmd(char **cmdlinep, int flags, cstack_T *cstack, LineGetter
       ++p;
     }
     p = xstrnsave(ea.cmd, (size_t)(p - ea.cmd));
-    int ret = apply_autocmds(EVENT_CMDUNDEFINED, (char_u *)p, (char_u *)p, true, NULL);
+    int ret = apply_autocmds(EVENT_CMDUNDEFINED, p, p, true, NULL);
     xfree(p);
     // If the autocommands did something and didn't cause an error, try
     // finding the command again.
@@ -2554,7 +2560,7 @@ int parse_command_modifiers(exarg_T *eap, char **errormsg, bool skip_only)
         break;
       }
       if (!skip_only) {
-        cmdmod.filter_regmatch.regprog = vim_regcomp((char_u *)reg_pat, RE_MAGIC);
+        cmdmod.filter_regmatch.regprog = vim_regcomp(reg_pat, RE_MAGIC);
         if (cmdmod.filter_regmatch.regprog == NULL) {
           break;
         }
@@ -2971,7 +2977,7 @@ char *find_ex_command(exarg_T *eap, int *full)
     }
 
     // check for non-alpha command
-    if (p == eap->cmd && vim_strchr((char_u *)"@!=><&~#", *p) != NULL) {
+    if (p == eap->cmd && vim_strchr("@!=><&~#", *p) != NULL) {
       p++;
     }
     len = (int)(p - eap->cmd);
@@ -3297,7 +3303,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
 
   // 2. skip comment lines and leading space, colons or bars
   const char *cmd;
-  for (cmd = buff; vim_strchr((const char_u *)" \t:|", *cmd) != NULL; cmd++) {}
+  for (cmd = buff; vim_strchr(" \t:|", *cmd) != NULL; cmd++) {}
   xp->xp_pattern = (char *)cmd;
 
   if (*cmd == NUL) {
@@ -3358,7 +3364,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
       }
     }
     // check for non-alpha command
-    if (p == cmd && vim_strchr((const char_u *)"@*!=><&~#", *p) != NULL) {
+    if (p == cmd && vim_strchr("@*!=><&~#", *p) != NULL) {
       p++;
     }
     len = (size_t)(p - cmd);
@@ -3390,7 +3396,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
   }
 
   if (ea.cmdidx == CMD_SIZE) {
-    if (*cmd == 's' && vim_strchr((const char_u *)"cgriI", cmd[1]) != NULL) {
+    if (*cmd == 's' && vim_strchr("cgriI", cmd[1]) != NULL) {
       ea.cmdidx = CMD_substitute;
       p = cmd + 1;
     } else if (cmd[0] >= 'A' && cmd[0] <= 'Z') {
@@ -4135,7 +4141,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
     break;
 
   case CMD_argdelete:
-    while ((xp->xp_pattern = (char *)vim_strchr((const char_u *)arg, ' ')) != NULL) {
+    while ((xp->xp_pattern = vim_strchr(arg, ' ')) != NULL) {
       arg = (const char *)(xp->xp_pattern + 1);
     }
     xp->xp_context = EXPAND_ARGLIST;
@@ -4166,7 +4172,7 @@ char *skip_range(const char *cmd, int *ctx)
 {
   unsigned delim;
 
-  while (vim_strchr((char_u *)" \t0123456789.$%'/?-+,;\\", *cmd) != NULL) {
+  while (vim_strchr(" \t0123456789.$%'/?-+,;\\", *cmd) != NULL) {
     if (*cmd == '\\') {
       if (cmd[1] == '?' || cmd[1] == '/' || cmd[1] == '&') {
         cmd++;
@@ -4536,7 +4542,7 @@ error:
 /// Get flags from an Ex command argument.
 static void get_flags(exarg_T *eap)
 {
-  while (vim_strchr((char_u *)"lp#", *eap->arg) != NULL) {
+  while (vim_strchr("lp#", *eap->arg) != NULL) {
     if (*eap->arg == 'l') {
       eap->flags |= EXFLAG_LIST;
     } else if (*eap->arg == 'p') {
@@ -4792,8 +4798,8 @@ int expand_filename(exarg_T *eap, char_u **cmdlinep, char **errormsgp)
      * Quick check if this cannot be the start of a special string.
      * Also removes backslash before '%', '#' and '<'.
      */
-    if (vim_strchr((char_u *)"%#<", *p) == NULL) {
-      ++p;
+    if (vim_strchr("%#<", *p) == NULL) {
+      p++;
       continue;
     }
 
@@ -4812,10 +4818,10 @@ int expand_filename(exarg_T *eap, char_u **cmdlinep, char **errormsgp)
 
     // Wildcards won't be expanded below, the replacement is taken
     // literally.  But do expand "~/file", "~user/file" and "$HOME/file".
-    if (vim_strchr((char_u *)repl, '$') != NULL || vim_strchr((char_u *)repl, '~') != NULL) {
+    if (vim_strchr(repl, '$') != NULL || vim_strchr(repl, '~') != NULL) {
       char *l = repl;
 
-      repl = (char *)expand_env_save((char_u *)repl);
+      repl = expand_env_save(repl);
       xfree(l);
     }
 
@@ -4845,8 +4851,8 @@ int expand_filename(exarg_T *eap, char_u **cmdlinep, char **errormsgp)
 # define ESCAPE_CHARS escape_chars
 #endif
 
-      for (l = repl; *l; ++l) {
-        if (vim_strchr(ESCAPE_CHARS, *l) != NULL) {
+      for (l = repl; *l; l++) {
+        if (vim_strchr((char *)ESCAPE_CHARS, *l) != NULL) {
           l = (char *)vim_strsave_escaped((char_u *)repl, ESCAPE_CHARS);
           xfree(repl);
           repl = l;
@@ -4885,8 +4891,8 @@ int expand_filename(exarg_T *eap, char_u **cmdlinep, char **errormsgp)
        * After expanding environment variables, check again
        * if there are still wildcards present.
        */
-      if (vim_strchr((char_u *)eap->arg, '$') != NULL
-          || vim_strchr((char_u *)eap->arg, '~') != NULL) {
+      if (vim_strchr(eap->arg, '$') != NULL
+          || vim_strchr(eap->arg, '~') != NULL) {
         expand_env_esc((char_u *)eap->arg, NameBuff, MAXPATHL, true, true, NULL);
         has_wildcards = path_has_wildcard(NameBuff);
         p = (char *)NameBuff;
@@ -5522,6 +5528,11 @@ char *uc_validate_name(char *name)
   return name;
 }
 
+/// Create a new user command {name}, if one doesn't already exist.
+///
+/// This function takes ownership of compl_arg, compl_luaref, and luaref.
+///
+/// @return  OK if the command is created, FAIL otherwise.
 int uc_add_command(char *name, size_t name_len, char *rep, uint32_t argt, long def, int flags,
                    int compl, char *compl_arg, LuaRef compl_luaref, cmd_addr_T addr_type,
                    LuaRef luaref, bool force)
@@ -6338,7 +6349,7 @@ static size_t uc_check_code(char *code, size_t len, char *buf, ucmd_T *cmd, exar
     ct_NONE,
   } type = ct_NONE;
 
-  if ((vim_strchr((char_u *)"qQfF", *p) != NULL) && p[1] == '-') {
+  if ((vim_strchr("qQfF", *p) != NULL) && p[1] == '-') {
     quote = (*p == 'q' || *p == 'Q') ? 1 : 2;
     p += 2;
     l -= 2;
@@ -6643,9 +6654,9 @@ static void do_ucmd(exarg_T *eap)
     totlen = 0;
 
     for (;;) {
-      start = (char *)vim_strchr((char_u *)p, '<');
+      start = vim_strchr(p, '<');
       if (start != NULL) {
-        end = (char *)vim_strchr((char_u *)start + 1, '>');
+        end = vim_strchr(start + 1, '>');
       }
       if (buf != NULL) {
         for (ksp = p; *ksp != NUL && (char_u)(*ksp) != K_SPECIAL; ksp++) {}
@@ -7781,7 +7792,7 @@ static void ex_tabs(exarg_T *eap)
       if (buf_spname(wp->w_buffer) != NULL) {
         STRLCPY(IObuff, buf_spname(wp->w_buffer), IOSIZE);
       } else {
-        home_replace(wp->w_buffer, wp->w_buffer->b_fname, IObuff, IOSIZE, true);
+        home_replace(wp->w_buffer, (char_u *)wp->w_buffer->b_fname, IObuff, IOSIZE, true);
       }
       msg_outtrans(IObuff);
       ui_flush();                  // output one line at a time
@@ -8096,7 +8107,7 @@ static void ex_read(exarg_T *eap)
       if (check_fname() == FAIL) {       // check for no file name
         return;
       }
-      i = readfile((char *)curbuf->b_ffname, (char *)curbuf->b_fname,
+      i = readfile((char *)curbuf->b_ffname, curbuf->b_fname,
                    eap->line2, (linenr_T)0, (linenr_T)MAXLNUM, eap, 0, false);
     } else {
       if (vim_strchr(p_cpo, CPO_ALTREAD) != NULL) {
@@ -8175,7 +8186,7 @@ static void post_chdir(CdScope scope, bool trigger_dirchanged)
     char *pdir = get_prevdir(scope);
     // If still in global directory, set CWD as the global directory.
     if (globaldir == NULL && pdir != NULL) {
-      globaldir = vim_strsave((char_u *)pdir);
+      globaldir = xstrdup(pdir);
     }
   }
 
@@ -8593,8 +8604,7 @@ static void ex_at(exarg_T *eap)
   }
 
   // Put the register in the typeahead buffer with the "silent" flag.
-  if (do_execreg(c, TRUE, vim_strchr(p_cpo, CPO_EXECBUF) != NULL, TRUE)
-      == FAIL) {
+  if (do_execreg(c, true, vim_strchr(p_cpo, CPO_EXECBUF) != NULL, true) == FAIL) {
     beep_flush();
   } else {
     bool save_efr = exec_from_reg;
@@ -8737,7 +8747,7 @@ static void ex_redir(exarg_T *eap)
       close_redir();
 
       // Expand environment variables and "~/".
-      fname = (char *)expand_env_save((char_u *)arg);
+      fname = expand_env_save(arg);
       if (fname == NULL) {
         return;
       }
@@ -8832,7 +8842,7 @@ static void ex_redraw(exarg_T *eap)
   ui_flush();
 }
 
-/// ":redrawstatus": force redraw of status line(s)
+/// ":redrawstatus": force redraw of status line(s) and window bar(s)
 static void ex_redrawstatus(exarg_T *eap)
 {
   if (State & MODE_CMDPREVIEW) {
@@ -8848,8 +8858,7 @@ static void ex_redrawstatus(exarg_T *eap)
   } else {
     status_redraw_curbuf();
   }
-  update_screen(VIsual_active ? INVERTED :
-                0);
+  update_screen(VIsual_active ? INVERTED : 0);
   RedrawingDisabled = r;
   p_lz = p;
   ui_flush();
@@ -8970,7 +8979,6 @@ bool save_current_state(save_state_T *sst)
   sst->save_restart_edit = restart_edit;
   sst->save_msg_didout = msg_didout;
   sst->save_State = State;
-  sst->save_insertmode = p_im;
   sst->save_finish_op = finish_op;
   sst->save_opcount = opcount;
   sst->save_reg_executing = reg_executing;
@@ -8978,7 +8986,6 @@ bool save_current_state(save_state_T *sst)
 
   msg_scroll = false;   // no msg scrolling in Normal mode
   restart_edit = 0;     // don't go to Insert mode
-  p_im = false;         // don't use 'insertmode
 
   // Save the current typeahead.  This is required to allow using ":normal"
   // from an event handler and makes sure we don't hang when the argument
@@ -9001,7 +9008,6 @@ void restore_current_state(save_state_T *sst)
     // override the value of restart_edit anyway.
     restart_edit = sst->save_restart_edit;
   }
-  p_im = sst->save_insertmode;
   finish_op = sst->save_finish_op;
   opcount = sst->save_opcount;
   reg_executing = sst->save_reg_executing;
@@ -9478,7 +9484,7 @@ char_u *eval_vars(char_u *src, char_u *srcstart, size_t *usedlen, linenr_T *lnum
         result = "";
         valid = 0;                  // Must have ":p:h" to be valid
       } else {
-        result = (char *)curbuf->b_fname;
+        result = curbuf->b_fname;
         tilde_file = STRCMP(result, "~") == 0;
       }
       break;
@@ -9532,7 +9538,7 @@ char_u *eval_vars(char_u *src, char_u *srcstart, size_t *usedlen, linenr_T *lnum
           result = "";
           valid = 0;                        // Must have ":p:h" to be valid
         } else {
-          result = (char *)buf->b_fname;
+          result = buf->b_fname;
           tilde_file = STRCMP(result, "~") == 0;
         }
       }

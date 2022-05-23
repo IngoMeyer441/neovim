@@ -125,6 +125,8 @@ static size_t msg_ext_cur_len = 0;
 static bool msg_ext_overwrite = false;  ///< will overwrite last message
 static int msg_ext_visible = 0;  ///< number of messages currently visible
 
+static bool msg_ext_history_visible = false;
+
 /// Shouldn't clear message after leaving cmdline
 static bool msg_ext_keep_after_cmdline = false;
 
@@ -162,7 +164,7 @@ void msg_grid_validate(void)
 {
   grid_assign_handle(&msg_grid);
   bool should_alloc = msg_use_grid();
-  if (should_alloc && (msg_grid.Rows != Rows || msg_grid.Columns != Columns
+  if (should_alloc && (msg_grid.rows != Rows || msg_grid.cols != Columns
                        || !msg_grid.chars)) {
     // TODO(bfredl): eventually should be set to "invalid". I e all callers
     // will use the grid including clear to EOS if necessary.
@@ -174,9 +176,9 @@ void msg_grid_validate(void)
 
     // Tricky: allow resize while pager is active
     int pos = msg_scrolled ? msg_grid_pos : Rows - p_ch;
-    ui_comp_put_grid(&msg_grid, pos, 0, msg_grid.Rows, msg_grid.Columns,
+    ui_comp_put_grid(&msg_grid, pos, 0, msg_grid.rows, msg_grid.cols,
                      false, true);
-    ui_call_grid_resize(msg_grid.handle, msg_grid.Columns, msg_grid.Rows);
+    ui_call_grid_resize(msg_grid.handle, msg_grid.cols, msg_grid.rows);
 
     msg_grid.throttled = false;  // don't throttle in 'cmdheight' area
     msg_scrolled_at_flush = msg_scrolled;
@@ -598,8 +600,8 @@ void msg_source(int attr)
 ///            If "emsg_skip" is set: never do error messages.
 int emsg_not_now(void)
 {
-  if ((emsg_off > 0 && vim_strchr(p_debug, 'm') == NULL
-       && vim_strchr(p_debug, 't') == NULL)
+  if ((emsg_off > 0 && vim_strchr((char *)p_debug, 'm') == NULL
+       && vim_strchr((char *)p_debug, 't') == NULL)
       || emsg_skip > 0) {
     return TRUE;
   }
@@ -623,14 +625,12 @@ static bool emsg_multiline(const char *s, bool multiline)
   bool severe = emsg_severe;
   emsg_severe = false;
 
-  if (!emsg_off || vim_strchr(p_debug, 't') != NULL) {
-    /*
-     * Cause a throw of an error exception if appropriate.  Don't display
-     * the error message in this case.  (If no matching catch clause will
-     * be found, the message will be displayed later on.)  "ignore" is set
-     * when the message should be ignored completely (used for the
-     * interrupt message).
-     */
+  if (!emsg_off || vim_strchr((char *)p_debug, 't') != NULL) {
+    // Cause a throw of an error exception if appropriate.  Don't display
+    // the error message in this case.  (If no matching catch clause will
+    // be found, the message will be displayed later on.)  "ignore" is set
+    // when the message should be ignored completely (used for the
+    // interrupt message).
     if (cause_errthrow(s, severe, &ignore)) {
       if (!ignore) {
         did_emsg++;
@@ -1027,6 +1027,9 @@ void ex_messages(void *const eap_p)
 
   // Display what was not skipped.
   if (ui_has(kUIMessages)) {
+    if (msg_silent) {
+      return;
+    }
     Array entries = ARRAY_DICT_INIT;
     for (; p != NULL; p = p->next) {
       if (p->msg != NULL && p->msg[0] != NUL) {
@@ -1042,6 +1045,8 @@ void ex_messages(void *const eap_p)
       }
     }
     ui_call_msg_history_show(entries);
+    msg_ext_history_visible = true;
+    wait_return(false);
   } else {
     msg_hist_off = true;
     for (; p != NULL && !got_int; p = p->next) {
@@ -1212,7 +1217,7 @@ void wait_return(int redraw)
     if (c == K_LEFTMOUSE || c == K_MIDDLEMOUSE || c == K_RIGHTMOUSE
         || c == K_X1MOUSE || c == K_X2MOUSE) {
       (void)jump_to_mouse(MOUSE_SETPOS, NULL, 0);
-    } else if (vim_strchr((char_u *)"\r\n ", c) == NULL && c != Ctrl_C) {
+    } else if (vim_strchr("\r\n ", c) == NULL && c != Ctrl_C) {
       // Put the character back in the typeahead buffer.  Don't use the
       // stuff buffer, because lmaps wouldn't work.
       ins_char_typebuf(vgetc_char, vgetc_mod_mask);
@@ -2322,10 +2327,10 @@ void msg_scroll_up(bool may_throttle)
     if (msg_grid_pos > 0) {
       msg_grid_set_pos(msg_grid_pos - 1, true);
     } else {
-      grid_del_lines(&msg_grid, 0, 1, msg_grid.Rows, 0, msg_grid.Columns);
+      grid_del_lines(&msg_grid, 0, 1, msg_grid.rows, 0, msg_grid.cols);
       memmove(msg_grid.dirty_col, msg_grid.dirty_col + 1,
-              (msg_grid.Rows - 1) * sizeof(*msg_grid.dirty_col));
-      msg_grid.dirty_col[msg_grid.Rows - 1] = 0;
+              (msg_grid.rows - 1) * sizeof(*msg_grid.dirty_col));
+      msg_grid.dirty_col[msg_grid.rows - 1] = 0;
     }
   } else {
     grid_del_lines(&msg_grid_adj, 0, 1, Rows, 0, Columns);
@@ -2358,7 +2363,7 @@ void msg_scroll_flush(void)
     msg_grid.throttled = false;
     int pos_delta = msg_grid_pos_at_flush - msg_grid_pos;
     assert(pos_delta >= 0);
-    int delta = MIN(msg_scrolled - msg_scrolled_at_flush, msg_grid.Rows);
+    int delta = MIN(msg_scrolled - msg_scrolled_at_flush, msg_grid.rows);
 
     if (pos_delta > 0) {
       ui_ext_msg_set_pos(msg_grid_pos, true);
@@ -2376,7 +2381,7 @@ void msg_scroll_flush(void)
     for (int i = MAX(Rows - MAX(delta, 1), 0); i < Rows; i++) {
       int row = i - msg_grid_pos;
       assert(row >= 0);
-      ui_line(&msg_grid, row, 0, msg_grid.dirty_col[row], msg_grid.Columns,
+      ui_line(&msg_grid, row, 0, msg_grid.dirty_col[row], msg_grid.cols,
               HL_ATTR(HLF_MSG), false);
       msg_grid.dirty_col[row] = 0;
     }
@@ -2402,9 +2407,9 @@ void msg_reset_scroll(void)
     clear_cmdline = true;
     if (msg_grid.chars) {
       // non-displayed part of msg_grid is considered invalid.
-      for (int i = 0; i < MIN(msg_scrollsize(), msg_grid.Rows); i++) {
+      for (int i = 0; i < MIN(msg_scrollsize(), msg_grid.rows); i++) {
         grid_clear_line(&msg_grid, msg_grid.line_offset[i],
-                        msg_grid.Columns, false);
+                        msg_grid.cols, false);
       }
     }
   } else {
@@ -3127,6 +3132,10 @@ void msg_ext_clear(bool force)
     ui_call_msg_clear();
     msg_ext_visible = 0;
     msg_ext_overwrite = false;  // nothing to overwrite
+  }
+  if (msg_ext_history_visible) {
+    ui_call_msg_history_clear();
+    msg_ext_history_visible = false;
   }
 
   // Only keep once.

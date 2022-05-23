@@ -104,8 +104,8 @@ char_u *vim_strsave_escaped_ext(const char_u *string, const char_u *esc_chars, c
       p += l - 1;
       continue;
     }
-    if (vim_strchr(esc_chars, *p) != NULL || (bsl && rem_backslash(p))) {
-      ++length;                         // count a backslash
+    if (vim_strchr((char *)esc_chars, *p) != NULL || (bsl && rem_backslash(p))) {
+      length++;                         // count a backslash
     }
     ++length;                           // count an ordinary char
   }
@@ -120,7 +120,7 @@ char_u *vim_strsave_escaped_ext(const char_u *string, const char_u *esc_chars, c
       p += l - 1;                     // skip multibyte char
       continue;
     }
-    if (vim_strchr(esc_chars, *p) != NULL || (bsl && rem_backslash(p))) {
+    if (vim_strchr((char *)esc_chars, *p) != NULL || (bsl && rem_backslash(p))) {
       *p2++ = cc;
     }
     *p2++ = *p;
@@ -473,18 +473,18 @@ int vim_strnicmp(const char *s1, const char *s2, size_t len)
 /// @return Pointer to the first byte of the found character in string or NULL
 ///         if it was not found or character is invalid. NUL character is never
 ///         found, use `strlen()` instead.
-char_u *vim_strchr(const char_u *const string, const int c)
+char *vim_strchr(const char *const string, const int c)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
   if (c <= 0) {
     return NULL;
   } else if (c < 0x80) {
-    return (char_u *)strchr((const char *)string, c);
+    return strchr(string, c);
   } else {
     char u8char[MB_MAXBYTES + 1];
     const int len = utf_char2bytes(c, u8char);
     u8char[len] = NUL;
-    return (char_u *)strstr((const char *)string, u8char);
+    return strstr(string, u8char);
   }
 }
 
@@ -634,12 +634,12 @@ static const void *tv_ptr(const typval_T *const tvs, int *const idxp)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
 #define OFF(attr) offsetof(union typval_vval_union, attr)
-  STATIC_ASSERT(OFF(v_string) == OFF(v_list)
+  STATIC_ASSERT(OFF(v_string) == OFF(v_list)  // -V568
                 && OFF(v_string) == OFF(v_dict)
                 && OFF(v_string) == OFF(v_partial)
-                && sizeof(tvs[0].vval.v_string) == sizeof(tvs[0].vval.v_list)      // -V568
-                && sizeof(tvs[0].vval.v_string) == sizeof(tvs[0].vval.v_dict)      // -V568
-                && sizeof(tvs[0].vval.v_string) == sizeof(tvs[0].vval.v_partial),  // -V568
+                && sizeof(tvs[0].vval.v_string) == sizeof(tvs[0].vval.v_list)
+                && sizeof(tvs[0].vval.v_string) == sizeof(tvs[0].vval.v_dict)
+                && sizeof(tvs[0].vval.v_string) == sizeof(tvs[0].vval.v_partial),
                 "Strings, dictionaries, lists and partials are expected to be pointers, "
                 "so that all three of them can be accessed via v_string");
 #undef OFF
@@ -1313,8 +1313,7 @@ int vim_vsnprintf_typval(char *str, size_t str_m, const char *fmt, va_list ap, t
             if (fmt_spec == 'f' || fmt_spec == 'F') {
               tp = tmp + str_arg_l - 1;
             } else {
-              tp = (char *)vim_strchr((char_u *)tmp,
-                                      fmt_spec == 'e' ? 'e' : 'E');
+              tp = vim_strchr(tmp, fmt_spec == 'e' ? 'e' : 'E');
               if (tp) {
                 // remove superfluous '+' and leading zeroes from exponent
                 if (tp[1] == '+') {
@@ -1343,8 +1342,7 @@ int vim_vsnprintf_typval(char *str, size_t str_m, const char *fmt, va_list ap, t
           } else {
             // Be consistent: some printf("%e") use 1.0e+12 and some
             // 1.0e+012; remove one zero in the last case.
-            char *tp = (char *)vim_strchr((char_u *)tmp,
-                                          fmt_spec == 'e' ? 'e' : 'E');
+            char *tp = vim_strchr(tmp, fmt_spec == 'e' ? 'e' : 'E');
             if (tp && (tp[1] == '+' || tp[1] == '-') && tp[2] == '0'
                 && ascii_isdigit(tp[3]) && ascii_isdigit(tp[4])) {
               STRMOVE(tp + 2, tp + 3);
@@ -1498,6 +1496,7 @@ int kv_do_printf(StringBuilder *str, const char *fmt, ...)
   // printed string didn't fit, resize and try again
   if ((size_t)printed >= remaining) {
     kv_ensure_space(*str, (size_t)printed + 1);  // include space for NUL terminator at the end
+    assert(str->items != NULL);
     va_start(ap, fmt);
     printed = vsnprintf(str->items + str->size, str->capacity - str->size, fmt, ap);
     va_end(ap);
@@ -1508,4 +1507,25 @@ int kv_do_printf(StringBuilder *str, const char *fmt, ...)
 
   str->size += (size_t)printed;
   return printed;
+}
+
+/// Reverse text into allocated memory.
+///
+/// @return  the allocated string.
+char_u *reverse_text(char_u *s)
+  FUNC_ATTR_NONNULL_RET
+{
+  // Reverse the pattern.
+  size_t len = STRLEN(s);
+  char_u *rev = xmalloc(len + 1);
+  size_t rev_i = len;
+  for (size_t s_i = 0; s_i < len; s_i++) {
+    const int mb_len = utfc_ptr2len((char *)s + s_i);
+    rev_i -= (size_t)mb_len;
+    memmove(rev + rev_i, s + s_i, (size_t)mb_len);
+    s_i += (size_t)mb_len - 1;
+  }
+  rev[len] = NUL;
+
+  return rev;
 }

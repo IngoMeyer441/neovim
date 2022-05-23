@@ -103,9 +103,11 @@ static const char *highlight_init_both[] = {
   "TabLineFill  cterm=reverse gui=reverse",
   "TabLineSel   cterm=bold gui=bold",
   "TermCursor   cterm=reverse gui=reverse",
+  "WinBar       cterm=bold gui=bold",
   "WildMenu     ctermbg=Yellow ctermfg=Black guibg=Yellow guifg=Black",
   "default link VertSplit Normal",
   "default link WinSeparator VertSplit",
+  "default link WinBarNC WinBar",
   "default link EndOfBuffer NonText",
   "default link LineNrAbove LineNr",
   "default link LineNrBelow LineNr",
@@ -560,7 +562,7 @@ int load_colors(char_u *name)
   recursive = true;
   size_t buflen = STRLEN(name) + 12;
   buf = xmalloc(buflen);
-  apply_autocmds(EVENT_COLORSCHEMEPRE, name, curbuf->b_fname, false, curbuf);
+  apply_autocmds(EVENT_COLORSCHEMEPRE, (char *)name, curbuf->b_fname, false, curbuf);
   snprintf((char *)buf, buflen, "colors/%s.vim", name);
   retval = source_runtime((char *)buf, DIP_START + DIP_OPT);
   if (retval == FAIL) {
@@ -568,7 +570,7 @@ int load_colors(char_u *name)
     retval = source_runtime((char *)buf, DIP_START + DIP_OPT);
   }
   xfree(buf);
-  apply_autocmds(EVENT_COLORSCHEME, name, curbuf->b_fname, false, curbuf);
+  apply_autocmds(EVENT_COLORSCHEME, (char *)name, curbuf->b_fname, false, curbuf);
 
   recursive = false;
 

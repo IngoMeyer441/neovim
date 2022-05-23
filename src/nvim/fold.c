@@ -775,7 +775,7 @@ void clearFolding(win_T *win)
 /// The changes in lines from top to bot (inclusive).
 void foldUpdate(win_T *wp, linenr_T top, linenr_T bot)
 {
-  if (compl_busy || State & MODE_INSERT) {
+  if (disable_fold_update || compl_busy || State & MODE_INSERT) {
     return;
   }
 
@@ -785,11 +785,18 @@ void foldUpdate(win_T *wp, linenr_T top, linenr_T bot)
   }
 
   if (wp->w_folds.ga_len > 0) {
-    // Mark all folds from top to bot as maybe-small.
+    linenr_T maybe_small_start = top;
+    linenr_T maybe_small_end = bot;
+
+    // Mark all folds from top to bot (or bot to top) as maybe-small.
+    if (top > bot) {
+      maybe_small_start = bot;
+      maybe_small_end = top;
+    }
     fold_T *fp;
-    (void)foldFind(&wp->w_folds, top, &fp);
+    (void)foldFind(&wp->w_folds, maybe_small_start, &fp);
     while (fp < (fold_T *)wp->w_folds.ga_data + wp->w_folds.ga_len
-           && fp->fd_top < bot) {
+           && fp->fd_top <= maybe_small_end) {
       fp->fd_small = kNone;
       fp++;
     }
@@ -1929,7 +1936,7 @@ static void foldUpdateIEMS(win_T *const wp, linenr_T top, linenr_T bot)
     bot = wp->w_buffer->b_ml.ml_line_count;
     wp->w_foldinvalid = false;
 
-    // Mark all folds a maybe-small.
+    // Mark all folds as maybe-small.
     setSmallMaybe(&wp->w_folds);
   }
 
@@ -1996,7 +2003,7 @@ static void foldUpdateIEMS(win_T *const wp, linenr_T top, linenr_T bot)
       // start one line back, because a "<1" may indicate the end of a
       // fold in the topline
       if (top > 1) {
-        --fline.lnum;
+        fline.lnum--;
       }
     } else if (foldmethodIsSyntax(wp)) {
       getlevel = foldlevelSyntax;
@@ -2004,6 +2011,12 @@ static void foldUpdateIEMS(win_T *const wp, linenr_T top, linenr_T bot)
       getlevel = foldlevelDiff;
     } else {
       getlevel = foldlevelIndent;
+      // Start one line back, because if the line above "top" has an
+      // undefined fold level, folding it relies on the line under it,
+      // which is "top".
+      if (top > 1) {
+        fline.lnum--;
+      }
     }
 
     // Backup to a line for which the fold level is defined.  Since it's
@@ -2911,7 +2924,7 @@ static void foldlevelIndent(fline_T *flp)
 
   // empty line or lines starting with a character in 'foldignore': level
   // depends on surrounding lines
-  if (*s == NUL || vim_strchr(flp->wp->w_p_fdi, *s) != NULL) {
+  if (*s == NUL || vim_strchr((char *)flp->wp->w_p_fdi, *s) != NULL) {
     // first and last line can't be undefined, use level 0
     if (lnum == 1 || lnum == buf->b_ml.ml_line_count) {
       flp->lvl = 0;
@@ -3042,7 +3055,7 @@ static void foldlevelExpr(fline_T *flp)
 /// Relies on the option value to have been checked for correctness already.
 static void parseMarker(win_T *wp)
 {
-  foldendmarker = vim_strchr(wp->w_p_fmr, ',');
+  foldendmarker = (char_u *)vim_strchr((char *)wp->w_p_fmr, ',');
   foldstartmarkerlen = (size_t)(foldendmarker++ - wp->w_p_fmr);
   foldendmarkerlen = STRLEN(foldendmarker);
 }

@@ -18,6 +18,7 @@ local NIL = helpers.NIL
 local read_file = require('test.helpers').read_file
 local write_file = require('test.helpers').write_file
 local isCI = helpers.isCI
+local meths = helpers.meths
 
 -- Use these to get access to a coroutine so that I can run async tests and use
 -- yield.
@@ -221,10 +222,32 @@ describe('LSP', function()
     end)
   end)
 
+  describe('lsp._cmd_parts test', function()
+    local function _cmd_parts(input)
+      return exec_lua([[
+        lsp = require('vim.lsp')
+        return lsp._cmd_parts(...)
+      ]], input)
+    end
+    it('should valid cmd argument', function()
+      eq(true, pcall(_cmd_parts, {"nvim"}))
+      eq(true, pcall(_cmd_parts, {"nvim", "--head"}))
+    end)
+
+    it('should invalid cmd argument', function()
+      eq('Error executing lua: .../lsp.lua:0: cmd: expected list, got nvim',
+        pcall_err(_cmd_parts, 'nvim'))
+      eq('Error executing lua: .../lsp.lua:0: cmd argument: expected string, got number',
+        pcall_err(_cmd_parts, {'nvim', 1}))
+    end)
+  end)
+end)
+
+describe('LSP', function()
   describe('basic_init test', function()
     after_each(function()
       stop()
-      exec_lua("lsp.stop_client(lsp.get_active_clients())")
+      exec_lua("lsp.stop_client(lsp.get_active_clients(), true)")
       exec_lua("lsp._vim_exit_handler()")
     end)
 
@@ -341,6 +364,43 @@ describe('LSP', function()
       }
     end)
 
+    it('should fire autocommands on attach and detach', function()
+      local client
+      test_rpc_server {
+        test_name = "basic_init";
+        on_setup = function()
+          exec_lua [[
+            BUFFER = vim.api.nvim_create_buf(false, true)
+            vim.api.nvim_create_autocmd('LspAttach', {
+              callback = function(args)
+                local client = vim.lsp.get_client_by_id(args.data.client_id)
+                vim.g.lsp_attached = client.name
+              end,
+            })
+            vim.api.nvim_create_autocmd('LspDetach', {
+              callback = function(args)
+                local client = vim.lsp.get_client_by_id(args.data.client_id)
+                vim.g.lsp_detached = client.name
+              end,
+            })
+          ]]
+        end;
+        on_init = function(_client)
+          client = _client
+          eq(true, exec_lua("return lsp.buf_attach_client(BUFFER, TEST_RPC_CLIENT_ID)"))
+          client.notify('finish')
+        end;
+        on_handler = function(_, _, ctx)
+          if ctx.method == 'finish' then
+            eq('basic_init', meths.get_var('lsp_attached'))
+            exec_lua("return lsp.buf_detach_client(BUFFER, TEST_RPC_CLIENT_ID)")
+            eq('basic_init', meths.get_var('lsp_detached'))
+            client.stop()
+          end
+        end;
+      }
+    end)
+
     it('client should return settings via workspace/configuration handler', function()
       local expected_handlers = {
         {NIL, {}, {method="shutdown", client_id=1}};
@@ -386,16 +446,23 @@ describe('LSP', function()
       }
     end)
     it('workspace/configuration returns NIL per section if client was started without config.settings', function()
-      fake_lsp_server_setup('workspace/configuration no settings')
-      eq({ NIL, NIL, }, exec_lua [[
-        local result = {
-          items = {
-            {section = 'foo'},
-            {section = 'bar'},
-          }
-        }
-        return vim.lsp.handlers['workspace/configuration'](nil, result, {client_id=TEST_RPC_CLIENT_ID})
-      ]])
+      local result = nil
+      test_rpc_server {
+        test_name = 'basic_init';
+        on_init = function(c) c.stop() end,
+        on_setup = function()
+          result = exec_lua [[
+            local result = {
+              items = {
+                {section = 'foo'},
+                {section = 'bar'},
+              }
+            }
+            return vim.lsp.handlers['workspace/configuration'](nil, result, {client_id=TEST_RPC_CLIENT_ID})
+          ]]
+        end
+      }
+      eq({ NIL, NIL }, result)
     end)
 
     it('should verify capabilities sent', function()
@@ -1305,25 +1372,6 @@ describe('LSP', function()
           end
         end;
       }
-    end)
-  end)
-  describe('lsp._cmd_parts test', function()
-    local function _cmd_parts(input)
-      return exec_lua([[
-        lsp = require('vim.lsp')
-        return lsp._cmd_parts(...)
-      ]], input)
-    end
-    it('should valid cmd argument', function()
-      eq(true, pcall(_cmd_parts, {"nvim"}))
-      eq(true, pcall(_cmd_parts, {"nvim", "--head"}))
-    end)
-
-    it('should invalid cmd argument', function()
-      eq('Error executing lua: .../lsp.lua:0: cmd: expected list, got nvim',
-        pcall_err(_cmd_parts, 'nvim'))
-      eq('Error executing lua: .../lsp.lua:0: cmd argument: expected string, got number',
-        pcall_err(_cmd_parts, {'nvim', 1}))
     end)
   end)
 end)

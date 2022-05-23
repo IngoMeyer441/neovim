@@ -530,11 +530,6 @@ int main(int argc, char **argv)
   // 'autochdir' has been postponed.
   do_autochdir();
 
-  // start in insert mode
-  if (p_im) {
-    need_start_insertmode = true;
-  }
-
   set_vim_var_nr(VV_VIM_DID_ENTER, 1L);
   apply_autocmds(EVENT_VIMENTER, NULL, NULL, false, curbuf);
   TIME_MSG("VimEnter autocommands");
@@ -643,8 +638,7 @@ void getout(int exitval)
           bufref_T bufref;
 
           set_bufref(&bufref, buf);
-          apply_autocmds(EVENT_BUFWINLEAVE, buf->b_fname,
-                         buf->b_fname, false, buf);
+          apply_autocmds(EVENT_BUFWINLEAVE, buf->b_fname, buf->b_fname, false, buf);
           if (bufref_valid(&bufref)) {
             buf_set_changedtick(buf, -1);  // note that we did it already
           }
