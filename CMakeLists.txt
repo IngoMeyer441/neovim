@@ -108,7 +108,14 @@ endif()
 
 option(ENABLE_LIBINTL "enable libintl" ON)
 option(ENABLE_LIBICONV "enable libiconv" ON)
-option(ENABLE_LTO "enable link time optimization" ON)
+if (MINGW)
+  # Disable LTO by default as it may not compile
+  # See https://github.com/Alexpux/MINGW-packages/issues/3516
+  # and https://github.com/neovim/neovim/pull/8654#issuecomment-402316672
+  option(ENABLE_LTO "enable link time optimization" OFF)
+else()
+  option(ENABLE_LTO "enable link time optimization" ON)
+endif()
 
 message(STATUS "CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
 
@@ -315,6 +322,10 @@ else()
   endif()
 endif()
 
+if(MINGW)
+  # Use POSIX compatible stdio in Mingw
+  add_definitions(-D__USE_MINGW_ANSI_STDIO)
+endif()
 if(WIN32)
   # Windows Vista is the minimum supported version
   add_definitions(-D_WIN32_WINNT=0x0600)
@@ -442,7 +453,7 @@ endif()
 option(PREFER_LUA "Prefer Lua over LuaJIT in the nvim executable." OFF)
 
 if(PREFER_LUA)
-  find_package(Lua 5.1 REQUIRED)
+  find_package(Lua 5.1 EXACT REQUIRED)
   set(LUA_PREFERRED_INCLUDE_DIRS ${LUA_INCLUDE_DIR})
   set(LUA_PREFERRED_LIBRARIES ${LUA_LIBRARIES})
   # Passive (not REQUIRED): if LUAJIT_FOUND is not set, nvim-test is skipped.

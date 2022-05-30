@@ -21,7 +21,6 @@ enum {
   kZIndexCmdlinePopupMenu = 250,
 };
 
-
 /// ScreenGrid represents a resizable rectuangular grid displayed by UI clients.
 ///
 /// chars[] contains the UTF-8 text that is currently displayed on the grid.
@@ -110,5 +109,23 @@ struct ScreenGrid {
 #define SCREEN_GRID_INIT { 0, NULL, NULL, NULL, NULL, NULL, 0, 0, false, \
                            false, 0, 0, NULL, false, true, 0, \
                            0, 0, 0, 0, 0,  false }
+
+/// Status line click definition
+typedef struct {
+  enum {
+    kStlClickDisabled = 0,  ///< Clicks to this area are ignored.
+    kStlClickTabSwitch,     ///< Switch to the given tab.
+    kStlClickTabClose,      ///< Close given tab.
+    kStlClickFuncRun,       ///< Run user function.
+  } type;      ///< Type of the click.
+  int tabnr;   ///< Tab page number.
+  char *func;  ///< Function to run.
+} StlClickDefinition;
+
+/// Used for tabline clicks
+typedef struct {
+  StlClickDefinition def;  ///< Click definition.
+  const char *start;       ///< Location where region starts.
+} StlClickRecord;
 
 #endif  // NVIM_GRID_DEFS_H

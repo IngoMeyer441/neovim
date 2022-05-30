@@ -241,8 +241,8 @@ retnomove:
     }
 
     curwin->w_cursor.lnum = curwin->w_topline;
-  } else if (on_status_line && which_button == MOUSE_LEFT) {
-    if (dragwin != NULL) {
+  } else if (on_status_line) {
+    if (which_button == MOUSE_LEFT && dragwin != NULL) {
       // Drag the status line
       count = row - dragwin->w_winrow - dragwin->w_height + 1
               - on_status_line;
@@ -480,7 +480,6 @@ win_T *mouse_find_win(int *gridp, int *rowp, int *colp)
     return NULL;
   }
 
-
   frame_T *fp;
 
   fp = topframe;
@@ -572,7 +571,6 @@ void setmouse(void)
   ui_cursor_shape();
   ui_check_mouse();
 }
-
 
 // Set orig_topline.  Used when jumping to another window, so that a double
 // click still works.

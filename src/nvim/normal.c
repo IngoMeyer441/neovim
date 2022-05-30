@@ -32,6 +32,7 @@
 #include "nvim/fold.h"
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
+#include "nvim/grid_defs.h"
 #include "nvim/indent.h"
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
@@ -84,7 +85,6 @@ typedef struct normal_state {
 } NormalState;
 
 static int VIsual_mode_orig = NUL;              // saved Visual mode
-
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "normal.c.generated.h"
@@ -431,15 +431,15 @@ static int find_command(int cmdchar)
   return idx;
 }
 
-// Normal state entry point. This is called on:
-//
-// - Startup, In this case the function never returns.
-// - The command-line window is opened(`q:`). Returns when `cmdwin_result` != 0.
-// - The :visual command is called from :global in ex mode, `:global/PAT/visual`
-//   for example. Returns when re-entering ex mode(because ex mode recursion is
-//   not allowed)
-//
-// This used to be called main_loop on main.c
+/// Normal state entry point. This is called on:
+///
+/// - Startup, In this case the function never returns.
+/// - The command-line window is opened(`q:`). Returns when `cmdwin_result` != 0.
+/// - The :visual command is called from :global in ex mode, `:global/PAT/visual`
+///   for example. Returns when re-entering ex mode(because ex mode recursion is
+///   not allowed)
+///
+/// This used to be called main_loop on main.c
 void normal_enter(bool cmdwin, bool noexmode)
 {
   NormalState state;
@@ -1315,11 +1315,12 @@ static void normal_redraw(NormalState *s)
   setcursor();
 }
 
-// Function executed before each iteration of normal mode.
-// Return:
-//   1 if the iteration should continue normally
-//   -1 if the iteration should be skipped
-//   0 if the main loop must exit
+/// Function executed before each iteration of normal mode.
+///
+/// @return:
+///           1 if the iteration should continue normally
+///          -1 if the iteration should be skipped
+///           0 if the main loop must exit
 static int normal_check(VimState *state)
 {
   NormalState *s = (NormalState *)state;
@@ -1418,8 +1419,8 @@ static void set_vcount_ca(cmdarg_T *cap, bool *set_prevcount)
   *set_prevcount = false;    // only set v:prevcount once
 }
 
-// Move the current tab to tab in same column as mouse or to end of the
-// tabline if there is no tab there.
+/// Move the current tab to tab in same column as mouse or to end of the
+/// tabline if there is no tab there.
 static void move_tab_to_mouse(void)
 {
   int tabnr = tab_page_click_defs[mouse_col].tabnr;
@@ -1430,6 +1431,63 @@ static void move_tab_to_mouse(void)
   } else {
     tabpage_move(tabnr);
   }
+}
+
+/// Call click definition function for column "col" in the "click_defs" array for button
+/// "which_button".
+static void call_click_def_func(StlClickDefinition *click_defs, int col, int which_button)
+{
+  typval_T argv[] = {
+    {
+      .v_lock = VAR_FIXED,
+      .v_type = VAR_NUMBER,
+      .vval = {
+        .v_number = (varnumber_T)click_defs[col].tabnr
+      },
+    },
+    {
+      .v_lock = VAR_FIXED,
+      .v_type = VAR_NUMBER,
+      .vval = {
+        .v_number = ((mod_mask & MOD_MASK_MULTI_CLICK) == MOD_MASK_4CLICK
+                     ? 4
+                     : ((mod_mask & MOD_MASK_MULTI_CLICK) == MOD_MASK_3CLICK
+                        ? 3
+                        : ((mod_mask & MOD_MASK_MULTI_CLICK) == MOD_MASK_2CLICK
+                           ? 2
+                           : 1)))
+      },
+    },
+    {
+      .v_lock = VAR_FIXED,
+      .v_type = VAR_STRING,
+      .vval = {
+        .v_string = (which_button == MOUSE_LEFT
+                     ? "l"
+                     : (which_button == MOUSE_RIGHT
+                        ? "r"
+                        : (which_button == MOUSE_MIDDLE
+                           ? "m"
+                           : "?")))
+      },
+    },
+    {
+      .v_lock = VAR_FIXED,
+      .v_type = VAR_STRING,
+      .vval = {
+        .v_string = (char[]) {
+          (char)(mod_mask & MOD_MASK_SHIFT ? 's' : ' '),
+          (char)(mod_mask & MOD_MASK_CTRL ? 'c' : ' '),
+          (char)(mod_mask & MOD_MASK_ALT ? 'a' : ' '),
+          (char)(mod_mask & MOD_MASK_META ? 'm' : ' '),
+          NUL
+        }
+      },
+    }
+  };
+  typval_T rettv;
+  (void)call_vim_function(click_defs[col].func, ARRAY_SIZE(argv), argv, &rettv);
+  tv_clear(&rettv);
 }
 
 /// Do the appropriate action for the current mouse click in the current mode.
@@ -1481,6 +1539,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
   int jump_flags = 0;           // flags for jump_to_mouse()
   pos_T start_visual;
   bool moved;                   // Has cursor moved?
+  bool in_winbar;               // mouse in window bar
   bool in_status_line;          // mouse in status line
   static bool in_tab_line = false;   // mouse clicked in tab line
   bool in_sep_line;             // mouse in vertical separator line
@@ -1545,7 +1604,6 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
       }
     }
   }
-
 
   // CTRL right mouse button does CTRL-T
   if (is_click && (mod_mask & MOD_MASK_CTRL) && which_button == MOUSE_RIGHT) {
@@ -1711,65 +1769,9 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
           }
         }
         break;
-      case kStlClickFuncRun: {
-        typval_T argv[] = {
-          {
-            .v_lock = VAR_FIXED,
-            .v_type = VAR_NUMBER,
-            .vval = {
-              .v_number = (varnumber_T)tab_page_click_defs[mouse_col].tabnr
-            },
-          },
-          {
-            .v_lock = VAR_FIXED,
-            .v_type = VAR_NUMBER,
-            .vval = {
-              .v_number = ((mod_mask & MOD_MASK_MULTI_CLICK) == MOD_MASK_4CLICK
-                           ? 4
-                           : ((mod_mask & MOD_MASK_MULTI_CLICK) == MOD_MASK_3CLICK
-                              ? 3
-                              : ((mod_mask & MOD_MASK_MULTI_CLICK) == MOD_MASK_2CLICK
-                                 ? 2
-                                 : 1)))
-            },
-          },
-          {
-            .v_lock = VAR_FIXED,
-            .v_type = VAR_STRING,
-            .vval = {
-              .v_string = (which_button == MOUSE_LEFT
-                           ? "l"
-                           : (which_button == MOUSE_RIGHT
-                              ? "r"
-                              : (which_button == MOUSE_MIDDLE
-                                 ? "m"
-                                 : "?")))
-            },
-          },
-          {
-            .v_lock = VAR_FIXED,
-            .v_type = VAR_STRING,
-            .vval = {
-              .v_string = (char[]) {
-                (char)(mod_mask & MOD_MASK_SHIFT ? 's' : ' '),
-                (char)(mod_mask & MOD_MASK_CTRL ? 'c' : ' '),
-                (char)(mod_mask & MOD_MASK_ALT ? 'a' : ' '),
-                (char)(mod_mask & MOD_MASK_META ? 'm' : ' '),
-                NUL
-              }
-            },
-          }
-        };
-        typval_T rettv;
-        funcexe_T funcexe = FUNCEXE_INIT;
-        funcexe.firstline = curwin->w_cursor.lnum;
-        funcexe.lastline = curwin->w_cursor.lnum;
-        funcexe.evaluate = true;
-        (void)call_func(tab_page_click_defs[mouse_col].func, -1,
-                        &rettv, ARRAY_SIZE(argv), argv, &funcexe);
-        tv_clear(&rettv);
+      case kStlClickFuncRun:
+        call_click_def_func(tab_page_click_defs, mouse_col, which_button);
         break;
-      }
       }
     }
     return true;
@@ -1777,7 +1779,6 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
     move_tab_to_mouse();
     return false;
   }
-
 
   // When 'mousemodel' is "popup" or "popup_setpos", translate mouse events:
   // right button up   -> pop-up menu
@@ -1840,15 +1841,42 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
                              oap == NULL ? NULL : &(oap->inclusive),
                              which_button);
 
-  // A click in the window bar has no side effects.
-  if (jump_flags & MOUSE_WINBAR) {
-    return false;
-  }
-
   moved = (jump_flags & CURSOR_MOVED);
+  in_winbar = (jump_flags & MOUSE_WINBAR);
   in_status_line = (jump_flags & IN_STATUS_LINE);
   in_sep_line = (jump_flags & IN_SEP_LINE);
 
+  if ((in_winbar || in_status_line) && is_click) {
+    // Handle click event on window bar or status lin
+    int click_grid = mouse_grid;
+    int click_row = mouse_row;
+    int click_col = mouse_col;
+    win_T *wp = mouse_find_win(&click_grid, &click_row, &click_col);
+    if (wp == NULL) {
+      return false;
+    }
+
+    StlClickDefinition *click_defs = in_status_line ? wp->w_status_click_defs
+                                                    : wp->w_winbar_click_defs;
+
+    if (click_defs != NULL) {
+      switch (click_defs[click_col].type) {
+      case kStlClickDisabled:
+        break;
+      case kStlClickFuncRun:
+        call_click_def_func(click_defs, click_col, which_button);
+        break;
+      default:
+        assert(false && "winbar and statusline only support %@ for clicks");
+        break;
+      }
+    }
+
+    return false;
+  } else if (in_winbar) {
+    // A drag or release event in the window bar has no side effects.
+    return false;
+  }
 
   // When jumping to another window, clear a pending operator.  That's a bit
   // friendlier than beeping and not jumping to that window.
@@ -1871,7 +1899,6 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
       curwin->w_cursor = save_cursor;
     }
   }
-
 
   // Set global flag that we are extending the Visual area with mouse dragging;
   // temporarily minimize 'scrolloff'.
@@ -2245,12 +2272,14 @@ void restore_visual_mode(void)
   }
 }
 
-// Check for a balloon-eval special item to include when searching for an
-// identifier.  When "dir" is BACKWARD "ptr[-1]" must be valid!
-// Returns true if the character at "*ptr" should be included.
-// "dir" is FORWARD or BACKWARD, the direction of searching.
-// "*colp" is in/decremented if "ptr[-dir]" should also be included.
-// "bnp" points to a counter for square brackets.
+/// Check for a balloon-eval special item to include when searching for an
+/// identifier.  When "dir" is BACKWARD "ptr[-1]" must be valid!
+///
+/// @return  true if the character at "*ptr" should be included.
+///
+/// @param dir    the direction of searching, is either FORWARD or BACKWARD
+/// @param *colp  is in/decremented if "ptr[-dir]" should also be included.
+/// @param bnp    points to a counter for square brackets.
 static bool find_is_eval_item(const char_u *const ptr, int *const colp, int *const bnp,
                               const int dir)
 {
@@ -2279,25 +2308,26 @@ static bool find_is_eval_item(const char_u *const ptr, int *const colp, int *con
   return false;
 }
 
-// Find the identifier under or to the right of the cursor.
-// "find_type" can have one of three values:
-// FIND_IDENT:   find an identifier (keyword)
-// FIND_STRING:  find any non-white text
-// FIND_IDENT + FIND_STRING: find any non-white text, identifier preferred.
-// FIND_EVAL:  find text useful for C program debugging
-//
-// There are three steps:
-// 1. Search forward for the start of an identifier/text.  Doesn't move if
-//    already on one.
-// 2. Search backward for the start of this identifier/text.
-//    This doesn't match the real Vi but I like it a little better and it
-//    shouldn't bother anyone.
-// 3. Search forward to the end of this identifier/text.
-//    When FIND_IDENT isn't defined, we backup until a blank.
-//
-// Returns the length of the text, or zero if no text is found.
-// If text is found, a pointer to the text is put in "*text".  This
-// points into the current buffer line and is not always NUL terminated.
+/// Find the identifier under or to the right of the cursor.
+/// "find_type" can have one of three values:
+/// FIND_IDENT:   find an identifier (keyword)
+/// FIND_STRING:  find any non-white text
+/// FIND_IDENT + FIND_STRING: find any non-white text, identifier preferred.
+/// FIND_EVAL:  find text useful for C program debugging
+///
+/// There are three steps:
+/// 1. Search forward for the start of an identifier/text.  Doesn't move if
+///    already on one.
+/// 2. Search backward for the start of this identifier/text.
+///    This doesn't match the real Vi but I like it a little better and it
+///    shouldn't bother anyone.
+/// 3. Search forward to the end of this identifier/text.
+///    When FIND_IDENT isn't defined, we backup until a blank.
+///
+/// @return  the length of the text, or zero if no text is found.
+///
+/// If text is found, a pointer to the text is put in "*text".  This
+/// points into the current buffer line and is not always NUL terminated.
 size_t find_ident_under_cursor(char_u **text, int find_type)
   FUNC_ATTR_NONNULL_ARG(1)
 {
@@ -2525,7 +2555,6 @@ static char_u showcmd_buf[SHOWCMD_BUFLEN];
 static char_u old_showcmd_buf[SHOWCMD_BUFLEN];    // For push_showcmd()
 static bool showcmd_is_clear = true;
 static bool showcmd_visual = false;
-
 
 void clear_showcmd(void)
 {
@@ -3786,7 +3815,6 @@ dozet:
     }
     break;
 
-
   case 'u':     // "zug" and "zuw": undo "zg" and "zw"
     no_mapping++;
     allow_keys++;               // no mapping for nchar, but allow key codes
@@ -3872,7 +3900,6 @@ dozet:
     newFoldLevel();
   }
 }
-
 
 /// "Q" command.
 static void nv_regreplay(cmdarg_T *cap)
@@ -3992,8 +4019,8 @@ static void nv_ctrlo(cmdarg_T *cap)
   }
 }
 
-// CTRL-^ command, short for ":e #".  Works even when the alternate buffer is
-// not named.
+/// CTRL-^ command, short for ":e #".  Works even when the alternate buffer is
+/// not named.
 static void nv_hat(cmdarg_T *cap)
 {
   if (!checkclearopq(cap->oap)) {
@@ -4799,6 +4826,8 @@ static void nv_brackets(cmdarg_T *cap)
     if ((len = find_ident_under_cursor(&ptr, FIND_IDENT)) == 0) {
       clearop(cap->oap);
     } else {
+      // Make a copy, if the line was changed it will be freed.
+      ptr = vim_strnsave(ptr, len);
       find_pattern_in_path(ptr, 0, len, true,
                            cap->count0 == 0 ? !isupper(cap->nchar) : false,
                            (((cap->nchar & 0xf) == ('d' & 0xf))
@@ -4812,6 +4841,7 @@ static void nv_brackets(cmdarg_T *cap)
                             ? curwin->w_cursor.lnum + 1
                             : (linenr_T)1),
                            MAXLNUM);
+      xfree(ptr);
       curwin->w_set_curswant = true;
     }
   } else if ((cap->cmdchar == '[' && vim_strchr("{(*/#mM", cap->nchar) != NULL)
@@ -5418,7 +5448,6 @@ static void n_swapchar(cmdarg_T *cap)
     }
   }
 
-
   check_cursor();
   curwin->w_set_curswant = true;
   if (did_change) {
@@ -5774,7 +5803,6 @@ static void n_start_visual_mode(int c)
     curwin->w_old_visual_lnum = curwin->w_cursor.lnum;
   }
 }
-
 
 /// CTRL-W: Window commands
 static void nv_window(cmdarg_T *cap)
@@ -6348,7 +6376,7 @@ static void nv_dot(cmdarg_T *cap)
   }
 }
 
-// CTRL-R: undo undo or specify register in select mode
+/// CTRL-R: undo undo or specify register in select mode
 static void nv_redo_or_register(cmdarg_T *cap)
 {
   if (VIsual_select && VIsual_active) {
@@ -6665,7 +6693,6 @@ static void nv_select(cmdarg_T *cap)
   }
 }
 
-
 /// "G", "gg", CTRL-END, CTRL-HOME.
 /// cap->arg is true for "G".
 static void nv_goto(cmdarg_T *cap)
@@ -6769,7 +6796,7 @@ static void nv_esc(cmdarg_T *cap)
   clearop(cap->oap);
 }
 
-// Move the cursor for the "A" command.
+/// Move the cursor for the "A" command.
 void set_cursor_for_append_to_line(void)
 {
   curwin->w_set_curswant = true;
@@ -7032,8 +7059,9 @@ static void nv_put(cmdarg_T *cap)
   nv_put_opt(cap, false);
 }
 
-// "P", "gP", "p" and "gp" commands.
-// "fix_indent" is true for "[p", "[P", "]p" and "]P".
+/// "P", "gP", "p" and "gp" commands.
+///
+/// @param fix_indent  true for "[p", "[P", "]p" and "]P".
 static void nv_put_opt(cmdarg_T *cap, bool fix_indent)
 {
   int regname = 0;
@@ -7183,7 +7211,7 @@ static void nv_open(cmdarg_T *cap)
   }
 }
 
-// Handle an arbitrary event in normal mode
+/// Handle an arbitrary event in normal mode
 static void nv_event(cmdarg_T *cap)
 {
   // Garbage collection should have been executed before blocking for events in
@@ -7206,7 +7234,7 @@ static void nv_event(cmdarg_T *cap)
   }
 }
 
-/// @return true when 'mousemodel' is set to "popup" or "popup_setpos".
+/// @return  true when 'mousemodel' is set to "popup" or "popup_setpos".
 static bool mouse_model_popup(void)
 {
   return p_mousem[0] == 'p';

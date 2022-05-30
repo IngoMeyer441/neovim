@@ -40,6 +40,7 @@
 #include "nvim/undo.h"
 #include "nvim/version.h"
 #include "nvim/vim.h"
+#include "nvim/window.h"
 
 static int in_fast_callback = 0;
 
@@ -135,7 +136,6 @@ static int nlua_pcall(lua_State *lstate, int nargs, int nresults)
   return status;
 }
 
-
 /// Gets the version of the current Nvim build.
 ///
 /// @param  lstate  Lua interpreter state.
@@ -146,7 +146,6 @@ static int nlua_nvim_version(lua_State *const lstate) FUNC_ATTR_NONNULL_ALL
   api_free_dictionary(version);
   return 1;
 }
-
 
 static void nlua_luv_error_event(void **argv)
 {
@@ -916,12 +915,22 @@ int nlua_in_fast_event(lua_State *lstate)
   return 1;
 }
 
+static bool viml_func_is_fast(const char *name)
+{
+  const EvalFuncDef *const fdef = find_internal_func((const char *)name);
+  if (fdef) {
+    return fdef->fast;
+  }
+  // Not a vimL function
+  return false;
+}
+
 int nlua_call(lua_State *lstate)
 {
   Error err = ERROR_INIT;
   size_t name_len;
   const char *name = luaL_checklstring(lstate, 1, &name_len);
-  if (!nlua_is_deferred_safe()) {
+  if (!nlua_is_deferred_safe() && !viml_func_is_fast(name)) {
     return luaL_error(lstate, e_luv_api_disabled, "vimL function");
   }
 
@@ -1041,7 +1050,6 @@ static int nlua_empty_dict_tostring(lua_State *lstate)
   return 1;
 }
 
-
 #ifdef WIN32
 /// os.getenv: override os.getenv to maintain coherency. #9681
 ///
@@ -1054,7 +1062,6 @@ static int nlua_getenv(lua_State *lstate)
   return 1;
 }
 #endif
-
 
 /// add the value to the registry
 /// The current implementation does not support calls from threads.
@@ -1073,7 +1080,6 @@ LuaRef nlua_ref(lua_State *lstate, nlua_ref_state_t *ref_state, int index)
   }
   return ref;
 }
-
 
 LuaRef nlua_ref_global(lua_State *lstate, int index)
 {
@@ -1100,7 +1106,6 @@ void nlua_unref_global(lua_State *lstate, LuaRef ref)
   nlua_unref(lstate, nlua_global_refs, ref);
 }
 
-
 void api_free_luaref(LuaRef ref)
 {
   nlua_unref_global(global_lstate, ref);
@@ -1111,7 +1116,6 @@ void nlua_pushref(lua_State *lstate, LuaRef ref)
 {
   lua_rawgeti(lstate, LUA_REGISTRYINDEX, ref);
 }
-
 
 /// Gets a new reference to an object stored at original_ref
 ///
@@ -1129,7 +1133,6 @@ LuaRef api_new_luaref(LuaRef original_ref)
   lua_pop(lstate, 1);
   return new_ref;
 }
-
 
 /// Evaluate lua string
 ///
@@ -1744,7 +1747,6 @@ char_u *nlua_register_table_as_callable(typval_T *const arg)
   char_u *name = register_cfunc(&nlua_CFunction_func_call,
                                 &nlua_CFunction_func_free, state);
 
-
   lua_pop(lstate, 1);  // []
   assert(top == lua_gettop(lstate));
 
@@ -1911,6 +1913,61 @@ void nlua_do_ucmd(ucmd_T *cmd, exarg_T *eap)
   (void)uc_mods(buf);
   lua_pushstring(lstate, buf);
   lua_setfield(lstate, -2, "mods");
+
+  lua_newtable(lstate);  // smods table
+
+  lua_pushinteger(lstate, cmdmod.tab);
+  lua_setfield(lstate, -2, "tab");
+  lua_pushinteger(lstate, p_verbose);
+  lua_setfield(lstate, -2, "verbose");
+
+  if (cmdmod.split & WSP_ABOVE) {
+    lua_pushstring(lstate, "aboveleft");
+  } else if (cmdmod.split & WSP_BELOW) {
+    lua_pushstring(lstate, "belowright");
+  } else if (cmdmod.split & WSP_TOP) {
+    lua_pushstring(lstate, "topleft");
+  } else if (cmdmod.split & WSP_BOT) {
+    lua_pushstring(lstate, "botright");
+  } else {
+    lua_pushstring(lstate, "");
+  }
+  lua_setfield(lstate, -2, "split");
+
+  lua_pushboolean(lstate, cmdmod.split & WSP_VERT);
+  lua_setfield(lstate, -2, "vertical");
+  lua_pushboolean(lstate, msg_silent != 0);
+  lua_setfield(lstate, -2, "silent");
+  lua_pushboolean(lstate, emsg_silent != 0);
+  lua_setfield(lstate, -2, "emsg_silent");
+  lua_pushboolean(lstate, eap->did_sandbox);
+  lua_setfield(lstate, -2, "sandbox");
+  lua_pushboolean(lstate, cmdmod.save_ei != NULL);
+  lua_setfield(lstate, -2, "noautocmd");
+
+  typedef struct {
+    bool *set;
+    char *name;
+  } mod_entry_T;
+  static mod_entry_T mod_entries[] = {
+    { &cmdmod.browse, "browse" },
+    { &cmdmod.confirm, "confirm" },
+    { &cmdmod.hide, "hide" },
+    { &cmdmod.keepalt, "keepalt" },
+    { &cmdmod.keepjumps, "keepjumps" },
+    { &cmdmod.keepmarks, "keepmarks" },
+    { &cmdmod.keeppatterns, "keeppatterns" },
+    { &cmdmod.lockmarks, "lockmarks" },
+    { &cmdmod.noswapfile, "noswapfile" }
+  };
+
+  // The modifiers that are simple flags
+  for (size_t i = 0; i < ARRAY_SIZE(mod_entries); i++) {
+    lua_pushboolean(lstate, *mod_entries[i].set);
+    lua_setfield(lstate, -2, mod_entries[i].name);
+  }
+
+  lua_setfield(lstate, -2, "smods");
 
   if (nlua_pcall(lstate, 1, 0)) {
     nlua_error(lstate, _("Error executing Lua callback: %.*s"));

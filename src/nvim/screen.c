@@ -88,6 +88,7 @@
 #include "nvim/fold.h"
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
+#include "nvim/grid_defs.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
@@ -158,7 +159,6 @@ typedef struct {
   int win_col;
 } WinExtmark;
 static kvec_t(WinExtmark) win_extmark_arr INIT(= KV_INITIAL_VALUE);
-
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "screen.c.generated.h"
@@ -276,21 +276,12 @@ void redrawWinline(win_T *wp, linenr_T lnum)
 void redraw_buf_status_later(buf_T *buf)
 {
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if (wp->w_buffer != buf) {
-      continue;
-    }
-    bool redraw = false;
-
-    if (wp->w_status_height || (wp == curwin && global_stl_height())) {
+    if (wp->w_buffer == buf && (wp->w_status_height || (wp == curwin && global_stl_height())
+                                || wp->w_winbar_height)) {
       wp->w_redr_status = true;
-      redraw = true;
-    }
-    if (wp->w_winbar_height) {
-      wp->w_redr_winbar = true;
-      redraw = true;
-    }
-    if (redraw && must_redraw < VALID) {
-      must_redraw = VALID;
+      if (must_redraw < VALID) {
+        must_redraw = VALID;
+      }
     }
   }
 }
@@ -396,9 +387,6 @@ int update_screen(int type)
           if (wp->w_floating) {
             continue;
           }
-          if (wp->w_winrow + wp->w_winbar_height > valid) {
-            wp->w_redr_winbar = true;
-          }
           if (W_ENDROW(wp) > valid) {
             wp->w_redr_type = MAX(wp->w_redr_type, NOT_VALID);
           }
@@ -431,9 +419,6 @@ int update_screen(int type)
           } else {
             wp->w_redr_type = NOT_VALID;
             if (wp->w_winrow + wp->w_winbar_height <= msg_scrolled) {
-              wp->w_redr_winbar = true;
-            }
-            if (!is_stl_global && W_ENDROW(wp) + wp->w_status_height <= msg_scrolled) {
               wp->w_redr_status = true;
             }
           }
@@ -565,7 +550,6 @@ int update_screen(int type)
   bool did_one = false;
   search_hl.rm.regprog = NULL;
 
-
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     if (wp->w_redr_type == CLEAR && wp->w_floating && wp->w_grid_alloc.chars) {
       grid_invalidate(&wp->w_grid_alloc);
@@ -589,10 +573,8 @@ int update_screen(int type)
 
     // redraw status line and window bar after the window to minimize cursor movement
     if (wp->w_redr_status) {
-      win_redr_status(wp);
-    }
-    if (wp->w_redr_winbar) {
       win_redr_winbar(wp);
+      win_redr_status(wp);
     }
   }
 
@@ -625,7 +607,6 @@ int update_screen(int type)
 
   decor_providers_invoke_end(&providers, &provider_err);
   kvi_destroy(providers);
-
 
   // either cmdline is cleared, not drawn or mode is last drawn
   cmdline_was_last_drawn = false;
@@ -746,7 +727,6 @@ static void win_update(win_T *wp, DecorProviders *providers)
 
   if (type >= NOT_VALID) {
     wp->w_redr_status = true;
-    wp->w_redr_winbar = true;
     wp->w_lines_valid = 0;
   }
 
@@ -1738,7 +1718,6 @@ static void win_update(win_T *wp, DecorProviders *providers)
     }
   }
 
-
   // restore got_int, unless CTRL-C was hit while redrawing
   if (!got_int) {
     got_int = save_got_int;
@@ -1823,7 +1802,6 @@ static void win_draw_end(win_T *wp, int c1, int c2, bool draw_margin, int row, i
   set_empty_rows(wp, row);
 }
 
-
 /// Advance **color_cols
 ///
 /// @return  true when there are columns to draw.
@@ -1905,7 +1883,6 @@ done:
   s->p += c_len;
   return cells;
 }
-
 
 /// Fills the foldcolumn at "p" for window "wp".
 /// Only to be called when 'foldcolumn' > 0.
@@ -4130,7 +4107,6 @@ static int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool noc
           n_attr = 0;
         }
 
-
         if (utf_char2cells(mb_c) > 1) {
           // Need to fill two screen columns.
           if (wp->w_p_rl) {
@@ -4515,7 +4491,6 @@ static void get_sign_display_info(bool nrcol, win_T *wp, linenr_T lnum, sign_att
   }
 }
 
-
 /*
  * Mirror text "str" for right-left displaying.
  * Only works for single-byte characters (e.g., numbers).
@@ -4538,17 +4513,9 @@ void status_redraw_all(void)
   bool is_stl_global = global_stl_height() != 0;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    bool redraw = false;
-
-    if ((!is_stl_global && wp->w_status_height) || (is_stl_global && wp == curwin)) {
+    if ((!is_stl_global && wp->w_status_height) || (is_stl_global && wp == curwin)
+        || wp->w_winbar_height) {
       wp->w_redr_status = true;
-      redraw = true;
-    }
-    if (wp->w_winbar_height) {
-      wp->w_redr_winbar = true;
-      redraw = true;
-    }
-    if (redraw) {
       redraw_later(wp, VALID);
     }
   }
@@ -4566,20 +4533,9 @@ void status_redraw_buf(buf_T *buf)
   bool is_stl_global = global_stl_height() != 0;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if (wp->w_buffer != buf) {
-      continue;
-    }
-    bool redraw = false;
-
-    if ((!is_stl_global && wp->w_status_height) || (is_stl_global && wp == curwin)) {
+    if (wp->w_buffer == buf && ((!is_stl_global && wp->w_status_height)
+                                || (is_stl_global && wp == curwin) || wp->w_winbar_height)) {
       wp->w_redr_status = true;
-      redraw = true;
-    }
-    if (wp->w_winbar_height) {
-      wp->w_redr_winbar = true;
-      redraw = true;
-    }
-    if (redraw) {
       redraw_later(wp, VALID);
     }
   }
@@ -4592,10 +4548,8 @@ void redraw_statuslines(void)
 {
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     if (wp->w_redr_status) {
-      win_redr_status(wp);
-    }
-    if (wp->w_redr_winbar) {
       win_redr_winbar(wp);
+      win_redr_status(wp);
     }
   }
   if (redraw_tabline) {
@@ -5119,12 +5073,8 @@ static void win_redr_winbar(win_T *wp)
   }
   entered = true;
 
-  wp->w_redr_winbar = false;
-  if (wp->w_winbar_height == 0) {
-    // No window bar, do nothing.
-  } else if (!redrawing()) {
-    // Don't redraw right now, do it later.
-    wp->w_redr_winbar = true;
+  if (wp->w_winbar_height == 0 || !redrawing()) {
+    // Do nothing.
   } else if (*p_wbr != NUL || *wp->w_p_wbr != NUL) {
     int saved_did_emsg = did_emsg;
 
@@ -5337,10 +5287,26 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
     attr = (wp == curwin) ? HL_ATTR(HLF_WBR) : HL_ATTR(HLF_WBRNC);
     maxwidth = wp->w_width_inner;
     use_sandbox = was_set_insecurely(wp, "winbar", 0);
+
+    stl_clear_click_defs(wp->w_winbar_click_defs, wp->w_winbar_click_defs_size);
+    // Allocate / resize the click definitions array for winbar if needed.
+    if (wp->w_winbar_height && wp->w_winbar_click_defs_size < (size_t)maxwidth) {
+      xfree(wp->w_winbar_click_defs);
+      wp->w_winbar_click_defs_size = (size_t)maxwidth;
+      wp->w_winbar_click_defs = xcalloc(wp->w_winbar_click_defs_size, sizeof(StlClickRecord));
+    }
   } else {
     row = is_stl_global ? (Rows - p_ch - 1) : W_ENDROW(wp);
     fillchar = fillchar_status(&attr, wp);
     maxwidth = is_stl_global ? Columns : wp->w_width;
+
+    stl_clear_click_defs(wp->w_status_click_defs, wp->w_status_click_defs_size);
+    // Allocate / resize the click definitions array for statusline if needed.
+    if (wp->w_status_click_defs_size < (size_t)maxwidth) {
+      xfree(wp->w_status_click_defs);
+      wp->w_status_click_defs_size = maxwidth;
+      wp->w_status_click_defs = xcalloc(wp->w_status_click_defs_size, sizeof(StlClickRecord));
+    }
 
     if (draw_ruler) {
       stl = p_ruf;
@@ -5445,25 +5411,37 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
 
   grid_puts_line_flush(false);
 
-  if (wp == NULL) {
-    // Fill the tab_page_click_defs array for clicking in the tab pages line.
-    col = 0;
-    len = 0;
-    p = buf;
-    StlClickDefinition cur_click_def = {
-      .type = kStlClickDisabled,
-    };
-    for (n = 0; tabtab[n].start != NULL; n++) {
-      len += vim_strnsize(p, (int)(tabtab[n].start - (char *)p));
-      while (col < len) {
-        tab_page_click_defs[col++] = cur_click_def;
-      }
-      p = (char_u *)tabtab[n].start;
-      cur_click_def = tabtab[n].def;
+  // Fill the tab_page_click_defs, w_status_click_defs or w_winbar_click_defs array for clicking
+  // in the tab page line, status line or window bar
+  StlClickDefinition *click_defs = (wp == NULL) ? tab_page_click_defs
+                                                : draw_winbar ? wp->w_winbar_click_defs
+                                                              : wp->w_status_click_defs;
+
+  if (click_defs == NULL) {
+    goto theend;
+  }
+
+  col = 0;
+  len = 0;
+  p = buf;
+  StlClickDefinition cur_click_def = {
+    .type = kStlClickDisabled,
+  };
+  for (n = 0; tabtab[n].start != NULL; n++) {
+    len += vim_strnsize(p, (int)(tabtab[n].start - (char *)p));
+    while (col < len) {
+      click_defs[col++] = cur_click_def;
     }
-    while (col < Columns) {
-      tab_page_click_defs[col++] = cur_click_def;
+    p = (char_u *)tabtab[n].start;
+    cur_click_def = tabtab[n].def;
+    if ((wp != NULL) && !(cur_click_def.type == kStlClickDisabled
+                          || cur_click_def.type == kStlClickFuncRun)) {
+      // window bar and status line only support click functions
+      cur_click_def.type = kStlClickDisabled;
     }
+  }
+  while (col < maxwidth) {
+    click_defs[col++] = cur_click_def;
   }
 
 theend:
@@ -5481,7 +5459,6 @@ static void win_redr_border(win_T *wp)
 
   schar_T *chars = wp->w_float_config.border_chars;
   int *attrs = wp->w_float_config.border_attr;
-
 
   int *adj = wp->w_border_adj;
   int irow = wp->w_height_inner, icol = wp->w_width_inner;
@@ -5530,7 +5507,6 @@ static void win_redr_border(win_T *wp)
   }
 }
 
-
 /*
  * Prepare for 'hlsearch' highlighting.
  */
@@ -5555,7 +5531,6 @@ static void end_search_hl(void)
   }
 }
 
-
 /// Check if there should be a delay.  Used before clearing or redrawing the
 /// screen or the command line.
 void check_for_delay(bool check_msg_scroll)
@@ -5571,7 +5546,6 @@ void check_for_delay(bool check_msg_scroll)
     }
   }
 }
-
 
 /// Resize the screen to Rows and Columns.
 ///
@@ -5641,7 +5615,7 @@ retry:
   StlClickDefinition *new_tab_page_click_defs =
     xcalloc((size_t)Columns, sizeof(*new_tab_page_click_defs));
 
-  clear_tab_page_click_defs(tab_page_click_defs, tab_page_click_defs_size);
+  stl_clear_click_defs(tab_page_click_defs, tab_page_click_defs_size);
   xfree(tab_page_click_defs);
 
   tab_page_click_defs = new_tab_page_click_defs;
@@ -5672,19 +5646,19 @@ retry:
   resizing = false;
 }
 
-/// Clear tab_page_click_defs table
+/// Clear status line, window bar or tab page line click definition table
 ///
 /// @param[out]  tpcd  Table to clear.
 /// @param[in]  tpcd_size  Size of the table.
-void clear_tab_page_click_defs(StlClickDefinition *const tpcd, const long tpcd_size)
+void stl_clear_click_defs(StlClickDefinition *const click_defs, const long click_defs_size)
 {
-  if (tpcd != NULL) {
-    for (long i = 0; i < tpcd_size; i++) {
-      if (i == 0 || tpcd[i].func != tpcd[i - 1].func) {
-        xfree(tpcd[i].func);
+  if (click_defs != NULL) {
+    for (long i = 0; i < click_defs_size; i++) {
+      if (i == 0 || click_defs[i].func != click_defs[i - 1].func) {
+        xfree(click_defs[i].func);
       }
     }
-    memset(tpcd, 0, (size_t)tpcd_size * sizeof(tpcd[0]));
+    memset(click_defs, 0, (size_t)click_defs_size * sizeof(click_defs[0]));
   }
 }
 
@@ -5809,7 +5783,6 @@ void win_scroll_lines(win_T *wp, int row, int line_count)
  * screen changes, and in the meantime, everything still works.
  */
 
-
 /// insert lines on the screen and move the existing lines down
 /// 'line_count' is the number of lines to be inserted.
 /// 'end' is the line after the scrolled part. Normally it is Rows.
@@ -5910,7 +5883,6 @@ void grid_del_lines(ScreenGrid *grid, int row, int line_count, int end, int col,
     ui_call_grid_scroll(grid->handle, row, end, col, col + width, line_count, 0);
   }
 }
-
 
 // Show the current mode and ruler.
 //
@@ -6197,10 +6169,9 @@ void draw_tabline(void)
     return;
   }
 
-
   // Init TabPageIdxs[] to zero: Clicking outside of tabs has no effect.
   assert(Columns == tab_page_click_defs_size);
-  clear_tab_page_click_defs(tab_page_click_defs, tab_page_click_defs_size);
+  stl_clear_click_defs(tab_page_click_defs, tab_page_click_defs_size);
 
   // Use the 'tabline' option if it's set.
   if (*p_tal != NUL) {
@@ -6246,7 +6217,6 @@ void draw_tabline(void)
         wp = tp->tp_firstwin;
       }
 
-
       if (tp->tp_topframe == topframe) {
         attr = win_hl_attr(cwp, HLF_TPS);
       }
@@ -6267,7 +6237,6 @@ void draw_tabline(void)
           modified = true;
         }
       }
-
 
       if (modified || wincount > 1) {
         if (wincount > 1) {

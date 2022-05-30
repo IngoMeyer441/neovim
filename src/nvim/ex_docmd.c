@@ -115,7 +115,6 @@ struct loop_cookie {
   void *cookie;
 };
 
-
 // Struct to save a few things while debugging.  Used in do_cmdline() only.
 struct dbg_stuff {
   int trylevel;
@@ -624,7 +623,6 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
       next_cmdline = cmdline_copy;
     }
 
-
     // reset did_emsg for a function that is not aborted by an error
     if (did_emsg && !force_abort
         && getline_equal(fgetline, cookie, get_func_line)
@@ -1108,7 +1106,6 @@ static int current_tab_nr(tabpage_T *tab)
 #define LAST_WIN_NR current_win_nr(NULL)
 #define CURRENT_TAB_NR current_tab_nr(curtab)
 #define LAST_TAB_NR current_tab_nr(NULL)
-
 
 /// Figure out the address type for ":wincmd".
 static void get_wincmd_addr_type(char *arg, exarg_T *eap)
@@ -2754,6 +2751,8 @@ int parse_cmd_address(exarg_T *eap, char **errormsg, bool silent)
 {
   int address_count = 1;
   linenr_T lnum;
+  bool need_check_cursor = false;
+  int ret = FAIL;
 
   // Repeat for all ',' or ';' separated addresses.
   for (;;) {
@@ -2763,7 +2762,7 @@ int parse_cmd_address(exarg_T *eap, char **errormsg, bool silent)
     lnum = get_address(eap, &eap->cmd, eap->addr_type, eap->skip, silent,
                        eap->addr_count == 0, address_count++);
     if (eap->cmd == NULL) {  // error detected
-      return FAIL;
+      goto theend;
     }
     if (lnum == MAXLNUM) {
       if (*eap->cmd == '%') {  // '%' - all lines
@@ -2802,14 +2801,14 @@ int parse_cmd_address(exarg_T *eap, char **errormsg, bool silent)
             // there is no Vim command which uses '%' and
             // ADDR_WINDOWS or ADDR_TABS
             *errormsg = _(e_invrange);
-            return FAIL;
+            goto theend;
           }
           break;
         case ADDR_TABS_RELATIVE:
         case ADDR_UNSIGNED:
         case ADDR_QUICKFIX:
           *errormsg = _(e_invrange);
-          return FAIL;
+          goto theend;
         case ADDR_ARGUMENTS:
           if (ARGCOUNT == 0) {
             eap->line1 = eap->line2 = 0;
@@ -2834,19 +2833,19 @@ int parse_cmd_address(exarg_T *eap, char **errormsg, bool silent)
         // '*' - visual area
         if (eap->addr_type != ADDR_LINES) {
           *errormsg = _(e_invrange);
-          return FAIL;
+          goto theend;
         }
 
         eap->cmd++;
         if (!eap->skip) {
           pos_T *fp = getmark('<', false);
           if (check_mark(fp) == FAIL) {
-            return FAIL;
+            goto theend;
           }
           eap->line1 = fp->lnum;
           fp = getmark('>', false);
           if (check_mark(fp) == FAIL) {
-            return FAIL;
+            goto theend;
           }
           eap->line2 = fp->lnum;
           eap->addr_count++;
@@ -2860,11 +2859,14 @@ int parse_cmd_address(exarg_T *eap, char **errormsg, bool silent)
     if (*eap->cmd == ';') {
       if (!eap->skip) {
         curwin->w_cursor.lnum = eap->line2;
+
         // Don't leave the cursor on an illegal line or column, but do
         // accept zero as address, so 0;/PATTERN/ works correctly.
+        // Check the cursor position before returning.
         if (eap->line2 > 0) {
           check_cursor();
         }
+        need_check_cursor = true;
       }
     } else if (*eap->cmd != ',') {
       break;
@@ -2880,7 +2882,13 @@ int parse_cmd_address(exarg_T *eap, char **errormsg, bool silent)
       eap->addr_count = 0;
     }
   }
-  return OK;
+  ret = OK;
+
+theend:
+  if (need_check_cursor) {
+    check_cursor();
+  }
+  return ret;
 }
 
 /// Check for an Ex command with optional tail.
@@ -4675,7 +4683,6 @@ static void correct_range(exarg_T *eap)
   }
 }
 
-
 /// For a ":vimgrep" or ":vimgrepadd" command return a pointer past the
 /// pattern.  Otherwise return eap->arg.
 static char *skip_grep_pat(exarg_T *eap)
@@ -5634,7 +5641,6 @@ fail:
   NLUA_CLEAR_REF(compl_luaref);
   return FAIL;
 }
-
 
 static struct {
   cmd_addr_T expand;
@@ -6958,7 +6964,6 @@ static void ex_highlight(exarg_T *eap)
   do_highlight((const char *)eap->arg, eap->forceit, false);
 }
 
-
 /// Call this function if we thought we were going to exit, but we won't
 /// (because of an error).  May need to restore the terminal mode.
 void not_exiting(void)
@@ -7164,7 +7169,6 @@ void ex_win_close(int forceit, win_T *win, tabpage_T *tp)
       return;
     }
   }
-
 
   // free buffer when not hiding it or when it's a scratch buffer
   if (tp == NULL) {
@@ -7432,7 +7436,7 @@ static void ex_goto(exarg_T *eap)
 /// Clear an argument list: free all file names and reset it to zero entries.
 void alist_clear(alist_T *al)
 {
-#define FREE_AENTRY_FNAME(arg) xfree(arg->ae_fname)
+#define FREE_AENTRY_FNAME(arg) xfree((arg)->ae_fname)
   GA_DEEP_CLEAR(&al->al_ga, aentry_T, FREE_AENTRY_FNAME);
 }
 
@@ -7441,7 +7445,6 @@ void alist_init(alist_T *al)
 {
   ga_init(&al->al_ga, (int)sizeof(aentry_T), 5);
 }
-
 
 /// Remove a reference from an argument list.
 /// Ignored when the argument list is the global one.
@@ -7683,7 +7686,6 @@ void ex_splitview(exarg_T *eap)
     do_exedit(eap, old_curwin);
   }
 
-
 theend:
   xfree(fname);
 }
@@ -7800,7 +7802,6 @@ static void ex_tabs(exarg_T *eap)
     }
   }
 }
-
 
 /// ":mode":
 /// If no argument given, get the screen size and redraw.
@@ -8011,7 +8012,6 @@ static void ex_nogui(exarg_T *eap)
   eap->errmsg = N_("E25: Nvim does not have a built-in GUI");
 }
 
-
 static void ex_swapname(exarg_T *eap)
 {
   if (curbuf->b_ml.ml_mfp == NULL || curbuf->b_ml.ml_mfp->mf_fname == NULL) {
@@ -8054,7 +8054,6 @@ static void ex_syncbind(exarg_T *eap)
     topline = 1;
   }
 
-
   /*
    * Set all scrollbind windows to the same topline.
    */
@@ -8088,7 +8087,6 @@ static void ex_syncbind(exarg_T *eap)
     }
   }
 }
-
 
 static void ex_read(exarg_T *eap)
 {
@@ -9243,7 +9241,6 @@ static void ex_findpat(exarg_T *eap)
                          n, action, eap->line1, eap->line2);
   }
 }
-
 
 /// ":ptag", ":ptselect", ":ptjump", ":ptnext", etc.
 static void ex_ptag(exarg_T *eap)

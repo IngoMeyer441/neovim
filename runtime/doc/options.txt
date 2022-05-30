@@ -927,15 +927,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	backup would be made by renaming the original file crontab won't see
 	the newly created file).  Also see 'backupcopy' and |crontab|.
 
-						*'balloondelay'* *'bdlay'*
-'balloondelay' 'bdlay'	Removed.
-
-			*'ballooneval'* *'beval'* *'noballooneval'* *'nobeval'*
-'ballooneval' 'beval'	Removed.
-
-						*'balloonexpr'* *'bexpr'*
-'balloonexpr' 'bexpr'	Removed.
-
 						*'belloff'* *'bo'*
 'belloff' 'bo'		string	(default "all")
 			global
@@ -3928,12 +3919,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	set.  Note that this is not in milliseconds, like other options that
 	set a time.  This is to be compatible with Nvi.
 
-						*'maxcombine'* *'mco'*
-'maxcombine' 'mco'	Removed. |vim-differences|
-	Nvim always displays up to 6 combining characters.  You can still edit
-    text with more than 6 combining characters, you just can't see them.
-    Use |g8| or |ga|.  See |mbyte-combining|.
-
 						*'maxfuncdepth'* *'mfd'*
 'maxfuncdepth' 'mfd'	number	(default 100)
 			global
@@ -6009,7 +5994,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	      the label, e.g.: %3Xclose%X.  Use %999X for a "close current 
 	      tab" label.    Clicking this label with left mouse button closes 
 	      specified tab page.
-	@ N   For 'tabline': start of execute function label. Use %X or %T to 
+	@ N   Start of execute function label. Use %X or %T to 
 	      end the label, e.g.: %10@SwitchBuffer@foo.c%X.  Clicking this 
 	      label runs specified function: in the example when clicking once 
 	      using left mouse button on "foo.c" "SwitchBuffer(10, 1, 'l', 
@@ -6033,8 +6018,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	         is a bug that denotes that new mouse button recognition was 
 	         added without modifying code that reacts on mouse clicks on 
 	         this label.
-	      Note: to test whether your version of Neovim contains this 
-	            feature use `has('tablineat')`.
 	< -   Where to truncate line if too long.  Default is at the start.
 	      No width fields allowed.
 	= -   Separation point between alignment sections. Each section will
@@ -6572,9 +6555,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	NOTE: Use of special characters in 'titlestring' may cause the display
 	to be garbled (e.g., when it contains a CR or NL character).
 
-				     *'ttyfast'* *'tf'* *'nottyfast'* *'notf'*
-'ttyfast' 'tf'		Removed. |vim-differences|
-
 						*'undodir'* *'udir'* *E5003*
 'undodir' 'udir'	string	(default "$XDG_STATE_HOME/nvim/undo//")
 			global
@@ -7005,6 +6985,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	When changing something that is used in 'winbar' that does not trigger
 	it to be updated, use |:redrawstatus|.
+
+	Floating windows do not use the global value of 'winbar'. The
+	window-local value of 'winbar' must be set for a floating window to
+	have a window bar.
 
 	This option cannot be set in a modeline when 'modelineexpr' is off.
 

@@ -442,6 +442,9 @@ to disable various visual features such as the 'number' column.
 
 Currently, floating windows don't support some widgets like scrollbar.
 
+The output of |:mksession| does not include commands for restoring floating
+windows.
+
 Example: create a float with scratch buffer: >
 
     let buf = nvim_create_buf(v:false, v:true)
@@ -740,6 +743,9 @@ nvim_create_user_command({name}, {command}, {*opts})
                                  specified |<reg>|
                                • mods: (string) Command modifiers, if any
                                  |<mods>|
+                               • smods: (table) Command modifiers in a
+                                 structured format. Has the same structure as
+                                 the "mods" key of |nvim_parse_cmd()|.
                     {opts}     Optional command attributes. See
                                |command-attributes| for more details. To use
                                boolean attributes (such as |:command-bang| or
@@ -1671,12 +1677,18 @@ nvim_set_option_value({name}, {value}, {*opts})
                 global and local value are set unless otherwise specified with
                 {scope}.
 
+                Note the options {win} and {buf} cannot be used together.
+
                 Parameters: ~
                     {name}   Option name
                     {value}  New option value
                     {opts}   Optional parameters
                              • scope: One of 'global' or 'local'. Analogous to
                                |:setglobal| and |:setlocal|, respectively.
+                             • win: |window-ID|. Used for setting window local
+                               option.
+                             • buf: Buffer number. Used for setting buffer
+                               local option.
 
 nvim_set_var({name}, {value})                                 *nvim_set_var()*
                 Sets a global (g:) variable.

@@ -4,6 +4,8 @@ set -e
 set -u
 # Use privileged mode, which e.g. skips using CDPATH.
 set -p
+# https://www.shellcheck.net/wiki/SC2031
+shopt -s lastpipe
 
 # Ensure that the user has a bash that supports -A
 if [[ "${BASH_VERSINFO[0]}" -lt 4  ]]; then
@@ -243,6 +245,10 @@ preprocess_patch() {
   LC_ALL=C sed -e 's/\( [ab]\/src\/nvim\)\/keymap\.h/\1\/keycodes.h/g' \
     "$file" > "$file".tmp && mv "$file".tmp "$file"
 
+  # Rename terminal.txt to nvim_terminal_emulator.txt
+  LC_ALL=C sed -e 's/\( [ab]\/runtime\/doc\)\/terminal\.txt/\1\/nvim_terminal_emulator.txt/g' \
+    "$file" > "$file".tmp && mv "$file".tmp "$file"
+
   # Rename test_urls.vim to check_urls.vim
   LC_ALL=C sed -e 's@\( [ab]\)/runtime/doc/test\(_urls\.vim\)@\1/scripts/check\2@g' \
     "$file" > "$file".tmp && mv "$file".tmp "$file"
@@ -341,7 +347,7 @@ stage_patch() {
 
   See the wiki for more information:
     * https://github.com/neovim/neovim/wiki/Merging-patches-from-upstream-vim
-' "${vim_version}" "${BASENAME}" "${BASENAME}"
+' "${vim_version}" "${BASENAME}" "${BASENAME}" "${BASENAME}"
   return $ret
 }
 
