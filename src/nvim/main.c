@@ -121,7 +121,6 @@ void event_init(void)
   resize_events = multiqueue_new_child(main_loop.events);
 
   // early msgpack-rpc initialization
-  msgpack_rpc_init_method_table();
   msgpack_rpc_helpers_init();
   input_init();
   signal_init();
@@ -263,6 +262,8 @@ int main(int argc, char **argv)
   command_line_scan(&params);
 
   nlua_init();
+
+  TIME_MSG("init lua interpreter");
 
   if (embedded_mode) {
     const char *err;

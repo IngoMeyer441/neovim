@@ -116,6 +116,19 @@ function tests.basic_init()
   }
 end
 
+function tests.basic_init_did_change_configuration()
+  skeleton({
+    on_init = function(_)
+      return {
+        capabilities = {},
+      }
+    end,
+    body = function()
+      expect_notification('workspace/didChangeConfiguration', { settings = { dummy = 1 } })
+    end,
+  })
+end
+
 function tests.check_workspace_configuration()
   skeleton {
     on_init = function(_params)
@@ -743,6 +756,35 @@ function tests.code_action_with_resolve()
     end;
   }
 end
+
+function tests.code_action_server_side_command()
+  skeleton({
+    on_init = function()
+      return {
+        capabilities = {
+          codeActionProvider = {
+            resolveProvider = false,
+          },
+        },
+      }
+    end,
+    body = function()
+      notify('start')
+      local cmd = {
+        title = 'Command 1',
+        command = 'dummy1',
+      }
+      expect_request('textDocument/codeAction', function()
+        return nil, { cmd }
+      end)
+      expect_request('workspace/executeCommand', function()
+        return nil, cmd
+      end)
+      notify('shutdown')
+    end,
+  })
+end
+
 
 function tests.code_action_filter()
   skeleton {

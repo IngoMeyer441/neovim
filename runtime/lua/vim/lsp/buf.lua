@@ -408,13 +408,13 @@ function M.rename(new_name, options)
   local cword = vfn.expand('<cword>')
 
   ---@private
-  local function get_text_at_range(range)
+  local function get_text_at_range(range, offset_encoding)
     return vim.api.nvim_buf_get_text(
       bufnr,
       range.start.line,
-      range.start.character,
+      util._get_line_byte_from_position(bufnr, range.start, offset_encoding),
       range['end'].line,
-      range['end'].character,
+      util._get_line_byte_from_position(bufnr, range['end'], offset_encoding),
       {}
     )[1]
   end
@@ -461,9 +461,9 @@ function M.rename(new_name, options)
         if result.placeholder then
           prompt_opts.default = result.placeholder
         elseif result.start then
-          prompt_opts.default = get_text_at_range(result)
+          prompt_opts.default = get_text_at_range(result, client.offset_encoding)
         elseif result.range then
-          prompt_opts.default = get_text_at_range(result.range)
+          prompt_opts.default = get_text_at_range(result.range, client.offset_encoding)
         else
           prompt_opts.default = cword
         end
@@ -752,7 +752,14 @@ local function on_code_action_results(results, ctx, options)
         enriched_ctx.client_id = client.id
         fn(command, enriched_ctx)
       else
-        M.execute_command(command)
+        -- Not using command directly to exclude extra properties,
+        -- see https://github.com/python-lsp/python-lsp-server/issues/146
+        local params = {
+          command = command.command,
+          arguments = command.arguments,
+          workDoneToken = command.workDoneToken,
+        }
+        client.request('workspace/executeCommand', params, nil, ctx.bufnr)
       end
     end
   end

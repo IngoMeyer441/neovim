@@ -45,6 +45,7 @@
 #include "nvim/move.h"
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/msgpack_rpc/helpers.h"
+#include "nvim/msgpack_rpc/unpacker.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/os/input.h"
@@ -156,7 +157,6 @@ Dictionary nvim__get_hl_defs(Integer ns_id, Error *err)
 ///                - reverse: boolean
 ///                - nocombine: boolean
 ///                - link: name of another highlight group to link to, see |:hi-link|.
-///              Additionally, the following keys are recognized:
 ///                - default: Don't override existing definition |:hi-default|
 ///                - ctermfg: Sets foreground of cterm color |highlight-ctermfg|
 ///                - ctermbg: Sets background of cterm color |highlight-ctermbg|
@@ -480,7 +480,7 @@ Object nvim_notify(String msg, Integer log_level, Dictionary opts, Error *err)
 }
 
 /// Calculates the number of display cells occupied by `text`.
-/// <Tab> counts as one cell.
+/// Control characters including <Tab> count as one cell.
 ///
 /// @param text       Some text
 /// @param[out] err   Error details, if any
@@ -2188,6 +2188,12 @@ void nvim__screenshot(String path)
   ui_call_screenshot(path);
 }
 
+Object nvim__unpack(String str, Error *err)
+  FUNC_API_FAST
+{
+  return unpack(str.data, str.size, err);
+}
+
 /// Deletes an uppercase/file named mark. See |mark-motions|.
 ///
 /// @note fails with error if a lowercase or buffer local named mark is used.
@@ -2511,6 +2517,7 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
 ///                 - desc: (string) Used for listing the command when a Lua function is used for
 ///                                  {command}.
 ///                 - force: (boolean, default true) Override any previous definition.
+///                 - preview: (function) Preview callback for 'inccommand' |:command-preview|
 /// @param[out] err Error details, if any.
 void nvim_create_user_command(String name, Object command, Dict(user_command) *opts, Error *err)
   FUNC_API_SINCE(9)

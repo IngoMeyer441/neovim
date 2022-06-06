@@ -81,8 +81,8 @@ getkey:
       may_sync_undo();
     }
 
-#if MIN_LOG_LEVEL <= DEBUG_LOG_LEVEL
-    log_key(DEBUG_LOG_LEVEL, key);
+#if MIN_LOG_LEVEL <= LOGLVL_DBG
+    log_key(LOGLVL_DBG, key);
 #endif
 
     int execute_result = s->execute(s, key);
@@ -137,7 +137,7 @@ bool virtual_active(void)
          || ((cur_ve_flags & VE_INSERT) && (State & MODE_INSERT));
 }
 
-/// MODE_VISUAL, MODE_SELECTMODE and MODE_OP_PENDING State are never set, they are
+/// MODE_VISUAL, MODE_SELECT and MODE_OP_PENDING State are never set, they are
 /// equal to MODE_NORMAL State with a condition.  This function returns the real
 /// State.
 int get_real_state(void)
