@@ -31,6 +31,7 @@ describe('ui/ext_messages', function()
       [7] = {background = Screen.colors.Yellow},
       [8] = {foreground = Screen.colors.Red},
       [9] = {special = Screen.colors.Red, undercurl = true},
+      [10] = {foreground = Screen.colors.Brown};
     })
   end)
   after_each(function()
@@ -858,9 +859,53 @@ stack traceback:
       {1:~                        }|
       {1:~                        }|
     ]]}
-
   end)
 
+  it('supports nvim_echo messages with multiple attrs', function()
+    async_meths.echo({{'wow, ',"Search"}, {"such\n\nvery ", "ErrorMsg"}, {"color", "LineNr"}}, true, {})
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]], messages={
+      { content = { { "wow, ", 7 }, { "such\n\nvery ", 2 }, { "color", 10 } }, kind = "" }
+    }}
+
+    feed ':ls<cr>'
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]], messages={
+      { content = { { '\n  1 %a   "[No Name]"                    line 1' } }, kind = "echomsg" }
+    }}
+
+    feed ':messages<cr>'
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]], messages={
+      { content = { { "Press ENTER or type command to continue", 4 } }, kind = "return_prompt" }
+    }, msg_history={
+      { content = { { "wow, ", 7 }, { "such\n\nvery ", 2 }, { "color", 10 } }, kind = "echomsg" }
+    }}
+
+    feed '<cr>'
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]]}
+  end)
 end)
 
 describe('ui/builtin messages', function()
@@ -869,17 +914,19 @@ describe('ui/builtin messages', function()
     clear()
     screen = Screen.new(60, 7)
     screen:attach({rgb=true, ext_popupmenu=true})
-    screen:set_default_attr_ids({
-      [1] = {bold = true, foreground = Screen.colors.Blue1},
-      [2] = {foreground = Screen.colors.Grey100, background = Screen.colors.Red},
-      [3] = {bold = true, reverse = true},
-      [4] = {bold = true, foreground = Screen.colors.SeaGreen4},
-      [5] = {foreground = Screen.colors.Blue1},
-      [6] = {bold = true, foreground = Screen.colors.Magenta},
-      [7] = {background = Screen.colors.Grey20},
-      [8] = {reverse = true},
-      [9] = {background = Screen.colors.LightRed}
-    })
+    screen:set_default_attr_ids  {
+      [1] = {bold = true, foreground = Screen.colors.Blue1};
+      [2] = {foreground = Screen.colors.Grey100, background = Screen.colors.Red};
+      [3] = {bold = true, reverse = true};
+      [4] = {bold = true, foreground = Screen.colors.SeaGreen4};
+      [5] = {foreground = Screen.colors.Blue1};
+      [6] = {bold = true, foreground = Screen.colors.Magenta};
+      [7] = {background = Screen.colors.Grey20};
+      [8] = {reverse = true};
+      [9] = {background = Screen.colors.LightRed};
+      [10] = {background = Screen.colors.Yellow};
+      [11] = {foreground = Screen.colors.Brown};
+    }
   end)
 
   it('supports multiline messages from rpc', function()
@@ -1112,6 +1159,41 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
       {2:stack traceback:}                                            |
       {2:        [C]: in function 'error'}                            |
       {2:        [string ":lua"]:1: in main chunk}                    |
+      {4:Press ENTER or type command to continue}^                     |
+    ]]}
+  end)
+
+  it('supports nvim_echo messages with multiple attrs', function()
+    async_meths.echo({{'wow, ',"Search"}, {"such\n\nvery ", "ErrorMsg"}, {"color", "LineNr"}}, true, {})
+    screen:expect{grid=[[
+                                                                  |
+      {1:~                                                           }|
+      {3:                                                            }|
+      {10:wow, }{2:such}                                                   |
+                                                                  |
+      {2:very }{11:color}                                                  |
+      {4:Press ENTER or type command to continue}^                     |
+    ]]}
+
+    feed '<cr>'
+    screen:expect{grid=[[
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+                                                                  |
+    ]]}
+
+    feed ':messages<cr>'
+    screen:expect{grid=[[
+                                                                  |
+      {1:~                                                           }|
+      {3:                                                            }|
+      {10:wow, }{2:such}                                                   |
+                                                                  |
+      {2:very }{11:color}                                                  |
       {4:Press ENTER or type command to continue}^                     |
     ]]}
   end)
@@ -1403,7 +1485,7 @@ ullamco laboris nisi ut
 aliquip ex ea commodo consequat.]])
   end)
 
-  it('can be quit', function()
+  it('can be quit with echon', function()
     screen:try_resize(25,5)
     feed(':echon join(map(range(0, &lines*10), "v:val"), "\\n")<cr>')
     screen:expect{grid=[[
@@ -1421,6 +1503,45 @@ aliquip ex ea commodo consequat.]])
       {1:~                        }|
                                |
     ]]}
+  end)
+
+  it('can be quit with Lua #11224 #16537', function()
+    -- NOTE: adds "4" to message history, although not displayed initially
+    --       (triggered the more prompt).
+    screen:try_resize(40,5)
+    feed(':lua for i=0,10 do print(i) end<cr>')
+    screen:expect{grid=[[
+      0                                       |
+      1                                       |
+      2                                       |
+      3                                       |
+      {4:-- More --}^                              |
+    ]]}
+    feed('q')
+    screen:expect{grid=[[
+      ^                                        |
+      {1:~                                       }|
+      {1:~                                       }|
+      {1:~                                       }|
+                                              |
+    ]]}
+    feed(':mess<cr>')
+    screen:expect{grid=[[
+      0                                       |
+      1                                       |
+      2                                       |
+      3                                       |
+      {4:-- More --}^                              |
+    ]]}
+    feed('j')
+    screen:expect{grid=[[
+      1                                       |
+      2                                       |
+      3                                       |
+      4                                       |
+      {4:Press ENTER or type command to continue}^ |
+    ]]}
+    feed('<cr>')
   end)
 
   it('handles wrapped lines with line scroll', function()

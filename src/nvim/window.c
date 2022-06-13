@@ -5085,6 +5085,7 @@ static void win_free(win_T *wp, tabpage_T *tp)
   clear_winopt(&wp->w_allbuf_opt);
 
   xfree(wp->w_p_lcs_chars.multispace);
+  xfree(wp->w_p_lcs_chars.leadmultispace);
 
   vars_clear(&wp->w_vars->dv_hashtab);          // free all w: variables
   hash_init(&wp->w_vars->dv_hashtab);
@@ -7296,7 +7297,7 @@ void win_findbuf(typval_T *argvars, list_T *list)
   int bufnr = tv_get_number(&argvars[0]);
 
   FOR_ALL_TAB_WINDOWS(tp, wp) {
-    if (!wp->w_closing && wp->w_buffer->b_fnum == bufnr) {
+    if (wp->w_buffer->b_fnum == bufnr) {
       tv_list_append_number(list, wp->handle);
     }
   }

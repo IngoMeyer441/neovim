@@ -990,30 +990,16 @@ int ins_typebuf(char *str, int noremap, int offset, bool nottyped, bool silent)
 /// Can be used for a character obtained by vgetc() that needs to be put back.
 /// Uses cmd_silent, KeyTyped and KeyNoremap to restore the flags belonging to
 /// the char.
+///
 /// @return the length of what was inserted
-int ins_char_typebuf(int c, int modifier)
+int ins_char_typebuf(int c, int modifiers)
 {
   char_u buf[MB_MAXBYTES * 3 + 4];
-  int len = 0;
-  if (modifier != 0) {
-    buf[0] = K_SPECIAL;
-    buf[1] = KS_MODIFIER;
-    buf[2] = (char_u)modifier;
-    buf[3] = NUL;
-    len = 3;
-  }
-  if (IS_SPECIAL(c)) {
-    buf[len] = K_SPECIAL;
-    buf[len + 1] = (char_u)K_SECOND(c);
-    buf[len + 2] = (char_u)K_THIRD(c);
-    buf[len + 3] = NUL;
-  } else {
-    char_u *end = add_char2buf(c, buf + len);
-    *end = NUL;
-    len = (int)(end - buf);
-  }
+  unsigned int len = special_to_buf(c, modifiers, true, buf);
+  assert(len < sizeof(buf));
+  buf[len] = NUL;
   (void)ins_typebuf((char *)buf, KeyNoremap, 0, !KeyTyped, cmd_silent);
-  return len;
+  return (int)len;
 }
 
 /// Return TRUE if the typeahead buffer was changed (while waiting for a
@@ -2328,19 +2314,19 @@ static int vgetorpeek(bool advance)
       // try re-mapping.
       for (;;) {
         check_end_reg_executing(advance);
-        // os_breakcheck() can call input_enqueue()
-        if ((mapped_ctrl_c | curbuf->b_mapped_ctrl_c) & get_real_state()) {
-          ctrl_c_interrupts = false;
-        }
         // os_breakcheck() is slow, don't use it too often when
         // inside a mapping.  But call it each time for typed
         // characters.
         if (typebuf.tb_maplen) {
           line_breakcheck();
         } else {
+          // os_breakcheck() can call input_enqueue()
+          if ((mapped_ctrl_c | curbuf->b_mapped_ctrl_c) & get_real_state()) {
+            ctrl_c_interrupts = false;
+          }
           os_breakcheck();  // check for CTRL-C
+          ctrl_c_interrupts = true;
         }
-        ctrl_c_interrupts = true;
         int keylen = 0;
         if (got_int) {
           // flush all input
@@ -2585,8 +2571,8 @@ static int vgetorpeek(bool advance)
 
         // get a character: 3. from the user - get it
         if (typebuf.tb_len == 0) {
-          // timedout may have been set while waiting for a mapping
-          // that has a <Nop> RHS.
+          // timedout may have been set if a mapping with empty RHS
+          // fully matched while longer mappings timed out.
           timedout = false;
         }
 

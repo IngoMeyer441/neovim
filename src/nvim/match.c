@@ -116,7 +116,7 @@ static int match_add(win_T *wp, const char *const grp, const char *const pat, in
                 (int)tv_list_idx_of_item(pos_list, li));
           goto fail;
         }
-        lnum = tv_get_number_chk(TV_LIST_ITEM_TV(subli), &error);
+        lnum = (linenr_T)tv_get_number_chk(TV_LIST_ITEM_TV(subli), &error);
         if (error) {
           goto fail;
         }
@@ -150,7 +150,7 @@ static int match_add(win_T *wp, const char *const grp, const char *const pat, in
         if (TV_LIST_ITEM_TV(li)->vval.v_number <= 0) {
           continue;
         }
-        m->pos.pos[i].lnum = TV_LIST_ITEM_TV(li)->vval.v_number;
+        m->pos.pos[i].lnum = (linenr_T)TV_LIST_ITEM_TV(li)->vval.v_number;
         m->pos.pos[i].col = 0;
         m->pos.pos[i].len = 0;
       } else {
@@ -873,11 +873,11 @@ void f_getmatches(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   int i;
   win_T *win = get_optional_window(argvars, 0);
 
+  tv_list_alloc_ret(rettv, kListLenMayKnow);
   if (win == NULL) {
     return;
   }
 
-  tv_list_alloc_ret(rettv, kListLenMayKnow);
   cur = win->w_match_head;
   while (cur != NULL) {
     dict_T *dict = tv_dict_alloc();

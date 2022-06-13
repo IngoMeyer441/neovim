@@ -107,11 +107,11 @@ jobs:
         run: ./ci/run_tests.sh build_nvim
 
       - if: "!cancelled()"
-        name: clint-full
-        run: ./ci/run_lint.sh clint-full
+        name: lintcfull
+        run: ./ci/run_lint.sh lintcfull
 
       - if: "!cancelled()"
-        name: stylua
+        name: lintstylua
         uses: JohnnyMorganz/stylua-action@1.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -124,16 +124,16 @@ jobs:
           git diff --color --exit-code
 
       - if: "!cancelled()"
-        name: lualint
-        run: ./ci/run_lint.sh lualint
+        name: lintlua
+        run: ./ci/run_lint.sh lintlua
 
       - if: "!cancelled()"
-        name: pylint
-        run: ./ci/run_lint.sh pylint
+        name: lintpy
+        run: ./ci/run_lint.sh lintpy
 
       - if: "!cancelled()"
-        name: shlint
-        run: ./ci/run_lint.sh shlint
+        name: lintsh
+        run: ./ci/run_lint.sh lintsh
 
       - if: "!cancelled()"
         name: check-single-includes
@@ -167,11 +167,12 @@ jobs:
             runner: macos-11.0
             os: osx
 
-            # The functionaltest-lua test two things simultaneously:
+            # functionaltest-lua is our dumping ground for non-mainline configurations.
             # 1. Check that the tests pass with PUC Lua instead of LuaJIT.
             # 2. Use as oldest/minimum versions of dependencies/build tools we
             #    still explicitly support so we don't accidentally rely on
             #    features that is only available on later versions.
+            # 3. No treesitter parsers installed.
           - flavor: functionaltest-lua
             cc: gcc
             runner: ubuntu-20.04

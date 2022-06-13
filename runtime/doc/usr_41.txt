@@ -157,7 +157,7 @@ cannot start with a digit.  Valid variable names are:
 	FuncLength
 	LENGTH
 
-Invalid names are "foo+bar" and "6var".
+Invalid names are "foo.bar" and "6var".
    These variables are global.  To see a list of currently defined variables
 use this command: >
 
@@ -581,7 +581,7 @@ statements is equal to: >
 
 	:substitute/\a/*/g
 
-Using the functions becomes more interesting when you do more work before and
+Using the functions becomes interesting when you do more work before and
 after the substitute() call.
 
 
@@ -1596,7 +1596,7 @@ the same (the text may change, e.g., it may be translated).
 
 When the ":read" command causes another error, the pattern "E484:" will not
 match in it.  Thus this exception will not be caught and result in the usual
-error message.
+error message and execution is aborted.
 
 You might be tempted to do this: >
 

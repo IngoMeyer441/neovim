@@ -16,56 +16,10 @@
 
 local M = {}
 
----@private
-local function getlines(bufnr, start_lnum, end_lnum)
-  if not end_lnum then
-    -- Return a single line as a string
-    return vim.api.nvim_buf_get_lines(bufnr, start_lnum - 1, start_lnum, false)[1]
-  end
-  return vim.api.nvim_buf_get_lines(bufnr, start_lnum - 1, end_lnum, false)
-end
-
----@private
-local function findany(s, patterns)
-  if s == nil then
-    return false
-  end
-  for _, v in ipairs(patterns) do
-    if s:find(v) then
-      return true
-    end
-  end
-  return false
-end
-
----@private
-local function nextnonblank(bufnr, start_lnum)
-  for _, line in ipairs(getlines(bufnr, start_lnum, -1)) do
-    if not line:find('^%s*$') then
-      return line
-    end
-  end
-  return nil
-end
-
----@private
-local matchregex = (function()
-  local cache = {}
-  return function(line, pattern)
-    if line == nil then
-      return nil
-    end
-    if not cache[pattern] then
-      cache[pattern] = vim.regex(pattern)
-    end
-    return cache[pattern]:match_str(line)
-  end
-end)()
-
----@private
-local did_filetype = function()
-  return vim.fn.did_filetype() ~= 0
-end
+local getlines = vim.filetype.getlines
+local findany = vim.filetype.findany
+local nextnonblank = vim.filetype.nextnonblank
+local matchregex = vim.filetype.matchregex
 
 -- luacheck: push no unused args
 -- luacheck: push ignore 122
@@ -73,24 +27,22 @@ end
 -- This function checks for the kind of assembly that is wanted by the user, or
 -- can be detected from the first five lines of the file.
 function M.asm(bufnr)
-  -- Make sure b:asmsyntax exists
-  if not vim.b[bufnr].asmsyntax then
-    vim.b[bufnr].asmsyntax = ''
-  end
-
-  if vim.b[bufnr].asmsyntax == '' then
-    M.asm_syntax(bufnr)
+  local syntax = vim.b[bufnr].asmsyntax
+  if not syntax or syntax == '' then
+    syntax = M.asm_syntax(bufnr)
   end
 
   -- If b:asmsyntax still isn't set, default to asmsyntax or GNU
-  if vim.b[bufnr].asmsyntax == '' then
+  if not syntax or syntax == '' then
     if vim.g.asmsyntax and vim.g.asmsyntax ~= 0 then
-      vim.b[bufnr].asmsyntax = vim.g.asmsyntax
+      syntax = vim.g.asmsyntax
     else
-      vim.b[bufnr].asmsyntax = 'asm'
+      syntax = 'asm'
     end
   end
-  return vim.fn.fnameescape(vim.b[bufnr].asmsyntax)
+  return syntax, function(b)
+    vim.b[b].asmsyntax = syntax
+  end
 end
 
 -- Checks the first 5 lines for a asmsyntax=foo override.
@@ -99,9 +51,9 @@ function M.asm_syntax(bufnr)
   local lines = table.concat(getlines(bufnr, 1, 5), ' '):lower()
   local match = lines:match('%sasmsyntax=([a-zA-Z0-9]+)%s')
   if match then
-    vim.b['asmsyntax'] = match
+    return match
   elseif findany(lines, { '%.title', '%.ident', '%.macro', '%.subtitle', '%.library' }) then
-    vim.b['asmsyntax'] = 'vmasm'
+    return 'vmasm'
   end
 end
 
@@ -200,7 +152,7 @@ function M.change(bufnr)
 end
 
 function M.csh(path, bufnr)
-  if did_filetype() then
+  if vim.fn.did_filetype() ~= 0 then
     -- Filetype was already detected
     return
   end
@@ -213,11 +165,15 @@ function M.csh(path, bufnr)
   end
 end
 
--- Determine if a *.dat file is Kuka Robot Language
-function M.dat(bufnr)
+function M.dat(path, bufnr)
+  -- Innovation data processing
+  if findany(path:lower(), { '^upstream%.dat$', '^upstream%..*%.dat$', '^.*%.upstream%.dat$' }) then
+    return 'upstreamdat'
+  end
   if vim.g.filetype_dat then
     return vim.g.filetype_dat
   end
+  -- Determine if a *.dat file is Kuka Robot Language
   local line = nextnonblank(bufnr, 1)
   if matchregex(line, [[\c\v^\s*%(\&\w+|defdat>)]]) then
     return 'krl'
@@ -257,7 +213,7 @@ function M.dep3patch(path, bufnr)
 end
 
 function M.dtrace(bufnr)
-  if did_filetype() then
+  if vim.fn.did_filetype() ~= 0 then
     -- Filetype was already detected
     return
   end
@@ -418,11 +374,12 @@ function M.inc(bufnr)
   elseif findany(lines, { '^%s{', '^%s%(%*' }) or matchregex(lines, pascal_keywords) then
     return 'pascal'
   else
-    M.asm_syntax(bufnr)
-    if vim.b[bufnr].asm_syntax then
-      return vim.fn.fnameescape(vim.b[bufnr].asm_syntax)
-    else
+    local syntax = M.asm_syntax(bufnr)
+    if not syntax or syntax == '' then
       return 'pov'
+    end
+    return syntax, function(b)
+      vim.b[b].asmsyntax = syntax
     end
   end
 end
@@ -815,10 +772,12 @@ end
 
 -- Also called from filetype.lua
 function M.sh(path, bufnr, name)
-  if did_filetype() or path:find(vim.g.ft_ignore_pat) then
+  if vim.fn.did_filetype() ~= 0 or path:find(vim.g.ft_ignore_pat) then
     -- Filetype was already detected or detection should be skipped
     return
   end
+
+  local on_detect
 
   if matchregex(name, [[\<csh\>]]) then
     -- Some .sh scripts contain #!/bin/csh.
@@ -830,25 +789,31 @@ function M.sh(path, bufnr, name)
   elseif matchregex(name, [[\<zsh\>]]) then
     return M.shell(path, bufnr, 'zsh')
   elseif matchregex(name, [[\<ksh\>]]) then
-    vim.b[bufnr].is_kornshell = 1
-    vim.b[bufnr].is_bash = nil
-    vim.b[bufnr].is_sh = nil
+    on_detect = function(b)
+      vim.b[b].is_kornshell = 1
+      vim.b[b].is_bash = nil
+      vim.b[b].is_sh = nil
+    end
   elseif vim.g.bash_is_sh or matchregex(name, [[\<bash\>]]) or matchregex(name, [[\<bash2\>]]) then
-    vim.b[bufnr].is_bash = 1
-    vim.b[bufnr].is_kornshell = nil
-    vim.b[bufnr].is_sh = nil
+    on_detect = function(b)
+      vim.b[b].is_bash = 1
+      vim.b[b].is_kornshell = nil
+      vim.b[b].is_sh = nil
+    end
   elseif matchregex(name, [[\<sh\>]]) then
-    vim.b[bufnr].is_sh = 1
-    vim.b[bufnr].is_kornshell = nil
-    vim.b[bufnr].is_bash = nil
+    on_detect = function(b)
+      vim.b[b].is_sh = 1
+      vim.b[b].is_kornshell = nil
+      vim.b[b].is_bash = nil
+    end
   end
-  return M.shell(path, bufnr, 'sh')
+  return M.shell(path, bufnr, 'sh'), on_detect
 end
 
 -- For shell-like file types, check for an "exec" command hidden in a comment, as used for Tcl.
 -- Also called from scripts.vim, thus can't be local to this script. [TODO]
 function M.shell(path, bufnr, name)
-  if did_filetype() or matchregex(path, vim.g.ft_ignore_pat) then
+  if vim.fn.did_filetype() ~= 0 or matchregex(path, vim.g.ft_ignore_pat) then
     -- Filetype was already detected or detection should be skipped
     return
   end
@@ -960,9 +925,11 @@ function M.xml(bufnr)
     line = line:lower()
     local is_docbook5 = line:find([[ xmlns="http://docbook.org/ns/docbook"]])
     if is_docbook4 or is_docbook5 then
-      vim.b[bufnr].docbk_type = 'xml'
-      vim.b[bufnr].docbk_ver = is_docbook4 and 4 or 5
-      return 'docbk'
+      return 'docbk',
+        function(b)
+          vim.b[b].docbk_type = 'xml'
+          vim.b[b].docbk_ver = is_docbook4 and 4 or 5
+        end
     end
     if line:find([[xmlns:xbl="http://www.mozilla.org/xbl"]]) then
       return 'xbl'
@@ -996,9 +963,10 @@ function M.sgml(bufnr)
   if lines:find('linuxdoc') then
     return 'smgllnx'
   elseif lines:find('<!DOCTYPE.*DocBook') then
-    vim.b[bufnr].docbk_type = 'sgml'
-    vim.b[bufnr].docbk_ver = 4
-    return 'docbk'
+    return 'docbk', function(b)
+      vim.b[b].docbk_type = 'sgml'
+      vim.b[b].docbk_ver = 4
+    end
   else
     return 'sgml'
   end
@@ -1054,6 +1022,52 @@ function M.hw(bufnr)
   end
   return 'virata'
 end
+
+function M.news(bufnr)
+  if getlines(bufnr, 1):lower():find('; urgency=') then
+    return 'debchangelog'
+  end
+end
+
+-- Debian Control
+function M.control(bufnr)
+  if getlines(bufnr, 1):find('^Source:') then
+    return 'debcontrol'
+  end
+end
+
+-- Debian Copyright
+function M.copyright(bufnr)
+  if getlines(bufnr, 1):find('^Format:') then
+    return 'debcopyright'
+  end
+end
+
+-- Software Distributor Product Specification File (POSIX 1387.2-1995)
+function M.psf(bufnr)
+  local line = getlines(bufnr, 1):lower()
+  if
+    findany(
+      line,
+      { '^%s*distribution%s*$', '^%s*installed_software%s*$', '^%s*root%s*$', '^%s*bundle%s*$', '^%s*product%s*$' }
+    )
+  then
+    return 'psf'
+  end
+end
+
+-- XFree86 config
+function M.xfree86(bufnr)
+  local line = getlines(bufnr, 1)
+  local on_detect
+  if matchregex(line, [[\<XConfigurator\>]]) then
+    on_detect = function(b)
+      vim.b[b].xf86conf_xfree86_version = 3
+    end
+  end
+  return 'xf86conf', on_detect
+end
+
 -- luacheck: pop
 -- luacheck: pop
 
