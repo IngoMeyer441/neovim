@@ -792,11 +792,11 @@ Dictionary hlattrs2dict(HlAttrs ae, bool use_rgb)
       PUT(hl, "special", INTEGER_OBJ(ae.rgb_sp_color));
     }
   } else {
-    if (cterm_normal_fg_color != ae.cterm_fg_color && ae.cterm_fg_color != 0) {
+    if (ae.cterm_fg_color != 0) {
       PUT(hl, "foreground", INTEGER_OBJ(ae.cterm_fg_color - 1));
     }
 
-    if (cterm_normal_bg_color != ae.cterm_bg_color && ae.cterm_bg_color != 0) {
+    if (ae.cterm_bg_color != 0) {
       PUT(hl, "background", INTEGER_OBJ(ae.cterm_bg_color - 1));
     }
   }
@@ -942,9 +942,9 @@ HlAttrs dict2hlattrs(Dict(highlight) *dict, bool use_rgb, int *link_id, Error *e
     hlattrs.cterm_fg_color = ctermfg == -1 ? 0 : ctermfg + 1;
     hlattrs.cterm_ae_attr = cterm_mask;
   } else {
+    hlattrs.cterm_bg_color = ctermbg == -1 ? 0 : ctermbg + 1;
+    hlattrs.cterm_fg_color = ctermfg == -1 ? 0 : ctermfg + 1;
     hlattrs.cterm_ae_attr = cterm_mask;
-    hlattrs.cterm_bg_color = bg == -1 ? 0 : bg + 1;
-    hlattrs.cterm_fg_color = fg == -1 ? 0 : fg + 1;
   }
 
   return hlattrs;

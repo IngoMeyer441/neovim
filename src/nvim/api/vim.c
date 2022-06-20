@@ -1025,8 +1025,7 @@ static void term_resize(uint16_t width, uint16_t height, void *data)
 static void term_close(void *data)
 {
   Channel *chan = data;
-  terminal_destroy(chan->term);
-  chan->term = NULL;
+  terminal_destroy(&chan->term);
   api_free_luaref(chan->stream.internal.cb);
   chan->stream.internal.cb = LUA_NOREF;
   channel_decref(chan);
@@ -1790,8 +1789,9 @@ Dictionary nvim__stats(void)
 {
   Dictionary rv = ARRAY_DICT_INIT;
   PUT(rv, "fsync", INTEGER_OBJ(g_stats.fsync));
-  PUT(rv, "redraw", INTEGER_OBJ(g_stats.redraw));
+  PUT(rv, "log_skip", INTEGER_OBJ(g_stats.log_skip));
   PUT(rv, "lua_refcount", INTEGER_OBJ(nlua_get_global_ref_count()));
+  PUT(rv, "redraw", INTEGER_OBJ(g_stats.redraw));
   return rv;
 }
 

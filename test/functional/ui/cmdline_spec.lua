@@ -5,6 +5,8 @@ local source = helpers.source
 local command = helpers.command
 local assert_alive = helpers.assert_alive
 local uname = helpers.uname
+local eval = helpers.eval
+local eq = helpers.eq
 
 local function new_screen(opt)
   local screen = Screen.new(25, 5)
@@ -17,6 +19,8 @@ local function new_screen(opt)
     [5] = {bold = true, foreground = Screen.colors.SeaGreen4},
     [6] = {foreground = Screen.colors.Magenta},
     [7] = {bold = true, foreground = Screen.colors.Brown},
+    [8] = {background = Screen.colors.LightGrey},
+    [9] = {bold = true},
   })
   return screen
 end
@@ -846,6 +850,37 @@ describe('cmdline redraw', function()
     456789^                   |
     ]], unchanged=true}
   end)
+
+  it('after pressing Ctrl-C in cmdwin in Visual mode #18967', function()
+    screen:try_resize(40, 10)
+    command('set cmdwinheight=3')
+    feed('q:iabc<Esc>vhh')
+    screen:expect([[
+                                              |
+      {1:~                                       }|
+      {1:~                                       }|
+      {1:~                                       }|
+      {2:[No Name]                               }|
+      {1::}^a{8:bc}                                    |
+      {1:~                                       }|
+      {1:~                                       }|
+      {3:[Command Line]                          }|
+      {9:-- VISUAL --}                            |
+    ]])
+    feed('<C-C>')
+    screen:expect([[
+                                              |
+      {1:~                                       }|
+      {1:~                                       }|
+      {1:~                                       }|
+      {2:[No Name]                               }|
+      {1::}a{8:bc}                                    |
+      {1:~                                       }|
+      {1:~                                       }|
+      {3:[Command Line]                          }|
+      :^abc                                    |
+    ]])
+  end)
 end)
 
 describe("cmdline height", function()
@@ -855,6 +890,159 @@ describe("cmdline height", function()
     screen:attach()
     command('set cmdheight=9999')
     screen:try_resize(25, 5)
+    assert_alive()
+  end)
+end)
+
+describe('cmdheight=0', function()
+  local screen
+  before_each(function()
+    clear()
+    screen = Screen.new(25, 5)
+    screen:attach()
+  end)
+
+  it("with cmdheight=1 noruler laststatus=2", function()
+    command("set cmdheight=1 noruler laststatus=2")
+    screen:expect{grid=[[
+      ^                         |
+      ~                        |
+      ~                        |
+      [No Name]                |
+                               |
+    ]]}
+  end)
+
+  it("with cmdheight=0 noruler laststatus=2", function()
+    command("set cmdheight=0 noruler laststatus=2")
+    screen:expect{grid=[[
+      ^                         |
+      ~                        |
+      ~                        |
+      ~                        |
+      [No Name]                |
+    ]]}
+  end)
+
+  it("with cmdheight=0 ruler laststatus=0", function()
+    command("set cmdheight=0 ruler laststatus=0")
+    screen:expect{grid=[[
+      ^                         |
+      ~                        |
+      ~                        |
+      ~                        |
+      ~                        |
+    ]]}
+  end)
+
+  it("with cmdheight=0 ruler laststatus=0", function()
+    command("set cmdheight=0 noruler laststatus=0 showmode")
+    feed('i')
+    screen:expect{grid=[[
+      ^                         |
+      ~                        |
+      ~                        |
+      ~                        |
+      ~                        |
+    ]], showmode={}}
+    feed('<Esc>')
+    eq(0, eval('&cmdheight'))
+  end)
+
+  it("with showmode", function()
+    command("set cmdheight=1 noruler laststatus=0 showmode")
+    feed('i')
+    screen:expect{grid=[[
+      ^                         |
+      ~                        |
+      ~                        |
+      ~                        |
+      -- INSERT --             |
+    ]]}
+    feed('<Esc>')
+    eq(1, eval('&cmdheight'))
+  end)
+
+  it("when using command line", function()
+    command("set cmdheight=0 noruler laststatus=0")
+    feed(':')
+    screen:expect{grid=[[
+                               |
+      ~                        |
+      ~                        |
+      ~                        |
+      :^                        |
+    ]]}
+    eq(1, eval('&cmdheight'))
+    feed('<cr>')
+    screen:expect{grid=[[
+      ^                         |
+      ~                        |
+      ~                        |
+      ~                        |
+      ~                        |
+    ]], showmode={}}
+    eq(0, eval('&cmdheight'))
+  end)
+
+  it("when using input()", function()
+    command("set cmdheight=0 noruler laststatus=0")
+    feed(':call input("foo >")<cr>')
+    screen:expect{grid=[[
+                               |
+      ~                        |
+      ~                        |
+      ~                        |
+      foo >^                    |
+    ]]}
+    eq(1, eval('&cmdheight'))
+    feed('<cr>')
+    screen:expect{grid=[[
+      ^                         |
+      ~                        |
+      ~                        |
+      ~                        |
+      ~                        |
+    ]], showmode={}}
+    eq(0, eval('&cmdheight'))
+  end)
+
+  it("with winbar and splits", function()
+    command("set cmdheight=0 noruler laststatus=3 winbar=foo")
+    feed(':split<CR>')
+    screen:expect{grid=[[
+      foo                      |
+                               |
+      E36: Not enough room     |
+      Press ENTER or type comma|
+      nd to continue^           |
+    ]]}
+    feed('<CR>')
+    screen:expect{grid=[[
+      foo                      |
+      ^                         |
+      ~                        |
+      ~                        |
+      [No Name]                |
+    ]]}
+    feed(':')
+    screen:expect{grid=[[
+      foo                      |
+                               |
+      ~                        |
+      [No Name]                |
+      :^                        |
+    ]]}
+    feed('<Esc>')
+    screen:expect{grid=[[
+      foo                      |
+      ^                         |
+      ~                        |
+      ~                        |
+      [No Name]                |
+    ]], showmode={}}
+    eq(0, eval('&cmdheight'))
+
     assert_alive()
   end)
 end)

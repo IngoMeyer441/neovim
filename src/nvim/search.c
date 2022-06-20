@@ -176,7 +176,7 @@ int search_regcomp(char_u *pat, int pat_save, int pat_use, int options, regmmatc
    * Save the currently used pattern in the appropriate place,
    * unless the pattern should not be remembered.
    */
-  if (!(options & SEARCH_KEEP) && !cmdmod.keeppatterns) {
+  if (!(options & SEARCH_KEEP) && (cmdmod.cmod_flags & CMOD_KEEPPATTERNS) == 0) {
     // search or global command
     if (pat_save == RE_SEARCH || pat_save == RE_BOTH) {
       save_re_pat(RE_SEARCH, pat, magic);
@@ -1420,7 +1420,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char_u *pat, long count,
   curwin->w_set_curswant = TRUE;
 
 end_do_search:
-  if ((options & SEARCH_KEEP) || cmdmod.keeppatterns) {
+  if ((options & SEARCH_KEEP) || (cmdmod.cmod_flags & CMOD_KEEPPATTERNS)) {
     spats[0].off = old_off;
   }
   xfree(msgbuf);
@@ -4057,6 +4057,11 @@ bool current_quote(oparg_T *oap, long count, bool include, int quotechar)
 
     // Find out if we have a quote in the selection.
     while (i <= col_end) {
+      // check for going over the end of the line, which can happen if
+      // the line was changed after the Visual area was selected.
+      if (line[i] == NUL) {
+        break;
+      }
       if (line[i++] == quotechar) {
         selected_quote = true;
         break;
@@ -5239,7 +5244,9 @@ static void do_fuzzymatch(const typval_T *const argvars, typval_T *const rettv,
     } else if (!tv_dict_get_callback(d, "text_cb", -1, &cb)) {
       semsg(_(e_invargval), "text_cb");
       return;
-    } else if ((di = tv_dict_find(d, "limit", -1)) != NULL) {
+    }
+
+    if ((di = tv_dict_find(d, "limit", -1)) != NULL) {
       if (di->di_tv.v_type != VAR_NUMBER) {
         semsg(_(e_invarg2), tv_get_string(&di->di_tv));
         return;

@@ -506,7 +506,7 @@ bool check_changed(buf_T *buf, int flags)
       && bufIsChanged(buf)
       && ((flags & CCGD_MULTWIN) || buf->b_nwindows <= 1)
       && (!(flags & CCGD_AW) || autowrite(buf, forceit) == FAIL)) {
-    if ((p_confirm || cmdmod.confirm) && p_write) {
+    if ((p_confirm || (cmdmod.cmod_flags & CMOD_CONFIRM)) && p_write) {
       int count = 0;
 
       if (flags & CCGD_ALLBUF) {
@@ -719,7 +719,7 @@ bool check_changed_any(bool hidden, bool unload)
   ret = true;
   exiting = false;
   // When ":confirm" used, don't give an error message.
-  if (!(p_confirm || cmdmod.confirm)) {
+  if (!(p_confirm || (cmdmod.cmod_flags & CMOD_CONFIRM))) {
     // There must be a wait_return for this message, do_buffer()
     // may cause a redraw.  But wait_return() is a no-op when vgetc()
     // is busy (Quit used from window menu), then make sure we don't
@@ -1127,7 +1127,7 @@ void do_argfile(exarg_T *eap, int argn)
     setpcmark();
 
     // split window or create new tab page first
-    if (*eap->cmd == 's' || cmdmod.tab != 0) {
+    if (*eap->cmd == 's' || cmdmod.cmod_tab != 0) {
       if (win_split(0, 0) == FAIL) {
         return;
       }
@@ -1637,10 +1637,13 @@ void ex_compiler(exarg_T *eap)
 /// ":options"
 void ex_options(exarg_T *eap)
 {
-  os_setenv("OPTWIN_CMD", cmdmod.tab ? "tab" : "", 1);
-  os_setenv("OPTWIN_CMD",
-            cmdmod.tab ? "tab" :
-            (cmdmod.split & WSP_VERT) ? "vert" : "", 1);
+  char buf[500];
+  bool multi_mods = 0;
+
+  buf[0] = NUL;
+  (void)add_win_cmd_modifers(buf, &multi_mods);
+
+  os_setenv("OPTWIN_CMD", buf, 1);
   cmd_source(SYS_OPTWIN_FILE, NULL);
 }
 
@@ -3024,7 +3027,7 @@ void ex_drop(exarg_T *eap)
     return;
   }
 
-  if (cmdmod.tab) {
+  if (cmdmod.cmod_tab) {
     // ":tab drop file ...": open a tab for each argument that isn't
     // edited in a window yet.  It's like ":tab all" but without closing
     // windows or tabs.

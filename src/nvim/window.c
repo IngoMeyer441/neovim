@@ -569,7 +569,7 @@ wingotofile:
 
     case 'f':                       // CTRL-W gf: "gf" in a new tab page
     case 'F':                       // CTRL-W gF: "gF" in a new tab page
-      cmdmod.tab = tabpage_index(curtab) + 1;
+      cmdmod.cmod_tab = tabpage_index(curtab) + 1;
       nchar = xchar;
       goto wingotofile;
     case 't':                       // CTRL-W gt: go to next tab page
@@ -907,7 +907,7 @@ void ui_ext_win_position(win_T *wp)
       int comp_col = (int)col - (east ? wp->w_width_outer : 0);
       comp_row += grid->comp_row;
       comp_col += grid->comp_col;
-      comp_row = MAX(MIN(comp_row, Rows - wp->w_height_outer - 1), 0);
+      comp_row = MAX(MIN(comp_row, Rows - wp->w_height_outer - (p_ch > 0 ? 1 : 0)), 0);
       comp_col = MAX(MIN(comp_col, Columns - wp->w_width_outer), 0);
       wp->w_winrow = comp_row;
       wp->w_wincol = comp_col;
@@ -985,7 +985,7 @@ int win_split(int size, int flags)
   }
 
   // Add flags from ":vertical", ":topleft" and ":botright".
-  flags |= cmdmod.split;
+  flags |= cmdmod.cmod_split;
   if ((flags & WSP_TOP) && (flags & WSP_BOT)) {
     emsg(_("E442: Can't split topleft and botright at the same time"));
     return FAIL;
@@ -1143,6 +1143,9 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
     needed = wmh1 + STATUS_HEIGHT;
     if (flags & WSP_ROOM) {
       needed += p_wh - wmh1 + oldwin->w_winbar_height;
+    }
+    if (p_ch < 1) {
+      needed += 1;  // Adjust for cmdheight=0.
     }
     if (flags & (WSP_BOT | WSP_TOP)) {
       minheight = frame_minheight(topframe, NOWIN) + need_status;
@@ -3879,7 +3882,7 @@ void close_others(int message, int forceit)
       continue;
     }
     if (!r) {
-      if (message && (p_confirm || cmdmod.confirm) && p_write) {
+      if (message && (p_confirm || (cmdmod.cmod_flags & CMOD_CONFIRM)) && p_write) {
         dialog_changed(wp->w_buffer, false);
         if (!win_valid(wp)) {                 // autocommands messed wp up
           nextwp = firstwin;
@@ -4133,10 +4136,10 @@ int win_new_tabpage(int after, char_u *filename)
  */
 int may_open_tabpage(void)
 {
-  int n = (cmdmod.tab == 0) ? postponed_split_tab : cmdmod.tab;
+  int n = (cmdmod.cmod_tab == 0) ? postponed_split_tab : cmdmod.cmod_tab;
 
   if (n != 0) {
-    cmdmod.tab = 0;         // reset it to avoid doing it twice
+    cmdmod.cmod_tab = 0;         // reset it to avoid doing it twice
     postponed_split_tab = 0;
     return win_new_tabpage(n, NULL);
   }
@@ -5501,12 +5504,11 @@ void win_setheight_win(int height, win_T *win)
       }
     }
     cmdline_row = row;
-    p_ch = MAX(Rows - cmdline_row, ui_has(kUIMessages) ? 0 : 1);
+    p_ch = MAX(Rows - cmdline_row, 0);
     curtab->tp_ch_used = p_ch;
     msg_row = row;
     msg_col = 0;
     redraw_all_later(NOT_VALID);
-    showmode();
   }
 }
 
@@ -5949,9 +5951,7 @@ void win_drag_status_line(win_T *dragwin, int offset)
     up = false;
     // Only dragging the last status line can reduce p_ch.
     room = Rows - cmdline_row;
-    if (curfr->fr_next == NULL) {
-      room -= 1;
-    } else {
+    if (curfr->fr_next != NULL) {
       room -= p_ch + global_stl_height();
     }
     if (room < 0) {
@@ -6008,7 +6008,7 @@ void win_drag_status_line(win_T *dragwin, int offset)
     clear_cmdline = true;
   }
   cmdline_row = row;
-  p_ch = MAX(Rows - cmdline_row, ui_has(kUIMessages) ? 0 : 1);
+  p_ch = MAX(Rows - cmdline_row, 0);
   curtab->tp_ch_used = p_ch;
   redraw_all_later(SOME_VALID);
   showmode();
