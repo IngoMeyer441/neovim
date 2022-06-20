@@ -2048,14 +2048,7 @@ static void augment_terminfo(TUIData *data, const char *term, long vte_version, 
     }
   }
 
-  if (tmux) {
-    // Use a color change sequence similiar to xterm but without leading
-    // '#' -> tmux can pass the rgb code to terminals that don't expect a
-    // leading '#' like 'iterm'. For xterm compatible clients, tmux must
-    // be configured to add a '#' in front of the rgb code.
-    data->unibi_ext.set_cursor_color = (int)unibi_add_ext_str(
-        ut, NULL, "\033]12;%p1%06x\007");
-  } else if (iterm || iterm_pretending_xterm) {
+  if (iterm || iterm_pretending_xterm) {
     // FIXME: Bypassing tmux like this affects the cursor colour globally, in
     // all panes, which is not particularly desirable.  A better approach
     // would use a tmux control sequence and an extra if(screen) test.
