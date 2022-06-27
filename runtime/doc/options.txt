@@ -2475,8 +2475,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 <	This is similar to the default, except that these characters will also
 	be used when there is highlighting.
 
-	For "stl" and "stlnc" single-byte and multibyte characters are
-	supported.  But double-width characters are not supported.
+	For the "stl", "stlnc", "foldopen", "foldclose" and "foldsep" items
+	single-byte and multibyte characters are supported.  But double-width
+	characters are not supported.
 
 	The highlighting used for these items:
 	  item		highlight group ~
@@ -3667,6 +3668,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	executing macros, registers and other commands that have not been
 	typed.  Also, updating the window title is postponed.  To force an
 	update use |:redraw|.
+	This may occasionally cause display errors.  It is only meant to be set
+	temporarily when performing an operation where redrawing may cause
+	flickering or cause a slow down.
 
 			*'linebreak'* *'lbr'* *'nolinebreak'* *'nolbr'*
 'linebreak' 'lbr'	boolean	(default off)
@@ -5288,9 +5292,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	unescaping, so to keep yourself sane use |:let-&| like shown above.
 							*shell-powershell*
 	To use PowerShell: >
-		let &shell = has('win32') ? 'powershell' : 'pwsh'
+		let &shell = executable('pwsh') ? 'pwsh' : 'powershell'
 		let &shellcmdflag = '-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command [Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;'
-		let &shellredir = '2>&1 | Out-File -Encoding UTF8 %s; exit $LastExitCode'
+		let &shellredir = '-RedirectStandardOutput %s -NoNewWindow -Wait'
 		let &shellpipe = '2>&1 | Out-File -Encoding UTF8 %s; exit $LastExitCode'
 		set shellquote= shellxquote=
 

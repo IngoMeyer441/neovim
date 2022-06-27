@@ -861,6 +861,9 @@ int get_mouse_button(int code, bool *is_click, bool *is_drag)
 /// @param[in]  from  What characters to replace.
 /// @param[in]  from_len  Length of the "from" argument.
 /// @param[out]  bufp  Location where results were saved in case of success (allocated).
+///                    if *bufp is non-NULL, it will be used directly. it is
+///                    assumed to be 128 bytes long (enough for transcoding LHS
+///                    of mapping)
 ///                    Will be set to NULL in case of failure.
 /// @param[in]  flags  REPTERM_FROM_PART    see above
 ///                    REPTERM_DO_LT        also translate <lt>
@@ -885,10 +888,12 @@ char *replace_termcodes(const char *const from, const size_t from_len, char **co
   const bool do_backslash = !(cpo_flags & FLAG_CPO_BSLASH);  // backslash is a special character
   const bool do_special = !(flags & REPTERM_NO_SPECIAL);
 
+  bool allocated = (*bufp == NULL);
+
   // Allocate space for the translation.  Worst case a single character is
   // replaced by 6 bytes (shifted special key), plus a NUL at the end.
-  const size_t buf_len = from_len * 6 + 1;
-  result = xmalloc(buf_len);
+  const size_t buf_len = allocated ? from_len * 6 + 1 : 128;
+  result = allocated ? xmalloc(buf_len) : *bufp;
 
   src = (char_u *)from;
 
@@ -907,6 +912,9 @@ char *replace_termcodes(const char *const from, const size_t from_len, char **co
 
   // Copy each byte from *from to result[dlen]
   while (src <= end) {
+    if (!allocated && dlen + 64 > buf_len) {
+      return NULL;
+    }
     // Check for special <> keycodes, like "<C-S-LeftMouse>"
     if (do_special && ((flags & REPTERM_DO_LT) || ((end - src) >= 3
                                                    && STRNCMP(src, "<lt>", 4) != 0))) {
@@ -1000,9 +1008,83 @@ char *replace_termcodes(const char *const from, const size_t from_len, char **co
   }
   result[dlen] = NUL;
 
-  *bufp = xrealloc(result, dlen + 1);
+  if (allocated) {
+    *bufp = xrealloc(result, dlen + 1);
+  }
 
   return *bufp;
+}
+
+/// Add character "c" to buffer "s"
+///
+/// Escapes the special meaning of K_SPECIAL, handles multi-byte
+/// characters.
+///
+/// @param[in]  c  Character to add.
+/// @param[out]  s  Buffer to add to. Must have at least MB_MAXBYTES + 1 bytes.
+///
+/// @return Pointer to after the added bytes.
+char_u *add_char2buf(int c, char_u *s)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  char_u temp[MB_MAXBYTES + 1];
+  const int len = utf_char2bytes(c, (char *)temp);
+  for (int i = 0; i < len; i++) {
+    c = (uint8_t)temp[i];
+    // Need to escape K_SPECIAL like in the typeahead buffer.
+    if (c == K_SPECIAL) {
+      *s++ = K_SPECIAL;
+      *s++ = KS_SPECIAL;
+      *s++ = KE_FILLER;
+    } else {
+      *s++ = (char_u)c;
+    }
+  }
+  return s;
+}
+
+/// Copy "p" to allocated memory, escaping K_SPECIAL so that the result
+/// can be put in the typeahead buffer.
+char *vim_strsave_escape_ks(char *p)
+{
+  // Need a buffer to hold up to three times as much.  Four in case of an
+  // illegal utf-8 byte:
+  // 0xc0 -> 0xc3 - 0x80 -> 0xc3 K_SPECIAL KS_SPECIAL KE_FILLER
+  char_u *res = xmalloc(STRLEN(p) * 4 + 1);
+  char_u *d = res;
+  for (char_u *s = (char_u *)p; *s != NUL;) {
+    if (s[0] == K_SPECIAL && s[1] != NUL && s[2] != NUL) {
+      // Copy special key unmodified.
+      *d++ = *s++;
+      *d++ = *s++;
+      *d++ = *s++;
+    } else {
+      // Add character, possibly multi-byte to destination, escaping
+      // K_SPECIAL. Be careful, it can be an illegal byte!
+      d = add_char2buf(utf_ptr2char((char *)s), d);
+      s += utf_ptr2len((char *)s);
+    }
+  }
+  *d = NUL;
+
+  return (char *)res;
+}
+
+/// Remove escaping from K_SPECIAL characters.  Reverse of
+/// vim_strsave_escape_ks().  Works in-place.
+void vim_unescape_ks(char_u *p)
+{
+  char_u *s = p, *d = p;
+
+  while (*s != NUL) {
+    if (s[0] == K_SPECIAL && s[1] == KS_SPECIAL && s[2] == KE_FILLER) {
+      *d++ = K_SPECIAL;
+      s += 3;
+    } else {
+      *d++ = *s++;
+    }
+  }
+  *d = NUL;
 }
 
 /// Logs a single key as a human-readable keycode.

@@ -37,6 +37,7 @@
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
 #include "nvim/main.h"
+#include "nvim/mapping.h"
 #include "nvim/mark.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -2755,13 +2756,13 @@ static void display_showcmd(void)
   showcmd_is_clear = (len == 0);
 
   if (ui_has(kUIMessages)) {
-    Array content = ARRAY_DICT_INIT;
+    MAXSIZE_TEMP_ARRAY(content, 1);
+    MAXSIZE_TEMP_ARRAY(chunk, 2);
     if (len > 0) {
-      Array chunk = ARRAY_DICT_INIT;
       // placeholder for future highlight support
-      ADD(chunk, INTEGER_OBJ(0));
-      ADD(chunk, STRING_OBJ(cstr_to_string((char *)showcmd_buf)));
-      ADD(content, ARRAY_OBJ(chunk));
+      ADD_C(chunk, INTEGER_OBJ(0));
+      ADD_C(chunk, STRING_OBJ(cstr_as_string((char *)showcmd_buf)));
+      ADD_C(content, ARRAY_OBJ(chunk));
     }
     ui_call_msg_showcmd(content);
     return;

@@ -745,8 +745,9 @@ func Test_search_syntax_skip()
   1
   call search('VIM', 'w', '', 0, 'synIDattr(synID(line("."), col("."), 1), "name") =~? "comment"')
   call assert_equal('Another Text for VIM', getline('.'))
+
   1
-  call search('VIM', 'w', '', 0, 'synIDattr(synID(line("."), col("."), 1), "name") !~? "string"')
+  call search('VIM', 'cw', '', 0, 'synIDattr(synID(line("."), col("."), 1), "name") !~? "string"')
   call assert_equal(' let a = "VIM"', getline('.'))
 
   " Skip argument using Lambda.
@@ -755,27 +756,104 @@ func Test_search_syntax_skip()
   call assert_equal('Another Text for VIM', getline('.'))
 
   1
-  call search('VIM', 'w', '', 0, { -> synIDattr(synID(line("."), col("."), 1), "name") !~? "string"})
+  call search('VIM', 'cw', '', 0, { -> synIDattr(synID(line("."), col("."), 1), "name") !~? "string"})
   call assert_equal(' let a = "VIM"', getline('.'))
 
   " Skip argument using funcref.
   func InComment()
     return synIDattr(synID(line("."), col("."), 1), "name") =~? "comment"
   endfunc
-  func InString()
+  func NotInString()
     return synIDattr(synID(line("."), col("."), 1), "name") !~? "string"
   endfunc
+
   1
   call search('VIM', 'w', '', 0, function('InComment'))
   call assert_equal('Another Text for VIM', getline('.'))
 
   1
-  call search('VIM', 'w', '', 0, function('InString'))
+  call search('VIM', 'cw', '', 0, function('NotInString'))
   call assert_equal(' let a = "VIM"', getline('.'))
 
   delfunc InComment
-  delfunc InString
+  delfunc NotInString
   bwipe!
+endfunc
+
+func Test_syn_contained_transparent()
+  " Comments starting with "Regression:" show the result when the highlighting
+  " span of the containing item is assigned to the contained region.
+  syntax on
+
+  let l:case = "Transparent region contained in region"
+  new
+  syntax region X start=/\[/ end=/\]/ contained transparent
+  syntax region Y start=/(/ end=/)/ contains=X
+
+  call setline(1,  "==(--[~~]--)==")
+  let l:expected = "  YYYYYYYYYY  "
+  eval AssertHighlightGroups(1, 1, l:expected, 1, l:case)
+  syntax clear Y X
+  bw!
+
+  let l:case = "Transparent region extends region"
+  new
+  syntax region X start=/\[/ end=/\]/ contained transparent
+  syntax region Y start=/(/ end=/)/ end=/e/ contains=X
+
+  call setline(1,  "==(--[~~e~~]--)==")
+  let l:expected = "  YYYYYYYYYYYYY  "
+  " Regression:    "  YYYYYYY   YYY  "
+  eval AssertHighlightGroups(1, 1, l:expected, 1, l:case)
+  syntax clear Y X
+  bw!
+
+  let l:case = "Nested transparent regions extend region"
+  new
+  syntax region X start=/\[/ end=/\]/ contained transparent
+  syntax region Y start=/(/ end=/)/ end=/e/ contains=X
+
+  call setline(1,  "==(--[~~e~~[~~e~~]~~e~~]--)==")
+  let l:expected = "  YYYYYYYYYYYYYYYYYYYYYYYYY  "
+  " Regression:    "  YYYYYYY         YYYYYYYYY  "
+  eval AssertHighlightGroups(1, 1, l:expected, 1, l:case)
+  syntax clear Y X
+  bw!
+
+  let l:case = "Transparent region contained in match"
+  new
+  syntax region X start=/\[/ end=/\]/ contained transparent
+  syntax match Y /(.\{-})/ contains=X
+
+  call setline(1,  "==(--[~~]--)==")
+  let l:expected = "  YYYYYYYYYY  "
+  eval AssertHighlightGroups(1, 1, l:expected, 1, l:case)
+  syntax clear Y X
+  bw!
+
+  let l:case = "Transparent region extends match"
+  new
+  syntax region X start=/\[/ end=/\]/ contained transparent
+  syntax match Y /(.\{-}[e)]/ contains=X
+
+  call setline(1,  "==(--[~~e~~]--)==")
+  let l:expected = "  YYYYYYYYYY     "
+  " Regression:    "  YYYYYYY        "
+  eval AssertHighlightGroups(1, 1, l:expected, 1, l:case)
+  syntax clear Y X
+  bw!
+
+  let l:case = "Nested transparent regions extend match"
+  new
+  syntax region X start=/\[/ end=/\]/ contained transparent
+  syntax match Y /(.\{-}[e)]/ contains=X
+
+  call setline(1,  "==(--[~~e~~[~~e~~]~~e~~]--)==")
+  let l:expected = "  YYYYYYYYYYYYYYYYYYYYYY     "
+  " Regression:    "  YYYYYYY         YYYYYY     "
+  eval AssertHighlightGroups(1, 1, l:expected, 1, l:case)
+  syntax clear Y X
+  bw!
 endfunc
 
 func Test_syn_include_contains_TOP()

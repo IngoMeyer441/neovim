@@ -1396,10 +1396,12 @@ describe('lua stdlib', function()
     ]]
     eq('', funcs.luaeval "vim.bo.filetype")
     eq(true, funcs.luaeval "vim.bo[BUF].modifiable")
-    matches("Invalid option name: 'nosuchopt'$",
+    matches("unknown option 'nosuchopt'$",
        pcall_err(exec_lua, 'return vim.bo.nosuchopt'))
     matches("Expected lua string$",
        pcall_err(exec_lua, 'return vim.bo[0][0].autoread'))
+    matches("Invalid buffer id: %-1$",
+       pcall_err(exec_lua, 'return vim.bo[-1].filetype'))
   end)
 
   it('vim.wo', function()
@@ -1415,15 +1417,24 @@ describe('lua stdlib', function()
     eq(0, funcs.luaeval "vim.wo.cole")
     eq(0, funcs.luaeval "vim.wo[0].cole")
     eq(0, funcs.luaeval "vim.wo[1001].cole")
-    matches("Invalid option name: 'notanopt'$",
+    matches("unknown option 'notanopt'$",
        pcall_err(exec_lua, 'return vim.wo.notanopt'))
     matches("Expected lua string$",
        pcall_err(exec_lua, 'return vim.wo[0][0].list'))
+    matches("Invalid window id: %-1$",
+       pcall_err(exec_lua, 'return vim.wo[-1].list'))
     eq(2, funcs.luaeval "vim.wo[1000].cole")
     exec_lua [[
     vim.wo[1000].cole = 0
     ]]
     eq(0, funcs.luaeval "vim.wo[1000].cole")
+
+    -- Can handle global-local values
+    exec_lua [[vim.o.scrolloff = 100]]
+    exec_lua [[vim.wo.scrolloff = 200]]
+    eq(200, funcs.luaeval "vim.wo.scrolloff")
+    exec_lua [[vim.wo.scrolloff = -1]]
+    eq(100, funcs.luaeval "vim.wo.scrolloff")
   end)
 
   describe('vim.opt', function()

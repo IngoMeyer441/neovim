@@ -15,6 +15,7 @@
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/lua/executor.h"
+#include "nvim/mapping.h"
 #include "nvim/memfile.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
@@ -605,6 +606,14 @@ void arena_mem_free(ArenaMem mem, ArenaMem *reuse_blk)
   }
 }
 
+char *arena_memdupz(Arena *arena, const char *buf, size_t size)
+{
+  char *mem = arena_alloc(arena, size + 1, false);
+  memcpy(mem, buf, size);
+  mem[size] = NUL;
+  return mem;
+}
+
 #if defined(EXITFREE)
 
 # include "nvim/buffer.h"
@@ -681,11 +690,9 @@ void free_all_mem(void)
   do_cmdline_cmd("menutranslate clear");
 
   // Clear mappings, abbreviations, breakpoints.
-  do_cmdline_cmd("lmapclear");
-  do_cmdline_cmd("xmapclear");
-  do_cmdline_cmd("mapclear");
-  do_cmdline_cmd("mapclear!");
-  do_cmdline_cmd("abclear");
+  // NB: curbuf not used with local=false arg
+  map_clear_int(curbuf, MAP_ALL_MODES, false, false);
+  map_clear_int(curbuf, MAP_ALL_MODES, false, true);
   do_cmdline_cmd("breakdel *");
   do_cmdline_cmd("profdel *");
   do_cmdline_cmd("set keymap=");
@@ -786,6 +793,7 @@ void free_all_mem(void)
   decor_free_all_mem();
 
   nlua_free_all_mem();
+  ui_free_all_mem();
 }
 
 #endif

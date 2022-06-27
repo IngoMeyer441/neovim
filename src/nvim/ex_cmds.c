@@ -1573,14 +1573,18 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
 #else
     false;
 #endif
+  bool is_pwsh = STRNCMP(invocation_path_tail(p_sh, NULL), "pwsh", 4) == 0
+                 || STRNCMP(invocation_path_tail(p_sh, NULL), "powershell", 10) == 0;
 
   size_t len = STRLEN(cmd) + 1;  // At least enough space for cmd + NULL.
 
   len += is_fish_shell ?  sizeof("begin; " "; end") - 1
-                       :  sizeof("(" ")") - 1;
+                       :  is_pwsh ? sizeof("Start-Process ")
+                                  : sizeof("(" ")") - 1;
 
   if (itmp != NULL) {
-    len += STRLEN(itmp) + sizeof(" { " " < " " } ") - 1;
+    len += is_pwsh  ? STRLEN(itmp) + sizeof(" -RedirectStandardInput ")
+                    : STRLEN(itmp) + sizeof(" { " " < " " } ") - 1;
   }
   if (otmp != NULL) {
     len += STRLEN(otmp) + STRLEN(p_srr) + 2;  // two extra spaces ("  "),
@@ -1590,7 +1594,10 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
 #if defined(UNIX)
   // Put delimiters around the command (for concatenated commands) when
   // redirecting input and/or output.
-  if (itmp != NULL || otmp != NULL) {
+  if (is_pwsh) {
+    xstrlcpy(buf, "Start-Process ", len);
+    xstrlcat(buf, cmd, len);
+  } else if (itmp != NULL || otmp != NULL) {
     char *fmt = is_fish_shell ? "begin; %s; end"
                               :       "(%s)";
     vim_snprintf(buf, len, fmt, cmd);
@@ -1599,13 +1606,22 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
   }
 
   if (itmp != NULL) {
-    xstrlcat(buf, " < ", len - 1);
-    xstrlcat(buf, (const char *)itmp, len - 1);
+    if (is_pwsh) {
+      xstrlcat(buf, " -RedirectStandardInput ", len - 1);
+    } else {
+      xstrlcat(buf, " < ", len - 1);
+    }
+    xstrlcat(buf, itmp, len - 1);
   }
 #else
   // For shells that don't understand braces around commands, at least allow
   // the use of commands in a pipe.
-  xstrlcpy(buf, (char *)cmd, len);
+  if (is_pwsh) {
+    xstrlcpy(buf, "Start-Process ", len);
+    xstrlcat(buf, cmd, len);
+  } else {
+    xstrlcpy(buf, cmd, len);
+  }
   if (itmp != NULL) {
     // If there is a pipe, we have to put the '<' in front of it.
     // Don't do this when 'shellquote' is not empty, otherwise the
@@ -1616,10 +1632,14 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
         *p = NUL;
       }
     }
-    xstrlcat(buf, " < ", len);
-    xstrlcat(buf, (const char *)itmp, len);
+    if (is_pwsh) {
+      xstrlcat(buf, " -RedirectStandardInput ", len);
+    } else {
+      xstrlcat(buf, " < ", len);
+    }
+    xstrlcat(buf, itmp, len);
     if (*p_shq == NUL) {
-      const char *const p = find_pipe((const char *)cmd);
+      const char *const p = find_pipe(cmd);
       if (p != NULL) {
         xstrlcat(buf, " ", len - 1);  // Insert a space before the '|' for DOS
         xstrlcat(buf, p, len - 1);
@@ -3468,7 +3488,6 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
   static int pre_hl_id = 0;
   pos_T old_cursor = curwin->w_cursor;
   int start_nsubs;
-  int save_ma = 0;
 
   bool did_save = false;
 
@@ -4060,7 +4079,8 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
         //    there is a replace pattern.
         if (!cmdpreview || has_second_delim) {
           long lnum_start = lnum;  // save the start lnum
-          save_ma = curbuf->b_p_ma;
+          int save_ma = curbuf->b_p_ma;
+          int save_sandbox = sandbox;
           if (subflags.do_count) {
             // prevent accidentally changing the buffer by a function
             curbuf->b_p_ma = false;
@@ -4069,20 +4089,24 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           // Save flags for recursion.  They can change for e.g.
           // :s/^/\=execute("s#^##gn")
           subflags_T subflags_save = subflags;
-          // get length of substitution part
+
+          // Disallow changing text or switching window in an expression.
+          textlock++;
+          // Get length of substitution part, including the NUL.
+          // When it fails sublen is zero.
           sublen = vim_regsub_multi(&regmatch,
                                     sub_firstlnum - regmatch.startpos[0].lnum,
                                     (char_u *)sub, (char_u *)sub_firstline, 0,
                                     REGSUB_BACKSLASH | (p_magic ? REGSUB_MAGIC : 0));
+          textlock--;
+
           // If getting the substitute string caused an error, don't do
           // the replacement.
           // Don't keep flags set by a recursive call
           subflags = subflags_save;
-          if (aborting() || subflags.do_count) {
+          if (sublen == 0 || aborting() || subflags.do_count) {
             curbuf->b_p_ma = save_ma;
-            if (sandbox > 0) {
-              sandbox--;
-            }
+            sandbox = save_sandbox;
             goto skip;
           }
 
@@ -4111,10 +4135,12 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           int start_col = new_end - new_start;
           current_match.start.col = start_col;
 
+          textlock++;
           (void)vim_regsub_multi(&regmatch,
                                  sub_firstlnum - regmatch.startpos[0].lnum,
                                  (char_u *)sub, (char_u *)new_end, sublen,
                                  REGSUB_COPY | REGSUB_BACKSLASH | (p_magic ? REGSUB_MAGIC : 0));
+          textlock--;
           sub_nsubs++;
           did_sub = true;
 

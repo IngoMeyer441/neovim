@@ -64,6 +64,8 @@ static handle_T cursor_grid_handle = DEFAULT_GRID_HANDLE;
 static bool has_mouse = false;
 static int pending_has_mouse = -1;
 
+static Array call_buf = ARRAY_DICT_INIT;
+
 #if MIN_LOG_LEVEL > LOGLVL_DBG
 # define UI_LOG(funname)
 #else
@@ -123,6 +125,12 @@ void ui_init(void)
   default_grid.handle = 1;
   msg_grid_adj.target = &default_grid;
   ui_comp_init();
+  kv_ensure_space(call_buf, 16);
+}
+
+void ui_free_all_mem(void)
+{
+  kv_destroy(call_buf);
 }
 
 void ui_builtin_start(void)
@@ -171,15 +179,6 @@ bool ui_override(void)
 bool ui_active(void)
 {
   return ui_count > 1;
-}
-
-void ui_event(char *name, Array args)
-{
-  bool args_consumed = false;
-  ui_call_event(name, args, &args_consumed);
-  if (!args_consumed) {
-    api_free_array(args);
-  }
 }
 
 void ui_refresh(void)
@@ -496,6 +495,11 @@ int ui_current_col(void)
   return cursor_col;
 }
 
+handle_T ui_cursor_grid(void)
+{
+  return cursor_grid_handle;
+}
+
 void ui_flush(void)
 {
   cmdline_ui_flush();
@@ -508,10 +512,12 @@ void ui_flush(void)
     pending_cursor_update = false;
   }
   if (pending_mode_info_update) {
-    Array style = mode_style_array();
+    Arena arena = ARENA_EMPTY;
+    arena_start(&arena, &ui_ext_fixblk);
+    Array style = mode_style_array(&arena);
     bool enabled = (*p_guicursor != NUL);
     ui_call_mode_info_set(enabled, style);
-    api_free_array(style);
+    arena_mem_free(arena_finish(&arena), &ui_ext_fixblk);
     pending_mode_info_update = false;
   }
   if (pending_mode_update && !starting) {

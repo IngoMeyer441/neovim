@@ -305,7 +305,7 @@ func Test_getcompletion()
   call assert_equal([], l)
 
   let l = getcompletion('', 'dir')
-  call assert_true(index(l, expand('sautest/')) >= 0)
+  call assert_true(index(l, 'sautest/') >= 0)
   let l = getcompletion('NoMatch', 'dir')
   call assert_equal([], l)
 
@@ -415,7 +415,7 @@ func Test_getcompletion()
 
   " Command line completion tests
   let l = getcompletion('cd ', 'cmdline')
-  call assert_true(index(l, expand('sautest/')) >= 0)
+  call assert_true(index(l, 'sautest/') >= 0)
   let l = getcompletion('cd NoMatch', 'cmdline')
   call assert_equal([], l)
   let l = getcompletion('let v:n', 'cmdline')
@@ -539,7 +539,7 @@ func Test_expand_star_star()
   call mkdir('a/b', 'p')
   call writefile(['asdfasdf'], 'a/b/fileXname')
   call feedkeys(":find **/fileXname\<Tab>\<CR>", 'xt')
-  call assert_equal('find '.expand('a/b/fileXname'), getreg(':'))
+  call assert_equal('find a/b/fileXname', getreg(':'))
   bwipe!
   call delete('a', 'rf')
 endfunc
@@ -634,6 +634,14 @@ func Test_illegal_address2()
   quit!
   bwipe!
   call delete('Xtest.vim')
+endfunc
+
+func Test_mark_from_line_zero()
+  " this was reading past the end of the first (empty) line
+  new
+  norm oxxxx
+  call assert_fails("0;'(", 'E20:')
+  bwipe!
 endfunc
 
 func Test_cmdline_complete_wildoptions()
@@ -1210,6 +1218,30 @@ func Test_recalling_cmdline()
 
   unlet g:cmdlines
   cunmap <Plug>(save-cmdline)
+endfunc
+
+" this was going over the end of IObuff
+func Test_report_error_with_composing()
+  let caught = 'no'
+  try
+    exe repeat('0', 987) .. "0\xdd\x80\xdd\x80\xdd\x80\xdd\x80"
+  catch /E492:/
+    let caught = 'yes'
+  endtry
+  call assert_equal('yes', caught)
+endfunc
+
+" Test for expanding 2-letter and 3-letter :substitute command arguments.
+" These commands don't accept an argument.
+func Test_cmdline_complete_substitute_short()
+  for cmd in ['sc', 'sce', 'scg', 'sci', 'scI', 'scn', 'scp', 'scl',
+        \ 'sgc', 'sge', 'sg', 'sgi', 'sgI', 'sgn', 'sgp', 'sgl', 'sgr',
+        \ 'sic', 'sie', 'si', 'siI', 'sin', 'sip', 'sir',
+        \ 'sIc', 'sIe', 'sIg', 'sIi', 'sI', 'sIn', 'sIp', 'sIl', 'sIr',
+        \ 'src', 'srg', 'sri', 'srI', 'srn', 'srp', 'srl', 'sr']
+    call feedkeys(':' .. cmd .. " \<Tab>\<C-B>\"\<CR>", 'tx')
+    call assert_equal('"' .. cmd .. " \<Tab>", @:)
+  endfor
 endfunc
 
 func Check_completion()
