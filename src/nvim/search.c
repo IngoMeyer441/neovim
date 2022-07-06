@@ -286,6 +286,8 @@ static struct spat saved_last_search_spat;
 static int did_save_last_search_spat = 0;
 static int saved_last_idx = 0;
 static bool saved_no_hlsearch = false;
+static colnr_T saved_search_match_endcol;
+static linenr_T saved_search_match_lines;
 
 /// Save and restore the search pattern for incremental highlight search
 /// feature.
@@ -326,6 +328,21 @@ void restore_last_search_pattern(void)
   set_vv_searchforward();
   last_idx = saved_last_idx;
   set_no_hlsearch(saved_no_hlsearch);
+}
+
+/// Save and restore the incsearch highlighting variables.
+/// This is required so that calling searchcount() at does not invalidate the
+/// incsearch highlighting.
+static void save_incsearch_state(void)
+{
+  saved_search_match_endcol = search_match_endcol;
+  saved_search_match_lines  = search_match_lines;
+}
+
+static void restore_incsearch_state(void)
+{
+  search_match_endcol = saved_search_match_endcol;
+  search_match_lines  = saved_search_match_lines;
 }
 
 char_u *last_search_pattern(void)
@@ -910,8 +927,7 @@ int searchit(win_T *win, buf_T *buf, pos_T *pos, pos_T *end_pos, Direction dir, 
         lnum = 1;
       }
       if (!shortmess(SHM_SEARCH) && (options & SEARCH_MSG)) {
-        give_warning((char_u *)_(dir == BACKWARD
-                                 ? top_bot_msg : bot_top_msg), true);
+        give_warning(_(dir == BACKWARD ? top_bot_msg : bot_top_msg), true);
       }
       if (extra_arg != NULL) {
         extra_arg->sa_wrapped = true;
@@ -1261,7 +1277,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char_u *pat, long count,
             memset(msgbuf + pat_len, ' ', r - msgbuf);
           }
         }
-        msg_outtrans(msgbuf);
+        msg_outtrans((char *)msgbuf);
         msg_clr_eos();
         msg_check();
 
@@ -1452,7 +1468,7 @@ int search_for_exact_line(buf_T *buf, pos_T *pos, Direction dir, char_u *pat)
       if (p_ws) {
         pos->lnum = buf->b_ml.ml_line_count;
         if (!shortmess(SHM_SEARCH)) {
-          give_warning((char_u *)_(top_bot_msg), true);
+          give_warning(_(top_bot_msg), true);
         }
       } else {
         pos->lnum = 1;
@@ -1462,7 +1478,7 @@ int search_for_exact_line(buf_T *buf, pos_T *pos, Direction dir, char_u *pat)
       if (p_ws) {
         pos->lnum = 1;
         if (!shortmess(SHM_SEARCH)) {
-          give_warning((char_u *)_(bot_top_msg), true);
+          give_warning(_(bot_top_msg), true);
         }
       } else {
         pos->lnum = 1;
@@ -4515,7 +4531,7 @@ static void cmdline_search_stat(int dirc, pos_T *pos, pos_T *cursor_pos, bool sh
     // keep the message even after redraw, but don't put in history
     msg_hist_off = true;
     msg_ext_set_kind("search_count");
-    give_warning(msgbuf, false);
+    give_warning((char *)msgbuf, false);
     msg_hist_off = false;
   }
 }
@@ -4718,6 +4734,7 @@ void f_searchcount(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
 
   save_last_search_pattern();
+  save_incsearch_state();
   if (pattern != NULL) {
     if (*pattern == NUL) {
       goto the_end;
@@ -4739,6 +4756,7 @@ void f_searchcount(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
 the_end:
   restore_last_search_pattern();
+  restore_incsearch_state();
 }
 
 /// Fuzzy string matching
@@ -5414,8 +5432,8 @@ void find_pattern_in_path(char_u *ptr, Direction dir, size_t len, bool whole, bo
           if (i == max_path_depth) {
             break;
           }
-          if (path_full_compare(new_fname, files[i].name,
-                                true, true) & kEqualFiles) {
+          if (path_full_compare((char *)new_fname, (char *)files[i].name, true,
+                                true) & kEqualFiles) {
             if (type != CHECK_PATH
                 && action == ACTION_SHOW_ALL && files[i].matched) {
               msg_putchar('\n');  // cursor below last one */

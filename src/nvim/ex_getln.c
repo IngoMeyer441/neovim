@@ -952,8 +952,7 @@ static uint8_t *command_line_enter(int firstc, long count, int indent, bool init
     need_wait_return = false;
   }
 
-  set_string_option_direct("icm", -1, s->save_p_icm, OPT_FREE,
-                           SID_NONE);
+  set_string_option_direct("icm", -1, (char *)s->save_p_icm, OPT_FREE, SID_NONE);
   State = s->save_State;
   if (cmdpreview != save_cmdpreview) {
     cmdpreview = save_cmdpreview;  // restore preview state
@@ -2372,7 +2371,7 @@ static void cmdpreview_close_win(void)
   }
 }
 
-/// Show 'inccommand' preview. It works like this:
+/// Show 'inccommand' preview if command is previewable. It works like this:
 ///    1. Store current undo information so we can revert to current state later.
 ///    2. Execute the preview callback with the parsed command, preview buffer number and preview
 ///       namespace number as arguments. The preview callback sets the highlight and does the
@@ -2385,12 +2384,15 @@ static void cmdpreview_close_win(void)
 ///    5. If the return value of the preview callback is not 0, update the screen while the effects
 ///       of the preview are still in place.
 ///    6. Revert all changes made by the preview callback.
-static void cmdpreview_show(CommandLineState *s)
+///
+/// @return whether preview is shown or not.
+static bool cmdpreview_may_show(CommandLineState *s)
 {
   // Parse the command line and return if it fails.
   exarg_T ea;
   CmdParseInfo cmdinfo;
   // Copy the command line so we can modify it.
+  int cmdpreview_type = 0;
   char *cmdline = xstrdup((char *)ccline.cmdbuff);
   char *errormsg = NULL;
   emsg_off++;  // Block errors when parsing the command line, and don't update v:errmsg
@@ -2399,6 +2401,12 @@ static void cmdpreview_show(CommandLineState *s)
     goto end;
   }
   emsg_off--;
+
+  // Check if command is previewable, if not, don't attempt to show preview
+  if (!(ea.argt & EX_PREVIEW)) {
+    undo_cmdmod(&cmdinfo.cmdmod);
+    goto end;
+  }
 
   // Swap invalid command range if needed
   if ((ea.argt & EX_RANGE) && ea.line1 > ea.line2) {
@@ -2454,7 +2462,7 @@ static void cmdpreview_show(CommandLineState *s)
   // the preview.
   Error err = ERROR_INIT;
   try_start();
-  int cmdpreview_type = execute_cmd(&ea, &cmdinfo, true);
+  cmdpreview_type = execute_cmd(&ea, &cmdinfo, true);
   if (try_end(&err)) {
     api_clear_error(&err);
     cmdpreview_type = 0;
@@ -2518,14 +2526,9 @@ static void cmdpreview_show(CommandLineState *s)
   update_topline(curwin);
 
   redrawcmdline();
-
-  // If preview callback returned 0, update screen to clear remnants of an earlier preview.
-  if (cmdpreview_type == 0) {
-    cmdpreview = false;
-    update_screen(SOME_VALID);
-  }
 end:
   xfree(cmdline);
+  return cmdpreview_type != 0;
 }
 
 static int command_line_changed(CommandLineState *s)
@@ -2564,9 +2567,9 @@ static int command_line_changed(CommandLineState *s)
       && *p_icm != NUL       // 'inccommand' is set
       && curbuf->b_p_ma      // buffer is modifiable
       && cmdline_star == 0   // not typing a password
-      && cmd_can_preview((char *)ccline.cmdbuff)
-      && !vpeekc_any()) {
-    cmdpreview_show(s);
+      && !vpeekc_any()
+      && cmdpreview_may_show(s)) {
+    // 'inccommand' preview has been shown.
   } else if (cmdpreview) {
     cmdpreview = false;
     update_screen(SOME_VALID);  // Clear 'inccommand' preview.
@@ -2747,7 +2750,7 @@ static int cmdline_charsize(int idx)
   if (cmdline_star > 0) {           // showing '*', always 1 position
     return 1;
   }
-  return ptr2cells(ccline.cmdbuff + idx);
+  return ptr2cells((char *)ccline.cmdbuff + idx);
 }
 
 /// Compute the offset of the cursor on the command line for the prompt and
@@ -3550,7 +3553,7 @@ void put_on_cmdline(char_u *str, int len, int redraw)
     }
     if (i != 0) {
       // Also backup the cursor position.
-      i = ptr2cells(ccline.cmdbuff + ccline.cmdpos);
+      i = ptr2cells((char *)ccline.cmdbuff + ccline.cmdpos);
       ccline.cmdspos -= i;
       msg_col -= i;
       if (msg_col < 0) {
@@ -4547,10 +4550,10 @@ static int showmatches(expand_T *xp, int wildmenu)
       if (!showtail && (xp->xp_context == EXPAND_FILES
                         || xp->xp_context == EXPAND_SHELLCMD
                         || xp->xp_context == EXPAND_BUFFERS)) {
-        home_replace(NULL, files_found[i], NameBuff, MAXPATHL, TRUE);
-        j = vim_strsize(NameBuff);
+        home_replace(NULL, (char *)files_found[i], (char *)NameBuff, MAXPATHL, true);
+        j = vim_strsize((char *)NameBuff);
       } else {
-        j = vim_strsize(L_SHOWFILE(i));
+        j = vim_strsize((char *)L_SHOWFILE(i));
       }
       if (j > maxlen) {
         maxlen = j;
@@ -4617,8 +4620,7 @@ static int showmatches(expand_T *xp, int wildmenu)
           if (showtail) {
             p = L_SHOWFILE(k);
           } else {
-            home_replace(NULL, files_found[k], NameBuff, MAXPATHL,
-                         TRUE);
+            home_replace(NULL, (char *)files_found[k], (char *)NameBuff, MAXPATHL, true);
             p = NameBuff;
           }
         } else {
@@ -6532,13 +6534,13 @@ void ex_history(exarg_T *eap)
           msg_putchar('\n');
           snprintf((char *)IObuff, IOSIZE, "%c%6d  ", i == idx ? '>' : ' ',
                    hist[i].hisnum);
-          if (vim_strsize(hist[i].hisstr) > Columns - 10) {
+          if (vim_strsize((char *)hist[i].hisstr) > Columns - 10) {
             trunc_string(hist[i].hisstr, IObuff + STRLEN(IObuff),
                          Columns - 10, IOSIZE - (int)STRLEN(IObuff));
           } else {
             STRCAT(IObuff, hist[i].hisstr);
           }
-          msg_outtrans(IObuff);
+          msg_outtrans((char *)IObuff);
           ui_flush();
         }
         if (i == idx) {
@@ -6643,8 +6645,8 @@ static int open_cmdwin(void)
   const int histtype = hist_char2type(cmdwin_type);
   if (histtype == HIST_CMD || histtype == HIST_DEBUG) {
     if (p_wc == TAB) {
-      add_map((char_u *)"<buffer> <Tab> <C-X><C-V>", MODE_INSERT, false);
-      add_map((char_u *)"<buffer> <Tab> a<C-X><C-V>", MODE_NORMAL, false);
+      add_map("<Tab>", "<C-X><C-V>", MODE_INSERT, true);
+      add_map("<Tab>", "a<C-X><C-V>", MODE_NORMAL, true);
     }
     set_option_value("ft", 0L, "vim", OPT_LOCAL);
   }

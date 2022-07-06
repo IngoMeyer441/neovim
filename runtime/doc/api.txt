@@ -1477,10 +1477,10 @@ nvim_set_hl({ns_id}, {name}, {*val})                           *nvim_set_hl()*
                              • bold: boolean
                              • standout: boolean
                              • underline: boolean
-                             • underlineline: boolean
                              • undercurl: boolean
-                             • underdot: boolean
-                             • underdash: boolean
+                             • underdouble: boolean
+                             • underdotted: boolean
+                             • underdashed: boolean
                              • strikethrough: boolean
                              • italic: boolean
                              • reverse: boolean
@@ -1944,6 +1944,11 @@ nvim_parse_cmd({str}, {opts})                               *nvim_parse_cmd()*
                         is treated as the start of a comment.
 
                     • mods: (dictionary) |:command-modifiers|.
+                      • filter: (dictionary) |:filter|.
+                        • pattern: (string) Filter pattern. Empty string if
+                          there is no filter.
+                        • force: (boolean) Whether filter is inverted or not.
+
                       • silent: (boolean) |:silent|.
                       • emsg_silent: (boolean) |:silent!|.
                       • sandbox: (boolean) |:sandbox|.

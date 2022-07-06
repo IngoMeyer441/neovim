@@ -1,7 +1,5 @@
 option(USE_GCOV "Enable gcov support" OFF)
 
-include(DefCmdTarget)
-
 if(USE_GCOV)
   if(CLANG_TSAN)
     # GCOV and TSAN results in false data race reports
@@ -24,7 +22,6 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -framework CoreServices")
 endif()
 
-set(TOUCHES_DIR ${PROJECT_BINARY_DIR}/touches)
 set(GENERATOR_DIR ${CMAKE_CURRENT_LIST_DIR}/generators)
 set(GENERATED_DIR ${PROJECT_BINARY_DIR}/src/nvim/auto)
 set(BINARY_LIB_DIR ${PROJECT_BINARY_DIR}/lib/nvim/)
@@ -59,7 +56,7 @@ set(EVENTS_GENERATOR ${GENERATOR_DIR}/gen_events.lua)
 set(KEYSETS_GENERATOR ${GENERATOR_DIR}/gen_keysets.lua)
 set(OPTIONS_GENERATOR ${GENERATOR_DIR}/gen_options.lua)
 set(UNICODE_TABLES_GENERATOR ${GENERATOR_DIR}/gen_unicode_tables.lua)
-set(UNICODE_DIR ${PROJECT_SOURCE_DIR}/unicode)
+set(UNICODE_DIR ${PROJECT_SOURCE_DIR}/src/unicode)
 set(GENERATED_UNICODE_TABLES ${GENERATED_DIR}/unicode_tables.generated.h)
 set(VIM_MODULE_FILE ${GENERATED_DIR}/lua/vim_module.generated.h)
 set(LUA_EDITOR_MODULE_SOURCE ${PROJECT_SOURCE_DIR}/runtime/lua/vim/_editor.lua)
@@ -161,12 +158,9 @@ list(REMOVE_ITEM NVIM_SOURCES ${to_remove})
 
 # Legacy files that do not yet pass -Wconversion.
 set(CONV_SOURCES
-  ex_cmds.c
-  fileio.c
   lua/treesitter.c
   mbyte.c
   memline.c
-  message.c
   regexp.c
   screen.c
   search.c
@@ -246,12 +240,12 @@ if(use_git_version)
   file(RELATIVE_PATH relbuild "${PROJECT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}")
   add_custom_target(update_version_stamp ALL
     COMMAND ${LUA_PRG} scripts/update_version_stamp.lua
-      ${relbuild}/config/auto/versiondef_git.h
+      ${relbuild}/cmake.config/auto/versiondef_git.h
       "v${NVIM_VERSION_MAJOR}.${NVIM_VERSION_MINOR}.${NVIM_VERSION_PATCH}${NVIM_VERSION_PRERELEASE}"
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    BYPRODUCTS ${CMAKE_BINARY_DIR}/config/auto/versiondef_git.h)
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/cmake.config/auto/versiondef_git.h)
 else()
-  file(WRITE ${CMAKE_BINARY_DIR}/config/auto/versiondef_git.h "")
+  file(WRITE ${CMAKE_BINARY_DIR}/cmake.config/auto/versiondef_git.h "")
 endif()
 
 # NVIM_GENERATED_FOR_HEADERS: generated headers to be included in headers
@@ -396,7 +390,7 @@ list(APPEND NVIM_GENERATED_FOR_SOURCES
 )
 
 list(APPEND NVIM_GENERATED_SOURCES
-  "${PROJECT_BINARY_DIR}/config/auto/pathdef.c"
+  "${PROJECT_BINARY_DIR}/cmake.config/auto/pathdef.c"
 )
 
 add_custom_command(OUTPUT ${GENERATED_EX_CMDS_ENUM} ${GENERATED_EX_CMDS_DEFS}
@@ -803,16 +797,12 @@ foreach(sfile ${LINT_NVIM_SOURCES})
 endforeach()
 add_custom_target(lintc DEPENDS ${LINT_TARGETS})
 
-def_cmd_target(lintuncrustify ${UNCRUSTIFY_PRG} UNCRUSTIFY_PRG false)
-if(UNCRUSTIFY_PRG)
-  add_custom_command(TARGET lintuncrustify
-    COMMAND ${CMAKE_COMMAND}
-      -D UNCRUSTIFY_PRG=${UNCRUSTIFY_PRG}
-      -D PROJECT_SOURCE_DIR=${PROJECT_SOURCE_DIR}
-      -D NVIM_SOURCES="${NVIM_SOURCES}"
-      -D NVIM_HEADERS="${NVIM_HEADERS}"
-      -P ${PROJECT_SOURCE_DIR}/cmake/RunUncrustify.cmake)
-endif()
+add_glob_targets(
+  TARGET lintuncrustify
+  COMMAND ${UNCRUSTIFY_PRG}
+  FLAGS -c "${PROJECT_SOURCE_DIR}/src/uncrustify.cfg" -q --check
+  FILES ${LINT_NVIM_SOURCES}
+  )
 
 add_custom_target(
   lintcfull

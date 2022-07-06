@@ -82,8 +82,13 @@
 #include "nvim/vim.h"
 #include "nvim/window.h"
 
-static char *e_no_such_user_defined_command_str = N_("E184: No such user-defined command: %s");
-static char *e_no_such_user_defined_command_in_current_buffer_str
+static char e_no_such_user_defined_command_str[]
+  = N_("E184: No such user-defined command: %s");
+static char e_ambiguous_use_of_user_defined_command[]
+  = N_("E464: Ambiguous use of user-defined command");
+static char e_not_an_editor_command[]
+  = N_("E492: Not an editor command");
+static char e_no_such_user_defined_command_in_current_buffer_str[]
   = N_("E1237: No such user-defined command in current buffer: %s");
 
 static int quitmore = 0;
@@ -1207,7 +1212,7 @@ static char *skip_colon_white(const char *p, bool skipleadingwhite)
 /// Set the addr type for command
 ///
 /// @param p pointer to character after command name in cmdline
-void set_cmd_addr_type(exarg_T *eap, char_u *p)
+void set_cmd_addr_type(exarg_T *eap, char *p)
 {
   // ea.addr_type for user commands is set by find_ucmd
   if (IS_USER_CMDIDX(eap->cmdidx)) {
@@ -1220,7 +1225,7 @@ void set_cmd_addr_type(exarg_T *eap, char_u *p)
   }
   // :wincmd range depends on the argument
   if (eap->cmdidx == CMD_wincmd && p != NULL) {
-    get_wincmd_addr_type(skipwhite((char *)p), eap);
+    get_wincmd_addr_type(skipwhite(p), eap);
   }
   // :.cc in quickfix window uses line number
   if ((eap->cmdidx == CMD_cc || eap->cmdidx == CMD_ll) && bt_quickfix(curbuf)) {
@@ -1400,6 +1405,8 @@ bool is_cmd_ni(cmdidx_T cmdidx)
 }
 
 /// Parse command line and return information about the first command.
+/// If parsing is done successfully, need to free cmod_filter_pat and cmod_filter_regmatch.regprog
+/// after calling, usually done using undo_cmdmod() or execute_cmd().
 ///
 /// @param cmdline Command line string
 /// @param[out] eap Ex command arguments
@@ -1427,7 +1434,7 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
 
   // Parse command modifiers
   if (parse_command_modifiers(eap, errormsg, &cmdinfo->cmdmod, false) == FAIL) {
-    return false;
+    goto err;
   }
   after_modifier = eap->cmd;
 
@@ -1439,28 +1446,32 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
     eap->cmd = skipwhite(eap->cmd + 1);
   }
   p = find_ex_command(eap, NULL);
+  if (p == NULL) {
+    *errormsg = _(e_ambiguous_use_of_user_defined_command);
+    goto err;
+  }
 
   // Set command address type and parse command range
-  set_cmd_addr_type(eap, (char_u *)p);
+  set_cmd_addr_type(eap, p);
   eap->cmd = cmd;
   if (parse_cmd_address(eap, errormsg, false) == FAIL) {
-    return false;
+    goto err;
   }
 
   // Skip colon and whitespace
   eap->cmd = skip_colon_white(eap->cmd, true);
   // Fail if command is a comment or if command doesn't exist
   if (*eap->cmd == NUL || *eap->cmd == '"') {
-    return false;
+    goto err;
   }
   // Fail if command is invalid
   if (eap->cmdidx == CMD_SIZE) {
-    STRCPY(IObuff, _("E492: Not an editor command"));
+    STRCPY(IObuff, _(e_not_an_editor_command));
     // If the modifier was parsed OK the error must be in the following command
     char *cmdname = after_modifier ? after_modifier : cmdline;
     append_command(cmdname);
     *errormsg = (char *)IObuff;
-    return false;
+    goto err;
   }
 
   // Correctly set 'forceit' for commands
@@ -1499,12 +1510,12 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
   // Fail if command doesn't support bang but is used with a bang
   if (!(eap->argt & EX_BANG) && eap->forceit) {
     *errormsg = _(e_nobang);
-    return false;
+    goto err;
   }
   // Fail if command doesn't support a range but it is given a range
   if (!(eap->argt & EX_RANGE) && eap->addr_count > 0) {
     *errormsg = _(e_norange);
-    return false;
+    goto err;
   }
   // Set default range for command if required
   if ((eap->argt & EX_DFLALL) && eap->addr_count == 0) {
@@ -1514,7 +1525,7 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
   // Parse register and count
   parse_register(eap);
   if (parse_count(eap, errormsg, false) == FAIL) {
-    return false;
+    goto err;
   }
 
   // Remove leading whitespace and colon from next command
@@ -1531,6 +1542,9 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
   }
 
   return true;
+err:
+  undo_cmdmod(&cmdinfo->cmdmod);
+  return false;
 }
 
 /// Execute an Ex command using parsed command line information.
@@ -1812,7 +1826,7 @@ static char *do_one_cmd(char **cmdlinep, int flags, cstack_T *cstack, LineGetter
   // The ea.cmd pointer is updated to point to the first character following the
   // range spec. If an initial address is found, but no second, the upper bound
   // is equal to the lower.
-  set_cmd_addr_type(&ea, (char_u *)p);
+  set_cmd_addr_type(&ea, p);
 
   ea.cmd = cmd;
   if (parse_cmd_address(&ea, &errormsg, false) == FAIL) {
@@ -1886,14 +1900,14 @@ static char *do_one_cmd(char **cmdlinep, int flags, cstack_T *cstack, LineGetter
 
   if (p == NULL) {
     if (!ea.skip) {
-      errormsg = _("E464: Ambiguous use of user-defined command");
+      errormsg = _(e_ambiguous_use_of_user_defined_command);
     }
     goto doend;
   }
   // Check for wrong commands.
   if (ea.cmdidx == CMD_SIZE) {
     if (!ea.skip) {
-      STRCPY(IObuff, _("E492: Not an editor command"));
+      STRCPY(IObuff, _(e_not_an_editor_command));
       // If the modifier was parsed OK the error must be in the following
       // command
       char *cmdname = after_modifier ? after_modifier : *cmdlinep;
@@ -2381,7 +2395,7 @@ char *ex_errmsg(const char *const msg, const char *const arg)
 /// - Set ex_pressedreturn for an empty command line.
 ///
 /// @param skip_only      if false, undo_cmdmod() must be called later to free
-///                       any cmod_filter_regmatch.regprog.
+///                       any cmod_filter_pat and cmod_filter_regmatch.regprog.
 /// @param[out] errormsg  potential error message.
 ///
 /// Call apply_cmdmod() to get the side effects of the modifiers:
@@ -2500,6 +2514,7 @@ int parse_command_modifiers(exarg_T *eap, char **errormsg, cmdmod_T *cmod, bool 
         break;
       }
       if (!skip_only) {
+        cmod->cmod_filter_pat = xstrdup(reg_pat);
         cmod->cmod_filter_regmatch.regprog = vim_regcomp(reg_pat, RE_MAGIC);
         if (cmod->cmod_filter_regmatch.regprog == NULL) {
           break;
@@ -2655,13 +2670,13 @@ static void apply_cmdmod(cmdmod_T *cmod)
   if ((cmod->cmod_flags & CMOD_NOAUTOCMD) && cmod->cmod_save_ei == NULL) {
     // Set 'eventignore' to "all".
     // First save the existing option value for restoring it later.
-    cmod->cmod_save_ei = vim_strsave(p_ei);
-    set_string_option_direct("ei", -1, (char_u *)"all", OPT_FREE, SID_NONE);
+    cmod->cmod_save_ei = (char *)vim_strsave(p_ei);
+    set_string_option_direct("ei", -1, "all", OPT_FREE, SID_NONE);
   }
 }
 
 /// Undo and free contents of "cmod".
-static void undo_cmdmod(cmdmod_T *cmod)
+void undo_cmdmod(cmdmod_T *cmod)
   FUNC_ATTR_NONNULL_ALL
 {
   if (cmod->cmod_verbose_save > 0) {
@@ -2676,11 +2691,12 @@ static void undo_cmdmod(cmdmod_T *cmod)
 
   if (cmod->cmod_save_ei != NULL) {
     // Restore 'eventignore' to the value before ":noautocmd".
-    set_string_option_direct("ei", -1, (char_u *)cmod->cmod_save_ei, OPT_FREE, SID_NONE);
+    set_string_option_direct("ei", -1, cmod->cmod_save_ei, OPT_FREE, SID_NONE);
     free_string_option((char_u *)cmod->cmod_save_ei);
     cmod->cmod_save_ei = NULL;
   }
 
+  xfree(cmod->cmod_filter_pat);
   vim_regfree(cmod->cmod_filter_regmatch.regprog);
 
   if (cmod->cmod_save_msg_silent > 0) {
@@ -5792,7 +5808,7 @@ static void uc_list(char *name, size_t name_len)
       } while (len < 25 - over);
 
       IObuff[len] = '\0';
-      msg_outtrans(IObuff);
+      msg_outtrans((char *)IObuff);
 
       msg_outtrans_special(cmd->uc_rep, false,
                            name_len == 0 ? Columns - 47 : 0);
@@ -7562,7 +7578,7 @@ static void ex_recover(exarg_T *eap)
                      | CCGD_EXCMD)
 
       && (*eap->arg == NUL
-          || setfname(curbuf, (char_u *)eap->arg, NULL, true) == OK)) {
+          || setfname(curbuf, eap->arg, NULL, true) == OK)) {
     ml_recover(true);
   }
   recoverymode = false;
@@ -7750,9 +7766,9 @@ static void ex_tabs(exarg_T *eap)
       if (buf_spname(wp->w_buffer) != NULL) {
         STRLCPY(IObuff, buf_spname(wp->w_buffer), IOSIZE);
       } else {
-        home_replace(wp->w_buffer, (char_u *)wp->w_buffer->b_fname, IObuff, IOSIZE, true);
+        home_replace(wp->w_buffer, wp->w_buffer->b_fname, (char *)IObuff, IOSIZE, true);
       }
-      msg_outtrans(IObuff);
+      msg_outtrans((char *)IObuff);
       ui_flush();                  // output one line at a time
       os_breakcheck();
     }
@@ -9634,7 +9650,7 @@ static char *arg_all(void)
   for (;;) {
     len = 0;
     for (idx = 0; idx < ARGCOUNT; idx++) {
-      p = (char *)alist_name(&ARGLIST[idx]);
+      p = alist_name(&ARGLIST[idx]);
       if (p == NULL) {
         continue;
       }
@@ -10029,44 +10045,6 @@ static void ex_terminal(exarg_T *eap)
   }
 
   do_cmdline_cmd(ex_cmd);
-}
-
-/// Checks if `cmd` is "previewable" (i.e. supported by 'inccommand').
-///
-/// @param[in] cmd Commandline to check. May start with a range or modifier.
-///
-/// @return true if `cmd` is previewable
-bool cmd_can_preview(char *cmd)
-{
-  if (cmd == NULL) {
-    return false;
-  }
-
-  // Ignore additional colons at the start...
-  cmd = skip_colon_white(cmd, true);
-
-  // Ignore any leading modifiers (:keeppatterns, :verbose, etc.)
-  for (int len = modifier_len(cmd); len != 0; len = modifier_len(cmd)) {
-    cmd += len;
-    cmd = skip_colon_white(cmd, true);
-  }
-
-  exarg_T ea;
-  memset(&ea, 0, sizeof(ea));
-  // parse the command line
-  ea.cmd = skip_range(cmd, NULL);
-  if (*ea.cmd == '*') {
-    ea.cmd = skipwhite(ea.cmd + 1);
-  }
-
-  if (find_ex_command(&ea, NULL) == NULL || ea.cmdidx == CMD_SIZE) {
-    return false;
-  } else if (!IS_USER_CMDIDX(ea.cmdidx)) {
-    // find_ex_command sets the flags for user commands automatically
-    ea.argt = cmdnames[(int)ea.cmdidx].cmd_argt;
-  }
-
-  return (ea.argt & EX_PREVIEW);
 }
 
 /// Gets a map of maps describing user-commands defined for buffer `buf` or

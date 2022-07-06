@@ -1022,7 +1022,7 @@ static int normal_execute(VimState *state, int key)
 
   s->need_flushbuf = add_to_showcmd(s->c);
 
-  while (normal_get_command_count(s)) { }
+  while (normal_get_command_count(s)) {}
 
   if (s->c == K_EVENT) {
     // Save the count values so that ca.opcount and ca.count0 are exactly
@@ -3287,7 +3287,7 @@ static bool nv_screengo(oparg_T *oap, int dir, long dist)
     validate_virtcol();
     colnr_T virtcol = curwin->w_virtcol;
     if (virtcol > (colnr_T)width1 && *get_showbreak_value(curwin) != NUL) {
-      virtcol -= vim_strsize(get_showbreak_value(curwin));
+      virtcol -= vim_strsize((char *)get_showbreak_value(curwin));
     }
 
     int c = utf_ptr2char((char *)get_cursor_pos_ptr());
@@ -4282,7 +4282,7 @@ static void nv_ident(cmdarg_T *cap)
       // Start insert mode in terminal buffer
       restart_edit = 'i';
 
-      add_map((char_u *)"<buffer> <esc> <Cmd>bdelete!<CR>", MODE_TERMINAL, true);
+      add_map("<esc>", "<Cmd>bdelete!<CR>", MODE_TERMINAL, true);
     }
   }
 

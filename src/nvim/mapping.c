@@ -939,8 +939,8 @@ static int get_map_mode(char **cmdp, bool forceit)
   return mode;
 }
 
-/// Clear all mappings or abbreviations.
-/// 'abbr' should be false for mappings, true for abbreviations.
+/// Clear all mappings (":mapclear") or abbreviations (":abclear").
+/// "abbr" should be false for mappings, true for abbreviations.
 /// This function used to be called map_clear().
 static void do_mapclear(char_u *cmdp, char_u *arg, int forceit, int abbr)
 {
@@ -954,7 +954,7 @@ static void do_mapclear(char_u *cmdp, char_u *arg, int forceit, int abbr)
   }
 
   mode = get_map_mode((char **)&cmdp, forceit);
-  map_clear_int(curbuf, mode, local, abbr);
+  map_clear_mode(curbuf, mode, local, abbr);
 }
 
 /// Clear all mappings in "mode".
@@ -963,7 +963,7 @@ static void do_mapclear(char_u *cmdp, char_u *arg, int forceit, int abbr)
 /// @param mode  mode in which to delete
 /// @param local  true for buffer-local mappings
 /// @param abbr  true for abbreviations
-void map_clear_int(buf_T *buf, int mode, bool local, bool abbr)
+void map_clear_mode(buf_T *buf, int mode, bool local, bool abbr)
 {
   mapblock_T *mp, **mpp;
   int hash;
@@ -1944,6 +1944,29 @@ char_u *check_map(char_u *keys, int mode, int exact, int ign_mod, int abbr, mapb
   return NULL;
 }
 
+/// "hasmapto()" function
+void f_hasmapto(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+{
+  const char *mode;
+  const char *const name = tv_get_string(&argvars[0]);
+  bool abbr = false;
+  char buf[NUMBUFLEN];
+  if (argvars[1].v_type == VAR_UNKNOWN) {
+    mode = "nvo";
+  } else {
+    mode = tv_get_string_buf(&argvars[1], buf);
+    if (argvars[2].v_type != VAR_UNKNOWN) {
+      abbr = tv_get_number(&argvars[2]);
+    }
+  }
+
+  if (map_to_exists(name, mode, abbr)) {
+    rettv->vval.v_number = true;
+  } else {
+    rettv->vval.v_number = false;
+  }
+}
+
 /// Fill a dictionary with all applicable maparg() like dictionaries
 ///
 /// @param dict          The dictionary to be filled
@@ -2092,37 +2115,35 @@ void f_mapcheck(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
 void init_default_mappings(void)
 {
-  add_map((char_u *)"Y y$", MODE_NORMAL, true);
+  add_map("Y", "y$", MODE_NORMAL, false);
 
   // Use normal! <C-L> to prevent inserting raw <C-L> when using i_<C-O>
   // See https://github.com/neovim/neovim/issues/17473
-  add_map((char_u *)"<C-L> <Cmd>nohlsearch<Bar>diffupdate<Bar>normal! <C-L><CR>",
-          MODE_NORMAL, true);
-  add_map((char_u *)"<C-U> <C-G>u<C-U>", MODE_INSERT, true);
-  add_map((char_u *)"<C-W> <C-G>u<C-W>", MODE_INSERT, true);
-  add_map((char_u *)"* y/\\\\V<C-R>\"<CR>", MODE_VISUAL, true);
-  add_map((char_u *)"# y?\\\\V<C-R>\"<CR>", MODE_VISUAL, true);
+  add_map("<C-L>", "<Cmd>nohlsearch<Bar>diffupdate<Bar>normal! <C-L><CR>",
+          MODE_NORMAL, false);
+  add_map("<C-U>", "<C-G>u<C-U>", MODE_INSERT, false);
+  add_map("<C-W>", "<C-G>u<C-W>", MODE_INSERT, false);
+  add_map("*", "y/\\\\V<C-R>\"<CR>", MODE_VISUAL, false);
+  add_map("#", "y?\\\\V<C-R>\"<CR>", MODE_VISUAL, false);
 }
 
-/// Add a mapping. Unlike @ref do_map this copies the {map} argument, so
+/// Add a mapping. Unlike @ref do_map this copies the string arguments, so
 /// static or read-only strings can be used.
 ///
-/// @param map  C-string containing the arguments of the map/abbrev command,
-///             i.e. everything except the initial `:[X][nore]map`.
+/// @param lhs  C-string containing the lhs of the mapping
+/// @param rhs  C-string containing the rhs of the mapping
 /// @param mode  Bitflags representing the mode in which to set the mapping.
 ///              See @ref get_map_mode.
-/// @param nore  If true, make a non-recursive mapping.
-void add_map(char_u *map, int mode, bool nore)
+/// @param buffer  If true, make a buffer-local mapping for curbuf
+void add_map(char *lhs, char *rhs, int mode, bool buffer)
 {
-  char_u *s;
-  char *cpo_save = p_cpo;
+  MapArguments args = { 0 };
+  set_maparg_lhs_rhs(lhs, strlen(lhs), rhs, strlen(rhs), LUA_NOREF, 0, &args);
+  args.buffer = buffer;
 
-  p_cpo = "";         // Allow <> notation
-  // Need to put string in allocated memory, because do_map() will modify it.
-  s = vim_strsave(map);
-  (void)do_map(nore ? 2 : 0, s, mode, false);
-  xfree(s);
-  p_cpo = cpo_save;
+  buf_do_map(2, &args, mode, false, curbuf);
+  xfree(args.rhs);
+  xfree(args.orig_rhs);
 }
 
 /// Any character has an equivalent 'langmap' character.  This is used for
@@ -2324,7 +2345,7 @@ void ex_map(exarg_T *eap)
   // print the mappings for security reasons.
   if (secure) {
     secure = 2;
-    msg_outtrans((char_u *)eap->cmd);
+    msg_outtrans(eap->cmd);
     msg_putchar('\n');
   }
   do_exmap(eap, false);

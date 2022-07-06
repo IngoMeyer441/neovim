@@ -1206,7 +1206,7 @@ void ex_diffpatch(exarg_T *eap)
       || (os_chdir((char *)dirbuf) != 0)) {
     dirbuf[0] = NUL;
   } else {
-    char *tempdir = (char *)vim_gettempdir();
+    char *tempdir = vim_gettempdir();
     if (tempdir == NULL) {
       tempdir = "/tmp";
     }
@@ -1408,8 +1408,7 @@ void diff_win_options(win_T *wp, int addbuf)
     }
     wp->w_p_fdm_save = vim_strsave(wp->w_p_fdm);
   }
-  set_string_option_direct("fdm", -1, (char_u *)"diff",
-                           OPT_LOCAL | OPT_FREE, 0);
+  set_string_option_direct("fdm", -1, "diff", OPT_LOCAL | OPT_FREE, 0);
   curwin = old_curwin;
   curbuf = curwin->w_buffer;
 

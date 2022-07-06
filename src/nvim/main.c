@@ -1357,9 +1357,8 @@ scripterror:
       char_u *p = vim_strsave((char_u *)argv[0]);
 
       if (parmp->diff_mode && os_isdir(p) && GARGCOUNT > 0
-          && !os_isdir(alist_name(&GARGLIST[0]))) {
-        char_u *r = (char_u *)concat_fnames((char *)p,
-                                            path_tail((char *)alist_name(&GARGLIST[0])), true);
+          && !os_isdir((char_u *)alist_name(&GARGLIST[0]))) {
+        char_u *r = (char_u *)concat_fnames((char *)p, path_tail(alist_name(&GARGLIST[0])), true);
         xfree(p);
         p = r;
       }
@@ -1477,7 +1476,7 @@ static void init_path(const char *exename)
 /// Get filename from command line, if any.
 static char_u *get_fname(mparm_T *parmp, char_u *cwd)
 {
-  return alist_name(&GARGLIST[0]);
+  return (char_u *)alist_name(&GARGLIST[0]);
 }
 
 /*
@@ -1502,7 +1501,7 @@ static void handle_quickfix(mparm_T *paramp)
 {
   if (paramp->edit_type == EDIT_QF) {
     if (paramp->use_ef != NULL) {
-      set_string_option_direct("ef", -1, (char_u *)paramp->use_ef, OPT_FREE, SID_CARG);
+      set_string_option_direct("ef", -1, paramp->use_ef, OPT_FREE, SID_CARG);
     }
     vim_snprintf((char *)IObuff, IOSIZE, "cfile %s", p_ef);
     if (qf_init(NULL, (char *)p_ef, p_efm, true, (char *)IObuff, (char *)p_menc) < 0) {
@@ -1743,7 +1742,7 @@ static void edit_buffers(mparm_T *parmp, char_u *cwd)
       // at the ATTENTION prompt close the window.
       swap_exists_did_quit = false;
       (void)do_ecmd(0, arg_idx < GARGCOUNT
-                    ? (char *)alist_name(&GARGLIST[arg_idx])
+                    ? alist_name(&GARGLIST[arg_idx])
                     : NULL, NULL, NULL, ECMD_LASTL, ECMD_HIDE, curwin);
       if (swap_exists_did_quit) {
         // abort or quit selected
@@ -1946,9 +1945,7 @@ static bool do_user_initialization(void)
   if (do_source((char *)user_vimrc, true, DOSO_VIMRC) != FAIL) {
     do_exrc = p_exrc;
     if (do_exrc) {
-      do_exrc = (path_full_compare((char_u *)VIMRC_FILE, user_vimrc,
-                                   false, true)
-                 != kEqualFiles);
+      do_exrc = (path_full_compare(VIMRC_FILE, (char *)user_vimrc, false, true) != kEqualFiles);
     }
     xfree(user_vimrc);
     return do_exrc;
@@ -1974,8 +1971,7 @@ static bool do_user_initialization(void)
       if (do_source(vimrc, true, DOSO_VIMRC) != FAIL) {
         do_exrc = p_exrc;
         if (do_exrc) {
-          do_exrc = (path_full_compare((char_u *)VIMRC_FILE, (char_u *)vimrc,
-                                       false, true) != kEqualFiles);
+          do_exrc = (path_full_compare(VIMRC_FILE, vimrc, false, true) != kEqualFiles);
         }
         xfree(vimrc);
         xfree(config_dirs);
@@ -2020,14 +2016,14 @@ static void source_startup_scripts(const mparm_T *const parmp)
       // do_user_initialization.
 #if defined(UNIX)
       // If vimrc file is not owned by user, set 'secure' mode.
-      if (!file_owned(VIMRC_FILE))
+      if (!os_file_owned(VIMRC_FILE))  // NOLINT(readability/braces)
 #endif
       secure = p_secure;
 
       if (do_source(VIMRC_FILE, true, DOSO_VIMRC) == FAIL) {
 #if defined(UNIX)
         // if ".exrc" is not owned by user set 'secure' mode
-        if (!file_owned(EXRC_FILE)) {
+        if (!os_file_owned(EXRC_FILE)) {
           secure = p_secure;
         } else {
           secure = 0;
@@ -2071,23 +2067,6 @@ static int execute_env(char *env)
   }
   return FAIL;
 }
-
-#ifdef UNIX
-/// Checks if user owns file.
-/// Use both uv_fs_stat() and uv_fs_lstat() through os_fileinfo() and
-/// os_fileinfo_link() respectively for extra security.
-static bool file_owned(const char *fname)
-{
-  assert(fname != NULL);
-  uid_t uid = getuid();
-  FileInfo file_info;
-  bool file_owned = os_fileinfo(fname, &file_info)
-                    && file_info.stat.st_uid == uid;
-  bool link_owned = os_fileinfo_link(fname, &file_info)
-                    && file_info.stat.st_uid == uid;
-  return file_owned && link_owned;
-}
-#endif
 
 /// Prints the following then exits:
 /// - An error message `errstr`

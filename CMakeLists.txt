@@ -21,6 +21,9 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 # We don't support building in-tree.
 include(PreventInTreeBuilds)
+include(Util)
+
+set(TOUCHES_DIR ${PROJECT_BINARY_DIR}/touches)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -30,7 +33,7 @@ if(DEFINED ENV{DEPS_BUILD_DIR})
     # pkg-config 29.2 has a bug on OpenBSD which causes it to drop any paths that
     # *contain* system include paths. To avoid this, we prefix what would be
     # "/usr/include" as "/_usr/include".
-    # This check is also performed in the third-party/CMakeLists.txt and in the
+    # This check is also performed in the cmake.deps/CMakeLists.txt and in the
     # else clause following here.
     # https://github.com/neovim/neovim/pull/14745#issuecomment-860201794
     set(DEPS_PREFIX "$ENV{DEPS_BUILD_DIR}/_usr" CACHE PATH "Path prefix for finding dependencies")
@@ -62,7 +65,7 @@ else()
         -DCMAKE_C_FLAGS_RELWITHDEBINFO=${CMAKE_C_FLAGS_RELWITHDEBINFO}
         -DCMAKE_C_FLAGS_RELEASE=${CMAKE_C_FLAGS_RELEASE}
         -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
-        ${PROJECT_SOURCE_DIR}/third-party
+        ${PROJECT_SOURCE_DIR}/cmake.deps
       WORKING_DIRECTORY ${DEPS_BUILD_DIR})
     execute_process(
       COMMAND ${CMAKE_COMMAND} --build ${DEPS_BUILD_DIR}
@@ -400,7 +403,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT P
     "${CMAKE_MODULE_LINKER_FLAGS} -image_base 100000000")
 endif()
 
-include_directories("${PROJECT_BINARY_DIR}/config")
+include_directories("${PROJECT_BINARY_DIR}/cmake.config")
 include_directories("${PROJECT_SOURCE_DIR}/src")
 
 find_package(LibUV 1.28.0 REQUIRED)
@@ -444,7 +447,7 @@ if(TS_HAS_SET_ALLOCATOR)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNVIM_TS_HAS_SET_ALLOCATOR")
 endif()
 
-# Note: The test lib requires LuaJIT; it will be skipped if LuaJIT is missing.
+# The unit test lib requires LuaJIT; it will be skipped if LuaJIT is missing.
 option(PREFER_LUA "Prefer Lua over LuaJIT in the nvim executable." OFF)
 
 if(PREFER_LUA)
@@ -611,37 +614,47 @@ find_program(STYLUA_PRG stylua)
 find_program(FLAKE8_PRG flake8)
 find_program(UNCRUSTIFY_PRG uncrustify)
 find_program(SHELLCHECK_PRG shellcheck)
-include(DefCmdTarget)
-def_cmd_target(lintlua ${LUACHECK_PRG} LUACHECK_PRG true)
-if(LUACHECK_PRG)
-  add_custom_command(TARGET lintlua
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMAND ${LUACHECK_PRG} -q runtime/ scripts/ src/ test/)
-endif()
-if(STYLUA_PRG)
-  add_custom_command(TARGET lintlua
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMAND ${STYLUA_PRG} --color=always --check runtime/)
-else()
-  add_custom_command(TARGET lintlua COMMAND ${CMAKE_COMMAND} -E echo "STYLUA_PRG not found")
-endif()
-def_cmd_target(lintpy ${FLAKE8_PRG} FLAKE8_PRG false)
-if(FLAKE8_PRG)
-  add_custom_command(TARGET lintpy
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMAND ${FLAKE8_PRG} contrib/ scripts/ src/ test/)
-endif()
-def_cmd_target(lintsh ${SHELLCHECK_PRG} SHELLCHECK_PRG false)
-if(SHELLCHECK_PRG)
-  add_custom_command(TARGET lintsh
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMAND ${SHELLCHECK_PRG} scripts/vim-patch.sh)
-endif()
+
+add_glob_targets(
+  REQUIRED
+  TARGET lintlua-luacheck
+  COMMAND ${LUACHECK_PRG}
+  FLAGS -q
+  GLOB_DIRS runtime/ scripts/ src/ test/
+  GLOB_PAT *.lua
+  TOUCH_STRATEGY SINGLE
+  )
+
+add_glob_targets(
+  TARGET lintlua-stylua
+  COMMAND ${STYLUA_PRG}
+  FLAGS --color=always --check
+  GLOB_DIRS runtime/
+  GLOB_PAT *.lua
+  TOUCH_STRATEGY SINGLE
+  )
+
+add_custom_target(lintlua)
+add_dependencies(lintlua lintlua-luacheck lintlua-stylua)
 
 include(InstallHelpers)
+add_glob_targets(
+  TARGET lintpy
+  COMMAND ${FLAKE8_PRG}
+  GLOB_DIRS contrib scripts src test
+  GLOB_PAT *.py
+  TOUCH_STRATEGY SINGLE
+  )
+
+add_glob_targets(
+  TARGET lintsh
+  COMMAND ${SHELLCHECK_PRG}
+  FILES scripts/vim-patch.sh
+  TOUCH_STRATEGY SINGLE
+  )
 
 install_helper(
-  FILES ${CMAKE_SOURCE_DIR}/man/nvim.1
+  FILES ${CMAKE_SOURCE_DIR}/src/man/nvim.1
   DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
 #
@@ -651,7 +664,7 @@ install_helper(
 add_subdirectory(src/nvim)
 get_directory_property(NVIM_VERSION_CFLAGS DIRECTORY src/nvim DEFINITION NVIM_VERSION_CFLAGS)
 add_subdirectory(test/includes)
-add_subdirectory(config)
+add_subdirectory(cmake.config)
 add_subdirectory(test/functional/fixtures)  # compile test programs
 add_subdirectory(runtime)
 get_directory_property(GENERATED_HELP_TAGS DIRECTORY runtime DEFINITION GENERATED_HELP_TAGS)
@@ -702,11 +715,11 @@ if(BUSTED_PRG)
     set(TEST_LIBNVIM_PATH "")
   endif()
   configure_file(
-    ${CMAKE_SOURCE_DIR}/test/config/paths.lua.in
-    ${CMAKE_BINARY_DIR}/test/config/paths.lua.gen)
+    ${CMAKE_SOURCE_DIR}/test/cmakeconfig/paths.lua.in
+    ${CMAKE_BINARY_DIR}/test/cmakeconfig/paths.lua.gen)
   file(GENERATE
-    OUTPUT ${CMAKE_BINARY_DIR}/test/config/paths.lua
-    INPUT ${CMAKE_BINARY_DIR}/test/config/paths.lua.gen)
+    OUTPUT ${CMAKE_BINARY_DIR}/test/cmakeconfig/paths.lua
+    INPUT ${CMAKE_BINARY_DIR}/test/cmakeconfig/paths.lua.gen)
 
   add_custom_target(functionaltest
     COMMAND ${CMAKE_COMMAND}
@@ -760,5 +773,5 @@ add_custom_target(uninstall
   COMMAND ${CMAKE_COMMAND} -P ${PROJECT_SOURCE_DIR}/cmake/UninstallHelper.cmake)
 
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
-  add_subdirectory(packaging)
+  add_subdirectory(cmake.packaging)
 endif()
