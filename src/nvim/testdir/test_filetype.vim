@@ -115,7 +115,7 @@ let s:filename_checks = {
     \ 'coco': ['file.atg'],
     \ 'conaryrecipe': ['file.recipe'],
     \ 'conf': ['auto.master'],
-    \ 'config': ['configure.in', 'configure.ac', '/etc/hostname.file'],
+    \ 'config': ['configure.in', 'configure.ac', '/etc/hostname.file', 'any/etc/hostname.file'],
     \ 'confini': ['/etc/pacman.conf', 'any/etc/pacman.conf', 'mpv.conf'],
     \ 'context': ['tex/context/any/file.tex', 'file.mkii', 'file.mkiv', 'file.mkvi', 'file.mkxl', 'file.mklx'],
     \ 'cook': ['file.cook'],
@@ -128,6 +128,7 @@ let s:filename_checks = {
     \ 'csp': ['file.csp', 'file.fdr'],
     \ 'css': ['file.css'],
     \ 'cterm': ['file.con'],
+    \ 'csv': ['file.csv'],
     \ 'cucumber': ['file.feature'],
     \ 'cuda': ['file.cu', 'file.cuh'],
     \ 'cupl': ['file.pld'],
@@ -208,7 +209,7 @@ let s:filename_checks = {
     \ 'gemtext': ['file.gmi', 'file.gemini'],
     \ 'gift': ['file.gift'],
     \ 'gitcommit': ['COMMIT_EDITMSG', 'MERGE_MSG', 'TAG_EDITMSG', 'NOTES_EDITMSG', 'EDIT_DESCRIPTION'],
-    \ 'gitconfig': ['file.git/config', 'file.git/config.worktree', 'file.git/worktrees/x/config.worktree', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/usr/local/etc/gitconfig', '/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'],
+    \ 'gitconfig': ['file.git/config', 'file.git/config.worktree', 'file.git/worktrees/x/config.worktree', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/usr/local/etc/gitconfig', '/etc/gitconfig.d/file', 'any/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'],
     \ 'gitolite': ['gitolite.conf', '/gitolite-admin/conf/file', 'any/gitolite-admin/conf/file'],
     \ 'gitrebase': ['git-rebase-todo'],
     \ 'gitsendemail': ['.gitsendemail.msg.xxxxxx'],
@@ -313,7 +314,6 @@ let s:filename_checks = {
     \ 'lotos': ['file.lot', 'file.lotos'],
     \ 'lout': ['file.lou', 'file.lout'],
     \ 'lpc': ['file.lpc', 'file.ulpc'],
-    \ 'lprolog': ['file.sig'],
     \ 'lsl': ['file.lsl'],
     \ 'lss': ['file.lss'],
     \ 'lua': ['file.lua', 'file.rockspec', 'file.nse'],
@@ -564,6 +564,7 @@ let s:filename_checks = {
     \ 'tsscl': ['file.tsscl'],
     \ 'tssgm': ['file.tssgm'],
     \ 'tssop': ['file.tssop'],
+    \ 'tsv': ['file.tsv'],
     \ 'twig': ['file.twig'],
     \ 'typescript.glimmer': ['file.gts'],
     \ 'typescriptreact': ['file.tsx'],
@@ -706,7 +707,8 @@ let s:script_checks = {
       \ 'awk': [['#!/path/awk'],
       \         ['#!/path/gawk']],
       \ 'wml': [['#!/path/wml']],
-      \ 'scheme': [['#!/path/scheme']],
+      \ 'scheme': [['#!/path/scheme'],
+      \            ['#!/path/guile']],
       \ 'cfengine': [['#!/path/cfengine']],
       \ 'erlang': [['#!/path/escript']],
       \ 'haskell': [['#!/path/haskell']],
@@ -1732,5 +1734,60 @@ func Test_cls_file()
   call delete('Xfile.cls')
   filetype off
 endfunc
+
+func Test_sig_file()
+  filetype on
+
+  call writefile(['this is neither Lambda Prolog nor SML'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('', &filetype)
+  bwipe!
+
+  " Test dist#ft#FTsig()
+
+  let g:filetype_sig = 'sml'
+  split Xfile.sig
+  call assert_equal('sml', &filetype)
+  bwipe!
+  unlet g:filetype_sig
+
+  " Lambda Prolog
+
+  call writefile(['sig foo.'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('lprolog', &filetype)
+  bwipe!
+
+  call writefile(['/* ... */'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('lprolog', &filetype)
+  bwipe!
+
+  call writefile(['% ...'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('lprolog', &filetype)
+  bwipe!
+
+  " SML signature file
+
+  call writefile(['signature FOO ='], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('sml', &filetype)
+  bwipe!
+
+  call writefile(['structure FOO ='], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('sml', &filetype)
+  bwipe!
+
+  call writefile(['(* ... *)'], 'Xfile.sig')
+  split Xfile.sig
+  call assert_equal('sml', &filetype)
+  bwipe!
+
+  call delete('Xfile.sig')
+  filetype off
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

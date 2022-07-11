@@ -688,12 +688,12 @@ static void finish_incsearch_highlighting(int gotesc, incsearch_state_T *s, bool
 /// @param init_ccline  clear ccline first
 static uint8_t *command_line_enter(int firstc, long count, int indent, bool init_ccline)
 {
-  bool cmdheight0 = p_ch < 1 && !ui_has(kUIMessages) && vpeekc() == NUL;
+  bool cmdheight0 = p_ch < 1 && !ui_has(kUIMessages);
 
   if (cmdheight0) {
     // If cmdheight is 0, cmdheight must be set to 1 when we enter command line.
     set_option_value("ch", 1L, NULL, 0);
-    redraw_statuslines();
+    update_screen(VALID);                 // redraw the screen NOW
   }
 
   // can be invoked recursively, identify each level
@@ -985,6 +985,9 @@ theend:
   if (cmdheight0) {
     // Restore cmdheight
     set_option_value("ch", 0L, NULL, 0);
+
+    // Redraw is needed for command line completion
+    redraw_all_later(CLEAR);
   }
 
   return p;
@@ -2719,8 +2722,19 @@ char *get_text_locked_msg(void)
   if (cmdwin_type != 0) {
     return e_cmdwin;
   } else {
-    return e_secure;
+    return e_textlock;
   }
+}
+
+/// Check for text, window or buffer locked.
+/// Give an error message and return true if something is locked.
+bool text_or_buf_locked(void)
+{
+  if (text_locked()) {
+    text_locked_msg();
+    return true;
+  }
+  return curbuf_locked();
 }
 
 /// Check if "curbuf->b_ro_locked" or "allbuf_lock" is set and
@@ -3210,7 +3224,7 @@ static void draw_cmdline(int start, int len)
       int u8cc[MAX_MCO];
       int u8c = utfc_ptr2char_len(p, u8cc, start + len - i);
       mb_l = utfc_ptr2len_len(p, start + len - i);
-      if (arabic_char(u8c)) {
+      if (ARABIC_CHAR(u8c)) {
         do_arabicshape = true;
         break;
       }
@@ -3246,7 +3260,7 @@ static void draw_cmdline(int start, int len)
       int u8cc[MAX_MCO];
       int u8c = utfc_ptr2char_len(p, u8cc, start + len - i);
       mb_l = utfc_ptr2len_len(p, start + len - i);
-      if (arabic_char(u8c)) {
+      if (ARABIC_CHAR(u8c)) {
         int pc;
         int pc1 = 0;
         int nc = 0;
@@ -4320,6 +4334,7 @@ void ExpandEscape(expand_T *xp, char_u *str, int numfiles, char_u **files, int o
 {
   int i;
   char_u *p;
+  const int vse_what = xp->xp_context == EXPAND_BUFFERS ? VSE_BUFFER : VSE_NONE;
 
   /*
    * May change home directory back to "~"
@@ -4351,10 +4366,10 @@ void ExpandEscape(expand_T *xp, char_u *str, int numfiles, char_u **files, int o
 #endif
         }
 #ifdef BACKSLASH_IN_FILENAME
-        p = (char_u *)vim_strsave_fnameescape((const char *)files[i], false);
+        p = (char_u *)vim_strsave_fnameescape((const char *)files[i], vse_what);
 #else
         p = (char_u *)vim_strsave_fnameescape((const char *)files[i],
-                                              xp->xp_shell);
+                                              xp->xp_shell ? VSE_SHELL : vse_what);
 #endif
         xfree(files[i]);
         files[i] = p;
@@ -4386,25 +4401,30 @@ void ExpandEscape(expand_T *xp, char_u *str, int numfiles, char_u **files, int o
   }
 }
 
-/// Escape special characters in a file name for use as a command argument
+/// Escape special characters in "fname", depending on "what":
 ///
 /// @param[in]  fname  File name to escape.
-/// @param[in]  shell  What to escape for: if false, escapes for VimL command,
-///                    if true then it escapes for a shell command.
+/// @param[in]  what   What to escape for:
+/// - VSE_NONE: for when used as a file name argument after a Vim command.
+/// - VSE_SHELL: for a shell command.
+/// - VSE_BUFFER: for the ":buffer" command.
 ///
 /// @return [allocated] escaped file name.
-char *vim_strsave_fnameescape(const char *const fname, const bool shell FUNC_ATTR_UNUSED)
+char *vim_strsave_fnameescape(const char *const fname, const int what)
   FUNC_ATTR_NONNULL_RET FUNC_ATTR_MALLOC FUNC_ATTR_NONNULL_ALL
 {
 #ifdef BACKSLASH_IN_FILENAME
 # define PATH_ESC_CHARS " \t\n*?[{`%#'\"|!<"
+# define BUFFER_ESC_CHARS ((char_u *)" \t\n*?[`%#'\"|!<")
   char_u buf[sizeof(PATH_ESC_CHARS)];
   int j = 0;
 
-  // Don't escape '[', '{' and '!' if they are in 'isfname'.
-  for (const char *s = PATH_ESC_CHARS; *s != NUL; s++) {
-    if ((*s != '[' && *s != '{' && *s != '!') || !vim_isfilec(*s)) {
-      buf[j++] = *s;
+  // Don't escape '[', '{' and '!' if they are in 'isfname' and for the
+  // ":buffer" command.
+  for (const char *p = what == VSE_BUFFER ? BUFFER_ESC_CHARS : PATH_ESC_CHARS;
+       *p != NUL; p++) {
+    if ((*p != '[' && *p != '{' && *p != '!') || !vim_isfilec(*p)) {
+      buf[j++] = *p;
     }
   }
   buf[j] = NUL;
@@ -4413,9 +4433,12 @@ char *vim_strsave_fnameescape(const char *const fname, const bool shell FUNC_ATT
 #else
 # define PATH_ESC_CHARS ((char_u *)" \t\n*?[{`$\\%#'\"|!<")
 # define SHELL_ESC_CHARS ((char_u *)" \t\n*?[{`$\\%#'\"|!<>();&")
+# define BUFFER_ESC_CHARS ((char_u *)" \t\n*?[`$\\%#'\"|!<")
   char *p =
-    (char *)vim_strsave_escaped((const char_u *)fname, (shell ? SHELL_ESC_CHARS : PATH_ESC_CHARS));
-  if (shell && csh_like_shell()) {
+    (char *)vim_strsave_escaped((const char_u *)fname,
+                                what == VSE_SHELL ? SHELL_ESC_CHARS
+                                : what == VSE_BUFFER ? BUFFER_ESC_CHARS : PATH_ESC_CHARS);
+  if (what == VSE_SHELL && csh_like_shell()) {
     // For csh and similar shells need to put two backslashes before '!'.
     // One is taken by Vim, one by the shell.
     char *s = (char *)vim_strsave_escaped((const char_u *)p,
@@ -4452,14 +4475,13 @@ static void escape_fname(char_u **pp)
  */
 void tilde_replace(char_u *orig_pat, int num_files, char_u **files)
 {
-  int i;
-  char_u *p;
+  char *p;
 
   if (orig_pat[0] == '~' && vim_ispathsep(orig_pat[1])) {
-    for (i = 0; i < num_files; ++i) {
-      p = home_replace_save(NULL, files[i]);
+    for (int i = 0; i < num_files; i++) {
+      p = home_replace_save(NULL, (char *)files[i]);
       xfree(files[i]);
-      files[i] = p;
+      files[i] = (char_u *)p;
     }
   }
 }
@@ -5161,10 +5183,10 @@ static int ExpandFromContext(expand_T *xp, char_u *pat, int *num_file, char_u **
     return OK;
   }
   if (xp->xp_context == EXPAND_BUFFERS) {
-    return ExpandBufnames(pat, num_file, file, options);
+    return ExpandBufnames((char *)pat, num_file, (char ***)file, options);
   }
   if (xp->xp_context == EXPAND_DIFF_BUFFERS) {
-    return ExpandBufnames(pat, num_file, file, options | BUF_DIFF_FILTER);
+    return ExpandBufnames((char *)pat, num_file, (char ***)file, options | BUF_DIFF_FILTER);
   }
   if (xp->xp_context == EXPAND_TAGS
       || xp->xp_context == EXPAND_TAGS_LISTFILES) {
@@ -5317,8 +5339,8 @@ static void ExpandGeneric(expand_T *xp, regmatch_T *regmatch, int *num_file, cha
     if (*str == NUL) {  // skip empty strings
       continue;
     }
-    if (vim_regexec(regmatch, str, (colnr_T)0)) {
-      ++count;
+    if (vim_regexec(regmatch, (char *)str, (colnr_T)0)) {
+      count++;
     }
   }
   if (count == 0) {
@@ -5338,7 +5360,7 @@ static void ExpandGeneric(expand_T *xp, regmatch_T *regmatch, int *num_file, cha
     if (*str == NUL) {  // Skip empty strings.
       continue;
     }
-    if (vim_regexec(regmatch, str, (colnr_T)0)) {
+    if (vim_regexec(regmatch, (char *)str, (colnr_T)0)) {
       if (escaped) {
         str = vim_strsave_escaped(str, (char_u *)" \t\\.");
       } else {
@@ -5570,7 +5592,7 @@ static int ExpandUserDefined(expand_T *xp, regmatch_T *regmatch, int *num_file, 
     *e = NUL;
 
     const bool skip = xp->xp_pattern[0]
-                      && vim_regexec(regmatch, s, (colnr_T)0) == 0;
+                      && vim_regexec(regmatch, (char *)s, (colnr_T)0) == 0;
     *e = keep;
     if (!skip) {
       GA_APPEND(char_u *, &ga, vim_strnsave(s, (size_t)(e - s)));
@@ -5811,7 +5833,7 @@ void globpath(char_u *path, char_u *file, garray_T *ga, int expand_options)
   // Loop over all entries in {path}.
   while (*path != NUL) {
     // Copy one item of the path to buf[] and concatenate the file name.
-    copy_option_part(&path, buf, MAXPATHL, ",");
+    copy_option_part((char **)&path, (char *)buf, MAXPATHL, ",");
     if (STRLEN(buf) + STRLEN(file) + 2 < MAXPATHL) {
       add_pathsep((char *)buf);
       STRCAT(buf, file);  // NOLINT
@@ -6290,7 +6312,7 @@ static int calc_hist_idx(int histype, int num)
         wrapped = TRUE;
       }
     }
-    if (hist[i].hisnum == num && hist[i].hisstr != NULL) {
+    if (i >= 0 && hist[i].hisnum == num && hist[i].hisstr != NULL) {
       return i;
     }
   } else if (-num <= hislen) {
@@ -6367,7 +6389,7 @@ int del_history_entry(int histype, char_u *str)
       if (hisptr->hisstr == NULL) {
         break;
       }
-      if (vim_regexec(&regmatch, hisptr->hisstr, (colnr_T)0)) {
+      if (vim_regexec(&regmatch, (char *)hisptr->hisstr, (colnr_T)0)) {
         found = true;
         hist_free_entry(hisptr);
       } else {
@@ -6535,7 +6557,7 @@ void ex_history(exarg_T *eap)
           snprintf((char *)IObuff, IOSIZE, "%c%6d  ", i == idx ? '>' : ' ',
                    hist[i].hisnum);
           if (vim_strsize((char *)hist[i].hisstr) > Columns - 10) {
-            trunc_string(hist[i].hisstr, IObuff + STRLEN(IObuff),
+            trunc_string((char *)hist[i].hisstr, (char *)IObuff + STRLEN(IObuff),
                          Columns - 10, IOSIZE - (int)STRLEN(IObuff));
           } else {
             STRCAT(IObuff, hist[i].hisstr);
@@ -6598,9 +6620,9 @@ static int open_cmdwin(void)
   bool save_exmode = exmode_active;
   int save_cmdmsg_rl = cmdmsg_rl;
 
+  // Can't do this when text or buffer is locked.
   // Can't do this recursively.  Can't do it when typing a password.
-  if (cmdwin_type != 0
-      || cmdline_star > 0) {
+  if (text_or_buf_locked() || cmdwin_type != 0 || cmdline_star > 0) {
     beep_flush();
     return K_IGNORE;
   }

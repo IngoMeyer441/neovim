@@ -1545,12 +1545,16 @@ int vgetc(void)
         }
         break;
 
+      case K_KUP:
       case K_XUP:
         c = K_UP; break;
+      case K_KDOWN:
       case K_XDOWN:
         c = K_DOWN; break;
+      case K_KLEFT:
       case K_XLEFT:
         c = K_LEFT; break;
+      case K_KRIGHT:
       case K_XRIGHT:
         c = K_RIGHT; break;
       }
@@ -1804,7 +1808,8 @@ static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
   bool is_plug_map = false;
 
   // If typehead starts with <Plug> then remap, even for a "noremap" mapping.
-  if (typebuf.tb_buf[typebuf.tb_off] == K_SPECIAL
+  if (typebuf.tb_len >= 3
+      && typebuf.tb_buf[typebuf.tb_off] == K_SPECIAL
       && typebuf.tb_buf[typebuf.tb_off + 1] == KS_EXTRA
       && typebuf.tb_buf[typebuf.tb_off + 2] == KE_PLUG) {
     is_plug_map = true;
@@ -2469,6 +2474,11 @@ static int vgetorpeek(bool advance)
             c = ESC;
           }
           tc = c;
+
+          // return 0 in normal_check()
+          if (pending_exmode_active) {
+            exmode_active = true;
+          }
 
           // no chars to block abbreviations for
           typebuf.tb_no_abbr_cnt = 0;

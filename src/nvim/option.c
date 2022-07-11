@@ -1400,7 +1400,7 @@ int do_set(char *arg, int opt_flags)
                */
               else if (varp == (char_u *)&p_bs
                        && ascii_isdigit(**(char_u **)varp)) {
-                i = getdigits_int((char_u **)varp, true, 0);
+                i = getdigits_int((char **)varp, true, 0);
                 switch (i) {
                 case 0:
                   *(char_u **)varp = empty_option;
@@ -1435,7 +1435,7 @@ int do_set(char *arg, int opt_flags)
               else if (varp == (char_u *)&p_ww
                        && ascii_isdigit(*arg)) {
                 *errbuf = NUL;
-                i = getdigits_int((char_u **)&arg, true, 0);
+                i = getdigits_int(&arg, true, 0);
                 if (i & 1) {
                   STRLCAT(errbuf, "b,", sizeof(errbuf));
                 }
@@ -1728,7 +1728,7 @@ skip:
         IObuff[i + ((char_u *)arg - startarg)] = NUL;
       }
       // make sure all characters are printable
-      trans_characters(IObuff, IOSIZE);
+      trans_characters((char *)IObuff, IOSIZE);
 
       no_wait_return++;         // wait_return done later
       emsg((char *)IObuff);     // show error highlighted
@@ -2366,6 +2366,69 @@ static bool valid_spellfile(const char_u *val)
   return true;
 }
 
+/// Handle setting 'mousescroll'.
+/// @return error message, NULL if it's OK.
+static char *check_mousescroll(char *string)
+{
+  long vertical = -1;
+  long horizontal = -1;
+
+  for (;;) {
+    char *end = vim_strchr(string, ',');
+    size_t length = end ? (size_t)(end - string) : STRLEN(string);
+
+    // Both "ver:" and "hor:" are 4 bytes long.
+    // They should be followed by at least one digit.
+    if (length <= 4) {
+      return e_invarg;
+    }
+
+    long *direction;
+
+    if (memcmp(string, "ver:", 4) == 0) {
+      direction = &vertical;
+    } else if (memcmp(string, "hor:", 4) == 0) {
+      direction = &horizontal;
+    } else {
+      return e_invarg;
+    }
+
+    // If the direction has already been set, this is a duplicate.
+    if (*direction != -1) {
+      return e_invarg;
+    }
+
+    // Verify that only digits follow the colon.
+    for (size_t i = 4; i < length; i++) {
+      if (!ascii_isdigit(string[i])) {
+        return N_("E548: digit expected");
+      }
+    }
+
+    string += 4;
+    *direction = getdigits_int(&string, false, -1);
+
+    // Num options are generally kept within the signed int range.
+    // We know this number won't be negative because we've already checked for
+    // a minus sign. We'll allow 0 as a means of disabling mouse scrolling.
+    if (*direction == -1) {
+      return e_invarg;
+    }
+
+    if (!end) {
+      break;
+    }
+
+    string = end + 1;
+  }
+
+  // If a direction wasn't set, fallback to the default value.
+  p_mousescroll_vert = (vertical == -1) ? MOUSESCROLL_VERT_DFLT : vertical;
+  p_mousescroll_hor = (horizontal == -1) ? MOUSESCROLL_HOR_DFLT : horizontal;
+
+  return NULL;
+}
+
 /// Handle string options that need some action to perform when changed.
 /// Returns NULL for success, or an error message for an error.
 ///
@@ -2859,6 +2922,8 @@ ambw_end:
     if (check_opt_strings(p_mousem, p_mousem_values, false) != OK) {
       errmsg = e_invarg;
     }
+  } else if (varp == &p_mousescroll) {  // 'mousescroll'
+    errmsg = check_mousescroll((char *)p_mousescroll);
   } else if (varp == &p_swb) {  // 'switchbuf'
     if (opt_strings_flags(p_swb, p_swb_values, &swb_flags, true) != OK) {
       errmsg = e_invarg;
@@ -2941,7 +3006,7 @@ ambw_end:
       if (*++s == '-') {        // ignore a '-'
         s++;
       }
-      wid = getdigits_int(&s, true, 0);
+      wid = getdigits_int((char **)&s, true, 0);
       if (wid && *s == '(' && (errmsg = check_stl_option((char *)p_ruf)) == NULL) {
         ru_wid = wid;
       } else {
@@ -3457,7 +3522,7 @@ char *check_colorcolumn(win_T *wp)
       if (!ascii_isdigit(*s)) {
         return e_invarg;
       }
-      col = col * getdigits_int(&s, true, 0);
+      col = col * getdigits_int((char **)&s, true, 0);
       if (wp->w_buffer->b_p_tw == 0) {
         goto skip;          // 'textwidth' not set, skip this item
       }
@@ -3472,7 +3537,7 @@ char *check_colorcolumn(win_T *wp)
         goto skip;
       }
     } else if (ascii_isdigit(*s)) {
-      col = getdigits_int(&s, true, 0);
+      col = getdigits_int((char **)&s, true, 0);
     } else {
       return e_invarg;
     }
@@ -5650,7 +5715,7 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char_u **valuep, uint6
           if (fprintf(fd, "%s %s+=", cmd, name) < 0) {
             goto fail;
           }
-          (void)copy_option_part(&p, part, size, ",");
+          (void)copy_option_part((char **)&p, (char *)part, size, ",");
           if (put_escstr(fd, part, 2) == FAIL || put_eol(fd) == FAIL) {
             goto fail;
           }
@@ -6921,7 +6986,7 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char_u ***
     if (xp->xp_context != EXPAND_BOOL_SETTINGS) {
       for (match = 0; match < (int)ARRAY_SIZE(names);
            match++) {
-        if (vim_regexec(regmatch, (char_u *)names[match], (colnr_T)0)) {
+        if (vim_regexec(regmatch, names[match], (colnr_T)0)) {
           if (loop == 0) {
             num_normal++;
           } else {
@@ -6940,10 +7005,10 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char_u ***
         continue;
       }
       match = false;
-      if (vim_regexec(regmatch, str, (colnr_T)0)
+      if (vim_regexec(regmatch, (char *)str, (colnr_T)0)
           || (options[opt_idx].shortname != NULL
               && vim_regexec(regmatch,
-                             (char_u *)options[opt_idx].shortname,
+                             options[opt_idx].shortname,
                              (colnr_T)0))) {
         match = true;
       }
@@ -7460,7 +7525,7 @@ void save_file_ff(buf_T *buf)
   if (buf->b_start_fenc == NULL
       || STRCMP(buf->b_start_fenc, buf->b_p_fenc) != 0) {
     xfree(buf->b_start_fenc);
-    buf->b_start_fenc = vim_strsave(buf->b_p_fenc);
+    buf->b_start_fenc = (char *)vim_strsave(buf->b_p_fenc);
   }
 }
 
@@ -7827,10 +7892,10 @@ static bool briopt_check(win_T *wp)
     if (STRNCMP(p, "shift:", 6) == 0
         && ((p[6] == '-' && ascii_isdigit(p[7])) || ascii_isdigit(p[6]))) {
       p += 6;
-      bri_shift = getdigits_int(&p, true, 0);
+      bri_shift = getdigits_int((char **)&p, true, 0);
     } else if (STRNCMP(p, "min:", 4) == 0 && ascii_isdigit(p[4])) {
       p += 4;
-      bri_min = getdigits_int(&p, true, 0);
+      bri_min = getdigits_int((char **)&p, true, 0);
     } else if (STRNCMP(p, "sbr", 3) == 0) {
       p += 3;
       bri_sbr = true;
@@ -7991,10 +8056,10 @@ char_u *skip_to_option_part(const char_u *p)
 /// @param[in]      sep_chars chars that separate the option parts
 ///
 /// @return length of `*option`
-size_t copy_option_part(char_u **option, char_u *buf, size_t maxlen, char *sep_chars)
+size_t copy_option_part(char **option, char *buf, size_t maxlen, char *sep_chars)
 {
   size_t len = 0;
-  char_u *p = *option;
+  char *p = *option;
 
   // skip '.' at start of option part, for 'suffixes'
   if (*p == '.') {
@@ -8015,7 +8080,7 @@ size_t copy_option_part(char_u **option, char_u *buf, size_t maxlen, char *sep_c
   if (*p != NUL && *p != ',') {  // skip non-standard separator
     p++;
   }
-  p = skip_to_option_part(p);    // p points to next file name
+  p = (char *)skip_to_option_part((char_u *)p);    // p points to next file name
 
   *option = p;
   return len;

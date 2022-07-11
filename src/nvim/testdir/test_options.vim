@@ -238,6 +238,12 @@ func Test_set_completion()
   call feedkeys(":set di\<C-A>\<C-B>\"\<CR>", 'tx')
   call assert_equal('"set dictionary diff diffexpr diffopt digraph directory display', @:)
 
+  call feedkeys(":setlocal di\<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal('"setlocal dictionary diff diffexpr diffopt digraph directory display', @:)
+
+  call feedkeys(":setglobal di\<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal('"setglobal dictionary diff diffexpr diffopt digraph directory display', @:)
+
   " Expand boolan options. When doing :set no<Tab>
   " vim displays the options names without "no" but completion uses "no...".
   call feedkeys(":set nodi\<C-A>\<C-B>\"\<CR>", 'tx')
@@ -268,6 +274,7 @@ func Test_set_completion()
 
   call feedkeys(":set tags=./\\\\ dif\<C-A>\<C-B>\"\<CR>", 'tx')
   call assert_equal('"set tags=./\\ diff diffexpr diffopt', @:)
+
   set tags&
 
   " Expand values for 'filetype'
@@ -623,7 +630,7 @@ func Test_copy_winopt()
   call assert_equal(4,&numberwidth)
   bw!
 
-  set nohidden
+  set hidden&
 endfunc
 
 func Test_shortmess_F()
@@ -743,6 +750,29 @@ func Test_shellquote()
   set verbose&
   set shellquote&
   call assert_match(': "#echo Hello#"', v)
+endfunc
+
+" Test for the 'rightleftcmd' option
+func Test_rightleftcmd()
+  CheckFeature rightleft
+  set rightleft
+  set rightleftcmd
+
+  let g:l = []
+  func AddPos()
+    call add(g:l, screencol())
+    return ''
+  endfunc
+  cmap <expr> <F2> AddPos()
+
+  call feedkeys("/\<F2>abc\<Left>\<F2>\<Right>\<Right>\<F2>" ..
+        \ "\<Left>\<F2>\<Esc>", 'xt')
+  call assert_equal([&co - 1, &co - 4, &co - 2, &co - 3], g:l)
+
+  cunmap <F2>
+  unlet g:l
+  set rightleftcmd&
+  set rightleft&
 endfunc
 
 " Test for setting option values using v:false and v:true

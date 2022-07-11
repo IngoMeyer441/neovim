@@ -147,7 +147,6 @@ endfunc
 
 " Test for the :insert command
 func Test_insert_cmd()
-  set noautoindent " test assumes noautoindent, but it's on by default in Nvim
   new
   call setline(1, ['  L1'])
   call feedkeys(":insert\<CR>  L2\<CR>  L3\<CR>.\<CR>", 'xt')
@@ -197,7 +196,6 @@ endfunc
 
 " Test for the :change command
 func Test_change_cmd()
-  set noautoindent " test assumes noautoindent, but it's on by default in Nvim
   new
   call setline(1, ['  L1', 'L2', 'L3'])
   call feedkeys(":change\<CR>  L4\<CR>  L5\<CR>.\<CR>", 'xt')
@@ -399,6 +397,30 @@ func Test_winsize_cmd()
   call assert_fails('winsize 1 x', 'E465:')
   call assert_fails('win_getid(1)', 'E475: Invalid argument: _getid(1)')
   " Actually changing the window size would be flaky.
+endfunc
+
+" Test for running Ex commands when text is locked.
+" <C-\>e in the command line is used to lock the text
+func Test_run_excmd_with_text_locked()
+  " :quit
+  let cmd = ":\<C-\>eexecute('quit')\<CR>\<C-C>"
+  call assert_fails("call feedkeys(cmd, 'xt')", 'E565:')
+
+  " :qall
+  let cmd = ":\<C-\>eexecute('qall')\<CR>\<C-C>"
+  call assert_fails("call feedkeys(cmd, 'xt')", 'E565:')
+
+  " :exit
+  let cmd = ":\<C-\>eexecute('exit')\<CR>\<C-C>"
+  call assert_fails("call feedkeys(cmd, 'xt')", 'E565:')
+
+  " :close - should be ignored
+  new
+  let cmd = ":\<C-\>eexecute('close')\<CR>\<C-C>"
+  call assert_equal(2, winnr('$'))
+  close
+
+  call assert_fails("call feedkeys(\":\<C-R>=execute('bnext')\<CR>\", 'xt')", 'E565:')
 endfunc
 
 func Test_not_break_expression_register()

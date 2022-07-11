@@ -783,8 +783,8 @@ void win_config_float(win_T *wp, FloatConfig fconfig)
   }
 
   if (!ui_has(kUIMultigrid)) {
-    wp->w_height = MIN(wp->w_height, Rows - 1 - win_extra_height(wp));
-    wp->w_width = MIN(wp->w_width, Columns - win_extra_width(wp));
+    wp->w_height = MIN(wp->w_height, Rows - 1 - win_border_height(wp));
+    wp->w_width = MIN(wp->w_width, Columns - win_border_width(wp));
   }
 
   win_set_inner_size(wp);
@@ -1266,8 +1266,9 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
   } else if (wp->w_floating) {
     new_frame(wp);
     wp->w_floating = false;
-    // non-floating window doesn't store float config.
+    // non-floating window doesn't store float config or have a border.
     wp->w_float_config = FLOAT_CONFIG_INIT;
+    memset(wp->w_border_adj, 0, sizeof(wp->w_border_adj));
   }
 
   /*
@@ -1554,9 +1555,9 @@ static void win_init(win_T *newp, win_T *oldp, int flags)
     copy_loclist_stack(oldp, newp);
   }
   newp->w_localdir = (oldp->w_localdir == NULL)
-                     ? NULL : vim_strsave(oldp->w_localdir);
+                     ? NULL : xstrdup(oldp->w_localdir);
   newp->w_prevdir = (oldp->w_prevdir == NULL)
-                    ? NULL : vim_strsave(oldp->w_prevdir);
+                    ? NULL : xstrdup(oldp->w_prevdir);
 
   // copy tagstack and folds
   for (i = 0; i < oldp->w_tagstacklen; i++) {
@@ -1940,7 +1941,7 @@ static void win_totop(int size, int flags)
     } else {
       // No longer a float, a non-multigrid UI shouldn't draw it as such
       ui_call_win_hide(curwin->w_grid_alloc.handle);
-      win_free_grid(curwin, false);
+      win_free_grid(curwin, true);
     }
   } else {
     // Remove the window and frame from the tree of frames.
@@ -2741,6 +2742,8 @@ int win_close(win_T *win, bool free_buf, bool force)
      * to be the last one left, return now.
      */
     if (wp->w_buffer != curbuf) {
+      reset_VIsual_and_resel();  // stop Visual mode
+
       other_buffer = true;
       win->w_closing = true;
       apply_autocmds(EVENT_BUFLEAVE, NULL, NULL, false, curbuf);
@@ -4074,7 +4077,7 @@ int win_new_tabpage(int after, char_u *filename)
   }
 
   newtp->tp_localdir = old_curtab->tp_localdir
-    ? vim_strsave(old_curtab->tp_localdir) : NULL;
+    ? xstrdup(old_curtab->tp_localdir) : NULL;
 
   curtab = newtp;
 
@@ -4569,12 +4572,8 @@ void win_goto(win_T *wp)
 {
   win_T *owp = curwin;
 
-  if (text_locked()) {
+  if (text_or_buf_locked()) {
     beep_flush();
-    text_locked_msg();
-    return;
-  }
-  if (curbuf_locked()) {
     return;
   }
 
@@ -4897,8 +4896,7 @@ static void win_enter_ext(win_T *const wp, const int flags)
 void fix_current_dir(void)
 {
   // New directory is either the local directory of the window, tab or NULL.
-  char *new_dir = (char *)(curwin->w_localdir
-                           ? curwin->w_localdir : curtab->tp_localdir);
+  char *new_dir = curwin->w_localdir ? curwin->w_localdir : curtab->tp_localdir;
   char cwd[MAXPATHL];
   if (os_dirname((char_u *)cwd, MAXPATHL) != OK) {
     cwd[0] = NUL;
@@ -5181,8 +5179,7 @@ void win_free_grid(win_T *wp, bool reinit)
   }
   grid_free(&wp->w_grid_alloc);
   if (reinit) {
-    // if a float is turned into a split and back into a float, the grid
-    // data structure will be reused
+    // if a float is turned into a split, the grid data structure will be reused
     memset(&wp->w_grid_alloc, 0, sizeof(wp->w_grid_alloc));
   }
 }
@@ -5560,9 +5557,10 @@ static void frame_setheight(frame_T *curfrp, int height)
   if (curfrp->fr_parent == NULL) {
     // topframe: can only change the command line
     if (height > ROWS_AVAIL) {
-      // If height is greater than the available space, try to create space for the frame by
-      // reducing 'cmdheight' if possible, while making sure `cmdheight` doesn't go below 1.
-      height = MIN(ROWS_AVAIL + (p_ch - 1), height);
+      // If height is greater than the available space, try to create space for
+      // the frame by reducing 'cmdheight' if possible, while making sure
+      // `cmdheight` doesn't go below 1.
+      height = MIN((p_ch > 0 ? ROWS_AVAIL + (p_ch - 1) : ROWS_AVAIL), height);
     }
     if (height > 0) {
       frame_new_height(curfrp, height, false, false);
@@ -6332,18 +6330,18 @@ void win_set_inner_size(win_T *wp)
     terminal_check_size(wp->w_buffer->terminal);
   }
 
-  wp->w_height_outer = (wp->w_height_inner + win_extra_height(wp));
-  wp->w_width_outer = (wp->w_width_inner + win_extra_width(wp));
+  wp->w_height_outer = (wp->w_height_inner + win_border_height(wp) + wp->w_winbar_height);
+  wp->w_width_outer = (wp->w_width_inner + win_border_width(wp));
   wp->w_winrow_off = wp->w_border_adj[0] + wp->w_winbar_height;
   wp->w_wincol_off = wp->w_border_adj[3];
 }
 
-static int win_extra_height(win_T *wp)
+static int win_border_height(win_T *wp)
 {
-  return wp->w_border_adj[0] + wp->w_border_adj[2] + wp->w_winbar_height;
+  return wp->w_border_adj[0] + wp->w_border_adj[2];
 }
 
-static int win_extra_width(win_T *wp)
+static int win_border_width(win_T *wp)
 {
   return wp->w_border_adj[1] + wp->w_border_adj[3];
 }
@@ -6481,7 +6479,7 @@ char_u *grab_file_name(long count, linenr_T *file_lnum)
 
       *file_lnum = getdigits_long(&p, false, 0);
     }
-    return find_file_name_in_path(ptr, len, options, count, curbuf->b_ffname);
+    return find_file_name_in_path(ptr, len, options, count, (char_u *)curbuf->b_ffname);
   }
   return file_name_at_cursor(options | FNAME_HYP, count, file_lnum);
 }
@@ -6502,7 +6500,7 @@ char_u *grab_file_name(long count, linenr_T *file_lnum)
 char_u *file_name_at_cursor(int options, long count, linenr_T *file_lnum)
 {
   return file_name_in_line(get_cursor_line_ptr(),
-                           curwin->w_cursor.col, options, count, curbuf->b_ffname,
+                           curwin->w_cursor.col, options, count, (char_u *)curbuf->b_ffname,
                            file_lnum);
 }
 

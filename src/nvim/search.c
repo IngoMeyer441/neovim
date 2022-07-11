@@ -514,7 +514,7 @@ void last_pat_prog(regmmatch_T *regmatch)
   --emsg_off;
 }
 
-/// lowest level search function.
+/// Lowest level search function.
 /// Search for 'count'th occurrence of pattern "pat" in direction "dir".
 /// Start at position "pos" and return the found position in "pos".
 ///
@@ -3991,8 +3991,7 @@ static int find_prev_quote(char_u *line, int col_start, int quotechar, char_u *e
     }
     if (n & 1) {
       col_start -= n;           // uneven number of escape chars, skip it
-    } else if (line[col_start] ==
-               quotechar) {
+    } else if (line[col_start] == quotechar) {
       break;
     }
   }
@@ -4115,8 +4114,7 @@ bool current_quote(oparg_T *oap, long count, bool include, int quotechar)
         col_end = curwin->w_cursor.col;
       }
     }
-  } else if (line[col_start] == quotechar
-             || !vis_empty) {
+  } else if (line[col_start] == quotechar || !vis_empty) {
     int first_col = col_start;
 
     if (!vis_empty) {
@@ -4185,9 +4183,8 @@ bool current_quote(oparg_T *oap, long count, bool include, int quotechar)
 
   // Set start position.  After vi" another i" must include the ".
   // For v2i" include the quotes.
-  if (!include && count < 2
-      && (vis_empty || !inside_quotes)) {
-    ++col_start;
+  if (!include && count < 2 && (vis_empty || !inside_quotes)) {
+    col_start++;
   }
   curwin->w_cursor.col = col_start;
   if (VIsual_active) {
@@ -5406,9 +5403,9 @@ void find_pattern_in_path(char_u *ptr, Direction dir, size_t len, bool whole, bo
 
   for (;;) {
     if (incl_regmatch.regprog != NULL
-        && vim_regexec(&incl_regmatch, line, (colnr_T)0)) {
+        && vim_regexec(&incl_regmatch, (char *)line, (colnr_T)0)) {
       char_u *p_fname = (curr_fname == (char_u *)curbuf->b_fname)
-                        ? curbuf->b_ffname : curr_fname;
+                        ? (char_u *)curbuf->b_ffname : curr_fname;
 
       if (inc_opt != NULL && strstr((char *)inc_opt, "\\zs") != NULL) {
         // Use text from '\zs' to '\ze' (or end) of 'include'.
@@ -5586,12 +5583,10 @@ void find_pattern_in_path(char_u *ptr, Direction dir, size_t len, bool whole, bo
 search_line:
       define_matched = false;
       if (def_regmatch.regprog != NULL
-          && vim_regexec(&def_regmatch, line, (colnr_T)0)) {
-        /*
-         * Pattern must be first identifier after 'define', so skip
-         * to that position before checking for match of pattern.  Also
-         * don't let it match beyond the end of this identifier.
-         */
+          && vim_regexec(&def_regmatch, (char *)line, (colnr_T)0)) {
+        // Pattern must be first identifier after 'define', so skip
+        // to that position before checking for match of pattern.  Also
+        // don't let it match beyond the end of this identifier.
         p = def_regmatch.endp[0];
         while (*p && !vim_iswordc(*p)) {
           p++;
@@ -5618,7 +5613,7 @@ search_line:
             matched = false;
           }
         } else if (regmatch.regprog != NULL
-                   && vim_regexec(&regmatch, line, (colnr_T)(p - line))) {
+                   && vim_regexec(&regmatch, (char *)line, (colnr_T)(p - line))) {
           matched = true;
           startp = regmatch.startp[0];
           // Check if the line is not a comment line (unless we are
@@ -5627,7 +5622,7 @@ search_line:
           if (skip_comments) {
             if ((*line != '#'
                  || STRNCMP(skipwhite((char *)line + 1), "define", 6) != 0)
-                && get_leader_len(line, NULL, false, true)) {
+                && get_leader_len((char *)line, NULL, false, true)) {
               matched = false;
             }
 

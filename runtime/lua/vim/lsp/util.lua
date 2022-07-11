@@ -44,12 +44,22 @@ local function get_border_size(opts)
       shadow = { 1, 1 },
     }
     if border_size[border] == nil then
-      error(string.format('invalid floating preview border: %s. :help vim.api.nvim_open_win()', vim.inspect(border)))
+      error(
+        string.format(
+          'invalid floating preview border: %s. :help vim.api.nvim_open_win()',
+          vim.inspect(border)
+        )
+      )
     end
     height, width = unpack(border_size[border])
   else
     if 8 % #border ~= 0 then
-      error(string.format('invalid floating preview border: %s. :help vim.api.nvim_open_win()', vim.inspect(border)))
+      error(
+        string.format(
+          'invalid floating preview border: %s. :help vim.api.nvim_open_win()',
+          vim.inspect(border)
+        )
+      )
     end
     ---@private
     local function border_width(id)
@@ -61,7 +71,12 @@ local function get_border_size(opts)
         -- border specified as a list of border characters
         return vim.fn.strdisplaywidth(border[id])
       end
-      error(string.format('invalid floating preview border: %s. :help vim.api.nvim_open_win()', vim.inspect(border)))
+      error(
+        string.format(
+          'invalid floating preview border: %s. :help vim.api.nvim_open_win()',
+          vim.inspect(border)
+        )
+      )
     end
     ---@private
     local function border_height(id)
@@ -73,7 +88,12 @@ local function get_border_size(opts)
         -- border specified as a list of border characters
         return #border[id] > 0 and 1 or 0
       end
-      error(string.format('invalid floating preview border: %s. :help vim.api.nvim_open_win()', vim.inspect(border)))
+      error(
+        string.format(
+          'invalid floating preview border: %s. :help vim.api.nvim_open_win()',
+          vim.inspect(border)
+        )
+      )
     end
     height = height + border_height(2) -- top
     height = height + border_height(6) -- bottom
@@ -531,7 +551,10 @@ function M.apply_text_document_edit(text_document_edit, index, offset_encoding)
   local text_document = text_document_edit.textDocument
   local bufnr = vim.uri_to_bufnr(text_document.uri)
   if offset_encoding == nil then
-    vim.notify_once('apply_text_document_edit must be called with valid offset encoding', vim.log.levels.WARN)
+    vim.notify_once(
+      'apply_text_document_edit must be called with valid offset encoding',
+      vim.log.levels.WARN
+    )
   end
 
   -- For lists of text document edits,
@@ -765,7 +788,10 @@ end
 --see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#workspace_applyEdit
 function M.apply_workspace_edit(workspace_edit, offset_encoding)
   if offset_encoding == nil then
-    vim.notify_once('apply_workspace_edit must be called with valid offset encoding', vim.log.levels.WARN)
+    vim.notify_once(
+      'apply_workspace_edit must be called with valid offset encoding',
+      vim.log.levels.WARN
+    )
   end
   if workspace_edit.documentChanges then
     for idx, change in ipairs(workspace_edit.documentChanges) do
@@ -1022,7 +1048,10 @@ function M.jump_to_location(location, offset_encoding, reuse_win)
     return
   end
   if offset_encoding == nil then
-    vim.notify_once('jump_to_location must be called with valid offset encoding', vim.log.levels.WARN)
+    vim.notify_once(
+      'jump_to_location must be called with valid offset encoding',
+      vim.log.levels.WARN
+    )
   end
   local bufnr = vim.uri_to_bufnr(uri)
   -- Save position in jumplist
@@ -1226,14 +1255,21 @@ function M.stylize_markdown(bufnr, contents, opts)
         -- strip any empty lines or separators prior to this separator in actual markdown
         if line:match('^---+$') then
           while
-            markdown_lines[#stripped] and (stripped[#stripped]:match('^%s*$') or stripped[#stripped]:match('^---+$'))
+            markdown_lines[#stripped]
+            and (stripped[#stripped]:match('^%s*$') or stripped[#stripped]:match('^---+$'))
           do
             markdown_lines[#stripped] = false
             table.remove(stripped, #stripped)
           end
         end
         -- add the line if its not an empty line following a separator
-        if not (line:match('^%s*$') and markdown_lines[#stripped] and stripped[#stripped]:match('^---+$')) then
+        if
+          not (
+            line:match('^%s*$')
+            and markdown_lines[#stripped]
+            and stripped[#stripped]:match('^---+$')
+          )
+        then
           table.insert(stripped, line)
           markdown_lines[#stripped] = true
         end
@@ -1265,7 +1301,11 @@ function M.stylize_markdown(bufnr, contents, opts)
   local function apply_syntax_to_region(ft, start, finish)
     if ft == '' then
       vim.cmd(
-        string.format('syntax region markdownCode start=+\\%%%dl+ end=+\\%%%dl+ keepend extend', start, finish + 1)
+        string.format(
+          'syntax region markdownCode start=+\\%%%dl+ end=+\\%%%dl+ keepend extend',
+          start,
+          finish + 1
+        )
       )
       return
     end
@@ -1283,7 +1323,13 @@ function M.stylize_markdown(bufnr, contents, opts)
       langs[lang] = true
     end
     vim.cmd(
-      string.format('syntax region %s start=+\\%%%dl+ end=+\\%%%dl+ contains=%s keepend', name, start, finish + 1, lang)
+      string.format(
+        'syntax region %s start=+\\%%%dl+ end=+\\%%%dl+ contains=%s keepend',
+        name,
+        start,
+        finish + 1,
+        lang
+      )
     )
   end
 
@@ -1309,49 +1355,11 @@ function M.stylize_markdown(bufnr, contents, opts)
 end
 
 ---@private
---- Creates autocommands to close a preview window when events happen.
----
----@param events table list of events
----@param winnr number window id of preview window
----@param bufnrs table list of buffers where the preview window will remain visible
----@see |autocmd-events|
-local function close_preview_autocmd(events, winnr, bufnrs)
-  local augroup = 'preview_window_' .. winnr
-
-  -- close the preview window when entered a buffer that is not
-  -- the floating window buffer or the buffer that spawned it
-  vim.cmd(string.format(
-    [[
-    augroup %s
-      autocmd!
-      autocmd BufEnter * lua vim.lsp.util._close_preview_window(%d, {%s})
-    augroup end
-  ]],
-    augroup,
-    winnr,
-    table.concat(bufnrs, ',')
-  ))
-
-  if #events > 0 then
-    vim.cmd(string.format(
-      [[
-      augroup %s
-        autocmd %s <buffer> lua vim.lsp.util._close_preview_window(%d)
-      augroup end
-    ]],
-      augroup,
-      table.concat(events, ','),
-      winnr
-    ))
-  end
-end
-
----@private
 --- Closes the preview window
 ---
 ---@param winnr number window id of preview window
 ---@param bufnrs table|nil optional list of ignored buffers
-function M._close_preview_window(winnr, bufnrs)
+local function close_preview_window(winnr, bufnrs)
   vim.schedule(function()
     -- exit if we are in one of ignored buffers
     if bufnrs and vim.tbl_contains(bufnrs, api.nvim_get_current_buf()) then
@@ -1359,18 +1367,40 @@ function M._close_preview_window(winnr, bufnrs)
     end
 
     local augroup = 'preview_window_' .. winnr
-    vim.cmd(string.format(
-      [[
-      augroup %s
-        autocmd!
-      augroup end
-      augroup! %s
-    ]],
-      augroup,
-      augroup
-    ))
-    pcall(vim.api.nvim_win_close, winnr, true)
+    pcall(api.nvim_del_augroup_by_name, augroup)
+    pcall(api.nvim_win_close, winnr, true)
   end)
+end
+
+---@private
+--- Creates autocommands to close a preview window when events happen.
+---
+---@param events table list of events
+---@param winnr number window id of preview window
+---@param bufnrs table list of buffers where the preview window will remain visible
+---@see |autocmd-events|
+local function close_preview_autocmd(events, winnr, bufnrs)
+  local augroup = api.nvim_create_augroup('preview_window_' .. winnr, {
+    clear = true,
+  })
+
+  -- close the preview window when entered a buffer that is not
+  -- the floating window buffer or the buffer that spawned it
+  api.nvim_create_autocmd('BufEnter', {
+    group = augroup,
+    callback = function()
+      close_preview_window(winnr, bufnrs)
+    end,
+  })
+
+  if #events > 0 then
+    api.nvim_create_autocmd(events, {
+      buffer = bufnrs[2],
+      callback = function()
+        close_preview_window(winnr)
+      end,
+    })
+  end
 end
 
 ---@internal
@@ -1587,15 +1617,21 @@ do --[[ References ]]
       offset_encoding = { offset_encoding, 'string', false },
     })
     for _, reference in ipairs(references) do
-      local start_line, start_char = reference['range']['start']['line'], reference['range']['start']['character']
-      local end_line, end_char = reference['range']['end']['line'], reference['range']['end']['character']
+      local start_line, start_char =
+        reference['range']['start']['line'], reference['range']['start']['character']
+      local end_line, end_char =
+        reference['range']['end']['line'], reference['range']['end']['character']
 
       local start_idx = get_line_byte_from_position(
         bufnr,
         { line = start_line, character = start_char },
         offset_encoding
       )
-      local end_idx = get_line_byte_from_position(bufnr, { line = start_line, character = end_char }, offset_encoding)
+      local end_idx = get_line_byte_from_position(
+        bufnr,
+        { line = start_line, character = end_char },
+        offset_encoding
+      )
 
       local document_highlight_kind = {
         [protocol.DocumentHighlightKind.Text] = 'LspReferenceText',
@@ -1630,7 +1666,10 @@ end)
 ---@returns (table) list of items
 function M.locations_to_items(locations, offset_encoding)
   if offset_encoding == nil then
-    vim.notify_once('locations_to_items must be called with valid offset encoding', vim.log.levels.WARN)
+    vim.notify_once(
+      'locations_to_items must be called with valid offset encoding',
+      vim.log.levels.WARN
+    )
   end
 
   local items = {}
@@ -1681,35 +1720,6 @@ function M.locations_to_items(locations, offset_encoding)
     end
   end
   return items
-end
-
---- Fills target window's location list with given list of items.
---- Can be obtained with e.g. |vim.lsp.util.locations_to_items()|.
---- Defaults to current window.
----
----@deprecated Use |setloclist()|
----
----@param items (table) list of items
-function M.set_loclist(items, win_id)
-  vim.deprecate('vim.lsp.util.set_loclist', 'setloclist', '0.8')
-  vim.fn.setloclist(win_id or 0, {}, ' ', {
-    title = 'Language Server',
-    items = items,
-  })
-end
-
---- Fills quickfix list with given list of items.
---- Can be obtained with e.g. |vim.lsp.util.locations_to_items()|.
----
----@deprecated Use |setqflist()|
----
----@param items (table) list of items
-function M.set_qflist(items)
-  vim.deprecate('vim.lsp.util.set_qflist', 'setqflist', '0.8')
-  vim.fn.setqflist({}, ' ', {
-    title = 'Language Server',
-    items = items,
-  })
 end
 
 -- According to LSP spec, if the client set "symbolKind.valueSet",
@@ -1857,7 +1867,10 @@ function M._get_offset_encoding(bufnr)
   for _, client in pairs(vim.lsp.buf_get_clients(bufnr)) do
     if client.offset_encoding == nil then
       vim.notify_once(
-        string.format('Client (id: %s) offset_encoding is nil. Do not unset offset_encoding.', client.id),
+        string.format(
+          'Client (id: %s) offset_encoding is nil. Do not unset offset_encoding.',
+          client.id
+        ),
         vim.log.levels.ERROR
       )
     end
@@ -1994,7 +2007,10 @@ end
 function M.character_offset(buf, row, col, offset_encoding)
   local line = get_line(buf, row)
   if offset_encoding == nil then
-    vim.notify_once('character_offset must be called with valid offset encoding', vim.log.levels.WARN)
+    vim.notify_once(
+      'character_offset must be called with valid offset encoding',
+      vim.log.levels.WARN
+    )
   end
   -- If the col is past the EOL, use the line length.
   if col > #line then

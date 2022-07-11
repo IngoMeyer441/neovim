@@ -55,6 +55,7 @@
 #include "nvim/main.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
+#include "nvim/mark_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
@@ -88,6 +89,7 @@
 static char *msg_loclist = N_("[Location List]");
 static char *msg_qflist = N_("[Quickfix List]");
 static char *e_auabort = N_("E855: Autocommands caused command to abort");
+static char *e_buflocked = N_("E937: Attempt to delete a buffer that is in use");
 
 // Number of times free_buffer() was called.
 static int buf_free_count = 0;
@@ -112,7 +114,7 @@ static int read_buffer(int read_stdin, exarg_T *eap, int flags)
   // the end.  This makes it possible to retry when 'fileformat' or
   // 'fileencoding' was guessed wrong.
   line_count = curbuf->b_ml.ml_line_count;
-  retval = readfile(read_stdin ? NULL : (char *)curbuf->b_ffname,
+  retval = readfile(read_stdin ? NULL : curbuf->b_ffname,
                     read_stdin ? NULL : curbuf->b_fname,
                     line_count, (linenr_T)0, (linenr_T)MAXLNUM, eap,
                     flags | READ_BUFFER, silent);
@@ -230,7 +232,7 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags)
     }
 #endif
 
-    retval = readfile((char *)curbuf->b_ffname, curbuf->b_fname,
+    retval = readfile(curbuf->b_ffname, curbuf->b_fname,
                       (linenr_T)0, (linenr_T)0, (linenr_T)MAXLNUM, eap,
                       flags | READ_NEW | (read_fifo ? READ_FIFO : 0), silent);
 #ifdef UNIX
@@ -437,7 +439,7 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
   // Disallow deleting the buffer when it is locked (already being closed or
   // halfway a command that relies on it). Unloading is allowed.
   if (buf->b_locked > 0 && (del_buf || wipe_buf)) {
-    emsg(_("E937: Attempt to delete a buffer that is in use"));
+    emsg(_(e_buflocked));
     return false;
   }
 
@@ -528,7 +530,9 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
   }
 
   if (buf->terminal) {
+    buf->b_locked++;
     terminal_close(&buf->terminal, -1);
+    buf->b_locked--;
   }
 
   // Always remove the buffer when there is no file name.
@@ -802,8 +806,7 @@ static void free_buffer_stuff(buf_T *buf, int free_flags)
     // Avoid losing b:changedtick when deleting buffer: clearing variables
     // implies using clear_tv() on b:changedtick and that sets changedtick to
     // zero.
-    hashitem_T *const changedtick_hi = hash_find(&buf->b_vars->dv_hashtab,
-                                                 (const char_u *)"changedtick");
+    hashitem_T *const changedtick_hi = hash_find(&buf->b_vars->dv_hashtab, "changedtick");
     assert(changedtick_hi != NULL);
     hash_remove(&buf->b_vars->dv_hashtab, changedtick_hi);
   }
@@ -813,7 +816,7 @@ static void free_buffer_stuff(buf_T *buf, int free_flags)
     buf_init_changedtick(buf);
   }
   uc_clear(&buf->b_ucmds);               // clear local user commands
-  buf_delete_signs(buf, (char_u *)"*");  // delete any signs
+  buf_delete_signs(buf, "*");            // delete any signs
   extmark_free_all(buf);                 // delete any extmarks
   map_clear_mode(buf, MAP_ALL_MODES, true, false);  // clear local mappings
   map_clear_mode(buf, MAP_ALL_MODES, true, true);   // clear local abbrevs
@@ -942,7 +945,7 @@ void handle_swap_exists(bufref_T *old_curbuf)
 /// @param end_bnr  buffer nr or last buffer nr in a range
 ///
 /// @return  error message or NULL
-char *do_bufdel(int command, char_u *arg, int addr_count, int start_bnr, int end_bnr, int forceit)
+char *do_bufdel(int command, char *arg, int addr_count, int start_bnr, int end_bnr, int forceit)
 {
   int do_current = 0;             // delete current buffer?
   int deleted = 0;                // number of buffers deleted
@@ -980,17 +983,17 @@ char *do_bufdel(int command, char_u *arg, int addr_count, int start_bnr, int end
           break;
         }
       } else {    // addr_count == 1
-        arg = (char_u *)skipwhite((char *)arg);
+        arg = skipwhite(arg);
         if (*arg == NUL) {
           break;
         }
         if (!ascii_isdigit(*arg)) {
-          p = (char *)skiptowhite_esc(arg);
-          bnr = buflist_findpat(arg, (char_u *)p, command == DOBUF_WIPE, false, false);
+          p = skiptowhite_esc(arg);
+          bnr = buflist_findpat(arg, p, command == DOBUF_WIPE, false, false);
           if (bnr < 0) {                    // failed
             break;
           }
-          arg = (char_u *)p;
+          arg = p;
         } else {
           bnr = getdigits_int(&arg, false, 0);
         }
@@ -1182,6 +1185,10 @@ int do_buffer(int action, int start, int dir, int count, int forceit)
   if (unload) {
     int forward;
     bufref_T bufref;
+    if (buf->b_locked) {
+      emsg(_(e_buflocked));
+      return FAIL;
+    }
     set_bufref(&bufref, buf);
 
     // When unloading or deleting a buffer that's already unloaded and
@@ -1676,10 +1683,10 @@ static inline void buf_init_changedtick(buf_T *const buf)
 /// @param bufnr
 ///
 /// @return  pointer to the buffer
-buf_T *buflist_new(char_u *ffname_arg, char_u *sfname_arg, linenr_T lnum, int flags)
+buf_T *buflist_new(char *ffname_arg, char *sfname_arg, linenr_T lnum, int flags)
 {
-  char *ffname = (char *)ffname_arg;
-  char *sfname = (char *)sfname_arg;
+  char *ffname = ffname_arg;
+  char *sfname = sfname_arg;
   buf_T *buf;
 
   fname_expand(curbuf, &ffname, &sfname);       // will allocate ffname
@@ -1746,8 +1753,8 @@ buf_T *buflist_new(char_u *ffname_arg, char_u *sfname_arg, linenr_T lnum, int fl
   }
 
   if (ffname != NULL) {
-    buf->b_ffname = (char_u *)ffname;
-    buf->b_sfname = vim_strsave((char_u *)sfname);
+    buf->b_ffname = ffname;
+    buf->b_sfname = xstrdup(sfname);
   }
 
   clear_wininfo(buf);
@@ -1789,13 +1796,14 @@ buf_T *buflist_new(char_u *ffname_arg, char_u *sfname_arg, linenr_T lnum, int fl
     buf_copy_options(buf, BCO_ALWAYS);
   }
 
-  buf->b_wininfo->wi_fpos.lnum = lnum;
+  buf->b_wininfo->wi_mark = (fmark_T)INIT_FMARK;
+  buf->b_wininfo->wi_mark.mark.lnum = lnum;
   buf->b_wininfo->wi_win = curwin;
 
   hash_init(&buf->b_s.b_keywtab);
   hash_init(&buf->b_s.b_keywtab_ic);
 
-  buf->b_fname = (char *)buf->b_sfname;
+  buf->b_fname = buf->b_sfname;
   if (!file_id_valid) {
     buf->file_id_valid = false;
   } else {
@@ -1937,7 +1945,7 @@ int buflist_getfile(int n, linenr_T lnum, int options, int forceit)
 {
   buf_T *buf;
   win_T *wp = NULL;
-  pos_T *fpos;
+  fmark_T *fm = NULL;
   colnr_T col;
 
   buf = buflist_findnr(n);
@@ -1955,19 +1963,17 @@ int buflist_getfile(int n, linenr_T lnum, int options, int forceit)
     return OK;
   }
 
-  if (text_locked()) {
-    text_locked_msg();
-    return FAIL;
-  }
-  if (curbuf_locked()) {
+  if (text_or_buf_locked()) {
     return FAIL;
   }
 
+  bool restore_view = false;
   // altfpos may be changed by getfile(), get it now
   if (lnum == 0) {
-    fpos = buflist_findfpos(buf);
-    lnum = fpos->lnum;
-    col = fpos->col;
+    fm = buflist_findfmark(buf);
+    lnum = fm->mark.lnum;
+    col = fm->mark.col;
+    restore_view = true;
   } else {
     col = 0;
   }
@@ -2011,6 +2017,9 @@ int buflist_getfile(int n, linenr_T lnum, int options, int forceit)
       curwin->w_cursor.coladd = 0;
       curwin->w_set_curswant = true;
     }
+    if (jop_flags & JOP_VIEW && restore_view) {
+      mark_view_restore(fm);
+    }
     return OK;
   }
   RedrawingDisabled--;
@@ -2022,7 +2031,7 @@ void buflist_getfpos(void)
 {
   pos_T *fpos;
 
-  fpos = buflist_findfpos(curbuf);
+  fpos = &buflist_findfmark(curbuf)->mark;
 
   curwin->w_cursor.lnum = fpos->lnum;
   check_cursor_lnum();
@@ -2040,13 +2049,13 @@ void buflist_getfpos(void)
 /// Find file in buffer list by name (it has to be for the current window).
 ///
 /// @return  buffer or NULL if not found
-buf_T *buflist_findname_exp(char_u *fname)
+buf_T *buflist_findname_exp(char *fname)
 {
   char *ffname;
   buf_T *buf = NULL;
 
   // First make the name into a full path name
-  ffname = FullName_save((char *)fname,
+  ffname = FullName_save(fname,
 #ifdef UNIX
                          // force expansion, get rid of symbolic links
                          true
@@ -2055,7 +2064,7 @@ buf_T *buflist_findname_exp(char_u *fname)
 #endif
                          );  // NOLINT(whitespace/parens)
   if (ffname != NULL) {
-    buf = buflist_findname((char_u *)ffname);
+    buf = buflist_findname(ffname);
     xfree(ffname);
   }
   return buf;
@@ -2066,11 +2075,11 @@ buf_T *buflist_findname_exp(char_u *fname)
 /// Skips dummy buffers.
 ///
 /// @return  buffer or NULL if not found
-buf_T *buflist_findname(char_u *ffname)
+buf_T *buflist_findname(char *ffname)
 {
   FileID file_id;
-  bool file_id_valid = os_fileid((char *)ffname, &file_id);
-  return buflist_findname_file_id((char *)ffname, &file_id, file_id_valid);
+  bool file_id_valid = os_fileid(ffname, &file_id);
+  return buflist_findname_file_id(ffname, &file_id, file_id_valid);
 }
 
 /// Same as buflist_findname(), but pass the FileID structure to avoid
@@ -2098,7 +2107,7 @@ static buf_T *buflist_findname_file_id(char *ffname, FileID *file_id, bool file_
 /// @param curtab_only  find buffers in current tab only
 ///
 /// @return  fnum of the found buffer or < 0 for error.
-int buflist_findpat(const char_u *pattern, const char_u *pattern_end, bool unlisted, bool diffmode,
+int buflist_findpat(const char *pattern, const char *pattern_end, bool unlisted, bool diffmode,
                     bool curtab_only)
   FUNC_ATTR_NONNULL_ARG(1)
 {
@@ -2229,7 +2238,7 @@ static int buf_time_compare(const void *s1, const void *s2)
 /// For command line expansion of ":buf" and ":sbuf".
 ///
 /// @return  OK if matches found, FAIL otherwise.
-int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options)
+int ExpandBufnames(char *pat, int *num_file, char ***file, int options)
 {
   int count = 0;
   int round;
@@ -2251,20 +2260,20 @@ int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options)
     STRCPY(patc, "\\(^\\|[\\/]\\)");
     STRCPY(patc + 11, pat + 1);
   } else {
-    patc = (char *)pat;
+    patc = pat;
   }
 
   // attempt == 0: try match with    '\<', match at start of word
   // attempt == 1: try match without '\<', match anywhere
   for (attempt = 0; attempt <= 1; attempt++) {
-    if (attempt > 0 && (char_u *)patc == pat) {
+    if (attempt > 0 && patc == pat) {
       break;            // there was no anchor, no need to try again
     }
 
     regmatch_T regmatch;
     regmatch.regprog = vim_regcomp(patc + attempt * 11, RE_MAGIC);
     if (regmatch.regprog == NULL) {
-      if ((char_u *)patc != pat) {
+      if (patc != pat) {
         xfree(patc);
       }
       return FAIL;
@@ -2291,7 +2300,7 @@ int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options)
             count++;
           } else {
             if (options & WILD_HOME_REPLACE) {
-              p = (char *)home_replace_save(buf, (char_u *)p);
+              p = home_replace_save(buf, p);
             } else {
               p = xstrdup(p);
             }
@@ -2300,7 +2309,7 @@ int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options)
               matches[count].match = p;
               count++;
             } else {
-              (*file)[count++] = (char_u *)p;
+              (*file)[count++] = p;
             }
           }
         }
@@ -2322,7 +2331,7 @@ int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options)
     }
   }
 
-  if ((char_u *)patc != pat) {
+  if (patc != pat) {
     xfree(patc);
   }
 
@@ -2334,12 +2343,12 @@ int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options)
     // if the current buffer is first in the list, place it at the end
     if (matches[0].buf == curbuf) {
       for (int i = 1; i < count; i++) {
-        (*file)[i - 1] = (char_u *)matches[i].match;
+        (*file)[i - 1] = matches[i].match;
       }
-      (*file)[count - 1] = (char_u *)matches[0].match;
+      (*file)[count - 1] = matches[0].match;
     } else {
       for (int i = 0; i < count; i++) {
-        (*file)[i] = (char_u *)matches[i].match;
+        (*file)[i] = matches[i].match;
       }
     }
     xfree(matches);
@@ -2355,9 +2364,9 @@ int ExpandBufnames(char_u *pat, int *num_file, char_u ***file, int options)
 static char *buflist_match(regmatch_T *rmp, buf_T *buf, bool ignore_case)
 {
   // First try the short file name, then the long file name.
-  char *match = fname_match(rmp, (char *)buf->b_sfname, ignore_case);
+  char *match = fname_match(rmp, buf->b_sfname, ignore_case);
   if (match == NULL && rmp->regprog != NULL) {
-    match = fname_match(rmp, (char *)buf->b_ffname, ignore_case);
+    match = fname_match(rmp, buf->b_ffname, ignore_case);
   }
   return match;
 }
@@ -2375,12 +2384,12 @@ static char *fname_match(regmatch_T *rmp, char *name, bool ignore_case)
   if (name != NULL) {
     // Ignore case when 'fileignorecase' or the argument is set.
     rmp->rm_ic = p_fic || ignore_case;
-    if (vim_regexec(rmp, (char_u *)name, (colnr_T)0)) {
+    if (vim_regexec(rmp, name, (colnr_T)0)) {
       match = name;
     } else if (rmp->regprog != NULL) {
       // Replace $(HOME) with '~' and try matching again.
-      p = (char *)home_replace_save(NULL, (char_u *)name);
-      if (vim_regexec(rmp, (char_u *)p, (colnr_T)0)) {
+      p = home_replace_save(NULL, name);
+      if (vim_regexec(rmp, p, (colnr_T)0)) {
         match = name;
       }
       xfree(p);
@@ -2407,16 +2416,14 @@ buf_T *buflist_findnr(int nr)
 /// @param helptail  for help buffers return tail only
 ///
 /// @return  a pointer to allocated memory, of NULL when failed.
-char_u *buflist_nr2name(int n, int fullname, int helptail)
+char *buflist_nr2name(int n, int fullname, int helptail)
 {
-  buf_T *buf;
-
-  buf = buflist_findnr(n);
+  buf_T *buf = buflist_findnr(n);
   if (buf == NULL) {
     return NULL;
   }
   return home_replace_save(helptail ? buf : NULL,
-                           fullname ? buf->b_ffname : (char_u *)buf->b_fname);
+                           fullname ? buf->b_ffname : buf->b_fname);
 }
 
 /// Set the line and column numbers for the given buffer and window
@@ -2462,8 +2469,11 @@ void buflist_setfpos(buf_T *const buf, win_T *const win, linenr_T lnum, colnr_T 
     }
   }
   if (lnum != 0) {
-    wip->wi_fpos.lnum = lnum;
-    wip->wi_fpos.col = col;
+    wip->wi_mark.mark.lnum = lnum;
+    wip->wi_mark.mark.col = col;
+    if (win != NULL) {
+      wip->wi_mark.view = mark_view_make(win->w_topline, wip->wi_mark.mark);
+    }
   }
   if (copy_options && win != NULL) {
     // Save the window-specific option values.
@@ -2581,24 +2591,23 @@ void get_winopts(buf_T *buf)
   didset_window_options(curwin);
 }
 
-/// Find the position (lnum and col) for the buffer 'buf' for the current
-/// window.
+/// Find the mark for the buffer 'buf' for the current window.
 ///
 /// @return  a pointer to no_position if no position is found.
-pos_T *buflist_findfpos(buf_T *buf)
+fmark_T *buflist_findfmark(buf_T *buf)
   FUNC_ATTR_PURE
 {
-  static pos_T no_position = { 1, 0, 0 };
+  static fmark_T no_position = { { 1, 0, 0 }, 0, 0, { 0 }, NULL };
 
   wininfo_T *const wip = find_wininfo(buf, false, false);
-  return (wip == NULL) ? &no_position : &(wip->wi_fpos);
+  return (wip == NULL) ? &no_position : &(wip->wi_mark);
 }
 
 /// Find the lnum for the buffer 'buf' for the current window.
 linenr_T buflist_findlnum(buf_T *buf)
   FUNC_ATTR_PURE
 {
-  return buflist_findfpos(buf)->lnum;
+  return buflist_findfmark(buf)->mark.lnum;
 }
 
 /// List all known file names (for :files and :buffers command).
@@ -2710,16 +2719,14 @@ void buflist_list(exarg_T *eap)
 /// Used by insert_reg() and cmdline_paste() for '#' register.
 ///
 /// @return  FAIL if not found, OK for success.
-int buflist_name_nr(int fnum, char_u **fname, linenr_T *lnum)
+int buflist_name_nr(int fnum, char **fname, linenr_T *lnum)
 {
-  buf_T *buf;
-
-  buf = buflist_findnr(fnum);
+  buf_T *buf = buflist_findnr(fnum);
   if (buf == NULL || buf->b_fname == NULL) {
     return FAIL;
   }
 
-  *fname = (char_u *)buf->b_fname;
+  *fname = buf->b_fname;
   *lnum = buflist_findlnum(buf);
 
   return OK;
@@ -2774,16 +2781,16 @@ int setfname(buf_T *buf, char *ffname_arg, char *sfname_arg, bool message)
     }
     sfname = xstrdup(sfname);
 #ifdef USE_FNAME_CASE
-    path_fix_case((char_u *)sfname);            // set correct case for short file name
+    path_fix_case(sfname);            // set correct case for short file name
 #endif
     if (buf->b_sfname != buf->b_ffname) {
       xfree(buf->b_sfname);
     }
     xfree(buf->b_ffname);
-    buf->b_ffname = (char_u *)ffname;
-    buf->b_sfname = (char_u *)sfname;
+    buf->b_ffname = ffname;
+    buf->b_sfname = sfname;
   }
-  buf->b_fname = (char *)buf->b_sfname;
+  buf->b_fname = buf->b_sfname;
   if (!file_id_valid) {
     buf->file_id_valid = false;
   } else {
@@ -2797,22 +2804,20 @@ int setfname(buf_T *buf, char *ffname_arg, char *sfname_arg, bool message)
 
 /// Crude way of changing the name of a buffer.  Use with care!
 /// The name should be relative to the current directory.
-void buf_set_name(int fnum, char_u *name)
+void buf_set_name(int fnum, char *name)
 {
-  buf_T *buf;
-
-  buf = buflist_findnr(fnum);
+  buf_T *buf = buflist_findnr(fnum);
   if (buf != NULL) {
     if (buf->b_sfname != buf->b_ffname) {
       xfree(buf->b_sfname);
     }
     xfree(buf->b_ffname);
-    buf->b_ffname = vim_strsave(name);
+    buf->b_ffname = xstrdup(name);
     buf->b_sfname = NULL;
     // Allocate ffname and expand into full path.  Also resolves .lnk
     // files on Win32.
-    fname_expand(buf, (char **)&buf->b_ffname, (char **)&buf->b_sfname);
-    buf->b_fname = (char *)buf->b_sfname;
+    fname_expand(buf, &buf->b_ffname, &buf->b_sfname);
+    buf->b_fname = buf->b_sfname;
   }
 }
 
@@ -2838,12 +2843,10 @@ void buf_name_changed(buf_T *buf)
 /// Used by do_one_cmd(), do_write() and do_ecmd().
 ///
 /// @return  the buffer.
-buf_T *setaltfname(char_u *ffname, char_u *sfname, linenr_T lnum)
+buf_T *setaltfname(char *ffname, char *sfname, linenr_T lnum)
 {
-  buf_T *buf;
-
   // Create a buffer.  'buflisted' is not set if it's a new buffer
-  buf = buflist_new(ffname, sfname, lnum, 0);
+  buf_T *buf = buflist_new(ffname, sfname, lnum, 0);
   if (buf != NULL && (cmdmod.cmod_flags & CMOD_KEEPALT) == 0) {
     curwin->w_alt_fnum = buf->b_fnum;
   }
@@ -2854,29 +2857,27 @@ buf_T *setaltfname(char_u *ffname, char_u *sfname, linenr_T lnum)
 /// Return NULL if there isn't any, and give error message if requested.
 ///
 /// @param errmsg  give error message
-char_u *getaltfname(bool errmsg)
+char *getaltfname(bool errmsg)
 {
   char *fname;
   linenr_T dummy;
 
-  if (buflist_name_nr(0, (char_u **)&fname, &dummy) == FAIL) {
+  if (buflist_name_nr(0, &fname, &dummy) == FAIL) {
     if (errmsg) {
       emsg(_(e_noalt));
     }
     return NULL;
   }
-  return (char_u *)fname;
+  return fname;
 }
 
 /// Add a file name to the buflist and return its number.
 /// Uses same flags as buflist_new(), except BLN_DUMMY.
 ///
 /// Used by qf_init(), main() and doarglist()
-int buflist_add(char_u *fname, int flags)
+int buflist_add(char *fname, int flags)
 {
-  buf_T *buf;
-
-  buf = buflist_new(fname, NULL, (linenr_T)0, flags);
+  buf_T *buf = buflist_new(fname, NULL, (linenr_T)0, flags);
   if (buf != NULL) {
     return buf->b_fnum;
   }
@@ -2910,10 +2911,10 @@ void buflist_altfpos(win_T *win)
 /// Fname must have a full path (expanded by path_to_absolute()).
 ///
 /// @param  ffname  full path name to check
-bool otherfile(char_u *ffname)
+bool otherfile(char *ffname)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL
 {
-  return otherfile_buf(curbuf, (char *)ffname, NULL, false);
+  return otherfile_buf(curbuf, ffname, NULL, false);
 }
 
 /// Check that "ffname" is not the same file as the file loaded in "buf".
@@ -3014,7 +3015,7 @@ void fileinfo(int fullname, int shorthelp, int dont_truncate)
     if (!fullname && curbuf->b_fname != NULL) {
       name = curbuf->b_fname;
     } else {
-      name = (char *)curbuf->b_ffname;
+      name = curbuf->b_ffname;
     }
     home_replace(shorthelp ? curbuf : NULL, name, p,
                  (size_t)(IOSIZE - (p - buffer)), true);
@@ -3062,7 +3063,7 @@ void fileinfo(int fullname, int shorthelp, int dont_truncate)
                      n);
     validate_virtcol();
     len = STRLEN(buffer);
-    col_print((char_u *)buffer + len, IOSIZE - len,
+    col_print(buffer + len, IOSIZE - len,
               (int)curwin->w_cursor.col + 1, (int)curwin->w_virtcol + 1);
   }
 
@@ -3091,12 +3092,12 @@ void fileinfo(int fullname, int shorthelp, int dont_truncate)
   xfree(buffer);
 }
 
-void col_print(char_u *buf, size_t buflen, int col, int vcol)
+void col_print(char *buf, size_t buflen, int col, int vcol)
 {
   if (col == vcol) {
-    vim_snprintf((char *)buf, buflen, "%d", col);
+    vim_snprintf(buf, buflen, "%d", col);
   } else {
-    vim_snprintf((char *)buf, buflen, "%d-%d", col, vcol);
+    vim_snprintf(buf, buflen, "%d-%d", col, vcol);
   }
 }
 
@@ -3191,7 +3192,7 @@ void maketitle(void)
         // Get path of file, replace home dir with ~.
         *buf_p++ = ' ';
         *buf_p++ = '(';
-        home_replace(curbuf, (char *)curbuf->b_ffname, buf_p,
+        home_replace(curbuf, curbuf->b_ffname, buf_p,
                      (SPACE_FOR_DIR - (size_t)(buf_p - buf)), true);
 #ifdef BACKSLASH_IN_FILENAME
         // Avoid "c:/name" to be reduced to "c".
@@ -3200,7 +3201,7 @@ void maketitle(void)
         }
 #endif
         // Remove the file name.
-        char *p = (char *)path_tail_with_sep((char_u *)buf_p);
+        char *p = path_tail_with_sep(buf_p);
         if (p == buf_p) {
           // Must be a help buffer.
           xstrlcpy(buf_p, _("help"), SPACE_FOR_DIR - (size_t)(buf_p - buf));
@@ -3235,7 +3236,7 @@ void maketitle(void)
       if (maxlen > 0) {
         // Make it shorter by removing a bit in the middle.
         if (vim_strsize(buf) > maxlen) {
-          trunc_string((char_u *)buf, (char_u *)buf, maxlen, sizeof(buf));
+          trunc_string(buf, buf, maxlen, sizeof(buf));
         }
       }
       title_str = buf;
@@ -3270,18 +3271,18 @@ void maketitle(void)
       if (buf_spname(curbuf) != NULL) {
         buf_p = buf_spname(curbuf);
       } else {                        // use file name only in icon
-        buf_p = path_tail((char *)curbuf->b_ffname);
+        buf_p = path_tail(curbuf->b_ffname);
       }
       *icon_str = NUL;
       // Truncate name at 100 bytes.
       len = (int)STRLEN(buf_p);
       if (len > 100) {
         len -= 100;
-        len += mb_tail_off((char_u *)buf_p, (char_u *)buf_p + len) + 1;
+        len += mb_tail_off(buf_p, buf_p + len) + 1;
         buf_p += len;
       }
       STRCPY(icon_str, buf_p);
-      trans_characters((char_u *)icon_str, IOSIZE);
+      trans_characters(icon_str, IOSIZE);
     }
   }
 
@@ -3679,7 +3680,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, int use_san
 
     // The first digit group is the item's min width
     if (ascii_isdigit(*fmt_p)) {
-      minwid = getdigits_int((char_u **)&fmt_p, false, 0);
+      minwid = getdigits_int(&fmt_p, false, 0);
     }
 
     // User highlight groups override the min width field
@@ -3762,7 +3763,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, int use_san
     if (*fmt_p == '.') {
       fmt_p++;
       if (ascii_isdigit(*fmt_p)) {
-        maxwid = getdigits_int((char_u **)&fmt_p, false, 50);
+        maxwid = getdigits_int(&fmt_p, false, 50);
       }
     }
 
@@ -3815,11 +3816,11 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, int use_san
       if (buf_spname(wp->w_buffer) != NULL) {
         STRLCPY(NameBuff, buf_spname(wp->w_buffer), MAXPATHL);
       } else {
-        char *t = (opt == STL_FULLPATH) ? (char *)wp->w_buffer->b_ffname
+        char *t = (opt == STL_FULLPATH) ? wp->w_buffer->b_ffname
                                           : wp->w_buffer->b_fname;
         home_replace(wp->w_buffer, t, (char *)NameBuff, MAXPATHL, true);
       }
-      trans_characters(NameBuff, MAXPATHL);
+      trans_characters((char *)NameBuff, MAXPATHL);
       if (opt != STL_FILENAME) {
         str = (char *)NameBuff;
       } else {
@@ -4699,7 +4700,7 @@ void do_arg_all(int count, int forceit, int keep_tabs)
           if (i < alist->al_ga.ga_len
               && (AARGLIST(alist)[i].ae_fnum == buf->b_fnum
                   || path_full_compare(alist_name(&AARGLIST(alist)[i]),
-                                       (char *)buf->b_ffname,
+                                       buf->b_ffname,
                                        true, true) & kEqualFiles)) {
             int weight = 1;
 
@@ -5567,7 +5568,7 @@ bool buf_contents_changed(buf_T *buf)
   aucmd_prepbuf(&aco, newbuf);
 
   if (ml_open(curbuf) == OK
-      && readfile((char *)buf->b_ffname, buf->b_fname,
+      && readfile(buf->b_ffname, buf->b_fname,
                   (linenr_T)0, (linenr_T)0, (linenr_T)MAXLNUM,
                   &ea, READ_NEW | READ_DUMMY, false) == OK) {
     // compare the two files line by line

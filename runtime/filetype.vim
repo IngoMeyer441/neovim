@@ -1,7 +1,12 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2022 Jun 03
+" Last Change:	2022 Jul 5
+
+" Only run this if enabled
+if !exists("do_legacy_filetype")
+  finish
+endif
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -399,6 +404,9 @@ au BufNewFile,BufRead configure.in,configure.ac setf config
 
 " Cooklang
 au BufNewFile,BufRead *.cook			setf cook
+
+" CSV Files
+au BufNewFile,BufRead *.csv			setf csv
 
 " CUDA Compute Unified Device Architecture
 au BufNewFile,BufRead *.cu,*.cuh		setf cuda
@@ -993,8 +1001,8 @@ au BufNewFile,BufRead *.latte,*.lte		setf latte
 " Limits
 au BufNewFile,BufRead */etc/limits,*/etc/*limits.conf,*/etc/*limits.d/*.conf	setf limits
 
-" LambdaProlog (see dist#ft#FTmod for *.mod)
-au BufNewFile,BufRead *.sig			setf lprolog
+" LambdaProlog or SML (see dist#ft#FTmod for *.mod)
+au BufNewFile,BufRead *.sig			call dist#ft#FTsig()
 
 " LDAP LDIF
 au BufNewFile,BufRead *.ldif			setf ldif
@@ -2024,6 +2032,9 @@ au BufNewFile,BufReadPost *.tssop		setf tssop
 " TSS - Command Line (temporary)
 au BufNewFile,BufReadPost *.tsscl		setf tsscl
 
+" TSV Files
+au BufNewFile,BufRead *.tsv			setf tsv
+
 " Tutor mode
 au BufNewFile,BufReadPost *.tutor		setf tutor
 
@@ -2388,7 +2399,7 @@ au BufNewFile,BufRead *fvwm2rc*
 au BufNewFile,BufRead */tmp/lltmp*		call s:StarSetf('gedcom')
 
 " Git
-au BufNewFile,BufRead */.gitconfig.d/*,/etc/gitconfig.d/*	call s:StarSetf('gitconfig')
+au BufNewFile,BufRead */.gitconfig.d/*,*/etc/gitconfig.d/*	call s:StarSetf('gitconfig')
 
 " Gitolite
 au BufNewFile,BufRead */gitolite-admin/conf/*	call s:StarSetf('gitolite')
@@ -2453,7 +2464,7 @@ au BufNewFile,BufRead neomuttrc*,Neomuttrc*		call s:StarSetf('neomuttrc')
 au BufNewFile,BufRead tmac.*			call s:StarSetf('nroff')
 
 " OpenBSD hostname.if
-au BufNewFile,BufRead /etc/hostname.*		call s:StarSetf('config')
+au BufNewFile,BufRead */etc/hostname.*		call s:StarSetf('config')
 
 " Pam conf
 au BufNewFile,BufRead */etc/pam.d/*		call s:StarSetf('pamconf')

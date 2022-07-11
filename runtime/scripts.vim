@@ -11,6 +11,10 @@
 " 'ignorecase' option making a difference.  Where case is to be ignored use
 " =~? instead.  Do not use =~ anywhere.
 
+" Only run when using legacy filetype
+if !exists('g:do_legacy_filetype')
+  finish
+endif
 
 " Only do the rest when the FileType autocommand has not been triggered yet.
 if did_filetype()
@@ -205,6 +209,10 @@ if s:line1 =~# "^#!"
     " Icon
   elseif s:name =~# 'icon\>'
     set ft=icon
+
+    " Guile
+  elseif s:name =~# 'guile'
+    set ft=scheme
 
   endif
   unlet s:name

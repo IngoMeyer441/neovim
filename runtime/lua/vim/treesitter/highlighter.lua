@@ -16,7 +16,7 @@ local _default_highlights = {}
 local _link_default_highlight_once = function(from, to)
   if not _default_highlights[from] then
     _default_highlights[from] = true
-    vim.cmd(string.format('highlight default link %s %s', from, to))
+    a.nvim_set_hl(0, from, { link = to, default = true })
   end
 
   return from
@@ -280,7 +280,8 @@ local function on_line_impl(self, buf, line)
     end
 
     if state.iter == nil or state.next_row < line then
-      state.iter = highlighter_query:query():iter_captures(root_node, self.bufnr, line, root_end_row + 1)
+      state.iter =
+        highlighter_query:query():iter_captures(root_node, self.bufnr, line, root_end_row + 1)
     end
 
     while line >= state.next_row do

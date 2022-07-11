@@ -349,19 +349,17 @@ func DummyCompleteOne(findstart, base)
   endif
 endfunc
 
-" Test that nothing happens if the 'completefunc' opens
-" a new window (no completion, no crash)
+" Test that nothing happens if the 'completefunc' tries to open
+" a new window (fails to open window, continues)
 func Test_completefunc_opens_new_window_one()
   new
   let winid = win_getid()
   setlocal completefunc=DummyCompleteOne
   call setline(1, 'one')
   /^one
-  call assert_fails('call feedkeys("A\<C-X>\<C-U>\<C-N>\<Esc>", "x")', 'E839:')
-  call assert_notequal(winid, win_getid())
-  q!
+  call assert_fails('call feedkeys("A\<C-X>\<C-U>\<C-N>\<Esc>", "x")', 'E565:')
   call assert_equal(winid, win_getid())
-  call assert_equal('', getline(1))
+  call assert_equal('oneDEF', getline(1))
   q!
 endfunc
 
@@ -913,7 +911,7 @@ func Test_popup_complete_backwards_ctrl_p()
   bwipe!
 endfunc
 
-fun! Test_complete_o_tab()
+func Test_complete_o_tab()
   CheckFunction test_override
   let s:o_char_pressed = 0
 
@@ -922,7 +920,7 @@ fun! Test_complete_o_tab()
       let s:o_char_pressed = 0
       call feedkeys("\<c-x>\<c-n>", 'i')
     endif
-  endf
+  endfunc
 
   set completeopt=menu,noselect
   new
@@ -941,7 +939,21 @@ fun! Test_complete_o_tab()
   bwipe!
   set completeopt&
   delfunc s:act_on_text_changed
-endf
+endfunc
+
+func Test_menu_only_exists_in_terminal()
+  if !exists(':tlmenu') || has('gui_running')
+    return
+  endif
+  tlnoremenu  &Edit.&Paste<Tab>"+gP  <C-W>"+
+  aunmenu *
+  try
+    popup Edit
+    call assert_false(1, 'command should have failed')
+  catch
+    call assert_exception('E328:')
+  endtry
+endfunc
 
 func Test_popup_complete_info_01()
   new

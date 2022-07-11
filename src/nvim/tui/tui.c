@@ -137,8 +137,7 @@ struct TUIData {
   char *space_buf;
 };
 
-static bool volatile got_winch = false;
-static bool did_user_set_dimensions = false;
+static int got_winch = 0;
 static bool cursor_style_enabled = false;
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -535,7 +534,7 @@ static void sigcont_cb(SignalWatcher *watcher, int signum, void *data)
 
 static void sigwinch_cb(SignalWatcher *watcher, int signum, void *data)
 {
-  got_winch = true;
+  got_winch++;
   UI *ui = data;
   if (tui_is_stopped(ui)) {
     return;
@@ -987,7 +986,7 @@ static void tui_grid_resize(UI *ui, Integer g, Integer width, Integer height)
     r->right = MIN(r->right, grid->width);
   }
 
-  if (!got_winch && (!data->is_starting || did_user_set_dimensions)) {
+  if (!got_winch && !data->is_starting) {
     // Resize the _host_ terminal.
     UNIBI_SET_NUM_VAR(data->params[0], (int)height);
     UNIBI_SET_NUM_VAR(data->params[1], (int)width);
@@ -997,7 +996,7 @@ static void tui_grid_resize(UI *ui, Integer g, Integer width, Integer height)
       reset_scroll_region(ui, ui->width == grid->width);
     }
   } else {  // Already handled the SIGWINCH signal; avoid double-resize.
-    got_winch = false;
+    got_winch = got_winch > 0 ? got_winch - 1 : 0;
     grid->row = -1;
   }
 }
@@ -1504,23 +1503,13 @@ static void tui_guess_size(UI *ui)
   TUIData *data = ui->data;
   int width = 0, height = 0;
 
-  // 1 - look for non-default 'columns' and 'lines' options during startup
-  if (data->is_starting && (Columns != DFLT_COLS || Rows != DFLT_ROWS)) {
-    did_user_set_dimensions = true;
-    assert(Columns >= 0);
-    assert(Rows >= 0);
-    width = Columns;
-    height = Rows;
-    goto end;
-  }
-
-  // 2 - try from a system call(ioctl/TIOCGWINSZ on unix)
+  // 1 - try from a system call(ioctl/TIOCGWINSZ on unix)
   if (data->out_isatty
       && !uv_tty_get_winsize(&data->output_handle.tty, &width, &height)) {
     goto end;
   }
 
-  // 3 - use $LINES/$COLUMNS if available
+  // 2 - use $LINES/$COLUMNS if available
   const char *val;
   int advance;
   if ((val = os_getenv("LINES"))
@@ -1530,7 +1519,7 @@ static void tui_guess_size(UI *ui)
     goto end;
   }
 
-  // 4 - read from terminfo if available
+  // 3 - read from terminfo if available
   height = unibi_get_num(data->ut, unibi_lines);
   width = unibi_get_num(data->ut, unibi_columns);
 
@@ -1653,6 +1642,7 @@ static void patch_terminfo_bugs(TUIData *data, const char *term, const char *col
   bool xterm = terminfo_is_term_family(term, "xterm")
                // Treat Terminal.app as generic xterm-like, for now.
                || nsterm;
+  bool hterm = terminfo_is_term_family(term, "hterm");
   bool kitty = terminfo_is_term_family(term, "xterm-kitty");
   bool linuxvt = terminfo_is_term_family(term, "linux");
   bool bsdvt = terminfo_is_bsd_console(term);
@@ -1716,7 +1706,7 @@ static void patch_terminfo_bugs(TUIData *data, const char *term, const char *col
     unibi_set_bool(ut, unibi_back_color_erase, false);
   }
 
-  if (xterm) {
+  if (xterm || hterm) {
     // Termit, LXTerminal, GTKTerm2, GNOME Terminal, MATE Terminal, roxterm,
     // and EvilVTE falsely claim to be xterm and do not support important xterm
     // control sequences that we use.  In an ideal world, these would have
@@ -1725,9 +1715,13 @@ static void patch_terminfo_bugs(TUIData *data, const char *term, const char *col
     // treatable as xterm.
 
     // 2017-04 terminfo.src lacks these.  Xterm-likes have them.
-    unibi_set_if_empty(ut, unibi_to_status_line, "\x1b]0;");
-    unibi_set_if_empty(ut, unibi_from_status_line, "\x07");
-    unibi_set_if_empty(ut, unibi_set_tb_margin, "\x1b[%i%p1%d;%p2%dr");
+    if (!hterm) {
+      // hterm doesn't have a status line.
+      unibi_set_if_empty(ut, unibi_to_status_line, "\x1b]0;");
+      unibi_set_if_empty(ut, unibi_from_status_line, "\x07");
+      // TODO(aktau): patch this in when DECSTBM is fixed (https://crbug.com/1298796)
+      unibi_set_if_empty(ut, unibi_set_tb_margin, "\x1b[%i%p1%d;%p2%dr");
+    }
     unibi_set_if_empty(ut, unibi_enter_italics_mode, "\x1b[3m");
     unibi_set_if_empty(ut, unibi_exit_italics_mode, "\x1b[23m");
 
@@ -1738,6 +1732,9 @@ static void patch_terminfo_bugs(TUIData *data, const char *term, const char *col
       unibi_set_if_empty(ut, unibi_set_right_margin_parm, "\x1b[%i;%p2%ds");
     } else {
       // Fix things advertised via TERM=xterm, for non-xterm.
+      //
+      // TODO(aktau): stop patching this out for hterm when it gains support
+      // (https://crbug.com/1175065).
       if (unibi_get_str(ut, unibi_set_lr_margin)) {
         ILOG("Disabling smglr with TERM=xterm for non-xterm.");
         unibi_set_str(ut, unibi_set_lr_margin, NULL);
@@ -1886,6 +1883,8 @@ static void patch_terminfo_bugs(TUIData *data, const char *term, const char *col
         && ((xterm && !vte_version)  // anything claiming xterm compat
             // per MinTTY 0.4.3-1 release notes from 2009
             || putty
+            // per https://chromium.googlesource.com/apps/libapps/+/a5fb83c190aa9d74f4a9bca233dac6be2664e9e9/hterm/doc/ControlSequences.md
+            || hterm
             // per https://bugzilla.gnome.org/show_bug.cgi?id=720821
             || (vte_version >= 3900)
             || (konsolev >= 180770)  // #9364
@@ -1970,6 +1969,7 @@ static void augment_terminfo(TUIData *data, const char *term, long vte_version, 
   bool xterm = terminfo_is_term_family(term, "xterm")
                // Treat Terminal.app as generic xterm-like, for now.
                || nsterm;
+  bool hterm = terminfo_is_term_family(term, "hterm");
   bool bsdvt = terminfo_is_bsd_console(term);
   bool dtterm = terminfo_is_term_family(term, "dtterm");
   bool rxvt = terminfo_is_term_family(term, "rxvt");
@@ -1999,7 +1999,7 @@ static void augment_terminfo(TUIData *data, const char *term, long vte_version, 
                                                            "ext.resize_screen",
                                                            "\x1b[8;%p1%d;%p2%dt");
   }
-  if (putty || xterm || rxvt) {
+  if (putty || xterm || hterm || rxvt) {
     data->unibi_ext.reset_scroll_region = (int)unibi_add_ext_str(ut,
                                                                  "ext.reset_scroll_region",
                                                                  "\x1b[r");
@@ -2048,22 +2048,27 @@ static void augment_terminfo(TUIData *data, const char *term, long vte_version, 
     }
   }
 
-  if (iterm || iterm_pretending_xterm) {
-    // FIXME: Bypassing tmux like this affects the cursor colour globally, in
-    // all panes, which is not particularly desirable.  A better approach
-    // would use a tmux control sequence and an extra if(screen) test.
-    data->unibi_ext.set_cursor_color =
-      (int)unibi_add_ext_str(ut, NULL, TMUX_WRAP(tmux, "\033]Pl%p1%06x\033\\"));
-  } else if ((xterm || rxvt || tmux || alacritty)
-             && (vte_version == 0 || vte_version >= 3900)) {
-    // Supported in urxvt, newer VTE.
-    data->unibi_ext.set_cursor_color = (int)unibi_add_ext_str(ut, "ext.set_cursor_color",
-                                                              "\033]12;#%p1%06x\007");
+  data->unibi_ext.set_cursor_color = unibi_find_ext_str(ut, "Cs");
+  if (-1 == data->unibi_ext.set_cursor_color) {
+    if (iterm || iterm_pretending_xterm) {
+      // FIXME: Bypassing tmux like this affects the cursor colour globally, in
+      // all panes, which is not particularly desirable.  A better approach
+      // would use a tmux control sequence and an extra if(screen) test.
+      data->unibi_ext.set_cursor_color =
+        (int)unibi_add_ext_str(ut, NULL, TMUX_WRAP(tmux, "\033]Pl%p1%06x\033\\"));
+    } else if ((xterm || hterm || rxvt || tmux || alacritty)
+               && (vte_version == 0 || vte_version >= 3900)) {
+      // Supported in urxvt, newer VTE.
+      data->unibi_ext.set_cursor_color = (int)unibi_add_ext_str(ut, "ext.set_cursor_color",
+                                                                "\033]12;#%p1%06x\007");
+    }
   }
-
   if (-1 != data->unibi_ext.set_cursor_color) {
-    data->unibi_ext.reset_cursor_color = (int)unibi_add_ext_str(ut, "ext.reset_cursor_color",
-                                                                "\x1b]112\x07");
+    data->unibi_ext.reset_cursor_color = unibi_find_ext_str(ut, "Cr");
+    if (-1 == data->unibi_ext.reset_cursor_color) {
+      data->unibi_ext.reset_cursor_color = (int)unibi_add_ext_str(ut, "ext.reset_cursor_color",
+                                                                  "\x1b]112\x07");
+    }
   }
 
   data->unibi_ext.save_title = (int)unibi_add_ext_str(ut, "ext.save_title", "\x1b[22;0t");

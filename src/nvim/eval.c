@@ -986,7 +986,7 @@ void restore_vimvar(int idx, typval_T *save_tv)
 
   vimvars[idx].vv_tv = *save_tv;
   if (vimvars[idx].vv_type == VAR_UNKNOWN) {
-    hi = hash_find(&vimvarht, vimvars[idx].vv_di.di_key);
+    hi = hash_find(&vimvarht, (char *)vimvars[idx].vv_di.di_key);
     if (HASHITEM_EMPTY(hi)) {
       internal_error("restore_vimvar()");
     } else {
@@ -2822,7 +2822,7 @@ void ex_lockvar(exarg_T *eap)
   if (eap->forceit) {
     deep = -1;
   } else if (ascii_isdigit(*arg)) {
-    deep = getdigits_int((char_u **)&arg, false, -1);
+    deep = getdigits_int(&arg, false, -1);
     arg = skipwhite(arg);
   }
 
@@ -3019,7 +3019,7 @@ int do_unlet(const char *const name, const size_t name_len, const bool forceit)
       }
     }
 
-    hashitem_T *hi = hash_find(ht, (const char_u *)varname);
+    hashitem_T *hi = hash_find(ht, varname);
     if (HASHITEM_EMPTY(hi)) {
       hi = find_hi_in_scoped_ht(name, &ht);
     }
@@ -7754,11 +7754,14 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     }
   } else if (name[0] == '\'') {
     // mark
-    const pos_T *const pp = getmark_buf_fnum(curbuf, (uint8_t)name[1], false, ret_fnum);
-    if (pp == NULL || pp == (pos_T *)-1 || pp->lnum <= 0) {
+    int mname = (uint8_t)name[1];
+    const fmark_T *const fm = mark_get(curbuf, curwin, NULL, kMarkAll, mname);
+    if (fm == NULL || fm->mark.lnum <= 0) {
       return NULL;
     }
-    pos = *pp;
+    pos = fm->mark;
+    // Vimscript behavior, only provide fnum if mark is global.
+    *ret_fnum = ASCII_ISUPPER(mname) || ascii_isdigit(mname) ? fm->fnum: *ret_fnum;
   }
   if (pos.lnum != 0) {
     if (charcol) {
@@ -9811,7 +9814,7 @@ void func_line_start(void *cookie)
 
   if (fp->uf_profiling && sourcing_lnum >= 1
       && sourcing_lnum <= fp->uf_lines.ga_len) {
-    fp->uf_tml_idx = (int)(sourcing_lnum - 1);
+    fp->uf_tml_idx = sourcing_lnum - 1;
     // Skip continuation lines.
     while (fp->uf_tml_idx > 0 && FUNCLINE(fp, fp->uf_tml_idx) == NULL) {
       fp->uf_tml_idx--;

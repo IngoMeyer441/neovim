@@ -476,7 +476,7 @@ static buf_T *find_buffer(typval_T *avar)
   if (avar->v_type == VAR_NUMBER) {
     buf = buflist_findnr((int)avar->vval.v_number);
   } else if (avar->v_type == VAR_STRING && avar->vval.v_string != NULL) {
-    buf = buflist_findname_exp((char_u *)avar->vval.v_string);
+    buf = buflist_findname_exp(avar->vval.v_string);
     if (buf == NULL) {
       /* No full path name match, try a match with a URL or a "nofile"
        * buffer, these don't use the full path. */
@@ -498,7 +498,7 @@ static void f_bufadd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   char_u *name = (char_u *)tv_get_string(&argvars[0]);
 
-  rettv->vval.v_number = buflist_add(*name == NUL ? NULL : name, 0);
+  rettv->vval.v_number = buflist_add(*name == NUL ? NULL : (char *)name, 0);
 }
 
 /// "bufexists(expr)" function
@@ -586,7 +586,7 @@ static void f_bufnr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       && tv_get_number_chk(&argvars[1], &error) != 0
       && !error
       && (name = tv_get_string_chk(&argvars[0])) != NULL) {
-    buf = buflist_new((char_u *)name, NULL, 1, 0);
+    buf = buflist_new((char *)name, NULL, 1, 0);
   }
 
   if (buf != NULL) {
@@ -655,7 +655,7 @@ buf_T *tv_get_buf(typval_T *tv, int curtab_only)
   save_cpo = p_cpo;
   p_cpo = "";
 
-  buf = buflist_findnr(buflist_findpat(name, name + STRLEN(name),
+  buf = buflist_findnr(buflist_findpat((char *)name, (char *)name + STRLEN(name),
                                        true, false, curtab_only));
 
   p_magic = save_magic;
@@ -1062,6 +1062,11 @@ static void f_complete(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     return;
   }
 
+  const int save_textlock = textlock;
+  // "textlock" is set when evaluating 'completefunc' but we can change text
+  // here.
+  textlock = 0;
+
   // Check for undo allowed here, because if something was already inserted
   // the line was already saved for undo and this check isn't done.
   if (!undo_allowed(curbuf)) {
@@ -1070,15 +1075,13 @@ static void f_complete(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   if (argvars[1].v_type != VAR_LIST) {
     emsg(_(e_invarg));
-    return;
+  } else {
+    const colnr_T startcol = tv_get_number_chk(&argvars[0], NULL);
+    if (startcol > 0) {
+      set_completion(startcol - 1, argvars[1].vval.v_list);
+    }
   }
-
-  const colnr_T startcol = tv_get_number_chk(&argvars[0], NULL);
-  if (startcol <= 0) {
-    return;
-  }
-
-  set_completion(startcol - 1, argvars[1].vval.v_list);
+  textlock = save_textlock;
 }
 
 /// "complete_add()" function
@@ -2396,7 +2399,7 @@ static void findfilendir(typval_T *argvars, typval_T *rettv, int find_what)
       fresult = find_file_in_path_option(first ? (char_u *)fname : NULL,
                                          first ? strlen(fname) : 0,
                                          0, first, path,
-                                         find_what, curbuf->b_ffname,
+                                         find_what, (char_u *)curbuf->b_ffname,
                                          (find_what == FINDFILE_DIR
                                           ? (char_u *)""
                                           : curbuf->b_p_sua));
@@ -2464,7 +2467,7 @@ static void f_fmod(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 /// "fnameescape({string})" function
 static void f_fnameescape(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  rettv->vval.v_string = vim_strsave_fnameescape(tv_get_string(&argvars[0]), false);
+  rettv->vval.v_string = vim_strsave_fnameescape(tv_get_string(&argvars[0]), VSE_NONE);
   rettv->v_type = VAR_STRING;
 }
 
@@ -2574,7 +2577,7 @@ static void f_foldtext(typval_T *argvars, typval_T *rettv, FunPtr fptr)
         }
       }
     }
-    unsigned long count = (unsigned long)(foldend - foldstart + 1);
+    unsigned long count = (unsigned long)foldend - foldstart + 1;
     txt = NGETTEXT("+-%s%3ld line: ", "+-%s%3ld lines: ", count);
     r = xmalloc(STRLEN(txt)
                 + STRLEN(dashes)  // for %s
@@ -3308,8 +3311,8 @@ static void f_getcwd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     [kCdScopeTabpage] = 0,  // Number of tab to look at.
   };
 
-  char_u *cwd  = NULL;  // Current working directory to print
-  char_u *from = NULL;  // The original string to copy
+  char *cwd  = NULL;    // Current working directory to print
+  char *from = NULL;    // The original string to copy
 
   tabpage_T *tp  = curtab;  // The tabpage to look at.
   win_T *win = curwin;  // The window to look at.
@@ -3386,13 +3389,13 @@ static void f_getcwd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     FALLTHROUGH;
   case kCdScopeGlobal:
     if (globaldir) {        // `globaldir` is not always set.
-      from = (char_u *)globaldir;
+      from = globaldir;
       break;
     }
     FALLTHROUGH;            // In global directory, just need to get OS CWD.
   case kCdScopeInvalid:     // If called without any arguments, get OS CWD.
-    if (os_dirname(cwd, MAXPATHL) == FAIL) {
-      from = (char_u *)"";  // Return empty string on failure.
+    if (os_dirname((char_u *)cwd, MAXPATHL) == FAIL) {
+      from = "";  // Return empty string on failure.
     }
   }
 
@@ -3400,7 +3403,7 @@ static void f_getcwd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     STRLCPY(cwd, from, MAXPATHL);
   }
 
-  rettv->vval.v_string = (char *)vim_strsave(cwd);
+  rettv->vval.v_string = xstrdup(cwd);
 #ifdef BACKSLASH_IN_FILENAME
   slash_adjust(rettv->vval.v_string);
 #endif
@@ -5968,7 +5971,7 @@ static void f_mkdir(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   if (*path_tail(dir) == NUL) {
     // Remove trailing slashes.
-    *path_tail_with_sep((char_u *)dir) = NUL;
+    *path_tail_with_sep((char *)dir) = NUL;
   }
 
   if (argvars[1].v_type != VAR_UNKNOWN) {
@@ -6366,20 +6369,17 @@ static void f_prompt_getprompt(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 /// "prompt_setprompt({buffer}, {text})" function
 static void f_prompt_setprompt(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  buf_T *buf;
-  const char_u *text;
-
   if (check_secure()) {
     return;
   }
-  buf = tv_get_buf(&argvars[0], false);
+  buf_T *buf = tv_get_buf(&argvars[0], false);
   if (buf == NULL) {
     return;
   }
 
-  text = (const char_u *)tv_get_string(&argvars[1]);
+  const char *text = tv_get_string(&argvars[1]);
   xfree(buf->b_prompt_text);
-  buf->b_prompt_text = vim_strsave(text);
+  buf->b_prompt_text = xstrdup(text);
 }
 
 /// "pum_getpos()" function
@@ -7341,7 +7341,7 @@ static void f_resolve(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     if (!has_trailing_pathsep) {
       q = p + strlen(p);
       if (after_pathsep(p, q)) {
-        *path_tail_with_sep((char_u *)p) = NUL;
+        *path_tail_with_sep(p) = NUL;
       }
     }
 
@@ -8521,7 +8521,7 @@ static void set_position(typval_T *argvars, typval_T *rettv, bool charpos)
         rettv->vval.v_number = 0;
       } else if (name[0] == '\'' && name[1] != NUL && name[2] == NUL) {
         // set mark
-        if (setmark_pos((uint8_t)name[1], &pos, fnum) == OK) {
+        if (setmark_pos((uint8_t)name[1], &pos, fnum, NULL) == OK) {
           rettv->vval.v_number = 0;
         }
       } else {

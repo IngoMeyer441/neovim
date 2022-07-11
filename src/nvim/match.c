@@ -86,7 +86,7 @@ static int match_add(win_T *wp, const char *const grp, const char *const pat, in
   m = xcalloc(1, sizeof(matchitem_T));
   m->id = id;
   m->priority = prio;
-  m->pattern = pat == NULL ? NULL: (char_u *)xstrdup(pat);
+  m->pattern = pat == NULL ? NULL: xstrdup(pat);
   m->hlg_id = hlg_id;
   m->match.regprog = regprog;
   m->match.rmm_ic = false;
@@ -494,10 +494,10 @@ static void next_search_hl(win_T *win, match_T *search_hl, match_T *shl, linenr_
       shl->lnum += shl->rm.startpos[0].lnum;
       break;                            // useful match found
     }
-
-    // Restore called_emsg for assert_fails().
-    called_emsg = save_called_emsg;
   }
+
+  // Restore called_emsg for assert_fails().
+  called_emsg = save_called_emsg;
 }
 
 /// Advance to the match in window "wp" line "lnum" or past it.

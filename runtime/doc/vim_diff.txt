@@ -238,6 +238,7 @@ Options:
   'inccommand'  shows interactive results for |:substitute|-like commands
                 and |:command-preview| commands
   'laststatus'  global statusline support
+  'mousescroll' amount to scroll by when scrolling with a mouse
   'pumblend'    pseudo-transparent popupmenu
   'scrollback'
   'signcolumn'  supports up to 9 dynamic/fixed columns
@@ -383,6 +384,8 @@ Normal commands:
 Options:
   'ttimeout', 'ttimeoutlen' behavior was simplified
   |jumpoptions| "stack" behavior
+  |jumpoptions| "view" tries to restore the |mark-view| when moving through
+  the |jumplist|, |changelist|, |alternate-file| or using |mark-motions|.
   'shortmess' the "F" flag does not affect output from autocommands
 
 Shell:

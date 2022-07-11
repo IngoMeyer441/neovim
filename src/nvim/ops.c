@@ -1347,7 +1347,7 @@ bool get_spec_reg(int regname, char_u **argp, bool *allocated, bool errmsg)
     return true;
 
   case '#':                       // alternate file name
-    *argp = getaltfname(errmsg);  // may give emsg if not set
+    *argp = (char_u *)getaltfname(errmsg);  // may give emsg if not set
     return true;
 
   case '=':                     // result of expression
@@ -1810,10 +1810,8 @@ setmarks:
 /// Used for deletion.
 static void mb_adjust_opend(oparg_T *oap)
 {
-  char_u *p;
-
   if (oap->inclusive) {
-    p = ml_get(oap->end.lnum);
+    char *p = (char *)ml_get(oap->end.lnum);
     oap->end.col += mb_tail_off(p, p + oap->end.col);
   }
 }
@@ -2791,7 +2789,7 @@ static void op_yank_reg(oparg_T *oap, bool message, yankreg_T *reg, bool append)
     xfree(reg->y_array);
   }
 
-  if (message) {  // Display message about yank?
+  if (message && (p_ch > 0 || ui_has(kUIMessages))) {  // Display message about yank?
     if (yank_type == kMTCharWise && yanklines == 1) {
       yanklines = 0;
     }
@@ -3886,12 +3884,12 @@ void ex_display(exarg_T *eap)
 
   // display alternate file name
   if ((arg == NULL || vim_strchr((char *)arg, '%') != NULL) && !got_int) {
-    char_u *fname;
+    char *fname;
     linenr_T dummy;
 
-    if (buflist_name_nr(0, &fname, &dummy) != FAIL && !message_filtered(fname)) {
+    if (buflist_name_nr(0, &fname, &dummy) != FAIL && !message_filtered((char_u *)fname)) {
       msg_puts("\n  c  \"#   ");
-      dis_msg(fname, false);
+      dis_msg((char_u *)fname, false);
     }
   }
 
@@ -3950,7 +3948,7 @@ char_u *skip_comment(char_u *line, bool process, bool include_space, bool *is_co
 {
   char_u *comment_flags = NULL;
   int lead_len;
-  int leader_offset = get_last_leader_offset(line, &comment_flags);
+  int leader_offset = get_last_leader_offset((char *)line, (char **)&comment_flags);
 
   *is_comment = false;
   if (leader_offset != -1) {
@@ -3972,7 +3970,7 @@ char_u *skip_comment(char_u *line, bool process, bool include_space, bool *is_co
     return line;
   }
 
-  lead_len = get_leader_len(line, &comment_flags, false, include_space);
+  lead_len = get_leader_len((char *)line, (char **)&comment_flags, false, include_space);
 
   if (lead_len == 0) {
     return line;
@@ -4423,6 +4421,7 @@ void format_lines(linenr_T line_count, int avoid_fex)
   int smd_save;
   long count;
   bool need_set_indent = true;      // set indent of next paragraph
+  linenr_T first_line = curwin->w_cursor.lnum;
   bool force_format = false;
   const int old_State = State;
 
@@ -4549,9 +4548,24 @@ void format_lines(linenr_T line_count, int avoid_fex)
        */
       if (is_end_par || force_format) {
         if (need_set_indent) {
-          // replace indent in first line with minimal number of
-          // tabs and spaces, according to current options
-          (void)set_indent(get_indent(), SIN_CHANGED);
+          int indent = 0;  // amount of indent needed
+
+          // Replace indent in first line of a paragraph with minimal
+          // number of tabs and spaces, according to current options.
+          // For the very first formatted line keep the current
+          // indent.
+          if (curwin->w_cursor.lnum == first_line) {
+            indent = get_indent();
+          } else if (curbuf->b_p_lisp) {
+            indent = get_lisp_indent();
+          } else {
+            if (cindent_on()) {
+              indent = *curbuf->b_p_inde != NUL ? get_expr_indent() : get_c_indent();
+            } else {
+              indent = get_indent();
+            }
+          }
+          (void)set_indent(indent, SIN_CHANGED);
         }
 
         // put cursor on last non-space
@@ -4654,7 +4668,7 @@ static int fmt_check_par(linenr_T lnum, int *leader_len, char_u **leader_flags, 
 
   ptr = ml_get(lnum);
   if (do_comments) {
-    *leader_len = get_leader_len(ptr, leader_flags, false, true);
+    *leader_len = get_leader_len((char *)ptr, (char **)leader_flags, false, true);
   } else {
     *leader_len = 0;
   }
@@ -5597,7 +5611,7 @@ void write_reg_contents_ex(int name, const char_u *str, ssize_t len, bool must_a
         semsg(_(e_nobufnr), (int64_t)num);
       }
     } else {
-      buf = buflist_findnr(buflist_findpat(str, str + STRLEN(str),
+      buf = buflist_findnr(buflist_findpat((char *)str, (char *)str + STRLEN(str),
                                            true, false, false));
     }
     if (buf == NULL) {
@@ -5993,9 +6007,9 @@ void cursor_pos_info(dict_T *dict)
       } else {
         p = get_cursor_line_ptr();
         validate_virtcol();
-        col_print(buf1, sizeof(buf1), (int)curwin->w_cursor.col + 1,
+        col_print((char *)buf1, sizeof(buf1), (int)curwin->w_cursor.col + 1,
                   (int)curwin->w_virtcol + 1);
-        col_print(buf2, sizeof(buf2), (int)STRLEN(p), linetabsize(p));
+        col_print((char *)buf2, sizeof(buf2), (int)STRLEN(p), linetabsize(p));
 
         if (char_count_cursor == byte_count_cursor
             && char_count == byte_count) {
@@ -6220,6 +6234,15 @@ static void get_op_vcol(oparg_T *oap, colnr_T redo_VIsual_vcol, bool initial)
   oap->start = curwin->w_cursor;
 }
 
+/// Information for redoing the previous Visual selection.
+typedef struct {
+  int rv_mode;             ///< 'v', 'V', or Ctrl-V
+  linenr_T rv_line_count;  ///< number of lines
+  colnr_T rv_vcol;         ///< number of cols or end column
+  long rv_count;           ///< count for Visual operator
+  int rv_arg;              ///< extra argument
+} redo_VIsual_T;
+
 /// Handle an operator after Visual mode or when the movement is finished.
 /// "gui_yank" is true when yanking text for the clipboard.
 void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
@@ -6231,11 +6254,8 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
   int lbr_saved = curwin->w_p_lbr;
 
   // The visual area is remembered for redo
-  static int redo_VIsual_mode = NUL;        // 'v', 'V', or Ctrl-V
-  static linenr_T redo_VIsual_line_count;   // number of lines
-  static colnr_T redo_VIsual_vcol;          // number of cols or end column
-  static long redo_VIsual_count;            // count for Visual operator
-  static int redo_VIsual_arg;               // extra argument
+  static redo_VIsual_T redo_VIsual = { NUL, 0, 0, 0, 0 };
+
   bool include_line_break = false;
 
   old_cursor = curwin->w_cursor;
@@ -6318,28 +6338,27 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
 
     if (redo_VIsual_busy) {
       // Redo of an operation on a Visual area. Use the same size from
-      // redo_VIsual_line_count and redo_VIsual_vcol.
+      // redo_VIsual.rv_line_count and redo_VIsual.rv_vcol.
       oap->start = curwin->w_cursor;
-      curwin->w_cursor.lnum += redo_VIsual_line_count - 1;
+      curwin->w_cursor.lnum += redo_VIsual.rv_line_count - 1;
       if (curwin->w_cursor.lnum > curbuf->b_ml.ml_line_count) {
         curwin->w_cursor.lnum = curbuf->b_ml.ml_line_count;
       }
-      VIsual_mode = redo_VIsual_mode;
-      if (redo_VIsual_vcol == MAXCOL || VIsual_mode == 'v') {
+      VIsual_mode = redo_VIsual.rv_mode;
+      if (redo_VIsual.rv_vcol == MAXCOL || VIsual_mode == 'v') {
         if (VIsual_mode == 'v') {
-          if (redo_VIsual_line_count <= 1) {
+          if (redo_VIsual.rv_line_count <= 1) {
             validate_virtcol();
-            curwin->w_curswant =
-              curwin->w_virtcol + redo_VIsual_vcol - 1;
+            curwin->w_curswant = curwin->w_virtcol + redo_VIsual.rv_vcol - 1;
           } else {
-            curwin->w_curswant = redo_VIsual_vcol;
+            curwin->w_curswant = redo_VIsual.rv_vcol;
           }
         } else {
           curwin->w_curswant = MAXCOL;
         }
         coladvance(curwin->w_curswant);
       }
-      cap->count0 = redo_VIsual_count;
+      cap->count0 = redo_VIsual.rv_count;
       cap->count1 = (cap->count0 == 0 ? 1 : cap->count0);
     } else if (VIsual_active) {
       if (!gui_yank) {
@@ -6426,7 +6445,7 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
     virtual_op = virtual_active();
 
     if (VIsual_active || redo_VIsual_busy) {
-      get_op_vcol(oap, redo_VIsual_vcol, true);
+      get_op_vcol(oap, redo_VIsual.rv_vcol, true);
 
       if (!redo_VIsual_busy && !gui_yank) {
         // Prepare to reselect and redo Visual: this is based on the
@@ -6471,6 +6490,8 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
                     get_op_char(oap->op_type), get_extra_op_char(oap->op_type),
                     oap->motion_force, cap->cmdchar, cap->nchar);
         } else if (cap->cmdchar != ':' && cap->cmdchar != K_COMMAND) {
+          int opchar = get_op_char(oap->op_type);
+          int extra_opchar = get_extra_op_char(oap->op_type);
           int nchar = oap->op_type == OP_REPLACE ? cap->nchar : NUL;
 
           // reverse what nv_replace() did
@@ -6479,15 +6500,20 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
           } else if (nchar == REPLACE_NL_NCHAR) {
             nchar = NL;
           }
-          prep_redo(oap->regname, 0L, NUL, 'v', get_op_char(oap->op_type),
-                    get_extra_op_char(oap->op_type), nchar);
+
+          if (opchar == 'g' && extra_opchar == '@') {
+            // also repeat the count for 'operatorfunc'
+            prep_redo_num2(oap->regname, 0L, NUL, 'v', cap->count0, opchar, extra_opchar, nchar);
+          } else {
+            prep_redo(oap->regname, 0L, NUL, 'v', opchar, extra_opchar, nchar);
+          }
         }
         if (!redo_VIsual_busy) {
-          redo_VIsual_mode = resel_VIsual_mode;
-          redo_VIsual_vcol = resel_VIsual_vcol;
-          redo_VIsual_line_count = resel_VIsual_line_count;
-          redo_VIsual_count = cap->count0;
-          redo_VIsual_arg = cap->arg;
+          redo_VIsual.rv_mode = resel_VIsual_mode;
+          redo_VIsual.rv_vcol = resel_VIsual_vcol;
+          redo_VIsual.rv_line_count = resel_VIsual_line_count;
+          redo_VIsual.rv_count = cap->count0;
+          redo_VIsual.rv_arg = cap->arg;
         }
       }
 
@@ -6601,9 +6627,7 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
     switch (oap->op_type) {
     case OP_LSHIFT:
     case OP_RSHIFT:
-      op_shift(oap, true,
-               oap->is_VIsual ? (int)cap->count1 :
-               1);
+      op_shift(oap, true, oap->is_VIsual ? (int)cap->count1 : 1);
       auto_format(false, true);
       break;
 
@@ -6737,12 +6761,20 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
       op_format(oap, true);             // use internal function
       break;
 
-    case OP_FUNCTION:
+    case OP_FUNCTION: {
+      redo_VIsual_T save_redo_VIsual = redo_VIsual;
+
       // Restore linebreak, so that when the user edits it looks as
       // before.
       curwin->w_p_lbr = lbr_saved;
-      op_function(oap);                 // call 'operatorfunc'
+      // call 'operatorfunc'
+      op_function(oap);
+
+      // Restore the info for redoing Visual mode, the function may
+      // invoke another operator and unintentionally change it.
+      redo_VIsual = save_redo_VIsual;
       break;
+    }
 
     case OP_INSERT:
     case OP_APPEND:
@@ -6823,7 +6855,7 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
       } else {
         VIsual_active = true;
         curwin->w_p_lbr = lbr_saved;
-        op_addsub(oap, (linenr_T)cap->count1, redo_VIsual_arg);
+        op_addsub(oap, (linenr_T)cap->count1, redo_VIsual.rv_arg);
         VIsual_active = false;
       }
       check_cursor_col();
@@ -6961,7 +6993,7 @@ bool prepare_yankreg_from_object(yankreg_T *reg, String regtype, size_t lines)
       return false;
     }
     const char *p = regtype.data + 1;
-    reg->y_width = getdigits_int((char_u **)&p, false, 1) - 1;
+    reg->y_width = getdigits_int((char **)&p, false, 1) - 1;
     if (regtype.size > (size_t)(p - regtype.data)) {
       return false;
     }

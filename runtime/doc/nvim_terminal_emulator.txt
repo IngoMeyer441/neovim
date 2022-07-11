@@ -80,6 +80,9 @@ To use `ALT+{h,j,k,l}` to navigate windows from any mode: >
     :nnoremap <A-k> <C-w>k
     :nnoremap <A-l> <C-w>l
 
+You can also create menus similar to terminal mode mappings, but you have to
+use |:tlmenu| instead of |:tmenu|.
+
 Mouse input has the following behavior:
 
 - If the program has enabled mouse events, the corresponding events will be
@@ -467,6 +470,20 @@ You can define your own shortcuts (mappings) to control gdb, that can work in
 any window, using the TermDebugSendCommand() function.  Example: >
 	map ,w :call TermDebugSendCommand('where')<CR>
 The argument is the gdb command.
+
+
+Popup menu ~
+							*termdebug_popup*
+
+By default the Termdebug plugin sets 'mousemodel' to "popup_setpos" and adds
+these entries to the popup menu:
+	Set breakpoint		`:Break`
+	Clear breakpoint	`:Clear`
+	Evaluate		`:Evaluate`
+If you don't want this then disable it with: >
+	let g:termdebug_config['popup'] = 0
+or if there is no g:termdebug_config: >
+	let g:termdebug_popup = 0
 
 
 Vim window width ~

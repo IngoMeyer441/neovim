@@ -169,7 +169,9 @@ func Test_autocmd_bufunload_avoiding_SEGV_01()
     exe 'autocmd BufUnload <buffer> ' . (lastbuf + 1) . 'bwipeout!'
   augroup END
 
-  call assert_fails('edit bb.txt', 'E937:')
+  " Todo: check for E937 generated first
+  " call assert_fails('edit bb.txt', 'E937:')
+  call assert_fails('edit bb.txt', 'E517:')
 
   autocmd! test_autocmd_bufunload
   augroup! test_autocmd_bufunload
@@ -540,7 +542,7 @@ func Test_three_windows()
   e Xtestje2
   sp Xtestje1
   call assert_fails('e', 'E937:')
-  call assert_equal('Xtestje2', expand('%'))
+  call assert_equal('Xtestje1', expand('%'))
 
   " Test changing buffers in a BufWipeout autocommand.  If this goes wrong
   " there are ml_line errors and/or a Crash.
@@ -563,7 +565,6 @@ func Test_three_windows()
 
   au!
   enew
-  bwipe! Xtestje1
   call delete('Xtestje1')
   call delete('Xtestje2')
   call delete('Xtestje3')
@@ -1719,7 +1720,7 @@ func Test_Cmd_Autocmds()
   au BufWriteCmd XtestE call extend(g:lines, getline(0, '$'))
   wall				" will write other window to 'lines'
   call assert_equal(4, len(g:lines), g:lines)
-  call assert_equal("\tasdf", g:lines[2])
+  call assert_equal("asdf", g:lines[2])
 
   au! BufReadCmd
   au! BufWriteCmd
@@ -2665,6 +2666,27 @@ func Test_autocmd_window()
     au!
   augroup END
   augroup! aucmd_win_test1
+  %bw!
+endfunc
+
+" Test for trying to close the temporary window used for executing an autocmd
+func Test_close_autocmd_window()
+  %bw!
+  edit one.txt
+  tabnew two.txt
+  augroup aucmd_win_test2
+    au!
+    " Nvim makes aucmd_win the last window
+    " au BufEnter * if expand('<afile>') == 'one.txt' | 1close | endif
+    au BufEnter * if expand('<afile>') == 'one.txt' | close | endif
+  augroup END
+
+  call assert_fails('doautoall BufEnter', 'E813:')
+
+  augroup aucmd_win_test2
+    au!
+  augroup END
+  augroup! aucmd_win_test2
   %bw!
 endfunc
 

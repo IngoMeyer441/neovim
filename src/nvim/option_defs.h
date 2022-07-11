@@ -153,6 +153,11 @@
 #define MOUSE_NONE      ' '             // don't use Visual selection
 #define MOUSE_NONEF     'x'             // forced modeless selection
 
+// default vertical and horizontal mouse scroll values.
+// Note: This should be in sync with the default mousescroll option.
+#define MOUSESCROLL_VERT_DFLT   3
+#define MOUSESCROLL_HOR_DFLT    6
+
 #define COCU_ALL        "nvic"          // flags for 'concealcursor'
 
 /// characters for p_shm option:
@@ -491,9 +496,10 @@ EXTERN int p_js;                // 'joinspaces'
 EXTERN char_u *p_jop;           // 'jumpooptions'
 EXTERN unsigned jop_flags;
 #ifdef IN_OPTION_C
-static char *(p_jop_values[]) = { "stack", NULL };
+static char *(p_jop_values[]) = { "stack", "view", NULL };
 #endif
 #define JOP_STACK               0x01
+#define JOP_VIEW                0x02
 EXTERN char_u *p_kp;          // 'keywordprg'
 EXTERN char_u *p_km;          // 'keymodel'
 EXTERN char_u *p_langmap;     // 'langmap'
@@ -527,6 +533,9 @@ EXTERN long p_mls;              // 'modelines'
 EXTERN char_u *p_mouse;       // 'mouse'
 EXTERN char_u *p_mousem;      // 'mousemodel'
 EXTERN int p_mousef;           // 'mousefocus'
+EXTERN char_u *p_mousescroll;  // 'mousescroll'
+EXTERN long p_mousescroll_vert INIT(= MOUSESCROLL_VERT_DFLT);
+EXTERN long p_mousescroll_hor INIT(= MOUSESCROLL_HOR_DFLT);
 EXTERN long p_mouset;           // 'mousetime'
 EXTERN int p_more;              // 'more'
 EXTERN char_u *p_opfunc;      // 'operatorfunc'

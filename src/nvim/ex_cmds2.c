@@ -562,7 +562,7 @@ void dialog_changed(buf_T *buf, bool checkall)
 
   if (ret == VIM_YES) {
     if (buf->b_fname != NULL
-        && check_overwrite(&ea, buf, buf->b_fname, (char *)buf->b_ffname, false) == OK) {
+        && check_overwrite(&ea, buf, buf->b_fname, buf->b_ffname, false) == OK) {
       // didn't hit Cancel
       (void)buf_write_all(buf, false);
     }
@@ -578,8 +578,7 @@ void dialog_changed(buf_T *buf, bool checkall)
         set_bufref(&bufref, buf2);
 
         if (buf2->b_fname != NULL
-            && check_overwrite(&ea, buf2, buf2->b_fname,
-                               (char *)buf2->b_ffname, false) == OK) {
+            && check_overwrite(&ea, buf2, buf2->b_fname, buf2->b_ffname, false) == OK) {
           // didn't hit Cancel
           (void)buf_write_all(buf2, false);
         }
@@ -786,7 +785,7 @@ int buf_write_all(buf_T *buf, int forceit)
   int retval;
   buf_T *old_curbuf = curbuf;
 
-  retval = (buf_write(buf, (char *)buf->b_ffname, buf->b_fname,
+  retval = (buf_write(buf, buf->b_ffname, buf->b_fname,
                       (linenr_T)1, buf->b_ml.ml_line_count, NULL,
                       false, forceit, true, false));
   if (curbuf != old_curbuf) {
@@ -929,7 +928,7 @@ static int do_arglist(char *str, int what, int after, bool will_edit)
 
       didone = false;
       for (match = 0; match < ARGCOUNT; match++) {
-        if (vim_regexec(&regmatch, (char_u *)alist_name(&ARGLIST[match]), (colnr_T)0)) {
+        if (vim_regexec(&regmatch, alist_name(&ARGLIST[match]), (colnr_T)0)) {
           didone = true;
           xfree(ARGLIST[match].ae_fname);
           memmove(ARGLIST + match, ARGLIST + match + 1,
@@ -992,7 +991,7 @@ static bool editing_arg_idx(win_T *win)
                != WARGLIST(win)[win->w_arg_idx].ae_fnum
                && (win->w_buffer->b_ffname == NULL
                    || !(path_full_compare(alist_name(&WARGLIST(win)[win->w_arg_idx]),
-                                          (char *)win->w_buffer->b_ffname, true,
+                                          win->w_buffer->b_ffname, true,
                                           true) & kEqualFiles))));
 }
 
@@ -1011,7 +1010,7 @@ void check_arg_idx(win_T *win)
         && (win->w_buffer->b_fnum == GARGLIST[GARGCOUNT - 1].ae_fnum
             || (win->w_buffer->b_ffname != NULL
                 && (path_full_compare(alist_name(&GARGLIST[GARGCOUNT - 1]),
-                                      (char *)win->w_buffer->b_ffname, true, true)
+                                      win->w_buffer->b_ffname, true, true)
                     & kEqualFiles)))) {
       arg_had_last = true;
     }
@@ -1138,7 +1137,7 @@ void do_argfile(exarg_T *eap, int argn)
       other = true;
       if (buf_hide(curbuf)) {
         p = fix_fname(alist_name(&ARGLIST[argn]));
-        other = otherfile((char_u *)p);
+        other = otherfile(p);
         xfree(p);
       }
       if ((!buf_hide(curbuf) || !other)
@@ -1551,7 +1550,7 @@ static void alist_add_list(int count, char **files, int after, bool will_edit)
     for (int i = 0; i < count; i++) {
       const int flags = BLN_LISTED | (will_edit ? BLN_CURBUF : 0);
       ARGLIST[after + i].ae_fname = (char_u *)files[i];
-      ARGLIST[after + i].ae_fnum = buflist_add((char_u *)files[i], flags);
+      ARGLIST[after + i].ae_fnum = buflist_add(files[i], flags);
     }
     ALIST(curwin)->al_ga.ga_len += count;
     if (old_argcount > 0 && curwin->w_arg_idx >= after) {
@@ -1641,7 +1640,7 @@ void ex_options(exarg_T *eap)
   bool multi_mods = 0;
 
   buf[0] = NUL;
-  (void)add_win_cmd_modifers(buf, &multi_mods);
+  (void)add_win_cmd_modifers(buf, &cmdmod, &multi_mods);
 
   os_setenv("OPTWIN_CMD", buf, 1);
   cmd_source(SYS_OPTWIN_FILE, NULL);
@@ -2157,31 +2156,23 @@ scriptitem_T *get_current_script_id(char_u *fname, sctx_T *ret_sctx)
   sctx_T script_sctx = { .sc_seq = ++last_current_SID_seq,
                          .sc_lnum = 0,
                          .sc_sid = 0 };
-  FileID file_id;
   scriptitem_T *si = NULL;
 
-  bool file_id_ok = os_fileid((char *)fname, &file_id);
   assert(script_items.ga_len >= 0);
-  for (script_sctx.sc_sid = script_items.ga_len; script_sctx.sc_sid > 0;
-       script_sctx.sc_sid--) {
+  for (script_sctx.sc_sid = script_items.ga_len; script_sctx.sc_sid > 0; script_sctx.sc_sid--) {
+    // We used to check inode here, but that doesn't work:
+    // - If a script is edited and written, it may get a different
+    //   inode number, even though to the user it is the same script.
+    // - If a script is deleted and another script is written, with a
+    //   different name, the inode may be re-used.
     si = &SCRIPT_ITEM(script_sctx.sc_sid);
-    // Compare dev/ino when possible, it catches symbolic links.
-    // Also compare file names, the inode may change when the file was edited.
-    bool file_id_equal = file_id_ok && si->file_id_valid
-                         && os_fileid_equal(&(si->file_id), &file_id);
-    if (si->sn_name != NULL
-        && (file_id_equal || FNAMECMP(si->sn_name, fname) == 0)) {
+    if (si->sn_name != NULL && FNAMECMP(si->sn_name, fname) == 0) {
+      // Found it!
       break;
     }
   }
   if (script_sctx.sc_sid == 0) {
     si = new_script_item((char *)vim_strsave(fname), &script_sctx.sc_sid);
-    if (file_id_ok) {
-      si->file_id_valid = true;
-      si->file_id = file_id;
-    } else {
-      si->file_id_valid = false;
-    }
   }
   if (ret_sctx != NULL) {
     *ret_sctx = script_sctx;
@@ -2265,7 +2256,7 @@ char_u *get_scriptname(LastSet last_set, bool *should_free)
     }
 
     *should_free = true;
-    return home_replace_save(NULL, (char_u *)sname);
+    return (char_u *)home_replace_save(NULL, sname);
   }
   }
 }
@@ -2494,8 +2485,7 @@ void script_line_start(void)
   if (si->sn_prof_on && sourcing_lnum >= 1) {
     // Grow the array before starting the timer, so that the time spent
     // here isn't counted.
-    (void)ga_grow(&si->sn_prl_ga,
-                  (int)(sourcing_lnum - si->sn_prl_ga.ga_len));
+    (void)ga_grow(&si->sn_prl_ga, sourcing_lnum - si->sn_prl_ga.ga_len);
     si->sn_prl_idx = sourcing_lnum - 1;
     while (si->sn_prl_ga.ga_len <= si->sn_prl_idx
            && si->sn_prl_ga.ga_len < si->sn_prl_ga.ga_maxlen) {
