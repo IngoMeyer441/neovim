@@ -35,6 +35,13 @@ func Test_gf_url()
   call search("URL")
   call assert_equal("URL://machine.name:1234?q=vim", expand("<cfile>"))
 
+  %d
+  call setline(1, "demo://remote_file")
+  wincmd f
+  call assert_equal('demo://remote_file', @%)
+  call assert_equal(2, winnr('$'))
+  close!
+
   set isf&vim
   enew!
 endfunc
@@ -63,11 +70,18 @@ func Test_gF()
   call assert_equal('Xfile', bufname('%'))
   call assert_equal(2, getcurpos()[1])
 
+  " jumping to the file/line with CTRL-W_F
+  %bw!
+  edit Xfile1
+  call setline(1, ['one', 'Xfile:4', 'three'])
+  exe "normal 2G\<C-W>F"
+  call assert_equal('Xfile', bufname('%'))
+  call assert_equal(4, getcurpos()[1])
+
   set isfname&
   call delete('Xfile')
   call delete('Xfile2')
-  bwipe Xfile
-  bwipe Xfile2
+  %bw!
 endfunc
 
 " Test for invoking 'gf' on a ${VAR} variable
@@ -161,6 +175,23 @@ func Test_gf_error()
   au! InsertCharPre
 
   bwipe!
+endfunc
+
+" If a file is not found by 'gf', then 'includeexpr' should be used to locate
+" the file.
+func Test_gf_includeexpr()
+  new
+  let g:Inc_fname = ''
+  func IncFunc()
+    let g:Inc_fname = v:fname
+    return v:fname
+  endfunc
+  setlocal includeexpr=IncFunc()
+  call setline(1, 'somefile.java')
+  call assert_fails('normal gf', 'E447:')
+  call assert_equal('somefile.java', g:Inc_fname)
+  close!
+  delfunc IncFunc
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

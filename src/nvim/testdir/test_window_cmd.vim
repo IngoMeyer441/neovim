@@ -34,7 +34,16 @@ func Test_window_cmd_cmdwin_with_vsp()
   set ls&vim
 endfunc
 
-function Test_window_cmd_wincmd_gf()
+" Test for jumping to windows
+func Test_window_jump()
+  new
+  " jumping to a window with a count greater than the max windows
+  exe "normal 4\<C-W>w"
+  call assert_equal(2, winnr())
+  only
+endfunc
+
+func Test_window_cmd_wincmd_gf()
   let fname = 'test_gf.txt'
   let swp_fname = '.' . fname . '.swp'
   call writefile([], fname)
@@ -168,6 +177,35 @@ func Test_window_split_edit_bufnr()
     call assert_equal('Xbaz', bufname(winbufnr(1)))
     call assert_equal('Xbar', bufname(winbufnr(2)))
   endif
+
+  %bw!
+endfunc
+
+func Test_window_split_no_room()
+  " N horizontal windows need >= 2*N + 1 lines:
+  " - 1 line + 1 status line in each window
+  " - 1 Ex command line
+  "
+  " 2*N + 1 <= &lines
+  " N <= (lines - 1)/2
+  "
+  " Beyond that number of windows, E36: Not enough room is expected.
+  let hor_win_count = (&lines - 1)/2
+  let hor_split_count = hor_win_count - 1
+  for s in range(1, hor_split_count) | split | endfor
+  call assert_fails('split', 'E36:')
+
+  " N vertical windows need >= 2*(N - 1) + 1 columns:
+  " - 1 column + 1 separator for each window (except last window)
+  " - 1 column for the last window which does not have separator
+  "
+  " 2*(N - 1) + 1 <= &columns
+  " 2*N - 1 <= &columns
+  " N <= (&columns + 1)/2
+  let ver_win_count = (&columns + 1)/2
+  let ver_split_count = ver_win_count - 1
+  for s in range(1, ver_split_count) | vsplit | endfor
+  call assert_fails('vsplit', 'E36:')
 
   %bw!
 endfunc
@@ -886,6 +924,155 @@ func Test_floatwin_splitmove()
   bwipe
 endfunc
 
+" Test for the :only command
+func Test_window_only()
+  new
+  set modified
+  new
+  call assert_fails('only', 'E445:')
+  only!
+  " Test for :only with a count
+  let wid = win_getid()
+  new
+  new
+  3only
+  call assert_equal(1, winnr('$'))
+  call assert_equal(wid, win_getid())
+  call assert_fails('close', 'E444:')
+  call assert_fails('%close', 'E16:')
+endfunc
+
+" Test for errors with :wincmd
+func Test_wincmd_errors()
+  call assert_fails('wincmd g', 'E474:')
+  call assert_fails('wincmd ab', 'E474:')
+endfunc
+
+" Test for errors with :winpos
+func Test_winpos_errors()
+  throw 'Skipped: Nvim does not have :winpos'
+  if !has("gui_running") && !has('win32')
+    call assert_fails('winpos', 'E188:')
+  endif
+  call assert_fails('winpos 10', 'E466:')
+endfunc
+
+" Test for +cmd in a :split command
+func Test_split_cmd()
+  split +set\ readonly
+  call assert_equal(1, &readonly)
+  call assert_equal(2, winnr('$'))
+  close
+endfunc
+
+" Create maximum number of horizontally or vertically split windows and then
+" run commands that create a new horizontally/vertically split window
+func Run_noroom_for_newwindow_test(dir_arg)
+  let dir = (a:dir_arg == 'v') ? 'vert ' : ''
+
+  " Open as many windows as possible
+  for i in range(500)
+    try
+      exe dir . 'new'
+    catch /E36:/
+      break
+    endtry
+  endfor
+
+  call writefile(['first', 'second', 'third'], 'Xfile1')
+  call writefile([], 'Xfile2')
+  call writefile([], 'Xfile3')
+
+  " Argument list related commands
+  args Xfile1 Xfile2 Xfile3
+  next
+  for cmd in ['sargument 2', 'snext', 'sprevious', 'sNext', 'srewind',
+			\ 'sfirst', 'slast']
+    call assert_fails(dir .. cmd, 'E36:')
+  endfor
+  %argdelete
+
+  " Buffer related commands
+  set modified
+  hide enew
+  for cmd in ['sbuffer Xfile1', 'sbnext', 'sbprevious', 'sbNext', 'sbrewind',
+		\ 'sbfirst', 'sblast', 'sball', 'sbmodified', 'sunhide']
+    call assert_fails(dir .. cmd, 'E36:')
+  endfor
+
+  " Window related commands
+  for cmd in ['split', 'split Xfile2', 'new', 'new Xfile3', 'sview Xfile1',
+		\ 'sfind runtest.vim']
+    call assert_fails(dir .. cmd, 'E36:')
+  endfor
+
+  " Help
+  call assert_fails(dir .. 'help', 'E36:')
+  call assert_fails(dir .. 'helpgrep window', 'E36:')
+
+  " Command-line window
+  if a:dir_arg == 'h'
+    " Cmd-line window is always a horizontally split window
+    call assert_beeps('call feedkeys("q:\<CR>", "xt")')
+  endif
+
+  " Quickfix and location list window
+  if has('quickfix')
+    cexpr ''
+    call assert_fails(dir .. 'copen', 'E36:')
+    lexpr ''
+    call assert_fails(dir .. 'lopen', 'E36:')
+
+    " Preview window
+    call assert_fails(dir .. 'pedit Xfile2', 'E36:')
+    call setline(1, 'abc')
+    call assert_fails(dir .. 'psearch abc', 'E36:')
+  endif
+
+  " Window commands (CTRL-W ^ and CTRL-W f)
+  if a:dir_arg == 'h'
+    call assert_fails('call feedkeys("\<C-W>^", "xt")', 'E36:')
+    call setline(1, 'Xfile1')
+    call assert_fails('call feedkeys("gg\<C-W>f", "xt")', 'E36:')
+  endif
+  enew!
+
+  " Tag commands (:stag, :stselect and :stjump)
+  call writefile(["!_TAG_FILE_ENCODING\tutf-8\t//",
+        \ "second\tXfile1\t2",
+        \ "third\tXfile1\t3",],
+        \ 'Xtags')
+  set tags=Xtags
+  call assert_fails(dir .. 'stag second', 'E36:')
+  call assert_fails('call feedkeys(":" .. dir .. "stselect second\n1\n", "xt")', 'E36:')
+  call assert_fails(dir .. 'stjump second', 'E36:')
+  call assert_fails(dir .. 'ptag second', 'E36:')
+  set tags&
+  call delete('Xtags')
+
+  " :isplit and :dsplit
+  call setline(1, ['#define FOO 1', 'FOO'])
+  normal 2G
+  call assert_fails(dir .. 'isplit FOO', 'E36:')
+  call assert_fails(dir .. 'dsplit FOO', 'E36:')
+
+  " terminal
+  if has('terminal')
+    call assert_fails(dir .. 'terminal', 'E36:')
+  endif
+
+  %bwipe!
+  call delete('Xfile1')
+  call delete('Xfile2')
+  call delete('Xfile3')
+  only
+endfunc
+
+func Test_split_cmds_with_no_room()
+  call Run_noroom_for_newwindow_test('h')
+  call Run_noroom_for_newwindow_test('v')
+endfunc
+
 func Test_window_resize()
   throw 'Skipped: Nvim supports cmdheight=0'
   " Vertical :resize (absolute, relative, min and max size).
@@ -939,6 +1126,181 @@ func Test_window_resize()
   call assert_equal(0, winwidth(other_winnr))
 
   %bwipe!
+endfunc
+
+" Test for adjusting the window width when a window is closed with some
+" windows using 'winfixwidth'
+func Test_window_width_adjust()
+  only
+  " Three vertical windows. Windows 1 and 2 have 'winfixwidth' set and close
+  " window 2.
+  wincmd v
+  vert resize 10
+  set winfixwidth
+  wincmd v
+  set winfixwidth
+  wincmd c
+  call assert_inrange(10, 12, winwidth(1))
+  " Three vertical windows. Windows 2 and 3 have 'winfixwidth' set and close
+  " window 3.
+  only
+  set winfixwidth
+  wincmd v
+  vert resize 10
+  set winfixwidth
+  wincmd v
+  set nowinfixwidth
+  wincmd b
+  wincmd c
+  call assert_inrange(10, 12, winwidth(2))
+
+  new | only
+endfunc
+
+" Test for jumping to a vertical/horizontal neighbor window based on the
+" current cursor position
+func Test_window_goto_neightbor()
+  %bw!
+
+  " Vertical window movement
+
+  " create the following window layout:
+  "     +--+--+
+  "     |w1|w3|
+  "     +--+  |
+  "     |w2|  |
+  "     +--+--+
+  "     |w4   |
+  "     +-----+
+  new
+  vsplit
+  split
+  " vertically jump from w4
+  wincmd b
+  call setline(1, repeat(' ', &columns))
+  call cursor(1, 1)
+  wincmd k
+  call assert_equal(2, winnr())
+  wincmd b
+  call cursor(1, &columns)
+  redraw!
+  wincmd k
+  call assert_equal(3, winnr())
+  %bw!
+
+  " create the following window layout:
+  "     +--+--+--+
+  "     |w1|w2|w3|
+  "     +--+--+--+
+  "     |w4      |
+  "     +--------+
+  new
+  vsplit
+  vsplit
+  wincmd b
+  call setline(1, repeat(' ', &columns))
+  call cursor(1, 1)
+  wincmd k
+  call assert_equal(1, winnr())
+  wincmd b
+  call cursor(1, &columns / 2)
+  redraw!
+  wincmd k
+  call assert_equal(2, winnr())
+  wincmd b
+  call cursor(1, &columns)
+  redraw!
+  wincmd k
+  call assert_equal(3, winnr())
+  %bw!
+
+  " Horizontal window movement
+
+  " create the following window layout:
+  "     +--+--+--+
+  "     |w1|w2|w4|
+  "     +--+--+  |
+  "     |w3   |  |
+  "     +-----+--+
+  vsplit
+  split
+  vsplit
+  4wincmd l
+  call setline(1, repeat([' '], &lines))
+  call cursor(1, 1)
+  redraw!
+  wincmd h
+  call assert_equal(2, winnr())
+  4wincmd l
+  call cursor(&lines, 1)
+  redraw!
+  wincmd h
+  call assert_equal(3, winnr())
+  %bw!
+
+  " create the following window layout:
+  "     +--+--+
+  "     |w1|w4|
+  "     +--+  +
+  "     |w2|  |
+  "     +--+  +
+  "     |w3|  |
+  "     +--+--+
+  vsplit
+  split
+  split
+  wincmd l
+  call setline(1, repeat([' '], &lines))
+  call cursor(1, 1)
+  redraw!
+  wincmd h
+  call assert_equal(1, winnr())
+  wincmd l
+  call cursor(&lines / 2, 1)
+  redraw!
+  wincmd h
+  call assert_equal(2, winnr())
+  wincmd l
+  call cursor(&lines, 1)
+  redraw!
+  wincmd h
+  call assert_equal(3, winnr())
+  %bw!
+endfunc
+
+" Test for an autocmd closing the destination window when jumping from one
+" window to another.
+func Test_close_dest_window()
+  split
+  edit Xfile
+
+  " Test for BufLeave
+  augroup T1
+    au!
+    au BufLeave Xfile $wincmd c
+  augroup END
+  wincmd b
+  call assert_equal(1, winnr('$'))
+  call assert_equal('Xfile', @%)
+  augroup T1
+    au!
+  augroup END
+
+  " Test for WinLeave
+  new
+  wincmd p
+  augroup T1
+    au!
+    au WinLeave * 1wincmd c
+  augroup END
+  wincmd t
+  call assert_equal(1, winnr('$'))
+  call assert_equal('Xfile', @%)
+  augroup T1
+    au!
+  augroup END
+  augroup! T1
+  %bw!
 endfunc
 
 func Test_win_move_separator()

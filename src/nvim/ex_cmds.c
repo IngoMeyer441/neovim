@@ -1980,17 +1980,14 @@ theend:
 /// @return  OK if it's OK, FAIL if it is not.
 int check_overwrite(exarg_T *eap, buf_T *buf, char *fname, char *ffname, int other)
 {
-  /*
-   * write to other file or b_flags set or not writing the whole file:
-   * overwriting only allowed with '!'
-   */
+  // Write to another file or b_flags set or not writing the whole file:
+  // overwriting only allowed with '!'
   if ((other
        || (buf->b_flags & BF_NOTEDITED)
        || ((buf->b_flags & BF_NEW)
            && vim_strchr(p_cpo, CPO_OVERNEW) == NULL)
        || (buf->b_flags & BF_READERR))
       && !p_wa
-      && !bt_nofile(buf)
       && os_path_exists((char_u *)ffname)) {
     if (!eap->forceit && !eap->append) {
 #ifdef UNIX
@@ -2415,6 +2412,8 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
    * Otherwise we re-use the current buffer.
    */
   if (other_file) {
+    const int prev_alt_fnum = curwin->w_alt_fnum;
+
     if (!(flags & (ECMD_ADDBUF | ECMD_ALTBUF))) {
       if ((cmdmod.cmod_flags & CMOD_KEEPALT) == 0) {
         curwin->w_alt_fnum = curbuf->b_fnum;
@@ -2457,6 +2456,10 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
     }
     if (buf == NULL) {
       goto theend;
+    }
+    if (curwin->w_alt_fnum == buf->b_fnum && prev_alt_fnum != 0) {
+      // reusing the buffer, keep the old alternate file
+      curwin->w_alt_fnum = prev_alt_fnum;
     }
     if (buf->b_ml.ml_mfp == NULL) {
       // No memfile yet.
@@ -3868,6 +3871,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
                 curwin->w_cursor.col = 0;
               }
               getvcol(curwin, &curwin->w_cursor, NULL, NULL, &ec);
+              curwin->w_cursor.col = regmatch.startpos[0].col;
               if (subflags.do_number || curwin->w_p_nu) {
                 int numw = number_width(curwin) + 1;
                 sc += numw;
@@ -3877,7 +3881,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
               prompt = xmallocz((size_t)ec + 1);
               memset(prompt, ' ', (size_t)sc);
               memset(prompt + sc, '^', (size_t)(ec - sc) + 1);
-              resp = getcmdline_prompt((char)(-1), prompt, 0, EXPAND_NOTHING, NULL, CALLBACK_NONE);
+              resp = getcmdline_prompt(-1, prompt, 0, EXPAND_NOTHING, NULL, CALLBACK_NONE);
               msg_putchar('\n');
               xfree(prompt);
               if (resp != NULL) {
@@ -4855,8 +4859,7 @@ void ex_help(exarg_T *eap)
    * Re-use an existing help window or open a new one.
    * Always open a new one for ":tab help".
    */
-  if (!bt_help(curwin->w_buffer)
-      || cmdmod.cmod_tab != 0) {
+  if (!bt_help(curwin->w_buffer) || cmdmod.cmod_tab != 0) {
     if (cmdmod.cmod_tab != 0) {
       wp = NULL;
     } else {

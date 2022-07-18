@@ -643,6 +643,13 @@ func Test_map_error()
   map <expr> ,f abc
   call assert_fails('normal ,f', 'E121:')
   unmap <expr> ,f
+
+  " Recursive use of :normal in a map
+  set maxmapdepth=100
+  map gq :normal gq<CR>
+  call assert_fails('normal gq', 'E192:')
+  unmap gq
+  set maxmapdepth&
 endfunc
 
 " Test for <special> key mapping
@@ -947,6 +954,16 @@ func Test_map_cmdkey_redo()
   call delete('Xcmdtext')
   delfunc SelectDash
   ounmap i-
+endfunc
+
+" Test for using <script> with a map to remap characters in rhs
+func Test_script_local_remap()
+  new
+  inoremap <buffer> <SID>xyz mno
+  inoremap <buffer> <script> abc st<SID>xyzre
+  normal iabc
+  call assert_equal('stmnore', getline(1))
+  bwipe!
 endfunc
 
 func Test_abbreviate_multi_byte()

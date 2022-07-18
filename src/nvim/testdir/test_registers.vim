@@ -416,6 +416,20 @@ func Test_put_reg_restart_mode()
   bwipe!
 endfunc
 
+" Test for executing a register using :@ command
+func Test_execute_register()
+  call setreg('r', [])
+  call assert_beeps('@r')
+  let i = 1
+  let @q = 'let i+= 1'
+  @q
+  @
+  call assert_equal(3, i)
+
+  " cannot execute a register in operator pending mode
+  call assert_beeps('normal! c@r')
+endfunc
+
 " Test for getting register info
 func Test_get_reginfo()
   enew
@@ -667,6 +681,16 @@ func Test_insert_small_delete()
   call assert_equal("'foo' foobar bar", getline(1))
   exe ":norm! w.w."
   call assert_equal("'foo' 'foobar' 'bar'", getline(1))
+  bwipe!
+endfunc
+
+" Record in insert mode using CTRL-O
+func Test_record_in_insert_mode()
+  new
+  let @r = ''
+  call setline(1, ['foo'])
+  call feedkeys("i\<C-O>qrbaz\<C-O>q", 'xt')
+  call assert_equal('baz', @r)
   bwipe!
 endfunc
 

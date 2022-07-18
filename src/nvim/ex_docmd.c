@@ -227,6 +227,8 @@ void do_exmode(void)
         emsg(_(e_emptybuf));
       } else {
         if (ex_pressedreturn) {
+          // Make sure the message overwrites the right line and isn't throttled.
+          msg_scroll_flush();
           // go up one line, to overwrite the ":<CR>" line, so the
           // output doesn't contain empty lines.
           msg_row = prev_msg_row;
@@ -908,6 +910,15 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
 
   msg_list = saved_msg_list;
 
+  // Cleanup if "cs_emsg_silent_list" remains.
+  if (cstack.cs_emsg_silent_list != NULL) {
+    eslist_T *elem, *temp;
+    for (elem = cstack.cs_emsg_silent_list; elem != NULL; elem = temp) {
+      temp = elem->next;
+      xfree(elem);
+    }
+  }
+
   /*
    * If there was too much output to fit on the command line, ask the user to
    * hit return before redrawing the screen. With the ":global" command we do
@@ -1433,10 +1444,13 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
   eap->getline = NULL;
   eap->cookie = NULL;
 
+  const bool save_ex_pressedreturn = ex_pressedreturn;
   // Parse command modifiers
   if (parse_command_modifiers(eap, errormsg, &cmdinfo->cmdmod, false) == FAIL) {
+    ex_pressedreturn = save_ex_pressedreturn;
     goto err;
   }
+  ex_pressedreturn = save_ex_pressedreturn;
   after_modifier = eap->cmd;
 
   // Save location after command modifiers
@@ -1576,9 +1590,15 @@ int execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo, bool preview)
       && !(curbuf->terminal && eap->cmdidx == CMD_put)) {
     ERROR(_(e_modifiable));
   }
-  if (text_locked() && !(eap->argt & EX_CMDWIN)
-      && !IS_USER_CMDIDX(eap->cmdidx)) {
-    ERROR(_(get_text_locked_msg()));
+  if (!IS_USER_CMDIDX(eap->cmdidx)) {
+    if (cmdwin_type != 0 && !(eap->argt & EX_CMDWIN)) {
+      // Command not allowed in the command line window
+      ERROR(_(e_cmdwin));
+    }
+    if (text_locked() && !(eap->argt & EX_LOCK_OK)) {
+      // Command not allowed when text is locked
+      ERROR(_(get_text_locked_msg()));
+    }
   }
   // Disallow editing another buffer when "curbuf->b_ro_locked" is set.
   // Do allow ":checktime" (it is postponed).
@@ -1953,11 +1973,17 @@ static char *do_one_cmd(char **cmdlinep, int flags, cstack_T *cstack, LineGetter
       goto doend;
     }
 
-    if (text_locked() && !(ea.argt & EX_CMDWIN)
-        && !IS_USER_CMDIDX(ea.cmdidx)) {
-      // Command not allowed when editing the command line.
-      errormsg = _(get_text_locked_msg());
-      goto doend;
+    if (!IS_USER_CMDIDX(ea.cmdidx)) {
+      if (cmdwin_type != 0 && !(ea.argt & EX_CMDWIN)) {
+        // Command not allowed in the command line window
+        errormsg = _(e_cmdwin);
+        goto doend;
+      }
+      if (text_locked() && !(ea.argt & EX_LOCK_OK)) {
+        // Command not allowed when text is locked
+        errormsg = _(get_text_locked_msg());
+        goto doend;
+      }
     }
 
     // Disallow editing another buffer when "curbuf->b_ro_locked" is set.
@@ -2396,7 +2422,8 @@ char *ex_errmsg(const char *const msg, const char *const arg)
 /// - Set ex_pressedreturn for an empty command line.
 ///
 /// @param skip_only      if false, undo_cmdmod() must be called later to free
-///                       any cmod_filter_pat and cmod_filter_regmatch.regprog.
+///                       any cmod_filter_pat and cmod_filter_regmatch.regprog,
+///                       and ex_pressedreturn may be set.
 /// @param[out] errormsg  potential error message.
 ///
 /// Call apply_cmdmod() to get the side effects of the modifiers:
@@ -2410,7 +2437,7 @@ int parse_command_modifiers(exarg_T *eap, char **errormsg, cmdmod_T *cmod, bool 
 {
   char *p;
 
-  memset(cmod, 0, sizeof(*cmod));
+  CLEAR_POINTER(cmod);
 
   // Repeat until no more command modifiers are found.
   for (;;) {
@@ -3017,6 +3044,8 @@ char *find_ex_command(exarg_T *eap, int *full)
       if (ASCII_ISLOWER(c2)) {
         eap->cmdidx += cmdidxs2[CHAR_ORD_LOW(c1)][CHAR_ORD_LOW(c2)];
       }
+    } else if (ASCII_ISUPPER(eap->cmd[0])) {
+      eap->cmdidx = CMD_Next;
     } else {
       eap->cmdidx = CMD_bang;
     }
@@ -4605,8 +4634,9 @@ char *invalid_range(exarg_T *eap)
       }
       break;
     case ADDR_BUFFERS:
-      if (eap->line1 < firstbuf->b_fnum
-          || eap->line2 > lastbuf->b_fnum) {
+      // Only a boundary check, not whether the buffers actually
+      // exist.
+      if (eap->line1 < 1 || eap->line2 > get_highest_fnum()) {
         return _(e_invrange);
       }
       break;

@@ -290,9 +290,10 @@ func Test_set_errors()
   call assert_fails('set regexpengine=3', 'E474:')
   call assert_fails('set history=10001', 'E474:')
   call assert_fails('set numberwidth=21', 'E474:')
-  call assert_fails('set colorcolumn=-a')
-  call assert_fails('set colorcolumn=a')
-  call assert_fails('set colorcolumn=1,')
+  call assert_fails('set colorcolumn=-a', 'E474:')
+  call assert_fails('set colorcolumn=a', 'E474:')
+  call assert_fails('set colorcolumn=1,', 'E474:')
+  call assert_fails('set colorcolumn=1;', 'E474:')
   call assert_fails('set cmdheight=-1', 'E487:')
   call assert_fails('set cmdwinheight=-1', 'E487:')
   if has('conceal')
@@ -343,8 +344,12 @@ func Test_set_errors()
     call assert_fails('set guicursor=i-ci,r-cr:h', 'E545:')
     call assert_fails('set guicursor=i-ci', 'E545:')
     call assert_fails('set guicursor=x', 'E545:')
+    call assert_fails('set guicursor=x:', 'E546:')
     call assert_fails('set guicursor=r-cr:horx', 'E548:')
     call assert_fails('set guicursor=r-cr:hor0', 'E549:')
+  endif
+  if has('mouseshape')
+    call assert_fails('se mouseshape=i-r:x', 'E547:')
   endif
   call assert_fails('set backupext=~ patchmode=~', 'E589:')
   call assert_fails('set winminheight=10 winheight=9', 'E591:')
@@ -461,9 +466,11 @@ func Test_set_one_column()
 endfunc
 
 func Test_set_values()
-  " The file is only generated when running "make test" in the src directory.
+  " opt_test.vim is generated from ../optiondefs.h using gen_opt_test.vim
   if filereadable('opt_test.vim')
     source opt_test.vim
+  else
+    throw 'Skipped: opt_test.vim does not exist'
   endif
 endfunc
 
@@ -736,7 +743,26 @@ func Test_buftype()
   call setline(1, ['L1'])
   set buftype=nowrite
   call assert_fails('write', 'E382:')
-  close!
+
+  " for val in ['', 'nofile', 'nowrite', 'acwrite', 'quickfix', 'help', 'terminal', 'prompt', 'popup']
+  for val in ['', 'nofile', 'nowrite', 'acwrite', 'quickfix', 'help', 'prompt']
+    exe 'set buftype=' .. val
+    call writefile(['something'], 'XBuftype')
+    call assert_fails('write XBuftype', 'E13:', 'with buftype=' .. val)
+  endfor
+
+  call delete('XBuftype')
+  bwipe!
+endfunc
+
+" Test for the 'shell' option
+func Test_shell()
+  throw 'Skipped: Nvim does not have :shell'
+  CheckUnix
+  let save_shell = &shell
+  set shell=
+  call assert_fails('shell', 'E91:')
+  let &shell = save_shell
 endfunc
 
 " Test for the 'shellquote' option
@@ -789,6 +815,47 @@ func Test_opt_boolean()
   set number&
 endfunc
 
+" Test for the 'window' option
+func Test_window_opt()
+  " Needs only one open widow
+  %bw!
+  call setline(1, range(1, 8))
+  set window=5
+  exe "normal \<C-F>"
+  call assert_equal(4, line('w0'))
+  exe "normal \<C-F>"
+  call assert_equal(7, line('w0'))
+  exe "normal \<C-F>"
+  call assert_equal(8, line('w0'))
+  exe "normal \<C-B>"
+  call assert_equal(5, line('w0'))
+  exe "normal \<C-B>"
+  call assert_equal(2, line('w0'))
+  exe "normal \<C-B>"
+  call assert_equal(1, line('w0'))
+  set window=1
+  exe "normal gg\<C-F>"
+  call assert_equal(2, line('w0'))
+  exe "normal \<C-F>"
+  call assert_equal(3, line('w0'))
+  exe "normal \<C-B>"
+  call assert_equal(2, line('w0'))
+  exe "normal \<C-B>"
+  call assert_equal(1, line('w0'))
+  enew!
+  set window&
+endfunc
+
+" Test for the 'winminheight' option
+func Test_opt_winminheight()
+  only!
+  let &winheight = &lines + 4
+  call assert_fails('let &winminheight = &lines + 2', 'E36:')
+  call assert_true(&winminheight <= &lines)
+  set winminheight&
+  set winheight&
+endfunc
+
 func Test_opt_winminheight_term()
   " See test/functional/legacy/options_spec.lua
   CheckRunVimInTerminal
@@ -830,6 +897,16 @@ func Test_opt_winminheight_term_tabs()
 
   call StopVimInTerminal(buf)
   call delete('Xwinminheight')
+endfunc
+
+" Test for the 'winminwidth' option
+func Test_opt_winminwidth()
+  only!
+  let &winwidth = &columns + 4
+  call assert_fails('let &winminwidth = &columns + 2', 'E36:')
+  call assert_true(&winminwidth <= &columns)
+  set winminwidth&
+  set winwidth&
 endfunc
 
 " Test for setting option value containing spaces with isfname+=32

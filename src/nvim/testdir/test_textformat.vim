@@ -1060,7 +1060,7 @@ func Test_tw_2_fo_tm_replace()
 endfunc
 
 " Test for 'matchpairs' with multibyte chars
-func Test_mps()
+func Test_mps_multibyte()
   new
   let t =<< trim END
     {
@@ -1082,6 +1082,30 @@ func Test_mps()
 
   set mps&
   bwipe!
+endfunc
+
+" Test for 'matchpairs' in latin1 encoding
+func Test_mps_latin1()
+  new
+  let save_enc = &encoding
+  " set encoding=latin1
+  call setline(1, 'abc(def)ghi')
+  normal %
+  call assert_equal(8, col('.'))
+  normal %
+  call assert_equal(4, col('.'))
+  call cursor(1, 6)
+  normal [(
+  call assert_equal(4, col('.'))
+  normal %
+  call assert_equal(8, col('.'))
+  call cursor(1, 6)
+  normal ])
+  call assert_equal(8, col('.'))
+  normal %
+  call assert_equal(4, col('.'))
+  let &encoding = save_enc
+  close!
 endfunc
 
 func Test_empty_matchpairs()
@@ -1137,8 +1161,103 @@ func Test_whichwrap_multi_byte()
   bwipe!
 endfunc
 
-func Test_substitute()
-  call assert_equal('a１a２a３a', substitute('１２３', '\zs', 'a', 'g'))
+" Test for automatically adding comment leaders in insert mode
+func Test_threepiece_comment()
+  new
+  setlocal expandtab
+  call setline(1, ["\t/*"])
+  setlocal formatoptions=croql
+  call cursor(1, 3)
+  call feedkeys("A\<cr>\<cr>/", 'tnix')
+  call assert_equal(["\t/*", " *", " */"], getline(1, '$'))
+
+  " If a comment ends in a single line, then don't add it in the next line
+  %d
+  call setline(1, '/* line1 */')
+  call feedkeys("A\<CR>next line", 'xt')
+  call assert_equal(['/* line1 */', 'next line'], getline(1, '$'))
+
+  %d
+  " Copy the trailing indentation from the leader comment to a new line
+  setlocal autoindent noexpandtab
+  call feedkeys("a\t/*\tone\ntwo\n/", 'xt')
+  call assert_equal(["\t/*\tone", "\t *\ttwo", "\t */"], getline(1, '$'))
+  close!
+endfunc
+
+" Test for the 'f' flag in 'comments' (only the first line has the comment
+" string)
+func Test_firstline_comment()
+  new
+  setlocal comments=f:- fo+=ro
+  exe "normal i- B\nD\<C-C>ggoC\<C-C>ggOA\<C-C>"
+  call assert_equal(['A', '- B', '  C', '  D'], getline(1, '$'))
+  %d
+  setlocal comments=:-
+  exe "normal i- B\nD\<C-C>ggoC\<C-C>ggOA\<C-C>"
+  call assert_equal(['- A', '- B', '- C', '- D'], getline(1, '$'))
+  %bw!
+endfunc
+
+" Test for the 'r' flag in 'comments' (right align comment)
+func Test_comment_rightalign()
+  new
+  setlocal comments=sr:/***,m:**,ex-2:******/ fo+=ro
+  exe "normal i=\<C-C>o\t  /***\nD\n/"
+  exe "normal 2GOA\<C-C>joB\<C-C>jOC\<C-C>joE\<C-C>GOF\<C-C>joG"
+  let expected =<< trim END
+    =
+    A
+    	  /***
+    	    ** B
+    	    ** C
+    	    ** D
+    	    ** E
+    	    **     F
+    	    ******/
+    G
+  END
+  call assert_equal(expected, getline(1, '$'))
+  %bw!
+endfunc
+
+" Test for the 'b' flag in 'comments'
+func Test_comment_blank()
+  new
+  setlocal comments=b:* fo+=ro
+  exe "normal i* E\nF\n\<BS>G\nH\<C-C>ggOC\<C-C>O\<BS>B\<C-C>OA\<C-C>2joD"
+  let expected =<< trim END
+    A
+    *B
+    * C
+    * D
+    * E
+    * F
+    *G
+    H
+  END
+  call assert_equal(expected, getline(1, '$'))
+  %bw!
+endfunc
+
+" Test for the 'n' flag in comments
+func Test_comment_nested()
+  new
+  setlocal comments=n:> fo+=ro
+  exe "normal i> B\nD\<C-C>ggOA\<C-C>joC\<C-C>Go\<BS>>>> F\nH"
+  exe "normal 5GOE\<C-C>6GoG"
+  let expected =<< trim END
+    > A
+    > B
+    > C
+    > D
+    >>>> E
+    >>>> F
+    >>>> G
+    >>>> H
+  END
+  call assert_equal(expected, getline(1, '$'))
+  %bw!
 endfunc
 
 " Test for 'a' and 'w' flags in 'formatoptions'

@@ -5316,7 +5316,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
     }
 
     fillchar = wp->w_p_fcs_chars.wbr;
-    attr = (wp == curwin) ? HL_ATTR(HLF_WBR) : HL_ATTR(HLF_WBRNC);
+    attr = (wp == curwin) ? win_hl_attr(wp, HLF_WBR) : win_hl_attr(wp, HLF_WBRNC);
     maxwidth = wp->w_width_inner;
     use_sandbox = was_set_insecurely(wp, "winbar", 0);
 
@@ -6533,13 +6533,11 @@ static void win_redr_ruler(win_T *wp, bool always)
   }
 
   if (*p_ruf && p_ch > 0 && !ui_has(kUIMessages)) {
-    int save_called_emsg = called_emsg;
-    called_emsg = false;
+    const int called_emsg_before = called_emsg;
     win_redr_custom(wp, false, true);
-    if (called_emsg) {
+    if (called_emsg > called_emsg_before) {
       set_string_option_direct("rulerformat", -1, "", OPT_FREE, SID_ERROR);
     }
-    called_emsg |= save_called_emsg;
     return;
   }
 

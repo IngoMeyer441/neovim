@@ -482,7 +482,7 @@ static buf_T *find_buffer(typval_T *avar)
        * buffer, these don't use the full path. */
       FOR_ALL_BUFFERS(bp) {
         if (bp->b_fname != NULL
-            && (path_with_url(bp->b_fname) || bt_nofile(bp))
+            && (path_with_url(bp->b_fname) || bt_nofilename(bp))
             && STRCMP(bp->b_fname, avar->vval.v_string) == 0) {
           buf = bp;
           break;
@@ -1062,11 +1062,6 @@ static void f_complete(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     return;
   }
 
-  const int save_textlock = textlock;
-  // "textlock" is set when evaluating 'completefunc' but we can change text
-  // here.
-  textlock = 0;
-
   // Check for undo allowed here, because if something was already inserted
   // the line was already saved for undo and this check isn't done.
   if (!undo_allowed(curbuf)) {
@@ -1081,7 +1076,6 @@ static void f_complete(typval_T *argvars, typval_T *rettv, FunPtr fptr)
       set_completion(startcol - 1, argvars[1].vval.v_list);
     }
   }
-  textlock = save_textlock;
 }
 
 /// "complete_add()" function
@@ -2053,6 +2047,12 @@ static void f_exepath(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   char *path = NULL;
 
   (void)os_can_exe(tv_get_string(&argvars[0]), &path, true);
+
+#ifdef BACKSLASH_IN_FILENAME
+  if (path != NULL) {
+    slash_adjust((char_u *)path);
+  }
+#endif
 
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = path;
@@ -3902,15 +3902,14 @@ static void f_wait(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   typval_T argv = TV_INITIAL_VALUE;
   typval_T exprval = TV_INITIAL_VALUE;
   bool error = false;
-  int save_called_emsg = called_emsg;
-  called_emsg = false;
+  const int called_emsg_before = called_emsg;
 
   LOOP_PROCESS_EVENTS_UNTIL(&main_loop, main_loop.events, timeout,
                             eval_expr_typval(&expr, &argv, 0, &exprval) != OK
                             || tv_get_number_chk(&exprval, &error)
-                            || called_emsg || error || got_int);
+                            || called_emsg > called_emsg_before || error || got_int);
 
-  if (called_emsg || error) {
+  if (called_emsg > called_emsg_before || error) {
     rettv->vval.v_number = -3;
   } else if (got_int) {
     got_int = false;
@@ -3919,8 +3918,6 @@ static void f_wait(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   } else if (tv_get_number_chk(&exprval, &error)) {
     rettv->vval.v_number = 0;
   }
-
-  called_emsg = save_called_emsg;
 
   // Stop dummy timer
   time_watcher_stop(tw);

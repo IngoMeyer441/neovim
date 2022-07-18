@@ -284,6 +284,15 @@ func Test_virtual_replace2()
   call assert_equal(['abcd',
         \ 'efgh',
         \ 'ijkl'], getline(1, '$'))
+
+  " Test for truncating spaces in a newly added line using 'autoindent' if
+  " characters are not added to that line.
+  %d_
+  call setline(1, ['    app', '    bee', '    cat'])
+  setlocal autoindent
+  exe "normal gg$gRt\n\nr"
+  call assert_equal(['    apt', '', '    rat'], getline(1, '$'))
+
   " clean up
   %d_
   set bs&vim
@@ -1169,14 +1178,37 @@ func Test_exclusive_selection()
   close!
 endfunc
 
-" Test for starting visual mode with a count
-" This test should be run withou any previous visual modes. So this should be
+" Test for starting visual mode with a count.
+" This test should be run without any previous visual modes. So this should be
 " run as a first test.
 func Test_AAA_start_visual_mode_with_count()
   new
   call setline(1, ['aaaaaaa', 'aaaaaaa', 'aaaaaaa', 'aaaaaaa'])
   normal! gg2Vy
   call assert_equal("aaaaaaa\naaaaaaa\n", @")
+  close!
+endfunc
+
+" Test for visually selecting an inner block (iB)
+func Test_visual_inner_block()
+  new
+  call setline(1, ['one', '{', 'two', '{', 'three', '}', 'four', '}', 'five'])
+  call cursor(5, 1)
+  " visually select all the lines in the block and then execute iB
+  call feedkeys("ViB\<C-C>", 'xt')
+  call assert_equal([0, 5, 1, 0], getpos("'<"))
+  call assert_equal([0, 5, 6, 0], getpos("'>"))
+  " visually select two inner blocks
+  call feedkeys("ViBiB\<C-C>", 'xt')
+  call assert_equal([0, 3, 1, 0], getpos("'<"))
+  call assert_equal([0, 7, 5, 0], getpos("'>"))
+  " try to select non-existing inner block
+  call cursor(5, 1)
+  call assert_beeps('normal ViBiBiB')
+  " try to select a unclosed inner block
+  8,9d
+  call cursor(5, 1)
+  call assert_beeps('normal ViBiB')
   close!
 endfunc
 
