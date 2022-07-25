@@ -37,6 +37,7 @@
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
+#include "nvim/eval/vars.h"
 #include "nvim/ex_cmds2.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_getln.h"
@@ -49,6 +50,7 @@
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent_c.h"
+#include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/macros.h"
 #include "nvim/mapping.h"
@@ -3021,7 +3023,7 @@ ambw_end:
     }
     // add / remove window bars for 'winbar'
     if (gvarp == (char_u **)&p_wbr) {
-      set_winbar();
+      set_winbar(true);
     }
   } else if (gvarp == &p_cpt) {
     // check if it is a valid value for 'complete' -- Acevedo
@@ -6455,6 +6457,7 @@ void didset_window_options(win_T *wp)
   set_chars_option(wp, &wp->w_p_lcs, true);
   parse_winhl_opt(wp);  // sets w_hl_needs_update also for w_p_winbl
   check_blending(wp);
+  set_winbar_win(wp, false);
   wp->w_grid_alloc.blending = wp->w_p_winbl > 0;
 }
 

@@ -14,10 +14,12 @@
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/userfunc.h"
+#include "nvim/eval/vars.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_getln.h"
 #include "nvim/fileio.h"
 #include "nvim/getchar.h"
+#include "nvim/insexpand.h"
 #include "nvim/lua/executor.h"
 #include "nvim/map.h"
 #include "nvim/option.h"
@@ -1835,9 +1837,13 @@ bool apply_autocmds_group(event_T event, char *fname, char *fname_io, bool force
     }
     ap->last = true;
 
+    // Make sure cursor and topline are valid.  The first time the current
+    // values are saved, restored by reset_lnums().  When nested only the
+    // values are corrected when needed.
     if (nesting == 1) {
-      // make sure cursor and topline are valid
       check_lnums(true);
+    } else {
+      check_lnums_nested(true);
     }
 
     // Execute the autocmd. The `getnextac` callback handles iteration.
@@ -2051,8 +2057,8 @@ static bool call_autocmd_callback(const AutoCmd *ac, const AutoPatCmd *apc)
       break;
     }
 
-    FIXED_TEMP_ARRAY(args, 1);
-    args.items[0] = DICTIONARY_OBJ(data);
+    MAXSIZE_TEMP_ARRAY(args, 1);
+    ADD_C(args, DICTIONARY_OBJ(data));
 
     Object result = nlua_call_ref(callback.data.luaref, NULL, args, true, NULL);
     if (result.type == kObjectTypeBoolean) {

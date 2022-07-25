@@ -13,6 +13,7 @@
 #include "nvim/diff.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
+#include "nvim/eval/vars.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
 #include "nvim/ex_docmd.h"
@@ -1500,9 +1501,6 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
     }
   }
 
-  // Keep same changelist position in new window.
-  wp->w_changelistidx = oldwin->w_changelistidx;
-
   // make the new window the current window
   win_enter_ext(wp, WEE_TRIGGER_NEW_AUTOCMDS | WEE_TRIGGER_ENTER_AUTOCMDS
                 | WEE_TRIGGER_LEAVE_AUTOCMDS);
@@ -1573,6 +1571,10 @@ static void win_init(win_T *newp, win_T *oldp, int flags)
   }
   newp->w_tagstackidx = oldp->w_tagstackidx;
   newp->w_tagstacklen = oldp->w_tagstacklen;
+
+  // Keep same changelist position in new window.
+  newp->w_changelistidx = oldp->w_changelistidx;
+
   copyFoldingState(oldp, newp);
 
   win_init_some(newp, oldp);
@@ -4111,7 +4113,6 @@ int win_new_tabpage(int after, char_u *filename)
 
     newtp->tp_topframe = topframe;
     last_status(false);
-    set_winbar();
 
     redraw_all_later(NOT_VALID);
 
@@ -6740,34 +6741,50 @@ static void last_status_rec(frame_T *fr, bool statusline, bool is_stl_global)
   }
 }
 
-// Add or remove window bars from windows depending on the value of 'winbar'.
-void set_winbar(void)
+/// Add or remove window bar from window "wp".
+///
+/// @param make_room Whether to resize frames to make room for winbar.
+///
+/// @return Success status.
+int set_winbar_win(win_T *wp, bool make_room)
+{
+  // Require the local value to be set in order to show winbar on a floating window.
+  int winbar_height = wp->w_floating ? ((*wp->w_p_wbr != NUL) ? 1 : 0)
+                                     : ((*p_wbr != NUL || *wp->w_p_wbr != NUL) ? 1 : 0);
+
+  if (wp->w_winbar_height != winbar_height) {
+    if (winbar_height == 1 && wp->w_height_inner <= 1) {
+      if (wp->w_floating) {
+        emsg(_(e_noroom));
+        return NOTDONE;
+      } else if (!make_room || !resize_frame_for_winbar(wp->w_frame)) {
+        return FAIL;
+      }
+    }
+    wp->w_winbar_height = winbar_height;
+    win_set_inner_size(wp);
+    wp->w_redr_status = wp->w_redr_status || winbar_height;
+
+    if (winbar_height == 0) {
+      // When removing winbar, deallocate the w_winbar_click_defs array
+      stl_clear_click_defs(wp->w_winbar_click_defs, wp->w_winbar_click_defs_size);
+      xfree(wp->w_winbar_click_defs);
+      wp->w_winbar_click_defs_size = 0;
+      wp->w_winbar_click_defs = NULL;
+    }
+  }
+
+  return OK;
+}
+
+/// Add or remove window bars from all windows in tab depending on the value of 'winbar'.
+///
+/// @param make_room Whether to resize frames to make room for winbar.
+void set_winbar(bool make_room)
 {
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    // Require the local value to be set in order to show winbar on a floating window.
-    int winbar_height = wp->w_floating ? ((*wp->w_p_wbr != NUL) ? 1 : 0)
-                                       : ((*p_wbr != NUL || *wp->w_p_wbr != NUL) ? 1 : 0);
-
-    if (wp->w_winbar_height != winbar_height) {
-      if (winbar_height == 1 && wp->w_height_inner <= 1) {
-        if (wp->w_floating) {
-          emsg(_(e_noroom));
-          continue;
-        } else if (!resize_frame_for_winbar(wp->w_frame)) {
-          return;
-        }
-      }
-      wp->w_winbar_height = winbar_height;
-      win_set_inner_size(wp);
-      wp->w_redr_status = wp->w_redr_status || winbar_height;
-
-      if (winbar_height == 0) {
-        // When removing winbar, deallocate the w_winbar_click_defs array
-        stl_clear_click_defs(wp->w_winbar_click_defs, wp->w_winbar_click_defs_size);
-        xfree(wp->w_winbar_click_defs);
-        wp->w_winbar_click_defs_size = 0;
-        wp->w_winbar_click_defs = NULL;
-      }
+    if (set_winbar_win(wp, make_room) == FAIL) {
+      break;
     }
   }
 }
@@ -6841,17 +6858,16 @@ bool only_one_window(void) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
   return count <= 1;
 }
 
-/// Correct the cursor line number in other windows.  Used after changing the
-/// current buffer, and before applying autocommands.
-///
-/// @param do_curwin  when true, also check current window.
-void check_lnums(bool do_curwin)
+/// Implementation of check_lnums() and check_lnums_nested().
+static void check_lnums_both(bool do_curwin, bool nested)
 {
   FOR_ALL_TAB_WINDOWS(tp, wp) {
     if ((do_curwin || wp != curwin) && wp->w_buffer == curbuf) {
-      // save the original cursor position and topline
-      wp->w_save_cursor.w_cursor_save = wp->w_cursor;
-      wp->w_save_cursor.w_topline_save = wp->w_topline;
+      if (!nested) {
+        // save the original cursor position and topline
+        wp->w_save_cursor.w_cursor_save = wp->w_cursor;
+        wp->w_save_cursor.w_topline_save = wp->w_topline;
+      }
 
       if (wp->w_cursor.lnum > curbuf->b_ml.ml_line_count) {
         wp->w_cursor.lnum = curbuf->b_ml.ml_line_count;
@@ -6860,11 +6876,26 @@ void check_lnums(bool do_curwin)
         wp->w_topline = curbuf->b_ml.ml_line_count;
       }
 
-      // save the corrected cursor position and topline
+      // save the (corrected) cursor position and topline
       wp->w_save_cursor.w_cursor_corr = wp->w_cursor;
       wp->w_save_cursor.w_topline_corr = wp->w_topline;
     }
   }
+}
+
+/// Correct the cursor line number in other windows.  Used after changing the
+/// current buffer, and before applying autocommands.
+///
+/// @param do_curwin  when true, also check current window.
+void check_lnums(bool do_curwin)
+{
+  check_lnums_both(do_curwin, false);
+}
+
+/// Like check_lnums() but for when check_lnums() was already called.
+void check_lnums_nested(bool do_curwin)
+{
+  check_lnums_both(do_curwin, true);
 }
 
 /// Reset cursor and topline to its stored values from check_lnums().

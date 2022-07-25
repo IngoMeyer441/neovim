@@ -1583,22 +1583,39 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
   if (otmp != NULL) {
     len += STRLEN(otmp) + STRLEN(p_srr) + 2;  // two extra spaces ("  "),
   }
+
+  const char *const cmd_args = strchr(cmd, ' ');
+  len += (is_pwsh && cmd_args)
+      ? STRLEN(" -ArgumentList ") + 2  // two extra quotes
+      : 0;
+
   char *const buf = xmalloc(len);
 
-#if defined(UNIX)
-  // Put delimiters around the command (for concatenated commands) when
-  // redirecting input and/or output.
   if (is_pwsh) {
     xstrlcpy(buf, "Start-Process ", len);
-    xstrlcat(buf, cmd, len);
+    if (cmd_args == NULL) {
+      xstrlcat(buf, cmd, len);
+    } else {
+      xstrlcpy(buf + STRLEN(buf), cmd, (size_t)(cmd_args - cmd + 1));
+      xstrlcat(buf, " -ArgumentList \"", len);
+      xstrlcat(buf, cmd_args + 1, len);  // +1 to skip the leading space.
+      xstrlcat(buf, "\"", len);
+    }
+#if defined(UNIX)
+    // Put delimiters around the command (for concatenated commands) when
+    // redirecting input and/or output.
   } else if (itmp != NULL || otmp != NULL) {
     char *fmt = is_fish_shell ? "begin; %s; end"
                               :       "(%s)";
     vim_snprintf(buf, len, fmt, cmd);
+#endif
+    // For shells that don't understand braces around commands, at least allow
+    // the use of commands in a pipe.
   } else {
     xstrlcpy(buf, cmd, len);
   }
 
+#if defined(UNIX)
   if (itmp != NULL) {
     if (is_pwsh) {
       xstrlcat(buf, " -RedirectStandardInput ", len - 1);
@@ -1608,14 +1625,6 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
     xstrlcat(buf, itmp, len - 1);
   }
 #else
-  // For shells that don't understand braces around commands, at least allow
-  // the use of commands in a pipe.
-  if (is_pwsh) {
-    xstrlcpy(buf, "Start-Process ", len);
-    xstrlcat(buf, cmd, len);
-  } else {
-    xstrlcpy(buf, cmd, len);
-  }
   if (itmp != NULL) {
     // If there is a pipe, we have to put the '<' in front of it.
     // Don't do this when 'shellquote' is not empty, otherwise the
@@ -3635,7 +3644,6 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
 
   assert(sub != NULL);
 
-  bool sub_needs_free = false;
   char *sub_copy = NULL;
 
   // If the substitute pattern starts with "\=" then it's an expression.
@@ -3647,11 +3655,12 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
     sub = xstrdup(sub);
     sub_copy = sub;
   } else {
-    char *source = sub;
-    sub = (char *)regtilde((char_u *)sub, p_magic, cmdpreview);
-    // When previewing, the new pattern allocated by regtilde() needs to be freed
-    // in this function because it will not be used or freed by regtilde() later.
-    sub_needs_free = cmdpreview && sub != source;
+    char *newsub = (char *)regtilde((char_u *)sub, p_magic, cmdpreview);
+    if (newsub != sub) {
+      // newsub was allocated, free it later.
+      sub_copy = newsub;
+      sub = newsub;
+    }
   }
 
   bool cmdheight0 = p_ch < 1 && !ui_has(kUIMessages);
@@ -4450,9 +4459,6 @@ skip:
 
   vim_regfree(regmatch.regprog);
   xfree(sub_copy);
-  if (sub_needs_free) {
-    xfree(sub);
-  }
 
   // Restore the flag values, they can be used for ":&&".
   subflags.do_all = save_do_all;

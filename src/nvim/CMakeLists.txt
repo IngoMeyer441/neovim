@@ -160,7 +160,6 @@ list(REMOVE_ITEM NVIM_SOURCES ${to_remove})
 set(CONV_SOURCES
   lua/treesitter.c
   mbyte.c
-  memline.c
   regexp.c
   screen.c
   search.c
@@ -230,6 +229,7 @@ add_custom_target(update_version_stamp
     -DNVIM_VERSION_PATCH=${NVIM_VERSION_PATCH}
     -DNVIM_VERSION_PRERELEASE=${NVIM_VERSION_PRERELEASE}
     -DOUTPUT=${NVIM_VERSION_GIT_H}
+    -DCMAKE_MESSAGE_LOG_LEVEL=${CMAKE_MESSAGE_LOG_LEVEL}
     -P ${PROJECT_SOURCE_DIR}/cmake/GenerateVersion.cmake
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   BYPRODUCTS ${NVIM_VERSION_GIT_H})

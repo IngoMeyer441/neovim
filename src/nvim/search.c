@@ -18,6 +18,7 @@
 #include "nvim/cursor.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
+#include "nvim/eval/funcs.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
 #include "nvim/ex_getln.h"
@@ -27,6 +28,7 @@
 #include "nvim/getchar.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
+#include "nvim/insexpand.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -5849,7 +5851,7 @@ exit_matched:
     if (action == ACTION_EXPAND) {
       ins_compl_check_keys(30, false);
     }
-    if (got_int || compl_interrupted) {
+    if (got_int || ins_compl_interrupted()) {
       break;
     }
 
@@ -5911,7 +5913,7 @@ exit_matched:
     }
   } else if (!found
              && action != ACTION_EXPAND) {
-    if (got_int || compl_interrupted) {
+    if (got_int || ins_compl_interrupted()) {
       emsg(_(e_interr));
     } else if (type == FIND_DEFINE) {
       emsg(_("E388: Couldn't find definition"));
