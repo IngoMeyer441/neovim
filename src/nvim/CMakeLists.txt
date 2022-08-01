@@ -156,33 +156,10 @@ endforeach()
 
 list(REMOVE_ITEM NVIM_SOURCES ${to_remove})
 
-# Legacy files that do not yet pass -Wconversion.
-set(CONV_SOURCES
-  lua/treesitter.c
-  mbyte.c
-  regexp.c
-  screen.c
-  search.c
-  spell.c
-  spellfile.c
-  syntax.c
-  window.c)
-foreach(sfile ${CONV_SOURCES})
-  if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/${sfile}")
-    message(FATAL_ERROR "${sfile} doesn't exist (it was added to CONV_SOURCES)")
-  endif()
-endforeach()
-
 if(NOT MSVC)
-  set_source_files_properties(
-    ${CONV_SOURCES} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion")
-
   # xdiff, mpack, lua-cjson: inlined external project, we don't maintain it. #9306
   set_source_files_properties(
     ${EXTERNAL_SOURCES} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion -Wno-missing-noreturn -Wno-missing-format-attribute -Wno-double-promotion")
-
-  set_source_files_properties(
-    eval/funcs.c PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion")
 endif()
 
 if(NOT "${MIN_LOG_LEVEL}" MATCHES "^$")
@@ -268,7 +245,7 @@ foreach(sfile ${NVIM_SOURCES}
   set(depends "${HEADER_GENERATOR}" "${sfile}")
   if("${f}" STREQUAL "version.c")
     # Ensure auto/versiondef_git.h exists after "make clean".
-    list(APPEND depends "${NVIM_VERSION_GIT_H}")
+    list(APPEND depends update_version_stamp "${NVIM_VERSION_GIT_H}")
   endif()
   add_custom_command(
     OUTPUT "${gf_c_h}" "${gf_h_h}"
@@ -789,12 +766,20 @@ foreach(sfile ${LINT_NVIM_SOURCES})
 endforeach()
 add_custom_target(lintc DEPENDS ${LINT_TARGETS})
 
+add_custom_target(uncrustify-version
+  COMMAND ${CMAKE_COMMAND}
+    -D UNCRUSTIFY_PRG=${UNCRUSTIFY_PRG}
+    -D CONFIG_FILE=${PROJECT_SOURCE_DIR}/src/uncrustify.cfg
+    -P ${PROJECT_SOURCE_DIR}/cmake/CheckUncrustifyVersion.cmake)
+
 add_glob_targets(
   TARGET lintuncrustify
   COMMAND ${UNCRUSTIFY_PRG}
   FLAGS -c "${PROJECT_SOURCE_DIR}/src/uncrustify.cfg" -q --check
   FILES ${LINT_NVIM_SOURCES}
   )
+
+add_dependencies(lintuncrustify uncrustify-version)
 
 add_custom_target(
   lintcfull

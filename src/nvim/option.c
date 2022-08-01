@@ -1327,7 +1327,6 @@ int do_set(char *arg, int opt_flags)
             char *saved_newval = NULL;
             unsigned newlen;
             int comma;
-            bool new_value_alloced = false;  // new string option was allocated
 
             // When using ":set opt=val" for a global option
             // with a local value the local value will be
@@ -1367,7 +1366,6 @@ int do_set(char *arg, int opt_flags)
               // default value was already expanded, only
               // required when an environment variable was set
               // later
-              new_value_alloced = true;
               if (newval == NULL) {
                 newval = empty_option;
               } else if (!(options[opt_idx].flags & P_NO_DEF_EXP)) {
@@ -1381,7 +1379,6 @@ int do_set(char *arg, int opt_flags)
               }
             } else if (nextchar == '<') {  // set to global val
               newval = vim_strsave(*(char_u **)get_varp_scope(&(options[opt_idx]), OPT_GLOBAL));
-              new_value_alloced = true;
             } else {
               arg++;                    // jump to after the '=' or ':'
 
@@ -1626,7 +1623,6 @@ int do_set(char *arg, int opt_flags)
               if (save_arg != NULL) {               // number for 'whichwrap'
                 arg = (char *)save_arg;
               }
-              new_value_alloced = true;
             }
 
             // Set the new value.
@@ -1661,8 +1657,7 @@ int do_set(char *arg, int opt_flags)
               // for ":set" on local options. Note: when setting
               // 'syntax' or 'filetype' autocommands may be
               // triggered that can cause havoc.
-              errmsg = did_set_string_option(opt_idx, (char_u **)varp,
-                                             new_value_alloced, oldval,
+              errmsg = did_set_string_option(opt_idx, (char_u **)varp, oldval,
                                              errbuf, sizeof(errbuf),
                                              opt_flags, &value_checked);
 
@@ -2301,9 +2296,9 @@ static char *set_string_option(const int opt_idx, const char *const value, const
   char *const saved_newval = xstrdup(s);
 
   int value_checked = false;
-  char *const r = did_set_string_option(opt_idx, (char_u **)varp, true,
-                                        (char_u *)oldval,
-                                        NULL, 0, opt_flags, &value_checked);
+  char *const r = did_set_string_option(opt_idx, (char_u **)varp, (char_u *)oldval,
+                                        NULL, 0,
+                                        opt_flags, &value_checked);
   if (r == NULL) {
     did_set_option(opt_idx, opt_flags, true, value_checked);
   }
@@ -2432,19 +2427,18 @@ static char *check_mousescroll(char *string)
 }
 
 /// Handle string options that need some action to perform when changed.
+/// The new value must be allocated.
 /// Returns NULL for success, or an error message for an error.
 ///
 /// @param opt_idx  index in options[] table
 /// @param varp  pointer to the option variable
-/// @param new_value_alloced  new value was allocated
 /// @param oldval  previous value of the option
 /// @param errbuf  buffer for errors, or NULL
 /// @param errbuflen  length of errors buffer
 /// @param opt_flags  OPT_LOCAL and/or OPT_GLOBAL
 /// @param value_checked  value was checked to be safe, no need to set P_INSECURE
-static char *did_set_string_option(int opt_idx, char_u **varp, bool new_value_alloced,
-                                   char_u *oldval, char *errbuf, size_t errbuflen, int opt_flags,
-                                   int *value_checked)
+static char *did_set_string_option(int opt_idx, char_u **varp, char_u *oldval, char *errbuf,
+                                   size_t errbuflen, int opt_flags, int *value_checked)
 {
   char *errmsg = NULL;
   char_u *s, *p;
@@ -3099,11 +3093,8 @@ ambw_end:
                               (char **)&p, REPTERM_FROM_PART | REPTERM_DO_LT, NULL,
                               CPO_TO_CPO_FLAGS);
       if (p != NULL) {
-        if (new_value_alloced) {
-          free_string_option(p_pt);
-        }
+        free_string_option(p_pt);
         p_pt = p;
-        new_value_alloced = true;
       }
     }
   } else if (varp == &p_bs) {  // 'backspace'
@@ -3346,9 +3337,7 @@ ambw_end:
    * If error detected, restore the previous value.
    */
   if (errmsg != NULL) {
-    if (new_value_alloced) {
-      free_string_option(*varp);
-    }
+    free_string_option(*varp);
     *varp = oldval;
     /*
      * When resetting some values, need to act on it.
@@ -3365,11 +3354,7 @@ ambw_end:
     if (free_oldval) {
       free_string_option(oldval);
     }
-    if (new_value_alloced) {
-      options[opt_idx].flags |= P_ALLOCED;
-    } else {
-      options[opt_idx].flags &= ~P_ALLOCED;
-    }
+    options[opt_idx].flags |= P_ALLOCED;
 
     if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0
         && ((int)options[opt_idx].indir & PV_BOTH)) {
@@ -5046,28 +5031,29 @@ static int findoption(const char *const arg)
 /// @param stringval  NULL when only checking existence
 ///
 /// @returns:
-///           Toggle option: 2, *numval gets value.
-///           Number option: 1, *numval gets value.
-///           String option: 0, *stringval gets allocated string.
-/// Hidden Number or Toggle option: -1.
-///           hidden String option: -2.
-///                 unknown option: -3.
-int get_option_value(const char *name, long *numval, char **stringval, int opt_flags)
+///           Number option: gov_number, *numval gets value.
+///           Tottle option: gov_bool,   *numval gets value.
+///           String option: gov_string, *stringval gets allocated string.
+///           Hidden Number option: gov_hidden_number.
+///           Hidden Toggle option: gov_hidden_bool.
+///           Hidden String option: gov_hidden_string.
+///           Unknown option: gov_unknown.
+getoption_T get_option_value(const char *name, long *numval, char **stringval, int opt_flags)
 {
   if (get_tty_option(name, stringval)) {
-    return 0;
+    return gov_string;
   }
 
   int opt_idx = findoption(name);
-  if (opt_idx < 0) {  // Unknown option.
-    return -3;
+  if (opt_idx < 0) {  // option not in the table
+    return gov_unknown;
   }
 
   char_u *varp = get_varp_scope(&(options[opt_idx]), opt_flags);
 
   if (options[opt_idx].flags & P_STRING) {
     if (varp == NULL) {  // hidden option
-      return -2;
+      return gov_hidden_string;
     }
     if (stringval != NULL) {
       if ((char_u **)varp == &p_pt) {  // 'pastetoggle'
@@ -5076,26 +5062,24 @@ int get_option_value(const char *name, long *numval, char **stringval, int opt_f
         *stringval = xstrdup(*(char **)(varp));
       }
     }
-    return 0;
+    return gov_string;
   }
 
   if (varp == NULL) {  // hidden option
-    return -1;
+    return (options[opt_idx].flags & P_NUM) ? gov_hidden_number : gov_hidden_bool;
   }
   if (options[opt_idx].flags & P_NUM) {
     *numval = *(long *)varp;
-    return 1;
-  }
-
-  // Special case: 'modified' is b_changed, but we also want to consider
-  // it set when 'ff' or 'fenc' changed.
-  if ((int *)varp == &curbuf->b_changed) {
-    *numval = curbufIsChanged();
   } else {
-    *numval = (long)*(int *)varp;  // NOLINT(whitespace/cast)
+    // Special case: 'modified' is b_changed, but we also want to consider
+    // it set when 'ff' or 'fenc' changed.
+    if ((int *)varp == &curbuf->b_changed) {
+      *numval = curbufIsChanged();
+    } else {
+      *numval = (long)(*(int *)varp);
+    }
   }
-
-  return 2;
+  return (options[opt_idx].flags & P_NUM) ? gov_number : gov_bool;
 }
 
 // Returns the option attributes and its value. Unlike the above function it
@@ -5300,6 +5284,14 @@ char *set_option_value(const char *const name, const long number, const char *co
     }
   }
   return NULL;
+}
+
+/// Return true if "name" is a string option.
+/// Returns false if option "name" does not exist.
+bool is_string_option(const char *name)
+{
+  int idx = findoption(name);
+  return idx >= 0 && (options[idx].flags & P_STRING);
 }
 
 // Translate a string like "t_xx", "<t_xx>" or "<S-Tab>" to a key number.
@@ -6971,7 +6963,7 @@ void set_context_in_set_cmd(expand_T *xp, char_u *arg, int opt_flags)
   }
 }
 
-int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char_u ***file)
+int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char ***file)
 {
   int num_normal = 0;  // Nr of matching non-term-code settings
   int match;
@@ -6993,7 +6985,7 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char_u ***
           if (loop == 0) {
             num_normal++;
           } else {
-            (*file)[count++] = vim_strsave((char_u *)names[match]);
+            (*file)[count++] = xstrdup(names[match]);
           }
         }
       }
@@ -7020,7 +7012,7 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char_u ***
         if (loop == 0) {
           num_normal++;
         } else {
-          (*file)[count++] = vim_strsave(str);
+          (*file)[count++] = (char *)vim_strsave(str);
         }
       }
     }
@@ -7031,18 +7023,18 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char_u ***
       } else {
         return OK;
       }
-      *file = (char_u **)xmalloc((size_t)(*num_file) * sizeof(char_u *));
+      *file = xmalloc((size_t)(*num_file) * sizeof(char_u *));
     }
   }
   return OK;
 }
 
-void ExpandOldSetting(int *num_file, char_u ***file)
+void ExpandOldSetting(int *num_file, char ***file)
 {
   char_u *var = NULL;
 
   *num_file = 0;
-  *file = (char_u **)xmalloc(sizeof(char_u *));
+  *file = xmalloc(sizeof(char_u *));
 
   /*
    * For a terminal key code expand_option_idx is < 0.
@@ -7077,7 +7069,7 @@ void ExpandOldSetting(int *num_file, char_u ***file)
   }
 #endif
 
-  *file[0] = buf;
+  *file[0] = (char *)buf;
   *num_file = 1;
 }
 
@@ -7889,16 +7881,15 @@ static bool briopt_check(win_T *wp)
   bool bri_sbr = false;
   int bri_list = 0;
 
-  char_u *p = wp->w_p_briopt;
-  while (*p != NUL)
-  {
+  char *p = (char *)wp->w_p_briopt;
+  while (*p != NUL) {
     if (STRNCMP(p, "shift:", 6) == 0
         && ((p[6] == '-' && ascii_isdigit(p[7])) || ascii_isdigit(p[6]))) {
       p += 6;
-      bri_shift = getdigits_int((char **)&p, true, 0);
+      bri_shift = getdigits_int(&p, true, 0);
     } else if (STRNCMP(p, "min:", 4) == 0 && ascii_isdigit(p[4])) {
       p += 4;
-      bri_min = getdigits_int((char **)&p, true, 0);
+      bri_min = getdigits_int(&p, true, 0);
     } else if (STRNCMP(p, "sbr", 3) == 0) {
       p += 3;
       bri_sbr = true;

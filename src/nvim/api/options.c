@@ -104,20 +104,20 @@ Object nvim_get_option_value(String name, Dict(option) *opts, Error *err)
 
   long numval = 0;
   char *stringval = NULL;
-  int result = access_option_value_for(name.data, &numval, &stringval, scope, opt_type, from,
-                                       true, err);
+  getoption_T result = access_option_value_for(name.data, &numval, &stringval, scope, opt_type,
+                                               from, true, err);
   if (ERROR_SET(err)) {
     return rv;
   }
 
   switch (result) {
-  case 0:
+  case gov_string:
     rv = STRING_OBJ(cstr_as_string(stringval));
     break;
-  case 1:
+  case gov_number:
     rv = INTEGER_OBJ(numval);
     break;
-  case 2:
+  case gov_bool:
     switch (numval) {
     case 0:
     case 1:
@@ -280,7 +280,7 @@ Object nvim_buf_get_option(Buffer buffer, String name, Error *err)
   return get_option_from(buf, SREQ_BUF, name, err);
 }
 
-/// Sets a buffer option value. Passing 'nil' as value deletes the option (only
+/// Sets a buffer option value. Passing `nil` as value deletes the option (only
 /// works if there's a global fallback)
 ///
 /// @param channel_id
@@ -318,7 +318,7 @@ Object nvim_win_get_option(Window window, String name, Error *err)
   return get_option_from(win, SREQ_WIN, name, err);
 }
 
-/// Sets a window option value. Passing 'nil' as value deletes the option(only
+/// Sets a window option value. Passing `nil` as value deletes the option (only
 /// works if there's a global fallback)
 ///
 /// @param channel_id
@@ -338,7 +338,7 @@ void nvim_win_set_option(uint64_t channel_id, Window window, String name, Object
   set_option_to(channel_id, win, SREQ_WIN, name, value, err);
 }
 
-/// Gets the value of a global or local(buffer, window) option.
+/// Gets the value of a global or local (buffer, window) option.
 ///
 /// @param from If `type` is `SREQ_WIN` or `SREQ_BUF`, this must be a pointer
 ///        to the window or buffer.
@@ -393,7 +393,7 @@ Object get_option_from(void *from, int type, String name, Error *err)
   return rv;
 }
 
-/// Sets the value of a global or local(buffer, window) option.
+/// Sets the value of a global or local (buffer, window) option.
 ///
 /// @param to If `type` is `SREQ_WIN` or `SREQ_BUF`, this must be a pointer
 ///        to the window or buffer.
@@ -483,8 +483,8 @@ void set_option_to(uint64_t channel_id, void *to, int type, String name, Object 
   });
 }
 
-static int access_option_value(char *key, long *numval, char **stringval, int opt_flags, bool get,
-                               Error *err)
+static getoption_T access_option_value(char *key, long *numval, char **stringval, int opt_flags,
+                                       bool get, Error *err)
 {
   if (get) {
     return get_option_value(key, numval, stringval, opt_flags);
@@ -501,13 +501,13 @@ static int access_option_value(char *key, long *numval, char **stringval, int op
   }
 }
 
-static int access_option_value_for(char *key, long *numval, char **stringval, int opt_flags,
-                                   int opt_type, void *from, bool get, Error *err)
+static getoption_T access_option_value_for(char *key, long *numval, char **stringval, int opt_flags,
+                                           int opt_type, void *from, bool get, Error *err)
 {
   bool need_switch = false;
   switchwin_T switchwin;
   aco_save_T aco;
-  int result = 0;
+  getoption_T result = 0;
 
   try_start();
   switch (opt_type) {

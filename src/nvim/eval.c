@@ -206,7 +206,7 @@ static struct vimvar {
   VV(VV_OLDFILES,         "oldfiles",         VAR_LIST, 0),
   VV(VV_WINDOWID,         "windowid",         VAR_NUMBER, VV_RO_SBX),
   VV(VV_PROGPATH,         "progpath",         VAR_STRING, VV_RO),
-  VV(VV_COMPLETED_ITEM,   "completed_item",   VAR_DICT, VV_RO),
+  VV(VV_COMPLETED_ITEM,   "completed_item",   VAR_DICT, 0),
   VV(VV_OPTION_NEW,       "option_new",       VAR_STRING, VV_RO),
   VV(VV_OPTION_OLD,       "option_old",       VAR_STRING, VV_RO),
   VV(VV_OPTION_OLDLOCAL,  "option_oldlocal",  VAR_STRING, VV_RO),
@@ -3774,7 +3774,7 @@ int get_option_tv(const char **const arg, typval_T *const rettv, const bool eval
 {
   long numval;
   char *stringval;
-  int opt_type;
+  getoption_T opt_type;
   bool working = (**arg == '+');  // has("+option")
   int ret = OK;
   int opt_flags;
@@ -3798,26 +3798,28 @@ int get_option_tv(const char **const arg, typval_T *const rettv, const bool eval
   opt_type = get_option_value(*arg, &numval,
                               rettv == NULL ? NULL : &stringval, opt_flags);
 
-  if (opt_type == -3) {                 // invalid name
+  if (opt_type == gov_unknown) {
     if (rettv != NULL) {
       semsg(_("E113: Unknown option: %s"), *arg);
     }
     ret = FAIL;
   } else if (rettv != NULL) {
-    if (opt_type == -2) {               // hidden string option
+    if (opt_type == gov_hidden_string) {
       rettv->v_type = VAR_STRING;
       rettv->vval.v_string = NULL;
-    } else if (opt_type == -1) {      // hidden number option
+    } else if (opt_type == gov_hidden_bool || opt_type == gov_hidden_number) {
       rettv->v_type = VAR_NUMBER;
       rettv->vval.v_number = 0;
-    } else if (opt_type == 1 || opt_type == 2) {  // number or boolean option
+    } else if (opt_type == gov_bool || opt_type == gov_number) {
       rettv->v_type = VAR_NUMBER;
       rettv->vval.v_number = numval;
     } else {                          // string option
       rettv->v_type = VAR_STRING;
       rettv->vval.v_string = stringval;
     }
-  } else if (working && (opt_type == -2 || opt_type == -1)) {
+  } else if (working && (opt_type == gov_hidden_bool
+                         || opt_type == gov_hidden_number
+                         || opt_type == gov_hidden_string)) {
     ret = FAIL;
   }
 

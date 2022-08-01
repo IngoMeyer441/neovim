@@ -96,119 +96,6 @@ local function test_cmdline(linegrid)
     ]]}
   end)
 
-  describe("redraws statusline on entering", function()
-    before_each(function()
-      command('set laststatus=2')
-      command('set statusline=%{mode()}')
-    end)
-
-    it('from normal mode', function()
-      screen:expect{grid=[[
-        ^                         |
-        {1:~                        }|
-        {1:~                        }|
-        {3:n                        }|
-                                 |
-      ]]}
-
-      feed(':')
-      screen:expect{grid=[[
-        ^                         |
-        {1:~                        }|
-        {1:~                        }|
-        {3:c                        }|
-                                 |
-      ]], cmdline={{
-        firstc = ":",
-        content = {{""}},
-        pos = 0,
-      }}}
-    end)
-
-    it('from normal mode when : is mapped', function()
-      command('nnoremap ; :')
-
-      screen:expect{grid=[[
-        ^                         |
-        {1:~                        }|
-        {1:~                        }|
-        {3:n                        }|
-                                 |
-      ]]}
-
-      feed(';')
-      screen:expect{grid=[[
-        ^                         |
-        {1:~                        }|
-        {1:~                        }|
-        {3:c                        }|
-                                 |
-      ]], cmdline={{
-        firstc = ":",
-        content = {{""}},
-        pos = 0,
-      }}}
-    end)
-
-    it('but not with scrolled messages', function()
-      screen:try_resize(35,10)
-      feed(':echoerr doesnotexist<cr>')
-      screen:expect{grid=[[
-                                           |
-        {1:~                                  }|
-        {1:~                                  }|
-        {1:~                                  }|
-        {1:~                                  }|
-        {3:                                   }|
-        {4:E121: Undefined variable: doesnotex}|
-        {4:ist}                                |
-        {5:Press ENTER or type command to cont}|
-        {5:inue}^                               |
-      ]]}
-      feed(':echoerr doesnotexist<cr>')
-      screen:expect{grid=[[
-                                           |
-        {1:~                                  }|
-        {3:                                   }|
-        {4:E121: Undefined variable: doesnotex}|
-        {4:ist}                                |
-        {5:Press ENTER or type command to cont}|
-        {4:E121: Undefined variable: doesnotex}|
-        {4:ist}                                |
-        {5:Press ENTER or type command to cont}|
-        {5:inue}^                               |
-      ]]}
-
-      feed(':echoerr doesnotexist<cr>')
-      screen:expect{grid=[[
-        {4:E121: Undefined variable: doesnotex}|
-        {4:ist}                                |
-        {5:Press ENTER or type command to cont}|
-        {4:E121: Undefined variable: doesnotex}|
-        {4:ist}                                |
-        {5:Press ENTER or type command to cont}|
-        {4:E121: Undefined variable: doesnotex}|
-        {4:ist}                                |
-        {5:Press ENTER or type command to cont}|
-        {5:inue}^                               |
-      ]]}
-
-      feed('<cr>')
-      screen:expect{grid=[[
-        ^                                   |
-        {1:~                                  }|
-        {1:~                                  }|
-        {1:~                                  }|
-        {1:~                                  }|
-        {1:~                                  }|
-        {1:~                                  }|
-        {1:~                                  }|
-        {3:n                                  }|
-                                           |
-      ]]}
-    end)
-  end)
-
   it("works with input()", function()
     feed(':call input("input", "default")<cr>')
     screen:expect{grid=[[
@@ -883,6 +770,154 @@ describe('cmdline redraw', function()
   end)
 end)
 
+describe('statusline is redrawn on entering cmdline', function()
+  local screen
+
+  before_each(function()
+    clear()
+    screen = new_screen()
+    command('set laststatus=2')
+  end)
+
+  it('from normal mode', function()
+    command('set statusline=%{mode()}')
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {3:n                        }|
+                               |
+    ]]}
+
+    feed(':')
+    screen:expect{grid=[[
+                               |
+      {1:~                        }|
+      {1:~                        }|
+      {3:c                        }|
+      :^                        |
+    ]]}
+  end)
+
+  it('from normal mode when : is mapped', function()
+    command('set statusline=%{mode()}')
+    command('nnoremap ; :')
+
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {3:n                        }|
+                               |
+    ]]}
+
+    feed(';')
+    screen:expect{grid=[[
+                               |
+      {1:~                        }|
+      {1:~                        }|
+      {3:c                        }|
+      :^                        |
+    ]]}
+  end)
+
+  it('but not with scrolled messages', function()
+    command('set statusline=%{mode()}')
+    screen:try_resize(35,10)
+    feed(':echoerr doesnotexist<cr>')
+    screen:expect{grid=[[
+                                         |
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {3:                                   }|
+      {4:E121: Undefined variable: doesnotex}|
+      {4:ist}                                |
+      {5:Press ENTER or type command to cont}|
+      {5:inue}^                               |
+    ]]}
+    feed(':echoerr doesnotexist<cr>')
+    screen:expect{grid=[[
+                                         |
+      {1:~                                  }|
+      {3:                                   }|
+      {4:E121: Undefined variable: doesnotex}|
+      {4:ist}                                |
+      {5:Press ENTER or type command to cont}|
+      {4:E121: Undefined variable: doesnotex}|
+      {4:ist}                                |
+      {5:Press ENTER or type command to cont}|
+      {5:inue}^                               |
+    ]]}
+
+    feed(':echoerr doesnotexist<cr>')
+    screen:expect{grid=[[
+      {4:E121: Undefined variable: doesnotex}|
+      {4:ist}                                |
+      {5:Press ENTER or type command to cont}|
+      {4:E121: Undefined variable: doesnotex}|
+      {4:ist}                                |
+      {5:Press ENTER or type command to cont}|
+      {4:E121: Undefined variable: doesnotex}|
+      {4:ist}                                |
+      {5:Press ENTER or type command to cont}|
+      {5:inue}^                               |
+    ]]}
+
+    feed('<cr>')
+    screen:expect{grid=[[
+      ^                                   |
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {3:n                                  }|
+                                         |
+    ]]}
+  end)
+
+  describe('if custom statusline is set by', function()
+    before_each(function()
+      command('set statusline=')
+      screen:expect{grid=[[
+        ^                         |
+        {1:~                        }|
+        {1:~                        }|
+        {3:[No Name]                }|
+                                 |
+      ]]}
+    end)
+
+    it('CmdlineEnter autocommand', function()
+      command('autocmd CmdlineEnter * set statusline=command')
+      feed(':')
+      screen:expect{grid=[[
+                                 |
+        {1:~                        }|
+        {1:~                        }|
+        {3:command                  }|
+        :^                        |
+      ]]}
+    end)
+
+    it('ModeChanged autocommand', function()
+      command('autocmd ModeChanged *:c set statusline=command')
+      feed(':')
+      screen:expect{grid=[[
+                                 |
+        {1:~                        }|
+        {1:~                        }|
+        {3:command                  }|
+        :^                        |
+      ]]}
+    end)
+  end)
+end)
+
 describe("cmdline height", function()
   it("does not crash resized screen #14263", function()
     clear()
@@ -1068,7 +1103,7 @@ describe('cmdheight=0', function()
       ~                        |
       ~                        |
       ~                        |
-      ~                        |
+      recording @q             |
     ]], showmode={}}
     feed('q')
     screen:expect{grid=[[

@@ -451,7 +451,7 @@ void terminal_enter(void)
   if (save_curwin == curwin->handle) {  // Else: window was closed.
     curwin->w_p_cul = save_w_p_cul;
     if (save_w_p_culopt) {
-      xfree(curwin->w_p_culopt);
+      free_string_option(curwin->w_p_culopt);
       curwin->w_p_culopt = save_w_p_culopt;
     }
     curwin->w_p_culopt_flags = save_w_p_culopt_flags;
@@ -459,7 +459,7 @@ void terminal_enter(void)
     curwin->w_p_so = save_w_p_so;
     curwin->w_p_siso = save_w_p_siso;
   } else if (save_w_p_culopt) {
-    xfree(save_w_p_culopt);
+    free_string_option(save_w_p_culopt);
   }
 
   // draw the unfocused cursor
@@ -1384,7 +1384,7 @@ static void fetch_row(Terminal *term, int row, int end_col)
     fetch_cell(term, row, col, &cell);
     if (cell.chars[0]) {
       int cell_len = 0;
-      for (int i = 0; cell.chars[i]; i++) {
+      for (int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell.chars[i]; i++) {
         cell_len += utf_char2bytes((int)cell.chars[i], ptr + cell_len);
       }
       ptr += cell_len;
