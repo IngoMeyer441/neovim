@@ -76,6 +76,7 @@
 #include "nvim/syntax.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
+#include "nvim/usercmd.h"
 #include "nvim/version.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -968,7 +969,7 @@ char *do_bufdel(int command, char *arg, int addr_count, int start_bnr, int end_b
   } else {
     if (addr_count == 2) {
       if (*arg) {               // both range and argument is not allowed
-        return _(e_trailing);
+        return ex_errmsg(e_trailing_arg, arg);
       }
       bnr = start_bnr;
     } else {    // addr_count == 1
@@ -3288,7 +3289,7 @@ void maketitle(void)
       len = (int)STRLEN(buf_p);
       if (len > 100) {
         len -= 100;
-        len += mb_tail_off(buf_p, buf_p + len) + 1;
+        len += utf_cp_tail_off(buf_p, buf_p + len) + 1;
         buf_p += len;
       }
       STRCPY(icon_str, buf_p);
@@ -5639,7 +5640,9 @@ void wipe_buffer(buf_T *buf, bool aucmd)
 void buf_open_scratch(handle_T bufnr, char *bufname)
 {
   (void)do_ecmd((int)bufnr, NULL, NULL, NULL, ECMD_ONE, ECMD_HIDE, NULL);
+  apply_autocmds(EVENT_BUFFILEPRE, NULL, NULL, false, curbuf);
   (void)setfname(curbuf, bufname, NULL, true);
+  apply_autocmds(EVENT_BUFFILEPOST, NULL, NULL, false, curbuf);
   set_option_value("bh", 0L, "hide", OPT_LOCAL);
   set_option_value("bt", 0L, "nofile", OPT_LOCAL);
   set_option_value("swf", 0L, NULL, OPT_LOCAL);

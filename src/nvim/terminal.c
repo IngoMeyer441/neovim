@@ -82,6 +82,7 @@ typedef struct terminal_state {
   int save_rd;              // saved value of RedrawingDisabled
   bool close;
   bool got_bsl;             // if the last input was <C-\>
+  bool got_bsl_o;           // if left terminal mode with <c-\><c-o>
 } TerminalState;
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -366,7 +367,12 @@ void terminal_check_size(Terminal *term)
   vterm_get_size(term->vt, &curheight, &curwidth);
   uint16_t width = 0, height = 0;
 
+  // Check if there is a window that displays the terminal and find the maximum width and height.
+  // Skip the autocommand window which isn't actually displayed.
   FOR_ALL_TAB_WINDOWS(tp, wp) {
+    if (wp == aucmd_win) {
+      continue;
+    }
     if (wp->w_buffer && wp->w_buffer->terminal == term) {
       const uint16_t win_width =
         (uint16_t)(MAX(0, wp->w_width_inner - win_col_off(wp)));
@@ -388,12 +394,11 @@ void terminal_check_size(Terminal *term)
 }
 
 /// Implements MODE_TERMINAL state. :help Terminal-mode
-void terminal_enter(void)
+bool terminal_enter(void)
 {
   buf_T *buf = curbuf;
   assert(buf->terminal);  // Should only be called when curbuf has a terminal.
-  TerminalState state, *s = &state;
-  memset(s, 0, sizeof(TerminalState));
+  TerminalState s[1] = { 0 };
   s->term = buf->terminal;
   stop_insert_mode = false;
 
@@ -443,7 +448,9 @@ void terminal_enter(void)
   s->state.check = terminal_check;
   state_enter(&s->state);
 
-  restart_edit = 0;
+  if (!s->got_bsl_o) {
+    restart_edit = 0;
+  }
   State = save_state;
   RedrawingDisabled = s->save_rd;
   apply_autocmds(EVENT_TERMLEAVE, NULL, NULL, false, curbuf);
@@ -467,7 +474,11 @@ void terminal_enter(void)
   if (curbuf->terminal == s->term && !s->close) {
     terminal_check_cursor();
   }
-  unshowmode(true);
+  if (restart_edit) {
+    showmode();
+  } else {
+    unshowmode(true);
+  }
   ui_busy_stop();
   if (s->close) {
     bool wipe = s->term->buf_handle != 0;
@@ -477,6 +488,8 @@ void terminal_enter(void)
       do_cmdline_cmd("bwipeout!");
     }
   }
+
+  return s->got_bsl_o;
 }
 
 static void terminal_check_cursor(void)
@@ -560,6 +573,14 @@ static int terminal_execute(VimState *state, int key)
 
   case Ctrl_N:
     if (s->got_bsl) {
+      return 0;
+    }
+    FALLTHROUGH;
+
+  case Ctrl_O:
+    if (s->got_bsl) {
+      s->got_bsl_o = true;
+      restart_edit = 'I';
       return 0;
     }
     FALLTHROUGH;

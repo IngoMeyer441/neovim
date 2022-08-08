@@ -21,7 +21,6 @@
 #include "nvim/event/loop.h"
 #include "nvim/event/time.h"
 #include "nvim/ex_cmds2.h"
-#include "nvim/ex_docmd.h"
 #include "nvim/ex_getln.h"
 #include "nvim/extmark.h"
 #include "nvim/func_attr.h"
@@ -40,6 +39,7 @@
 #include "nvim/profile.h"
 #include "nvim/screen.h"
 #include "nvim/undo.h"
+#include "nvim/usercmd.h"
 #include "nvim/version.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -2075,4 +2075,35 @@ int nlua_do_ucmd(ucmd_T *cmd, exarg_T *eap, bool preview)
   }
 
   return retv;
+}
+
+/// String representation of a Lua function reference
+///
+/// @return Allocated string
+char *nlua_funcref_str(LuaRef ref)
+{
+  lua_State *const lstate = global_lstate;
+  StringBuilder str = KV_INITIAL_VALUE;
+  kv_resize(str, 16);
+
+  if (!lua_checkstack(lstate, 1)) {
+    goto plain;
+  }
+  nlua_pushref(lstate, ref);
+  if (!lua_isfunction(lstate, -1)) {
+    lua_pop(lstate, 1);
+    goto plain;
+  }
+
+  lua_Debug ar;
+  if (lua_getinfo(lstate, ">S", &ar) && *ar.source == '@' && ar.linedefined >= 0) {
+    char *src = home_replace_save(NULL, ar.source + 1);
+    kv_printf(str, "<Lua %d: %s:%d>", ref, src, ar.linedefined);
+    xfree(src);
+    return str.items;
+  }
+
+plain:
+  kv_printf(str, "<Lua %d>", ref);
+  return str.items;
 }

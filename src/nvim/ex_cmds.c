@@ -3616,7 +3616,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
   if (*cmd && *cmd != '"') {        // if not end-of-line or comment
     eap->nextcmd = (char *)check_nextcmd((char_u *)cmd);
     if (eap->nextcmd == NULL) {
-      emsg(_(e_trailing));
+      semsg(_(e_trailing_arg), cmd);
       return 0;
     }
   }
@@ -5054,7 +5054,7 @@ int find_help_tags(const char *arg, int *num_matches, char ***matches, bool keep
   int i;
 
   // Specific tags that either have a specific replacement or won't go
-  // throught the generic rules.
+  // through the generic rules.
   static char *(except_tbl[][2]) = {
     { "*",           "star" },
     { "g*",          "gstar" },

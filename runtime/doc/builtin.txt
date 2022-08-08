@@ -132,12 +132,12 @@ executable({expr})		Number	1 if executable {expr} exists
 execute({command})		String	execute and capture output of {command}
 exepath({expr})			String	full path of the command {expr}
 exists({expr})			Number	|TRUE| if {expr} exists
-extend({expr1}, {expr2} [, {expr3}])
-				List/Dict insert items of {expr2} into {expr1}
 exp({expr})			Float	exponential of {expr}
 expand({expr} [, {nosuf} [, {list}]])
 				any	expand special keywords in {expr}
 expandcmd({expr})		String	expand {expr} like with `:edit`
+extend({expr1}, {expr2} [, {expr3}])
+				List/Dict insert items of {expr2} into {expr1}
 feedkeys({string} [, {mode}])	Number	add key sequence to typeahead buffer
 filereadable({file})		Number	|TRUE| if {file} is a readable file
 filewritable({file})		Number	|TRUE| if {file} is a writable file
@@ -243,8 +243,8 @@ histadd({history}, {item})	String	add an item to a history
 histdel({history} [, {item}])	String	remove an item from a history
 histget({history} [, {index}])	String	get the item {index} from a history
 histnr({history})		Number	highest index of a history
-hlexists({name})		Number	|TRUE| if highlight group {name} exists
 hlID({name})			Number	syntax ID of highlight group {name}
+hlexists({name})		Number	|TRUE| if highlight group {name} exists
 hostname()			String	name of the machine Vim is running on
 iconv({expr}, {from}, {to})	String	convert encoding of {expr}
 indent({lnum})			Number	indent of line {lnum}
@@ -295,6 +295,8 @@ maparg({name} [, {mode} [, {abbr} [, {dict}]]])
 					rhs of mapping {name} in mode {mode}
 mapcheck({name} [, {mode} [, {abbr}]])
 				String	check for mappings matching {name}
+mapset({mode}, {abbr}, {dict})
+				none	restore mapping from |maparg()| result
 match({expr}, {pat} [, {start} [, {count}]])
 				Number	position where {pat} matches in {expr}
 matchadd({group}, {pattern} [, {priority} [, {id} [, {dict}]]])
@@ -317,6 +319,7 @@ matchstrpos({expr}, {pat} [, {start} [, {count}]])
 				List	{count}'th match of {pat} in {expr}
 max({expr})			Number	maximum value of items in {expr}
 menu_get({path} [, {modes}])	List	description of |menus| matched by {path}
+menu_info({name} [, {mode}])	Dict	get menu item information
 min({expr})			Number	minimum value of items in {expr}
 mkdir({name} [, {path} [, {prot}]])
 				Number	create directory {name}
@@ -338,8 +341,8 @@ prompt_setinterrupt({buf}, {text}) none	set prompt interrupt function
 prompt_setprompt({buf}, {text}) none	set prompt text
 pum_getpos()			Dict	position and size of pum if visible
 pumvisible()			Number	whether popup menu is visible
-pyeval({expr})			any	evaluate |Python| expression
 py3eval({expr})			any	evaluate |python3| expression
+pyeval({expr})			any	evaluate |Python| expression
 pyxeval({expr})			any	evaluate |python_x| expression
 rand([{expr}])			Number	get pseudo-random number
 range({expr} [, {max} [, {stride}]])
@@ -458,10 +461,10 @@ str2list({expr} [, {utf8}])	List	convert each character of {expr} to
 					ASCII/UTF-8 value
 str2nr({expr} [, {base} [, {quoted}]])
 				Number	convert String to Number
-strchars({expr} [, {skipcc}])	Number	character length of the String {expr}
 strcharpart({str}, {start} [, {len}])
 				String	{len} characters of {str} at
 					character {start}
+strchars({expr} [, {skipcc}])	Number	character length of the String {expr}
 strdisplaywidth({expr} [, {col}]) Number display length of the String {expr}
 strftime({format} [, {time}])	String	format time with a specified format
 strgetchar({str}, {index})	Number	get char {index} from {str}
@@ -496,8 +499,8 @@ tabpagebuflist([{arg}])		List	list of buffer numbers in tab page
 tabpagenr([{arg}])		Number	number of current or last tab page
 tabpagewinnr({tabarg} [, {arg}])
 				Number	number of current window in tab page
-taglist({expr} [, {filename}])	List	list of tags matching {expr}
 tagfiles()			List	tags files used
+taglist({expr} [, {filename}])	List	list of tags matching {expr}
 tan({expr})			Float	tangent of {expr}
 tanh({expr})			Float	hyperbolic tangent of {expr}
 tempname()			String	name for a temporary file
@@ -2138,7 +2141,7 @@ feedkeys({string} [, {mode}])				*feedkeys()*
 			script continues.
 			Note that if you manage to call feedkeys() while
 			executing commands, thus calling it recursively, then
-			all typehead will be consumed by the last call.
+			all typeahead will be consumed by the last call.
 		'!'	When used with 'x' will not end Insert mode. Can be
 			used in a test when a timer is set to exit Insert mode
 			a little later.  Useful for testing CursorHoldI.
@@ -2171,7 +2174,7 @@ filewritable({file})					*filewritable()*
 		directory, and we can write to it, the result is 2.
 
 		Can also be used as a |method|: >
-			GetName()->filewriteable()
+			GetName()->filewritable()
 
 filter({expr1}, {expr2})					*filter()*
 		{expr1} must be a |List|, |Blob|, or a |Dictionary|.
@@ -3254,7 +3257,7 @@ getmousepos()						*getmousepos()*
 		"screenrow" and "screencol" are valid, the others are zero.
 
 		When on the status line below a window or the vertical
-		separater right of a window, the "line" and "column" values
+		separator right of a window, the "line" and "column" values
 		are zero.
 
 		When the position is after the text then "column" is the
@@ -4716,6 +4719,7 @@ map({expr1}, {expr2})					*map()*
 		Can also be used as a |method|: >
 			mylist->map(expr2)
 
+
 maparg({name} [, {mode} [, {abbr} [, {dict}]]])			*maparg()*
 		When {dict} is omitted or zero: Return the rhs of mapping
 		{name} in mode {mode}.  The returned String has special
@@ -4749,7 +4753,10 @@ maparg({name} [, {mode} [, {abbr} [, {dict}]]])			*maparg()*
 		When {dict} is there and it is |TRUE| return a dictionary
 		containing all the information of the mapping with the
 		following items:
-		  "lhs"	     The {lhs} of the mapping.
+		  "lhs"	     The {lhs} of the mapping as it would be typed
+		  "lhsraw"   The {lhs} of the mapping as raw bytes
+		  "lhsrawalt" The {lhs} of the mapping as raw bytes, alternate
+		  	      form, only present when it differs from "lhsraw"
 		  "rhs"	     The {rhs} of the mapping as typed.
 		  "silent"   1 for a |:map-silent| mapping, else 0.
 		  "noremap"  1 if the {rhs} of the mapping is not remappable.
@@ -4767,6 +4774,9 @@ maparg({name} [, {mode} [, {abbr} [, {dict}]]])			*maparg()*
 		  "lnum"     The line number in "sid", zero if unknown.
 		  "nowait"   Do not wait for other, longer mappings.
 			     (|:map-<nowait>|).
+
+		The dictionary can be used to restore a mapping with
+		|mapset()|.
 
 		The mappings local to the current buffer are checked first,
 		then the global mappings.
@@ -4812,6 +4822,22 @@ mapcheck({name} [, {mode} [, {abbr}]])			*mapcheck()*
 
 		Can also be used as a |method|: >
 			GetKey()->mapcheck('n')
+
+mapset({mode}, {abbr}, {dict})				*mapset()*
+		Restore a mapping from a dictionary returned by |maparg()|.
+		{mode} and {abbr} should be the same as for the call to
+		|maparg()|. *E460*
+		{mode} is used to define the mode in which the mapping is set,
+		not the "mode" entry in {dict}.
+		Example for saving and restoring a mapping: >
+			let save_map = maparg('K', 'n', 0, 1)
+			nnoremap K somethingelse
+			...
+			call mapset('n', 0, save_map)
+<		Note that if you are going to replace a map in several modes,
+		e.g. with `:map!`, you need to save the mapping for all of
+		them, since they can differ.
+
 
 match({expr}, {pat} [, {start} [, {count}]])			*match()*
 		When {expr} is a |List| then this returns the index of the
@@ -5169,6 +5195,7 @@ matchstrpos({expr}, {pat} [, {start} [, {count}]])		*matchstrpos()*
 		Can also be used as a |method|: >
 			GetText()->matchstrpos('word')
 <
+
 							*max()*
 max({expr})	Return the maximum value of all items in {expr}. Example: >
 			echo max([apples, pears, oranges])
@@ -5181,6 +5208,7 @@ max({expr})	Return the maximum value of all items in {expr}. Example: >
 
 		Can also be used as a |method|: >
 			mylist->max()
+
 
 menu_get({path} [, {modes}])				*menu_get()*
 		Returns a |List| of |Dictionaries| describing |menus| (defined
@@ -5228,7 +5256,81 @@ menu_get({path} [, {modes}])				*menu_get()*
 			} ]
 <
 
-							*min()*
+menu_info({name} [, {mode}])				*menu_info()*
+		Return information about the specified menu {name} in
+		mode {mode}. The menu name should be specified without the
+		shortcut character ('&'). If {name} is "", then the top-level
+		menu names are returned.
+
+		{mode} can be one of these strings:
+			"n"	Normal
+			"v"	Visual (including Select)
+			"o"	Operator-pending
+			"i"	Insert
+			"c"	Cmd-line
+			"s"	Select
+			"x"	Visual
+			"t"	Terminal-Job
+			""	Normal, Visual and Operator-pending
+			"!"	Insert and Cmd-line
+		When {mode} is omitted, the modes for "" are used.
+
+		Returns a |Dictionary| containing the following items:
+		  accel		menu item accelerator text |menu-text|
+		  display	display name (name without '&')
+		  enabled	v:true if this menu item is enabled
+				Refer to |:menu-enable|
+		  icon		name of the icon file (for toolbar)
+				|toolbar-icon|
+		  iconidx	index of a built-in icon
+		  modes		modes for which the menu is defined. In
+				addition to the modes mentioned above, these
+				characters will be used:
+				" "	Normal, Visual and Operator-pending
+		  name		menu item name.
+		  noremenu	v:true if the {rhs} of the menu item is not
+				remappable else v:false.
+		  priority	menu order priority |menu-priority|
+		  rhs		right-hand-side of the menu item. The returned
+				string has special characters translated like
+				in the output of the ":menu" command listing.
+				When the {rhs} of a menu item is empty, then
+				"<Nop>" is returned.
+		  script	v:true if script-local remapping of {rhs} is
+				allowed else v:false.  See |:menu-script|.
+		  shortcut	shortcut key (character after '&' in
+				the menu name) |menu-shortcut|
+		  silent	v:true if the menu item is created
+				with <silent> argument |:menu-silent|
+		  submenus	|List| containing the names of
+				all the submenus.  Present only if the menu
+				item has submenus.
+
+		Returns an empty dictionary if the menu item is not found.
+
+		Examples: >
+			:echo menu_info('Edit.Cut')
+			:echo menu_info('File.Save', 'n')
+
+			" Display the entire menu hierarchy in a buffer
+			func ShowMenu(name, pfx)
+			  let m = menu_info(a:name)
+			  call append(line('$'), a:pfx .. m.display)
+			  for child in m->get('submenus', [])
+			    call ShowMenu(a:name .. '.' .. escape(child, '.'),
+							\ a:pfx .. '    ')
+			  endfor
+			endfunc
+			new
+			for topmenu in menu_info('').submenus
+			  call ShowMenu(topmenu, '')
+			endfor
+<
+		Can also be used as a |method|: >
+			GetMenuName()->menu_info('v')
+
+
+<							*min()*
 min({expr})	Return the minimum value of all items in {expr}. Example:  >
 			echo min([apples, pears, oranges])
 
@@ -5286,6 +5388,7 @@ mode([expr])	Return a string that indicates the current mode.
 		   niV	    Normal using |i_CTRL-O| in |Virtual-Replace-mode|
 		   nt	    Normal in |terminal-emulator| (insert goes to
 				Terminal mode)
+		   ntT	    Normal using |t_CTRL-\_CTRL-O| in |Terminal-mode|
 		   v	    Visual by character
 		   vs	    Visual by character using |v_CTRL-O| in Select mode
 		   V	    Visual by line
@@ -6459,8 +6562,10 @@ searchcount([{options}])					*searchcount()*
 		  recompute	|Boolean|	if |TRUE|, recompute the count
 						like |n| or |N| was executed.
 						otherwise returns the last
-						result by |n|, |N|, or this
-						function is returned.
+						computed result (when |n| or
+						|N| was used when "S" is not
+						in 'shortmess', or this
+						function was called).
 						(default: |TRUE|)
 		  pattern	|String|	recompute if this was given
 						and different with |@/|.
