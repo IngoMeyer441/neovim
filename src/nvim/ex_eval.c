@@ -16,12 +16,12 @@
 #include "nvim/debugger.h"
 #include "nvim/eval.h"
 #include "nvim/eval/userfunc.h"
-#include "nvim/ex_cmds2.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/regexp.h"
+#include "nvim/runtime.h"
 #include "nvim/strings.h"
 #include "nvim/vim.h"
 
@@ -151,8 +151,8 @@ int aborted_in_try(void)
 bool cause_errthrow(const char *mesg, bool severe, bool *ignore)
   FUNC_ATTR_NONNULL_ALL
 {
-  struct msglist *elem;
-  struct msglist **plist;
+  msglist_T *elem;
+  msglist_T **plist;
 
   /*
    * Do nothing when displaying the interrupt message or reporting an
@@ -254,7 +254,7 @@ bool cause_errthrow(const char *mesg, bool severe, bool *ignore)
         plist = &(*plist)->next;
       }
 
-      elem = xmalloc(sizeof(struct msglist));
+      elem = xmalloc(sizeof(msglist_T));
       elem->msg = xstrdup(mesg);
       elem->next = NULL;
       elem->throw_msg = NULL;
@@ -275,20 +275,26 @@ bool cause_errthrow(const char *mesg, bool severe, bool *ignore)
           (*msg_list)->throw_msg = tmsg;
         }
       }
+
+      // Get the source name and lnum now, it may change before
+      // reaching do_errthrow().
+      elem->sfile = estack_sfile(ESTACK_NONE);
+      elem->slnum = SOURCING_LNUM;
     }
     return true;
   }
 }
 
 /// Free a "msg_list" and the messages it contains.
-static void free_msglist(struct msglist *l)
+static void free_msglist(msglist_T *l)
 {
-  struct msglist *messages, *next;
+  msglist_T *messages, *next;
 
   messages = l;
   while (messages != NULL) {
     next = messages->next;
     xfree(messages->msg);
+    xfree(messages->sfile);
     xfree(messages);
     messages = next;
   }
@@ -389,7 +395,7 @@ char *get_exception_string(void *value, except_type_T type, char *cmdname, int *
 
   if (type == ET_ERROR) {
     *should_free = true;
-    mesg = ((struct msglist *)value)->throw_msg;
+    mesg = ((msglist_T *)value)->throw_msg;
     if (cmdname != NULL && *cmdname != NUL) {
       size_t cmdlen = STRLEN(cmdname);
       ret = xstrnsave("Vim(", 4 + cmdlen + 2 + STRLEN(mesg));
@@ -469,7 +475,7 @@ static int throw_exception(void *value, except_type_T type, char *cmdname)
   if (type == ET_ERROR) {
     // Store the original message and prefix the exception value with
     // "Vim:" or, if a command name is given, "Vim(cmdname):".
-    excp->messages = (struct msglist *)value;
+    excp->messages = (msglist_T *)value;
   }
 
   excp->value = get_exception_string(value, type, cmdname, &should_free);
@@ -478,8 +484,18 @@ static int throw_exception(void *value, except_type_T type, char *cmdname)
   }
 
   excp->type = type;
-  excp->throw_name = xstrdup(sourcing_name == NULL ? "" : sourcing_name);
-  excp->throw_lnum = sourcing_lnum;
+  if (type == ET_ERROR && ((msglist_T *)value)->sfile != NULL) {
+    msglist_T *entry = (msglist_T *)value;
+    excp->throw_name = entry->sfile;
+    entry->sfile = NULL;
+    excp->throw_lnum = entry->slnum;
+  } else {
+    excp->throw_name = estack_sfile(ESTACK_NONE);
+    if (excp->throw_name == NULL) {
+      excp->throw_name = xstrdup("");
+    }
+    excp->throw_lnum = SOURCING_LNUM;
+  }
 
   if (p_verbose >= 13 || debug_break_level > 0) {
     int save_msg_silent = msg_silent;

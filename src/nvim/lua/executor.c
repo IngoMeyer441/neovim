@@ -15,12 +15,12 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/change.h"
 #include "nvim/cursor.h"
+#include "nvim/eval.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/time.h"
-#include "nvim/ex_cmds2.h"
 #include "nvim/ex_getln.h"
 #include "nvim/extmark.h"
 #include "nvim/func_attr.h"
@@ -37,6 +37,7 @@
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/os/os.h"
 #include "nvim/profile.h"
+#include "nvim/runtime.h"
 #include "nvim/screen.h"
 #include "nvim/undo.h"
 #include "nvim/usercmd.h"
@@ -447,7 +448,7 @@ static nlua_ref_state_t *nlua_new_ref_state(lua_State *lstate, bool is_thread)
   FUNC_ATTR_NONNULL_ALL
 {
   nlua_ref_state_t *ref_state = lua_newuserdata(lstate, sizeof(*ref_state));
-  memset(ref_state, 0, sizeof(*ref_state));
+  CLEAR_POINTER(ref_state);
   ref_state->nil_ref = LUA_NOREF;
   ref_state->empty_dict_ref = LUA_NOREF;
   if (!is_thread) {
@@ -1313,12 +1314,11 @@ static void nlua_typval_exec(const char *lcmd, size_t lcmd_len, const char *name
 
 int nlua_source_using_linegetter(LineGetter fgetline, void *cookie, char *name)
 {
-  const linenr_T save_sourcing_lnum = sourcing_lnum;
   const sctx_T save_current_sctx = current_sctx;
   current_sctx.sc_sid = SID_STR;
   current_sctx.sc_seq = 0;
   current_sctx.sc_lnum = 0;
-  sourcing_lnum = 0;
+  estack_push(ETYPE_SCRIPT, NULL, 0);
 
   garray_T ga;
   char_u *line = NULL;
@@ -1331,7 +1331,7 @@ int nlua_source_using_linegetter(LineGetter fgetline, void *cookie, char *name)
   size_t len = strlen(code);
   nlua_typval_exec(code, len, name, NULL, 0, false, NULL);
 
-  sourcing_lnum = save_sourcing_lnum;
+  estack_pop();
   current_sctx = save_current_sctx;
   ga_clear_strings(&ga);
   xfree(code);
@@ -1906,7 +1906,7 @@ void nlua_set_sctx(sctx_T *current)
     break;
   }
   char *source_path = fix_fname(info->source + 1);
-  get_current_script_id((char_u *)source_path, current);
+  get_current_script_id(&source_path, current);
   xfree(source_path);
   current->sc_lnum = info->currentline;
   current->sc_seq = -1;

@@ -16,11 +16,12 @@
 #include "nvim/ascii.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
+#include "nvim/cmdhist.h"
 #include "nvim/eval/decode.h"
 #include "nvim/eval/encode.h"
 #include "nvim/eval/typval.h"
+#include "nvim/ex_cmds.h"
 #include "nvim/ex_docmd.h"
-#include "nvim/ex_getln.h"
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
 #include "nvim/globals.h"
@@ -2188,7 +2189,7 @@ static inline ShaDaWriteResult shada_read_when_writing(ShaDaReadDef *const sd_re
       k = kh_put(file_marks, &wms->file_marks, fname, &kh_ret);
       FileMarks *const filemarks = &kh_val(&wms->file_marks, k);
       if (kh_ret > 0) {
-        memset(filemarks, 0, sizeof(*filemarks));
+        CLEAR_POINTER(filemarks);
       }
       if (entry.timestamp > filemarks->greatest_timestamp) {
         filemarks->greatest_timestamp = entry.timestamp;
@@ -2449,6 +2450,27 @@ static inline void find_removable_bufs(khash_t(bufset) *removable_bufs)
       (void)kh_put(bufset, removable_bufs, (uintptr_t)buf, &kh_ret);
     }
   }
+}
+
+/// Translate a history type number to the associated character
+static int hist_type2char(const int type)
+  FUNC_ATTR_CONST
+{
+  switch (type) {
+  case HIST_CMD:
+    return ':';
+  case HIST_SEARCH:
+    return '/';
+  case HIST_EXPR:
+    return '=';
+  case HIST_INPUT:
+    return '@';
+  case HIST_DEBUG:
+    return '>';
+  default:
+    abort();
+  }
+  return NUL;
 }
 
 /// Write ShaDa file
@@ -2730,7 +2752,7 @@ static ShaDaWriteResult shada_write(ShaDaWriteDef *const sd_writer, ShaDaReadDef
       k = kh_put(file_marks, &wms->file_marks, fname, &kh_ret);
       FileMarks *const filemarks = &kh_val(&wms->file_marks, k);
       if (kh_ret > 0) {
-        memset(filemarks, 0, sizeof(*filemarks));
+        CLEAR_POINTER(filemarks);
       }
       do {
         fmark_T fm;
@@ -3456,7 +3478,7 @@ shada_read_next_item_start:
   // data union are NULL so they are safe to xfree(). This is needed in case
   // somebody calls goto shada_read_next_item_error before anything is set in
   // the switch.
-  memset(entry, 0, sizeof(*entry));
+  CLEAR_POINTER(entry);
   if (sd_reader->eof) {
     return kSDReadStatusFinished;
   }

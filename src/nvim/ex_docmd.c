@@ -13,6 +13,7 @@
 #include "nvim/buffer.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
+#include "nvim/cmdhist.h"
 #include "nvim/cursor.h"
 #include "nvim/debugger.h"
 #include "nvim/diff.h"
@@ -63,6 +64,7 @@
 #include "nvim/os_unix.h"
 #include "nvim/path.h"
 #include "nvim/popupmnu.h"
+#include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
 #include "nvim/screen.h"
@@ -319,8 +321,8 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
   int *dbg_tick = NULL;            // ptr to dbg_tick field in cookie
   struct dbg_stuff debug_saved;         // saved things for debug mode
   int initial_trylevel;
-  struct msglist **saved_msg_list = NULL;
-  struct msglist *private_msg_list;
+  msglist_T **saved_msg_list = NULL;
+  msglist_T *private_msg_list;
 
   // "fgetline" and "cookie" passed to do_one_cmd()
   char *(*cmd_getline)(int, void *, int, bool);
@@ -371,7 +373,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
     breakpoint = func_breakpoint(real_cookie);
     dbg_tick = func_dbg_tick(real_cookie);
   } else if (getline_equal(fgetline, cookie, getsourceline)) {
-    fname = sourcing_name;
+    fname = SOURCING_NAME;
     breakpoint = source_breakpoint(real_cookie);
     dbg_tick = source_dbg_tick(real_cookie);
   }
@@ -390,7 +392,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
   if (flags & DOCMD_EXCRESET) {
     save_dbg_stuff(&debug_saved);
   } else {
-    memset(&debug_saved, 0, sizeof(debug_saved));
+    CLEAR_FIELD(debug_saved);
   }
 
   initial_trylevel = trylevel;
@@ -464,20 +466,19 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
       if (breakpoint != NULL && dbg_tick != NULL
           && *dbg_tick != debug_tick) {
         *breakpoint = dbg_find_breakpoint(getline_equal(fgetline, cookie, getsourceline),
-                                          (char_u *)fname, sourcing_lnum);
+                                          (char_u *)fname, SOURCING_LNUM);
         *dbg_tick = debug_tick;
       }
 
       next_cmdline = ((wcmd_T *)(lines_ga.ga_data))[current_line].line;
-      sourcing_lnum = ((wcmd_T *)(lines_ga.ga_data))[current_line].lnum;
+      SOURCING_LNUM = ((wcmd_T *)(lines_ga.ga_data))[current_line].lnum;
 
       // Did we encounter a breakpoint?
-      if (breakpoint != NULL && *breakpoint != 0
-          && *breakpoint <= sourcing_lnum) {
-        dbg_breakpoint((char_u *)fname, sourcing_lnum);
+      if (breakpoint != NULL && *breakpoint != 0 && *breakpoint <= SOURCING_LNUM) {
+        dbg_breakpoint((char_u *)fname, SOURCING_LNUM);
         // Find next breakpoint.
         *breakpoint = dbg_find_breakpoint(getline_equal(fgetline, cookie, getsourceline),
-                                          (char_u *)fname, sourcing_lnum);
+                                          (char_u *)fname, SOURCING_LNUM);
         *dbg_tick = debug_tick;
       }
       if (do_profiling == PROF_YES) {
@@ -580,8 +581,8 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
       }
     }
 
-    if ((p_verbose >= 15 && sourcing_name != NULL) || p_verbose >= 16) {
-      msg_verbose_cmd(sourcing_lnum, cmdline_copy);
+    if ((p_verbose >= 15 && SOURCING_NAME != NULL) || p_verbose >= 16) {
+      msg_verbose_cmd(SOURCING_LNUM, cmdline_copy);
     }
 
     /*
@@ -601,10 +602,9 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
 
     if (next_cmdline == NULL) {
       XFREE_CLEAR(cmdline_copy);
-      //
+
       // If the command was typed, remember it for the ':' register.
       // Do this AFTER executing the command to make :@: work.
-      //
       if (getline_equal(fgetline, cookie, getexline)
           && new_last_cmdline != NULL) {
         xfree(last_cmdline);
@@ -682,7 +682,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
      */
     if (cstack.cs_looplevel == 0) {
       if (!GA_EMPTY(&lines_ga)) {
-        sourcing_lnum = ((wcmd_T *)lines_ga.ga_data)[lines_ga.ga_len - 1].lnum;
+        SOURCING_LNUM = ((wcmd_T *)lines_ga.ga_data)[lines_ga.ga_len - 1].lnum;
         GA_DEEP_CLEAR(&lines_ga, wcmd_T, FREE_WCMD);
       }
       current_line = 0;
@@ -799,10 +799,8 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
     // commands are executed.
     if (current_exception) {
       char *p = NULL;
-      char *saved_sourcing_name;
-      linenr_T saved_sourcing_lnum;
-      struct msglist *messages = NULL;
-      struct msglist *next;
+      msglist_T *messages = NULL;
+      msglist_T *next;
 
       /*
        * If the uncaught exception is a user exception, report it as an
@@ -825,10 +823,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
         break;
       }
 
-      saved_sourcing_name = sourcing_name;
-      saved_sourcing_lnum = sourcing_lnum;
-      sourcing_name = current_exception->throw_name;
-      sourcing_lnum = current_exception->throw_lnum;
+      estack_push(ETYPE_EXCEPT, current_exception->throw_name, current_exception->throw_lnum);
       current_exception->throw_name = NULL;
 
       discard_current_exception();              // uses IObuff if 'verbose'
@@ -848,9 +843,8 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
         emsg(p);
         xfree(p);
       }
-      xfree(sourcing_name);
-      sourcing_name = saved_sourcing_name;
-      sourcing_lnum = saved_sourcing_lnum;
+      xfree(SOURCING_NAME);
+      estack_pop();
     } else if (got_int || (did_emsg && force_abort)) {
       // On an interrupt or an aborting error not converted to an exception,
       // disable the conversion of errors to exceptions.  (Interrupts are not
@@ -978,7 +972,7 @@ static char *get_loop_line(int c, void *cookie, int indent, bool do_concat)
   KeyTyped = false;
   cp->current_line++;
   wp = (wcmd_T *)(cp->lines_gap->ga_data) + cp->current_line;
-  sourcing_lnum = wp->lnum;
+  SOURCING_LNUM = wp->lnum;
   return xstrdup(wp->line);
 }
 
@@ -987,7 +981,7 @@ static void store_loop_line(garray_T *gap, char *line)
 {
   wcmd_T *p = GA_APPEND_VIA_PTR(wcmd_T, gap);
   p->line = xstrdup(line);
-  p->lnum = sourcing_lnum;
+  p->lnum = SOURCING_LNUM;
 }
 
 /// If "fgetline" is get_loop_line(), return TRUE if the getline it uses equals
@@ -1428,16 +1422,17 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
   char *after_modifier = NULL;
 
   // Initialize cmdinfo
-  memset(cmdinfo, 0, sizeof(*cmdinfo));
+  CLEAR_POINTER(cmdinfo);
 
   // Initialize eap
-  memset(eap, 0, sizeof(*eap));
-  eap->line1 = 1;
-  eap->line2 = 1;
-  eap->cmd = cmdline;
-  eap->cmdlinep = &cmdline;
-  eap->getline = NULL;
-  eap->cookie = NULL;
+  *eap = (exarg_T){
+    .line1 = 1,
+    .line2 = 1,
+    .cmd = cmdline,
+    .cmdlinep = &cmdline,
+    .getline = NULL,
+    .cookie = NULL,
+  };
 
   const bool save_ex_pressedreturn = ex_pressedreturn;
   // Parse command modifiers
@@ -1877,10 +1872,10 @@ static char *do_one_cmd(char **cmdlinep, int flags, cstack_T *cstack, LineGetter
   const int save_reg_executing = reg_executing;
   const bool save_pending_end_reg_executing = pending_end_reg_executing;
 
-  exarg_T ea;
-  memset(&ea, 0, sizeof(ea));
-  ea.line1 = 1;
-  ea.line2 = 1;
+  exarg_T ea = {
+    .line1 = 1,
+    .line2 = 1,
+  };
   ex_nesting_level++;
 
   // When the last file has not been edited :q has to be typed twice.
@@ -2886,7 +2881,7 @@ static void append_command(char *cmd)
     } else if ((char_u *)d - IObuff + utfc_ptr2len(s) + 1 >= IOSIZE) {
       break;
     } else {
-      mb_copy_char((const char_u **)&s, (char_u **)&d);
+      mb_copy_char((const char **)&s, &d);
     }
   }
   *d = NUL;
@@ -3785,7 +3780,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
         } else if (context == EXPAND_COMMANDS) {
           return arg;
         } else if (context == EXPAND_MAPPINGS) {
-          return (const char *)set_context_in_map_cmd(xp, (char_u *)"map", (char_u *)arg, forceit,
+          return (const char *)set_context_in_map_cmd(xp, "map", (char_u *)arg, forceit,
                                                       false, false,
                                                       CMD_map);
         }
@@ -3823,7 +3818,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
   case CMD_snoremap:
   case CMD_xmap:
   case CMD_xnoremap:
-    return (const char *)set_context_in_map_cmd(xp, (char_u *)cmd, (char_u *)arg, forceit, false,
+    return (const char *)set_context_in_map_cmd(xp, (char *)cmd, (char_u *)arg, forceit, false,
                                                 false, ea.cmdidx);
   case CMD_unmap:
   case CMD_nunmap:
@@ -3834,7 +3829,7 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
   case CMD_lunmap:
   case CMD_sunmap:
   case CMD_xunmap:
-    return (const char *)set_context_in_map_cmd(xp, (char_u *)cmd, (char_u *)arg, forceit, false,
+    return (const char *)set_context_in_map_cmd(xp, (char *)cmd, (char_u *)arg, forceit, false,
                                                 true, ea.cmdidx);
   case CMD_mapclear:
   case CMD_nmapclear:
@@ -3855,12 +3850,12 @@ const char *set_one_cmd_context(expand_T *xp, const char *buff)
   case CMD_cnoreabbrev:
   case CMD_iabbrev:
   case CMD_inoreabbrev:
-    return (const char *)set_context_in_map_cmd(xp, (char_u *)cmd, (char_u *)arg, forceit, true,
+    return (const char *)set_context_in_map_cmd(xp, (char *)cmd, (char_u *)arg, forceit, true,
                                                 false, ea.cmdidx);
   case CMD_unabbreviate:
   case CMD_cunabbrev:
   case CMD_iunabbrev:
-    return (const char *)set_context_in_map_cmd(xp, (char_u *)cmd, (char_u *)arg, forceit, true,
+    return (const char *)set_context_in_map_cmd(xp, (char *)cmd, (char_u *)arg, forceit, true,
                                                 true, ea.cmdidx);
   case CMD_menu:
   case CMD_noremenu:
@@ -6021,12 +6016,11 @@ theend:
 /// Open a new tab page.
 void tabpage_new(void)
 {
-  exarg_T ea;
-
-  memset(&ea, 0, sizeof(ea));
-  ea.cmdidx = CMD_tabnew;
-  ea.cmd = "tabn";
-  ea.arg = "";
+  exarg_T ea = {
+    .cmdidx = CMD_tabnew,
+    .cmd = "tabn",
+    .arg = "",
+  };
   ex_splitview(&ea);
 }
 
@@ -7725,6 +7719,7 @@ ssize_t find_cmdline_var(const char_u *src, size_t *usedlen)
 ///        '<cexpr>' to C-expression under the cursor
 ///        '<cfile>' to path name under the cursor
 ///        '<sfile>' to sourced file name
+///        '<stack>' to call stack
 ///        '<slnum>' to sourced file line number
 ///        '<afile>' to file name for autocommand
 ///        '<abuf>'  to buffer number for autocommand
@@ -7787,7 +7782,7 @@ char_u *eval_vars(char_u *src, char_u *srcstart, size_t *usedlen, linenr_T *lnum
   if (spec_idx == SPEC_CWORD
       || spec_idx == SPEC_CCWORD
       || spec_idx == SPEC_CEXPR) {
-    resultlen = find_ident_under_cursor((char_u **)&result,
+    resultlen = find_ident_under_cursor(&result,
                                         spec_idx == SPEC_CWORD
         ? (FIND_IDENT | FIND_STRING)
         : (spec_idx == SPEC_CEXPR
@@ -7918,29 +7913,33 @@ char_u *eval_vars(char_u *src, char_u *srcstart, size_t *usedlen, linenr_T *lnum
       break;
 
     case SPEC_SFILE:            // file name for ":so" command
-      result = sourcing_name;
+    case SPEC_STACK:            // call stack
+      result = estack_sfile(spec_idx == SPEC_SFILE ? ESTACK_SFILE : ESTACK_STACK);
       if (result == NULL) {
-        *errormsg = _("E498: no :source file name to substitute for \"<sfile>\"");
+        *errormsg = spec_idx == SPEC_SFILE
+          ? _("E498: no :source file name to substitute for \"<sfile>\"")
+          : _("E489: no call stack to substitute for \"<stack>\"");
         return NULL;
       }
+      resultbuf = result;  // remember allocated string
       break;
 
     case SPEC_SLNUM:            // line in file for ":so" command
-      if (sourcing_name == NULL || sourcing_lnum == 0) {
+      if (SOURCING_NAME == NULL || SOURCING_LNUM == 0) {
         *errormsg = _("E842: no line number to use for \"<slnum>\"");
         return NULL;
       }
-      snprintf(strbuf, sizeof(strbuf), "%" PRIdLINENR, sourcing_lnum);
+      snprintf(strbuf, sizeof(strbuf), "%" PRIdLINENR, SOURCING_LNUM);
       result = strbuf;
       break;
 
     case SPEC_SFLNUM:  // line in script file
-      if (current_sctx.sc_lnum + sourcing_lnum == 0) {
+      if (current_sctx.sc_lnum + SOURCING_LNUM == 0) {
         *errormsg = _("E961: no line number to use for \"<sflnum>\"");
         return NULL;
       }
       snprintf((char *)strbuf, sizeof(strbuf), "%" PRIdLINENR,
-               current_sctx.sc_lnum + sourcing_lnum);
+               current_sctx.sc_lnum + SOURCING_LNUM);
       result = strbuf;
       break;
 

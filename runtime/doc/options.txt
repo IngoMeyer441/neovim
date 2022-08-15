@@ -591,7 +591,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	"double":	Use twice the width of ASCII characters.
 							*E834* *E835*
 	The value "double" cannot be used if 'listchars' or 'fillchars'
-	contains a character that would be double width.
+	contains a character that would be double width.  These errors may
+	also be given when calling setcellwidths().
+
+	The values are overruled for characters specified with
+	|setcellwidths()|.
 
 	There are a number of CJK fonts for which the width of glyphs for
 	those characters are solely based on how many octets they take in
@@ -1321,7 +1325,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	page can have a different value.
 
 	When 'cmdheight' is zero, there is no command-line unless it is being
-	used.  Any messages will cause the |hit-enter| prompt.
+	used.  Some informative messages will not be displayed, any other
+	messages will cause the |hit-enter| prompt.
 
 						*'cmdwinheight'* *'cwh'*
 'cmdwinheight' 'cwh'	number	(default 7)
@@ -2139,7 +2144,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	When on all Unicode emoji characters are considered to be full width.
 	This excludes "text emoji" characters, which are normally displayed as
 	single width.  Unfortunately there is no good specification for this
-	and it has been determined on trial-and-error basis.
+	and it has been determined on trial-and-error basis.  Use the
+	|setcellwidths()| function to change the behavior.
 
 					*'encoding'* *'enc'* *E543*
 'encoding' 'enc'
@@ -3731,8 +3737,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'lispwords'* *'lw'*
 'lispwords' 'lw'	string	(default is very long)
 			global or local to buffer |global-local|
-	Comma-separated list of words that influence the Lisp indenting.
-	|'lisp'|
+	Comma-separated list of words that influence the Lisp indenting when
+	enabled with the |'lisp'| option.
 
 						*'list'* *'nolist'*
 'list'			boolean	(default off)
@@ -4712,8 +4718,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	in read-only mode ("vim -R") or when the executable is called "view".
 	When using ":w!" the 'readonly' option is reset for the current
 	buffer, unless the 'Z' flag is in 'cpoptions'.
-	When using the ":view" command the 'readonly' option is
-	set for the newly edited buffer.
+	When using the ":view" command the 'readonly' option is set for the
+	newly edited buffer.
 	See 'modifiable' for disallowing changes to the buffer.
 
 						*'redrawdebug'* *'rdb'*
@@ -4834,7 +4840,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 		search		"/" and "?" commands
 
-	This is useful for languages such as Hebrew and Arabic.
+	This is useful for languages such as Hebrew, Arabic and Farsi.
 	The 'rightleft' option must be set for 'rightleftcmd' to take effect.
 
 					 *'ruler'* *'ru'* *'noruler'* *'noru'*
@@ -5870,6 +5876,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 			suggestions is never more than the value of 'lines'
 			minus two.
 
+	timeout:{millisec}   Limit the time searching for suggestions to
+			{millisec} milli seconds.  Applies to the following
+			methods.  When omitted the limit is 5000. When
+			negative there is no limit.
+
 	file:{filename} Read file {filename}, which must have two columns,
 			separated by a slash.  The first column contains the
 			bad word, the second column the suggested good word.
@@ -6185,7 +6196,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 	This option controls the behavior when switching between buffers.
 	Mostly for |quickfix| commands some values are also used for other
- 	commands, as mentioned below.
+	commands, as mentioned below.
 	Possible values (comma-separated list):
 	   useopen	If included, jump to the first open window that
 			contains the specified buffer (if there is one).

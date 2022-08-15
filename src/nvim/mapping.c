@@ -29,6 +29,7 @@
 #include "nvim/message.h"
 #include "nvim/option.h"
 #include "nvim/regexp.h"
+#include "nvim/runtime.h"
 #include "nvim/ui.h"
 #include "nvim/vim.h"
 
@@ -333,7 +334,7 @@ static int str_to_mapargs(const char_u *strargs, bool is_unmap, MapArguments *ma
 {
   const char_u *to_parse = strargs;
   to_parse = (char_u *)skipwhite((char *)to_parse);
-  memset(mapargs, 0, sizeof(*mapargs));
+  CLEAR_POINTER(mapargs);
 
   // Accept <buffer>, <nowait>, <silent>, <expr>, <script>, and <unique> in
   // any order.
@@ -469,7 +470,7 @@ static void map_add(buf_T *buf, mapblock_T **map_table, mapblock_T **abbr_table,
     mp->m_script_ctx.sc_lnum = lnum;
   } else {
     mp->m_script_ctx = current_sctx;
-    mp->m_script_ctx.sc_lnum += sourcing_lnum;
+    mp->m_script_ctx.sc_lnum += SOURCING_LNUM;
     nlua_set_sctx(&mp->m_script_ctx);
   }
   mp->m_desc = NULL;
@@ -776,7 +777,7 @@ static int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev,
                   mp->m_expr = args->expr;
                   mp->m_replace_keycodes = args->replace_keycodes;
                   mp->m_script_ctx = current_sctx;
-                  mp->m_script_ctx.sc_lnum += sourcing_lnum;
+                  mp->m_script_ctx.sc_lnum += SOURCING_LNUM;
                   nlua_set_sctx(&mp->m_script_ctx);
                   if (args->desc != NULL) {
                     mp->m_desc = xstrdup(args->desc);
@@ -964,7 +965,7 @@ static int get_map_mode(char **cmdp, bool forceit)
 /// Clear all mappings (":mapclear") or abbreviations (":abclear").
 /// "abbr" should be false for mappings, true for abbreviations.
 /// This function used to be called map_clear().
-static void do_mapclear(char_u *cmdp, char_u *arg, int forceit, int abbr)
+static void do_mapclear(char *cmdp, char_u *arg, int forceit, int abbr)
 {
   int mode;
   int local;
@@ -975,7 +976,7 @@ static void do_mapclear(char_u *cmdp, char_u *arg, int forceit, int abbr)
     return;
   }
 
-  mode = get_map_mode((char **)&cmdp, forceit);
+  mode = get_map_mode(&cmdp, forceit);
   map_clear_mode(curbuf, mode, local, abbr);
 }
 
@@ -1051,9 +1052,9 @@ bool map_to_exists(const char *const str, const char *const modechars, const boo
   int mode = 0;
   int retval;
 
-  char_u *buf = NULL;
+  char *buf = NULL;
   const char_u *const rhs = (char_u *)replace_termcodes(str, strlen(str),
-                                                        (char **)&buf, REPTERM_DO_LT,
+                                                        &buf, REPTERM_DO_LT,
                                                         NULL, CPO_TO_CPO_FLAGS);
 
 #define MAPMODE(mode, modechars, chr, modeflags) \
@@ -1194,14 +1195,14 @@ static char_u *translate_mapping(char_u *str, int cpo_flags)
 /// @param forceit  true if '!' given
 /// @param isabbrev  true if abbreviation
 /// @param isunmap  true if unmap/unabbrev command
-char_u *set_context_in_map_cmd(expand_T *xp, char_u *cmd, char_u *arg, bool forceit, bool isabbrev,
+char_u *set_context_in_map_cmd(expand_T *xp, char *cmd, char_u *arg, bool forceit, bool isabbrev,
                                bool isunmap, cmdidx_T cmdidx)
 {
   if (forceit && cmdidx != CMD_map && cmdidx != CMD_unmap) {
     xp->xp_context = EXPAND_NOTHING;
   } else {
     if (isunmap) {
-      expand_mapmodes = get_map_mode((char **)&cmd, forceit || isabbrev);
+      expand_mapmodes = get_map_mode(&cmd, forceit || isabbrev);
     } else {
       expand_mapmodes = MODE_INSERT | MODE_CMDLINE;
       if (!isabbrev) {
@@ -2079,7 +2080,7 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
   }
 
   char *keys_buf = NULL;
-  char_u *alt_keys_buf = NULL;
+  char *alt_keys_buf = NULL;
   bool did_simplify = false;
   const int flags = REPTERM_FROM_PART | REPTERM_DO_LT;
   const int mode = get_map_mode((char **)&which, 0);
@@ -2096,9 +2097,9 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
     // preferred for printing, like in do_map().
     (void)replace_termcodes(keys,
                             STRLEN(keys),
-                            (char **)&alt_keys_buf, flags | REPTERM_NO_SIMPLIFY, NULL,
+                            &alt_keys_buf, flags | REPTERM_NO_SIMPLIFY, NULL,
                             CPO_TO_CPO_FLAGS);
-    rhs = check_map(alt_keys_buf, mode, exact, false, abbr, &mp, &buffer_local, &rhs_lua);
+    rhs = check_map((char_u *)alt_keys_buf, mode, exact, false, abbr, &mp, &buffer_local, &rhs_lua);
   }
 
   if (!get_dict) {
@@ -2439,13 +2440,13 @@ void ex_unmap(exarg_T *eap)
 /// ":mapclear" and friends.
 void ex_mapclear(exarg_T *eap)
 {
-  do_mapclear((char_u *)eap->cmd, (char_u *)eap->arg, eap->forceit, false);
+  do_mapclear(eap->cmd, (char_u *)eap->arg, eap->forceit, false);
 }
 
 /// ":abclear" and friends.
 void ex_abclear(exarg_T *eap)
 {
-  do_mapclear((char_u *)eap->cmd, (char_u *)eap->arg, true, true);
+  do_mapclear(eap->cmd, (char_u *)eap->arg, true, true);
 }
 
 /// Set, tweak, or remove a mapping in a mode. Acts as the implementation for

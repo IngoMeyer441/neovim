@@ -9,7 +9,9 @@
 #include "nvim/autocmd.h"
 #include "nvim/charset.h"
 #include "nvim/cursor_shape.h"
+#include "nvim/eval.h"
 #include "nvim/eval/vars.h"
+#include "nvim/ex_docmd.h"
 #include "nvim/fold.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
@@ -689,12 +691,12 @@ void set_hl_group(int id, HlAttrs attrs, Dict(highlight) *dict, int link_id)
     g->sg_cleared = false;
     g->sg_link = link_id;
     g->sg_script_ctx = current_sctx;
-    g->sg_script_ctx.sc_lnum += sourcing_lnum;
+    g->sg_script_ctx.sc_lnum += SOURCING_LNUM;
     g->sg_set |= SG_LINK;
     if (is_default) {
       g->sg_deflink = link_id;
       g->sg_deflink_sctx = current_sctx;
-      g->sg_deflink_sctx.sc_lnum += sourcing_lnum;
+      g->sg_deflink_sctx.sc_lnum += SOURCING_LNUM;
     }
     return;
   }
@@ -733,7 +735,7 @@ void set_hl_group(int id, HlAttrs attrs, Dict(highlight) *dict, int link_id)
   g->sg_blend = attrs.hl_blend;
 
   g->sg_script_ctx = current_sctx;
-  g->sg_script_ctx.sc_lnum += sourcing_lnum;
+  g->sg_script_ctx.sc_lnum += SOURCING_LNUM;
 
   g->sg_attr = hl_get_syn_attr(0, id, attrs);
 
@@ -861,7 +863,7 @@ void do_highlight(const char *line, const bool forceit, const bool init)
       if (dodefault && (forceit || hlgroup->sg_deflink == 0)) {
         hlgroup->sg_deflink = to_id;
         hlgroup->sg_deflink_sctx = current_sctx;
-        hlgroup->sg_deflink_sctx.sc_lnum += sourcing_lnum;
+        hlgroup->sg_deflink_sctx.sc_lnum += SOURCING_LNUM;
         nlua_set_sctx(&hlgroup->sg_deflink_sctx);
       }
     }
@@ -871,7 +873,7 @@ void do_highlight(const char *line, const bool forceit, const bool init)
       // for the group, unless '!' is used
       if (to_id > 0 && !forceit && !init
           && hl_has_settings(from_id - 1, dodefault)) {
-        if (sourcing_name == NULL && !dodefault) {
+        if (SOURCING_NAME == NULL && !dodefault) {
           emsg(_("E414: group has settings, highlight link ignored"));
         }
       } else if (hlgroup->sg_link != to_id
@@ -882,7 +884,7 @@ void do_highlight(const char *line, const bool forceit, const bool init)
         }
         hlgroup->sg_link = to_id;
         hlgroup->sg_script_ctx = current_sctx;
-        hlgroup->sg_script_ctx.sc_lnum += sourcing_lnum;
+        hlgroup->sg_script_ctx.sc_lnum += SOURCING_LNUM;
         nlua_set_sctx(&hlgroup->sg_script_ctx);
         hlgroup->sg_cleared = false;
         redraw_all_later(SOME_VALID);
@@ -1272,7 +1274,7 @@ void do_highlight(const char *line, const bool forceit, const bool init)
     set_hl_attr(idx);
   }
   hl_table[idx].sg_script_ctx = current_sctx;
-  hl_table[idx].sg_script_ctx.sc_lnum += sourcing_lnum;
+  hl_table[idx].sg_script_ctx.sc_lnum += SOURCING_LNUM;
   nlua_set_sctx(&hl_table[idx].sg_script_ctx);
 
   // Only call highlight_changed() once, after a sequence of highlight
@@ -1765,7 +1767,7 @@ static int syn_add_group(const char *name, size_t len)
 
   // Append another syntax_highlight entry.
   HlGroup *hlgp = GA_APPEND_VIA_PTR(HlGroup, &highlight_ga);
-  memset(hlgp, 0, sizeof(*hlgp));
+  CLEAR_POINTER(hlgp);
   hlgp->sg_name = (char_u *)arena_memdupz(&highlight_arena, name, len);
   hlgp->sg_rgb_bg = -1;
   hlgp->sg_rgb_fg = -1;
@@ -1863,7 +1865,7 @@ static void combine_stl_hlt(int id, int id_S, int id_alt, int hlcnt, int i, int 
   HlGroup *const hlt = hl_table;
 
   if (id_alt == 0) {
-    memset(&hlt[hlcnt + i], 0, sizeof(HlGroup));
+    CLEAR_POINTER(&hlt[hlcnt + i]);
     hlt[hlcnt + i].sg_cterm = highlight_attr[hlf];
     hlt[hlcnt + i].sg_gui = highlight_attr[hlf];
   } else {
@@ -1945,7 +1947,7 @@ void highlight_changed(void)
   hlcnt = highlight_ga.ga_len;
   if (id_S == -1) {
     // Make sure id_S is always valid to simplify code below. Use the last entry
-    memset(&hl_table[hlcnt + 9], 0, sizeof(HlGroup));
+    CLEAR_POINTER(&hl_table[hlcnt + 9]);
     id_S = hlcnt + 10;
   }
   for (int i = 0; i < 9; i++) {

@@ -13,10 +13,9 @@
 #include "nvim/hashtab.h"
 #include "nvim/lib/queue.h"
 #include "nvim/macros.h"
-#include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/message.h"
 #include "nvim/pos.h"      // for linenr_T
-#include "nvim/profile.h"  // for proftime_T
 #include "nvim/types.h"
 #ifdef LOG_LIST_ACTIONS
 # include "nvim/memory.h"
@@ -356,6 +355,8 @@ struct ufunc {
                            ///< used for s: variables
   int uf_refcount;      ///< reference count, see func_name_refcount()
   funccall_T *uf_scoped;       ///< l: local variables for closure
+  char_u *uf_name_exp;  ///< if "uf_name[]" starts with SNR the name with
+                        ///< "<SNR>" as a string, otherwise NULL
   char_u uf_name[];  ///< Name of function (actual size equals name);
                      ///< can start with <SNR>123_
                      ///< (<SNR> is K_SPECIAL KS_EXTRA KE_SNR)

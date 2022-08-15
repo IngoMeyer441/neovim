@@ -12,10 +12,12 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
 #include "nvim/charset.h"
+#include "nvim/eval.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/garray.h"
 #include "nvim/lua/executor.h"
 #include "nvim/os/input.h"
+#include "nvim/runtime.h"
 #include "nvim/usercmd.h"
 #include "nvim/window.h"
 
@@ -167,7 +169,7 @@ char *find_ucmd(exarg_T *eap, char *p, int *full, expand_T *xp, int *complp)
             xp->xp_luaref = uc->uc_compl_luaref;
             xp->xp_arg = (char *)uc->uc_compl_arg;
             xp->xp_script_ctx = uc->uc_script_ctx;
-            xp->xp_script_ctx.sc_lnum += sourcing_lnum;
+            xp->xp_script_ctx.sc_lnum += SOURCING_LNUM;
           }
           // Do not search for further abbreviations
           // if this is an exact match.
@@ -889,7 +891,7 @@ int uc_add_command(char *name, size_t name_len, const char *rep, uint32_t argt, 
   cmd->uc_def = def;
   cmd->uc_compl = compl;
   cmd->uc_script_ctx = current_sctx;
-  cmd->uc_script_ctx.sc_lnum += sourcing_lnum;
+  cmd->uc_script_ctx.sc_lnum += SOURCING_LNUM;
   nlua_set_sctx(&cmd->uc_script_ctx);
   cmd->uc_compl_arg = (char_u *)compl_arg;
   cmd->uc_compl_luaref = compl_luaref;
@@ -1162,7 +1164,7 @@ static char *uc_split_args(char *arg, char **args, size_t *arglens, size_t argc,
         *q++ = ' ';
         *q++ = '"';
       } else {
-        mb_copy_char((const char_u **)&p, (char_u **)&q);
+        mb_copy_char((const char **)&p, &q);
       }
     }
   } else {
@@ -1175,7 +1177,7 @@ static char *uc_split_args(char *arg, char **args, size_t *arglens, size_t argc,
           *q++ = '\\';
           *q++ = *p++;
         } else {
-          mb_copy_char((const char_u **)&p, (char_u **)&q);
+          mb_copy_char((const char **)&p, &q);
         }
       }
       if (i != argc - 1) {

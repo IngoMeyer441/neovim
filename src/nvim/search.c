@@ -15,12 +15,13 @@
 #include "nvim/buffer.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
+#include "nvim/cmdhist.h"
 #include "nvim/cursor.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/ex_cmds.h"
-#include "nvim/ex_cmds2.h"
+#include "nvim/ex_docmd.h"
 #include "nvim/ex_getln.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
@@ -42,6 +43,7 @@
 #include "nvim/os/input.h"
 #include "nvim/os/time.h"
 #include "nvim/path.h"
+#include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/screen.h"
 #include "nvim/search.h"
@@ -271,7 +273,7 @@ void free_search_patterns(void)
   free_spat(&spats[0]);
   free_spat(&spats[1]);
 
-  memset(spats, 0, sizeof(spats));
+  CLEAR_FIELD(spats);
 
   if (mr_pattern_alloced) {
     xfree(mr_pattern);
@@ -431,7 +433,7 @@ void set_last_csearch(int c, char_u *s, int len)
   if (len) {
     memcpy(lastc_bytes, s, (size_t)len);
   } else {
-    memset(lastc_bytes, 0, sizeof(lastc_bytes));
+    CLEAR_FIELD(lastc_bytes);
   }
 }
 
@@ -1036,7 +1038,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char_u *pat, long count,
   char_u *p;
   long c;
   char_u *dircp;
-  char_u *strcopy = NULL;
+  char *strcopy = NULL;
   char_u *ps;
   char_u *msgbuf = NULL;
   size_t len;
@@ -1123,13 +1125,13 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char_u *pat, long count,
        * Find end of regular expression.
        * If there is a matching '/' or '?', toss it.
        */
-      ps = strcopy;
+      ps = (char_u *)strcopy;
       p = skip_regexp(pat, search_delim, p_magic, &strcopy);
-      if (strcopy != ps) {
+      if (strcopy != (char *)ps) {
         // made a copy of "pat" to change "\?" to "?"
         searchcmdlen += (int)(STRLEN(pat) - STRLEN(strcopy));
-        pat = strcopy;
-        searchstr = strcopy;
+        pat = (char_u *)strcopy;
+        searchstr = (char_u *)strcopy;
       }
       if (*p == search_delim) {
         dircp = p;              // remember where we put the NUL
@@ -4551,7 +4553,7 @@ static void update_search_stat(int dirc, pos_T *pos, pos_T *cursor_pos, searchst
   static buf_T *lbuf = NULL;
   proftime_T start;
 
-  memset(stat, 0, sizeof(searchstat_T));
+  CLEAR_POINTER(stat);
 
   if (dirc == 0 && !recompute && !EMPTY_POS(lastpos)) {
     stat->cur = cur;
@@ -5996,7 +5998,7 @@ void get_search_pattern(SearchPattern *const pat)
 void get_substitute_pattern(SearchPattern *const pat)
 {
   memcpy(pat, &(spats[1]), sizeof(spats[1]));
-  memset(&(pat->off), 0, sizeof(pat->off));
+  CLEAR_FIELD(pat->off);
 }
 
 /// Set last search pattern
@@ -6012,7 +6014,7 @@ void set_substitute_pattern(const SearchPattern pat)
 {
   free_spat(&spats[1]);
   memcpy(&(spats[1]), &pat, sizeof(spats[1]));
-  memset(&(spats[1].off), 0, sizeof(spats[1].off));
+  CLEAR_FIELD(spats[1].off);
 }
 
 /// Set last used search pattern

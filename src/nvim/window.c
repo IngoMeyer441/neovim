@@ -122,7 +122,7 @@ void do_window(int nchar, long Prenum, int xchar)
 {
   long Prenum1;
   win_T *wp;
-  char_u *ptr;
+  char *ptr;
   linenr_T lnum = -1;
   int type = FIND_DEFINE;
   size_t len;
@@ -483,14 +483,14 @@ newwindow:
 wingotofile:
     CHECK_CMDWIN;
 
-    ptr = grab_file_name(Prenum1, &lnum);
+    ptr = (char *)grab_file_name(Prenum1, &lnum);
     if (ptr != NULL) {
       tabpage_T *oldtab = curtab;
       win_T *oldwin = curwin;
       setpcmark();
       if (win_split(0, 0) == OK) {
         RESET_BINDING(curwin);
-        if (do_ecmd(0, (char *)ptr, NULL, NULL, ECMD_LASTL, ECMD_HIDE, NULL) == FAIL) {
+        if (do_ecmd(0, ptr, NULL, NULL, ECMD_LASTL, ECMD_HIDE, NULL) == FAIL) {
           // Failed to open the file, close the window opened for it.
           win_close(curwin, false, false);
           goto_tabpage_win(oldtab, oldwin);
@@ -518,9 +518,9 @@ wingotofile:
     }
 
     // Make a copy, if the line was changed it will be freed.
-    ptr = vim_strnsave(ptr, len);
+    ptr = xstrnsave(ptr, len);
 
-    find_pattern_in_path(ptr, 0, len, true, Prenum == 0,
+    find_pattern_in_path((char_u *)ptr, 0, len, true, Prenum == 0,
                          type, Prenum1, ACTION_SPLIT, 1, MAXLNUM);
     xfree(ptr);
     curwin->w_set_curswant = true;
@@ -705,7 +705,7 @@ win_T *win_new_float(win_T *wp, bool last, FloatConfig fconfig, Error *err)
   wp->w_vsep_width = 0;
 
   win_config_float(wp, fconfig);
-  win_set_inner_size(wp);
+  win_set_inner_size(wp, true);
   wp->w_pos_changed = true;
   redraw_later(wp, VALID);
   return wp;
@@ -789,7 +789,7 @@ void win_config_float(win_T *wp, FloatConfig fconfig)
     wp->w_width = MIN(wp->w_width, Columns - win_border_width(wp));
   }
 
-  win_set_inner_size(wp);
+  win_set_inner_size(wp, true);
   must_redraw = MAX(must_redraw, VALID);
 
   wp->w_pos_changed = true;
@@ -1270,7 +1270,7 @@ int win_split_ins(int size, int flags, win_T *new_wp, int dir)
     wp->w_floating = false;
     // non-floating window doesn't store float config or have a border.
     wp->w_float_config = FLOAT_CONFIG_INIT;
-    memset(wp->w_border_adj, 0, sizeof(wp->w_border_adj));
+    CLEAR_FIELD(wp->w_border_adj);
   }
 
   /*
@@ -5175,7 +5175,7 @@ void win_free_grid(win_T *wp, bool reinit)
   grid_free(&wp->w_grid_alloc);
   if (reinit) {
     // if a float is turned into a split, the grid data structure will be reused
-    memset(&wp->w_grid_alloc, 0, sizeof(wp->w_grid_alloc));
+    CLEAR_FIELD(wp->w_grid_alloc);
   }
 }
 
@@ -6162,7 +6162,7 @@ void win_new_height(win_T *wp, int height)
 
   wp->w_height = height;
   wp->w_pos_changed = true;
-  win_set_inner_size(wp);
+  win_set_inner_size(wp, true);
 }
 
 void scroll_to_fraction(win_T *wp, int prev_height)
@@ -6271,7 +6271,7 @@ void scroll_to_fraction(win_T *wp, int prev_height)
   invalidate_botline_win(wp);
 }
 
-void win_set_inner_size(win_T *wp)
+void win_set_inner_size(win_T *wp, bool valid_cursor)
 {
   int width = wp->w_width_request;
   if (width == 0) {
@@ -6285,7 +6285,7 @@ void win_set_inner_size(win_T *wp)
   }
 
   if (height != prev_height) {
-    if (height > 0) {
+    if (height > 0 && valid_cursor) {
       if (wp == curwin) {
         // w_wrow needs to be valid. When setting 'laststatus' this may
         // call win_new_height() recursively.
@@ -6304,7 +6304,7 @@ void win_set_inner_size(win_T *wp)
     // There is no point in adjusting the scroll position when exiting.  Some
     // values might be invalid.
     // Skip scroll_to_fraction() when 'cmdheight' was set to one from zero.
-    if (!exiting && !made_cmdheight_nonzero) {
+    if (!exiting && !made_cmdheight_nonzero && valid_cursor) {
       scroll_to_fraction(wp, prev_height);
     }
     redraw_later(wp, NOT_VALID);  // SOME_VALID??
@@ -6313,11 +6313,13 @@ void win_set_inner_size(win_T *wp)
   if (width != wp->w_width_inner) {
     wp->w_width_inner = width;
     wp->w_lines_valid = 0;
-    changed_line_abv_curs_win(wp);
-    invalidate_botline_win(wp);
-    if (wp == curwin) {
-      update_topline(wp);
-      curs_columns(wp, true);  // validate w_wrow
+    if (valid_cursor) {
+      changed_line_abv_curs_win(wp);
+      invalidate_botline_win(wp);
+      if (wp == curwin) {
+        update_topline(wp);
+        curs_columns(wp, true);  // validate w_wrow
+      }
     }
     redraw_later(wp, NOT_VALID);
   }
@@ -6346,7 +6348,7 @@ static int win_border_width(win_T *wp)
 void win_new_width(win_T *wp, int width)
 {
   wp->w_width = width;
-  win_set_inner_size(wp);
+  win_set_inner_size(wp, true);
 
   wp->w_redr_status = true;
   wp->w_pos_changed = true;
@@ -6465,17 +6467,17 @@ char_u *grab_file_name(long count, linenr_T *file_lnum)
   int options = FNAME_MESS | FNAME_EXP | FNAME_REL | FNAME_UNESC;
   if (VIsual_active) {
     size_t len;
-    char_u *ptr;
+    char *ptr;
     if (get_visual_text(NULL, &ptr, &len) == FAIL) {
       return NULL;
     }
     // Only recognize ":123" here
     if (file_lnum != NULL && ptr[len] == ':' && isdigit(ptr[len + 1])) {
-      char *p = (char *)ptr + len + 1;
+      char *p = ptr + len + 1;
 
       *file_lnum = (linenr_T)getdigits_long(&p, false, 0);
     }
-    return find_file_name_in_path(ptr, len, options, count, (char_u *)curbuf->b_ffname);
+    return find_file_name_in_path((char_u *)ptr, len, options, count, (char_u *)curbuf->b_ffname);
   }
   return file_name_at_cursor(options | FNAME_HYP, count, file_lnum);
 }
@@ -6738,9 +6740,11 @@ static void last_status_rec(frame_T *fr, bool statusline, bool is_stl_global)
 /// Add or remove window bar from window "wp".
 ///
 /// @param make_room Whether to resize frames to make room for winbar.
+/// @param valid_cursor Whether the cursor is valid and should be used while
+///                     resizing.
 ///
 /// @return Success status.
-int set_winbar_win(win_T *wp, bool make_room)
+int set_winbar_win(win_T *wp, bool make_room, bool valid_cursor)
 {
   // Require the local value to be set in order to show winbar on a floating window.
   int winbar_height = wp->w_floating ? ((*wp->w_p_wbr != NUL) ? 1 : 0)
@@ -6756,7 +6760,7 @@ int set_winbar_win(win_T *wp, bool make_room)
       }
     }
     wp->w_winbar_height = winbar_height;
-    win_set_inner_size(wp);
+    win_set_inner_size(wp, valid_cursor);
     wp->w_redr_status = wp->w_redr_status || winbar_height;
 
     if (winbar_height == 0) {
@@ -6777,7 +6781,7 @@ int set_winbar_win(win_T *wp, bool make_room)
 void set_winbar(bool make_room)
 {
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if (set_winbar_win(wp, make_room) == FAIL) {
+    if (set_winbar_win(wp, make_room, true) == FAIL) {
       break;
     }
   }
@@ -7095,7 +7099,7 @@ int switch_win(switchwin_T *switchwin, win_T *win, tabpage_T *tp, bool no_displa
 // As switch_win() but without blocking autocommands.
 int switch_win_noblock(switchwin_T *switchwin, win_T *win, tabpage_T *tp, bool no_display)
 {
-  memset(switchwin, 0, sizeof(switchwin_T));
+  CLEAR_POINTER(switchwin);
   switchwin->sw_curwin = curwin;
   if (win == curwin) {
     switchwin->sw_same_win = true;

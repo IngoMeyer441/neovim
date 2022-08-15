@@ -15,10 +15,12 @@
 #endif
 
 #include "nvim/ascii.h"
+#include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
+#include "nvim/cmdhist.h"
 #include "nvim/cursor.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
@@ -29,9 +31,10 @@
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
 #include "nvim/ex_cmds2.h"
+#include "nvim/ex_docmd.h"
+#include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
 #include "nvim/ex_session.h"
-#include "nvim/fileio.h"
 #include "nvim/getchar.h"
 #include "nvim/highlight_group.h"
 #include "nvim/lua/executor.h"
@@ -43,8 +46,10 @@
 #include "nvim/os/input.h"
 #include "nvim/os/shell.h"
 #include "nvim/path.h"
+#include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
+#include "nvim/runtime.h"
 #include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/sign.h"
@@ -1191,42 +1196,6 @@ void *call_func_retlist(const char *func, int argc, typval_T *argv)
   return rettv.vval.v_list;
 }
 
-/// Prepare profiling for entering a child or something else that is not
-/// counted for the script/function itself.
-/// Should always be called in pair with prof_child_exit().
-///
-/// @param tm  place to store waittime
-void prof_child_enter(proftime_T *tm)
-{
-  funccall_T *fc = get_current_funccal();
-
-  if (fc != NULL && fc->func->uf_profiling) {
-    fc->prof_child = profile_start();
-  }
-
-  script_prof_save(tm);
-}
-
-/// Take care of time spent in a child.
-/// Should always be called after prof_child_enter().
-///
-/// @param tm  where waittime was stored
-void prof_child_exit(proftime_T *tm)
-{
-  funccall_T *fc = get_current_funccal();
-
-  if (fc != NULL && fc->func->uf_profiling) {
-    fc->prof_child = profile_end(fc->prof_child);
-    // don't count waiting time
-    fc->prof_child = profile_sub_wait(*tm, fc->prof_child);
-    fc->func->uf_tm_children =
-      profile_add(fc->func->uf_tm_children, fc->prof_child);
-    fc->func->uf_tml_children =
-      profile_add(fc->func->uf_tml_children, fc->prof_child);
-  }
-  script_prof_restore(tm);
-}
-
 /// Evaluate 'foldexpr'.  Returns the foldlevel, and any character preceding
 /// it in "*cp".  Doesn't give error messages.
 int eval_foldexpr(char *arg, int *cp)
@@ -1307,7 +1276,7 @@ char *get_lval(char *const name, typval_T *const rettv, lval_T *const lp, const 
   int quiet = flags & GLV_QUIET;
 
   // Clear everything in "lp".
-  memset(lp, 0, sizeof(lval_T));
+  CLEAR_POINTER(lp);
 
   if (skip) {
     // When skipping just find the end of the name.
@@ -2291,7 +2260,7 @@ static int eval_func(char **const arg, char *const name, const int name_len, typ
   funcexe.evaluate = evaluate;
   funcexe.partial = partial;
   funcexe.basetv = basetv;
-  int ret = get_func_tv((char_u *)s, len, rettv, (char_u **)arg, &funcexe);
+  int ret = get_func_tv((char_u *)s, len, rettv, arg, &funcexe);
 
   xfree(s);
 
@@ -3147,7 +3116,7 @@ static int eval7(char **arg, typval_T *rettv, int evaluate, int want_string)
   // Lambda: {arg, arg -> expr}
   // Dictionary: {'key': val, 'key': val}
   case '{':
-    ret = get_lambda_tv((char_u **)arg, rettv, evaluate);
+    ret = get_lambda_tv(arg, rettv, evaluate);
     if (ret == NOTDONE) {
       ret = dict_get_tv(arg, rettv, evaluate, false);
     }
@@ -3325,7 +3294,7 @@ static int call_func_rettv(char **const arg, typval_T *const rettv, const bool e
   funcexe.selfdict = selfdict;
   funcexe.basetv = basetv;
   const int ret = get_func_tv((char_u *)funcname, is_lua ? (int)(*arg - funcname) : -1, rettv,
-                              (char_u **)arg, &funcexe);
+                              arg, &funcexe);
 
   // Clear the funcref afterwards, so that deleting it while
   // evaluating the arguments is possible (see test55).
@@ -3353,7 +3322,7 @@ static int eval_lambda(char **const arg, typval_T *const rettv, const bool evalu
   typval_T base = *rettv;
   rettv->v_type = VAR_UNKNOWN;
 
-  int ret = get_lambda_tv((char_u **)arg, rettv, evaluate);
+  int ret = get_lambda_tv(arg, rettv, evaluate);
   if (ret != OK) {
     return FAIL;
   } else if (**arg != '(') {
@@ -3957,11 +3926,11 @@ static int get_string_tv(char **arg, typval_T *rettv, int evaluate)
         FALLTHROUGH;
 
       default:
-        mb_copy_char((const char_u **)&p, (char_u **)&name);
+        mb_copy_char((const char **)&p, &name);
         break;
       }
     } else {
-      mb_copy_char((const char_u **)&p, (char_u **)&name);
+      mb_copy_char((const char **)&p, &name);
     }
   }
   *name = NUL;
@@ -4020,7 +3989,7 @@ static int get_lit_string_tv(char **arg, typval_T *rettv, int evaluate)
       }
       ++p;
     }
-    mb_copy_char((const char_u **)&p, (char_u **)&str);
+    mb_copy_char((const char **)&p, &str);
   }
   *str = NUL;
   *arg = p + 1;
@@ -4217,6 +4186,23 @@ bool garbage_collect(bool testing)
     want_garbage_collect = false;
     may_garbage_collect = false;
     garbage_collect_at_exit = false;
+  }
+
+  // The execution stack can grow big, limit the size.
+  if (exestack.ga_maxlen - exestack.ga_len > 500) {
+    // Keep 150% of the current size, with a minimum of the growth size.
+    int n = exestack.ga_len / 2;
+    if (n < exestack.ga_growsize) {
+      n = exestack.ga_growsize;
+    }
+
+    // Don't make it bigger though.
+    if (exestack.ga_len + n < exestack.ga_maxlen) {
+      size_t new_len = (size_t)exestack.ga_itemsize * (size_t)(exestack.ga_len + n);
+      char *pp = xrealloc(exestack.ga_data, new_len);
+      exestack.ga_maxlen = exestack.ga_len + n;
+      exestack.ga_data = pp;
+    }
   }
 
   // We advance by two (COPYID_INC) because we add one for items referenced
@@ -5125,7 +5111,7 @@ void common_function(typval_T *argvars, typval_T *rettv, bool is_funcref, FunPtr
 
   if ((use_string && vim_strchr(s, AUTOLOAD_CHAR) == NULL) || is_funcref) {
     name = s;
-    trans_name = (char *)trans_function_name((char_u **)&name, false,
+    trans_name = (char *)trans_function_name(&name, false,
                                              TFN_INT | TFN_QUIET | TFN_NO_AUTOLOAD
                                              | TFN_NO_DEREF, NULL, NULL);
     if (*name != NUL) {
@@ -7940,174 +7926,6 @@ const char *find_option_end(const char **const arg, int *const opt_flags)
   return p;
 }
 
-/// Start profiling function "fp".
-void func_do_profile(ufunc_T *fp)
-{
-  int len = fp->uf_lines.ga_len;
-
-  if (!fp->uf_prof_initialized) {
-    if (len == 0) {
-      len = 1;  // avoid getting error for allocating zero bytes
-    }
-    fp->uf_tm_count = 0;
-    fp->uf_tm_self = profile_zero();
-    fp->uf_tm_total = profile_zero();
-
-    if (fp->uf_tml_count == NULL) {
-      fp->uf_tml_count = xcalloc((size_t)len, sizeof(int));
-    }
-
-    if (fp->uf_tml_total == NULL) {
-      fp->uf_tml_total = xcalloc((size_t)len, sizeof(proftime_T));
-    }
-
-    if (fp->uf_tml_self == NULL) {
-      fp->uf_tml_self = xcalloc((size_t)len, sizeof(proftime_T));
-    }
-
-    fp->uf_tml_idx = -1;
-    fp->uf_prof_initialized = true;
-  }
-
-  fp->uf_profiling = TRUE;
-}
-
-/// Dump the profiling results for all functions in file "fd".
-void func_dump_profile(FILE *fd)
-{
-  hashitem_T *hi;
-  int todo;
-  ufunc_T *fp;
-  ufunc_T **sorttab;
-  int st_len = 0;
-
-  todo = (int)func_hashtab.ht_used;
-  if (todo == 0) {
-    return;         // nothing to dump
-  }
-
-  sorttab = xmalloc(sizeof(ufunc_T *) * (size_t)todo);
-
-  for (hi = func_hashtab.ht_array; todo > 0; ++hi) {
-    if (!HASHITEM_EMPTY(hi)) {
-      --todo;
-      fp = HI2UF(hi);
-      if (fp->uf_prof_initialized) {
-        sorttab[st_len++] = fp;
-
-        if (fp->uf_name[0] == K_SPECIAL) {
-          fprintf(fd, "FUNCTION  <SNR>%s()\n", fp->uf_name + 3);
-        } else {
-          fprintf(fd, "FUNCTION  %s()\n", fp->uf_name);
-        }
-        if (fp->uf_script_ctx.sc_sid != 0) {
-          bool should_free;
-          const LastSet last_set = (LastSet){
-            .script_ctx = fp->uf_script_ctx,
-            .channel_id = 0,
-          };
-          char *p = (char *)get_scriptname(last_set, &should_free);
-          fprintf(fd, "    Defined: %s:%" PRIdLINENR "\n",
-                  p, fp->uf_script_ctx.sc_lnum);
-          if (should_free) {
-            xfree(p);
-          }
-        }
-        if (fp->uf_tm_count == 1) {
-          fprintf(fd, "Called 1 time\n");
-        } else {
-          fprintf(fd, "Called %d times\n", fp->uf_tm_count);
-        }
-        fprintf(fd, "Total time: %s\n", profile_msg(fp->uf_tm_total));
-        fprintf(fd, " Self time: %s\n", profile_msg(fp->uf_tm_self));
-        fprintf(fd, "\n");
-        fprintf(fd, "count  total (s)   self (s)\n");
-
-        for (int i = 0; i < fp->uf_lines.ga_len; ++i) {
-          if (FUNCLINE(fp, i) == NULL) {
-            continue;
-          }
-          prof_func_line(fd, fp->uf_tml_count[i],
-                         &fp->uf_tml_total[i], &fp->uf_tml_self[i], TRUE);
-          fprintf(fd, "%s\n", FUNCLINE(fp, i));
-        }
-        fprintf(fd, "\n");
-      }
-    }
-  }
-
-  if (st_len > 0) {
-    qsort((void *)sorttab, (size_t)st_len, sizeof(ufunc_T *),
-          prof_total_cmp);
-    prof_sort_list(fd, sorttab, st_len, "TOTAL", FALSE);
-    qsort((void *)sorttab, (size_t)st_len, sizeof(ufunc_T *),
-          prof_self_cmp);
-    prof_sort_list(fd, sorttab, st_len, "SELF", TRUE);
-  }
-
-  xfree(sorttab);
-}
-
-/// @param prefer_self  when equal print only self time
-static void prof_sort_list(FILE *fd, ufunc_T **sorttab, int st_len, char *title, int prefer_self)
-{
-  int i;
-  ufunc_T *fp;
-
-  fprintf(fd, "FUNCTIONS SORTED ON %s TIME\n", title);
-  fprintf(fd, "count  total (s)   self (s)  function\n");
-  for (i = 0; i < 20 && i < st_len; ++i) {
-    fp = sorttab[i];
-    prof_func_line(fd, fp->uf_tm_count, &fp->uf_tm_total, &fp->uf_tm_self,
-                   prefer_self);
-    if (fp->uf_name[0] == K_SPECIAL) {
-      fprintf(fd, " <SNR>%s()\n", fp->uf_name + 3);
-    } else {
-      fprintf(fd, " %s()\n", fp->uf_name);
-    }
-  }
-  fprintf(fd, "\n");
-}
-
-/// Print the count and times for one function or function line.
-///
-/// @param prefer_self  when equal print only self time
-static void prof_func_line(FILE *fd, int count, proftime_T *total, proftime_T *self,
-                           int prefer_self)
-{
-  if (count > 0) {
-    fprintf(fd, "%5d ", count);
-    if (prefer_self && profile_equal(*total, *self)) {
-      fprintf(fd, "           ");
-    } else {
-      fprintf(fd, "%s ", profile_msg(*total));
-    }
-    if (!prefer_self && profile_equal(*total, *self)) {
-      fprintf(fd, "           ");
-    } else {
-      fprintf(fd, "%s ", profile_msg(*self));
-    }
-  } else {
-    fprintf(fd, "                            ");
-  }
-}
-
-/// Compare function for total time sorting.
-static int prof_total_cmp(const void *s1, const void *s2)
-{
-  ufunc_T *p1 = *(ufunc_T **)s1;
-  ufunc_T *p2 = *(ufunc_T **)s2;
-  return profile_cmp(p1->uf_tm_total, p2->uf_tm_total);
-}
-
-/// Compare function for self time sorting.
-static int prof_self_cmp(const void *s1, const void *s2)
-{
-  ufunc_T *p1 = *(ufunc_T **)s1;
-  ufunc_T *p2 = *(ufunc_T **)s2;
-  return profile_cmp(p1->uf_tm_self, p2->uf_tm_self);
-}
-
 /// Return the autoload script name for a function or variable name
 /// Caller must make sure that "name" contains AUTOLOAD_CHAR.
 ///
@@ -8180,61 +7998,6 @@ bool script_autoload(const char *const name, const size_t name_len, const bool r
 
   xfree(tofree);
   return ret;
-}
-
-/// Called when starting to read a function line.
-/// "sourcing_lnum" must be correct!
-/// When skipping lines it may not actually be executed, but we won't find out
-/// until later and we need to store the time now.
-void func_line_start(void *cookie)
-{
-  funccall_T *fcp = (funccall_T *)cookie;
-  ufunc_T *fp = fcp->func;
-
-  if (fp->uf_profiling && sourcing_lnum >= 1
-      && sourcing_lnum <= fp->uf_lines.ga_len) {
-    fp->uf_tml_idx = sourcing_lnum - 1;
-    // Skip continuation lines.
-    while (fp->uf_tml_idx > 0 && FUNCLINE(fp, fp->uf_tml_idx) == NULL) {
-      fp->uf_tml_idx--;
-    }
-    fp->uf_tml_execed = false;
-    fp->uf_tml_start = profile_start();
-    fp->uf_tml_children = profile_zero();
-    fp->uf_tml_wait = profile_get_wait();
-  }
-}
-
-/// Called when actually executing a function line.
-void func_line_exec(void *cookie)
-{
-  funccall_T *fcp = (funccall_T *)cookie;
-  ufunc_T *fp = fcp->func;
-
-  if (fp->uf_profiling && fp->uf_tml_idx >= 0) {
-    fp->uf_tml_execed = TRUE;
-  }
-}
-
-/// Called when done with a function line.
-void func_line_end(void *cookie)
-{
-  funccall_T *fcp = (funccall_T *)cookie;
-  ufunc_T *fp = fcp->func;
-
-  if (fp->uf_profiling && fp->uf_tml_idx >= 0) {
-    if (fp->uf_tml_execed) {
-      ++fp->uf_tml_count[fp->uf_tml_idx];
-      fp->uf_tml_start = profile_end(fp->uf_tml_start);
-      fp->uf_tml_start = profile_sub_wait(fp->uf_tml_wait, fp->uf_tml_start);
-      fp->uf_tml_total[fp->uf_tml_idx] =
-        profile_add(fp->uf_tml_total[fp->uf_tml_idx], fp->uf_tml_start);
-      fp->uf_tml_self[fp->uf_tml_idx] =
-        profile_self(fp->uf_tml_self[fp->uf_tml_idx], fp->uf_tml_start,
-                     fp->uf_tml_children);
-    }
-    fp->uf_tml_idx = -1;
-  }
 }
 
 static var_flavour_T var_flavour(char *varname)
@@ -8868,8 +8631,7 @@ typval_T eval_call_provider(char *provider, char *method, list_T *arguments, boo
   struct caller_scope saved_provider_caller_scope = provider_caller_scope;
   provider_caller_scope = (struct caller_scope) {
     .script_ctx = current_sctx,
-    .sourcing_name = sourcing_name,
-    .sourcing_lnum = sourcing_lnum,
+    .es_entry = ((estack_T *)exestack.ga_data)[exestack.ga_len - 1],
     .autocmd_fname = autocmd_fname,
     .autocmd_match = autocmd_match,
     .autocmd_bufnr = autocmd_bufnr,
@@ -8968,8 +8730,8 @@ bool eval_has_provider(const char *feat)
 /// Writes "<sourcing_name>:<sourcing_lnum>" to `buf[bufsize]`.
 void eval_fmt_source_name_line(char *buf, size_t bufsize)
 {
-  if (sourcing_name) {
-    snprintf(buf, bufsize, "%s:%" PRIdLINENR, sourcing_name, sourcing_lnum);
+  if (SOURCING_NAME) {
+    snprintf(buf, bufsize, "%s:%" PRIdLINENR, SOURCING_NAME, SOURCING_LNUM);
   } else {
     snprintf(buf, bufsize, "?");
   }

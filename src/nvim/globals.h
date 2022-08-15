@@ -6,12 +6,14 @@
 
 #include "nvim/ascii.h"
 #include "nvim/event/loop.h"
-#include "nvim/ex_eval.h"
+#include "nvim/ex_cmds_defs.h"
+#include "nvim/ex_eval_defs.h"
 #include "nvim/iconv.h"
 #include "nvim/macros.h"
 #include "nvim/mbyte.h"
-#include "nvim/menu.h"
+#include "nvim/menu_defs.h"
 #include "nvim/os/os_defs.h"
+#include "nvim/runtime.h"
 #include "nvim/syntax_defs.h"
 #include "nvim/types.h"
 
@@ -248,9 +250,6 @@ EXTERN int lines_left INIT(= -1);           // lines left for listing
 EXTERN int msg_no_more INIT(= false);       // don't use more prompt, truncate
                                             // messages
 
-EXTERN char *sourcing_name INIT(= NULL);    // name of error message source
-EXTERN linenr_T sourcing_lnum INIT(= 0);    // line number of the source file
-
 EXTERN int ex_nesting_level INIT(= 0);          // nesting level
 EXTERN int debug_break_level INIT(= -1);        // break below this level
 EXTERN bool debug_did_msg INIT(= false);        // did "debug mode" message
@@ -296,7 +295,7 @@ EXTERN int force_abort INIT(= false);
 /// same as the "msg" field of that element, but can be identical to the "msg"
 /// field of a later list element, when the "emsg_severe" flag was set when the
 /// emsg() call was made.
-EXTERN struct msglist **msg_list INIT(= NULL);
+EXTERN msglist_T **msg_list INIT(= NULL);
 
 /// When set, don't convert an error to an exception.  Used when displaying the
 /// interrupt message or reporting an exception that is still uncaught at the
@@ -348,8 +347,8 @@ EXTERN bool did_source_packages INIT(= false);
 // provider function call
 EXTERN struct caller_scope {
   sctx_T script_ctx;
-  char *sourcing_name, *autocmd_fname, *autocmd_match;
-  linenr_T sourcing_lnum;
+  estack_T es_entry;
+  char *autocmd_fname, *autocmd_match;
   int autocmd_bufnr;
   void *funccalp;
 } provider_caller_scope;

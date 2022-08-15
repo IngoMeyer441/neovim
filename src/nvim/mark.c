@@ -19,7 +19,6 @@
 #include "nvim/eval.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/extmark.h"
-#include "nvim/fileio.h"
 #include "nvim/fold.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -86,7 +85,7 @@ void clear_fmark(fmark_T *fm)
   FUNC_ATTR_NONNULL_ALL
 {
   free_fmark(*fm);
-  memset(fm, 0, sizeof(*fm));
+  CLEAR_POINTER(fm);
 }
 
 /*
@@ -1741,7 +1740,7 @@ void free_all_marks(void)
       free_xfmark(namedfm[i]);
     }
   }
-  memset(&namedfm[0], 0, sizeof(namedfm));
+  CLEAR_FIELD(namedfm);
 }
 #endif
 

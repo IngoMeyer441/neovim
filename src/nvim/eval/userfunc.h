@@ -4,6 +4,11 @@
 #include "nvim/eval/typval.h"
 #include "nvim/ex_cmds_defs.h"
 
+// From user function to hashitem and back.
+#define UF2HIKEY(fp) ((fp)->uf_name)
+#define HIKEY2UF(p)  ((ufunc_T *)(p - offsetof(ufunc_T, uf_name)))
+#define HI2UF(hi)    HIKEY2UF((hi)->hi_key)
+
 ///< Structure used by trans_function_name()
 typedef struct {
   dict_T *fd_dict;  ///< Dictionary used.
@@ -59,8 +64,8 @@ typedef struct {
   .basetv = NULL, \
 }
 
-#define FUNCARG(fp, j)  ((char_u **)(fp->uf_args.ga_data))[j]
-#define FUNCLINE(fp, j) ((char_u **)(fp->uf_lines.ga_data))[j]
+#define FUNCARG(fp, j)  ((char **)(fp->uf_args.ga_data))[j]
+#define FUNCLINE(fp, j) ((char **)(fp->uf_lines.ga_data))[j]
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "eval/userfunc.h.generated.h"
