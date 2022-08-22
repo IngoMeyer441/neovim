@@ -72,6 +72,7 @@
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
+#include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_docmd.h"
@@ -491,13 +492,13 @@ static void find_word(matchinf_T *mip, int mode)
       }
       endlen[endidxcnt] = wlen;
       endidx[endidxcnt++] = arridx++;
-      --len;
+      len--;
 
       // Skip over the zeros, there can be several flag/region
       // combinations.
       while (len > 0 && byts[arridx] == 0) {
-        ++arridx;
-        --len;
+        arridx++;
+        len--;
       }
       if (len == 0) {
         break;              // no children, word must end here
@@ -535,8 +536,8 @@ static void find_word(matchinf_T *mip, int mode)
 
     // Continue at the child (if there is one).
     arridx = idxs[lo];
-    ++wlen;
-    --flen;
+    wlen++;
+    flen--;
 
     // One space in the good word may stand for several spaces in the
     // checked word.
@@ -548,8 +549,8 @@ static void find_word(matchinf_T *mip, int mode)
         if (ptr[wlen] != ' ' && ptr[wlen] != TAB) {
           break;
         }
-        ++wlen;
-        --flen;
+        wlen++;
+        flen--;
       }
     }
   }
@@ -560,7 +561,7 @@ static void find_word(matchinf_T *mip, int mode)
   // Verify that one of the possible endings is valid.  Try the longest
   // first.
   while (endidxcnt > 0) {
-    --endidxcnt;
+    endidxcnt--;
     arridx = endidx[endidxcnt];
     wlen = endlen[endidxcnt];
 
@@ -980,7 +981,7 @@ bool match_compoundrule(slang_T *slang, char_u *compflags)
         bool match = false;
 
         // compare against all the flags in []
-        ++p;
+        p++;
         while (*p != ']' && *p != NUL) {
           if (*p++ == c) {
             match = true;
@@ -992,7 +993,7 @@ bool match_compoundrule(slang_T *slang, char_u *compflags)
       } else if (*p != c) {
         break;          // flag of word doesn't match flag in pattern
       }
-      ++p;
+      p++;
     }
 
     // Skip to the next "/", where the next pattern starts.
@@ -1108,8 +1109,8 @@ static void find_prefix(matchinf_T *mip, int mode)
       mip->mi_prefarridx = arridx;
       mip->mi_prefcnt = len;
       while (len > 0 && byts[arridx] == 0) {
-        ++arridx;
-        --len;
+        arridx++;
+        len--;
       }
       mip->mi_prefcnt -= len;
 
@@ -1158,8 +1159,8 @@ static void find_prefix(matchinf_T *mip, int mode)
 
     // Continue at the child (if there is one).
     arridx = idxs[lo];
-    ++wlen;
-    --flen;
+    wlen++;
+    flen--;
   }
 }
 
@@ -1407,7 +1408,7 @@ size_t spell_move_to(win_T *wp, int dir, bool allwords, bool curline, hlf_T *att
       capcol = -1;
     } else {
       if (lnum < wp->w_buffer->b_ml.ml_line_count) {
-        ++lnum;
+        lnum++;
       } else if (!p_ws) {
         break;              // at first line and 'nowrapscan'
       } else {
@@ -1435,7 +1436,7 @@ size_t spell_move_to(win_T *wp, int dir, bool allwords, bool curline, hlf_T *att
       }
 
       // Capcol skips over the inserted space.
-      --capcol;
+      capcol--;
 
       // But after empty line check first word in next line
       if (empty_line) {
@@ -1810,7 +1811,7 @@ static int count_syllables(slang_T *slang, const char_u *word)
       }
     }
     if (len != 0) {     // found a match, count syllable
-      ++cnt;
+      cnt++;
       skip = false;
     } else {
       // No recognized syllable item, at least a syllable char then?
@@ -2606,10 +2607,10 @@ void ex_spellrepall(exarg_T *eap)
       changed_bytes(curwin->w_cursor.lnum, curwin->w_cursor.col);
 
       if (curwin->w_cursor.lnum != prev_lnum) {
-        ++sub_nlines;
+        sub_nlines++;
         prev_lnum = curwin->w_cursor.lnum;
       }
-      ++sub_nsubs;
+      sub_nsubs++;
     }
     curwin->w_cursor.col += (colnr_T)STRLEN(repl_to);
   }
@@ -2900,12 +2901,12 @@ static void spell_soundfold_wsal(slang_T *slang, char_u *inword, char_u *res)
         if ((pf = smp[n].sm_oneof_w) != NULL) {
           // Check for match with one of the chars in "sm_oneof".
           while (*pf != NUL && *pf != word[i + k]) {
-            ++pf;
+            pf++;
           }
           if (*pf == NUL) {
             continue;
           }
-          ++k;
+          k++;
         }
         char_u *s = smp[n].sm_rules;
         pri = 5;            // default priority
@@ -2975,12 +2976,12 @@ static void spell_soundfold_wsal(slang_T *slang, char_u *inword, char_u *res)
                 // Check for match with one of the chars in
                 // "sm_oneof".
                 while (*pf != NUL && *pf != word[i + k0]) {
-                  ++pf;
+                  pf++;
                 }
                 if (*pf == NUL) {
                   continue;
                 }
-                ++k0;
+                k0++;
               }
 
               p0 = 5;
@@ -3284,7 +3285,7 @@ void spell_dump_compl(char_u *pat, int ic, Direction *dir, int dumpflags_arg)
              && (pat == NULL || !ins_compl_interrupted())) {
         if (curi[depth] > byts[arridx[depth]]) {
           // Done all bytes at this node, go up one level.
-          --depth;
+          depth--;
           line_breakcheck();
           ins_compl_check_keys(50, false);
         } else {
@@ -3317,7 +3318,7 @@ void spell_dump_compl(char_u *pat, int ic, Direction *dir, int dumpflags_arg)
                 dump_word(slang, word, pat, dir,
                           dumpflags, flags, lnum);
                 if (pat == NULL) {
-                  ++lnum;
+                  lnum++;
                 }
               }
 
@@ -3342,7 +3343,7 @@ void spell_dump_compl(char_u *pat, int ic, Direction *dir, int dumpflags_arg)
             assert(depth >= 0);
             if (depth <= patlen
                 && mb_strnicmp(word, pat, (size_t)depth) != 0) {
-              --depth;
+              depth--;
             }
           }
         }
@@ -3480,7 +3481,7 @@ static linenr_T dump_prefixes(slang_T *slang, char_u *word, char_u *pat, Directi
       len = byts[n];
       if (curi[depth] > len) {
         // Done all bytes at this node, go up one level.
-        --depth;
+        depth--;
         line_breakcheck();
       } else {
         // Do one more byte at this node.
@@ -3503,7 +3504,7 @@ static linenr_T dump_prefixes(slang_T *slang, char_u *word, char_u *pat, Directi
                       (c & WF_RAREPFX) ? (flags | WF_RARE)
                                        : flags, lnum);
             if (lnum != 0) {
-              ++lnum;
+              lnum++;
             }
           }
 
@@ -3519,7 +3520,7 @@ static linenr_T dump_prefixes(slang_T *slang, char_u *word, char_u *pat, Directi
                         (c & WF_RAREPFX) ? (flags | WF_RARE)
                                          : flags, lnum);
               if (lnum != 0) {
-                ++lnum;
+                lnum++;
               }
             }
           }
@@ -3605,4 +3606,72 @@ int expand_spelling(linenr_T lnum, char_u *pat, char ***matchp)
   spell_suggest_list(&ga, pat, 100, spell_expand_need_cap, true);
   *matchp = ga.ga_data;
   return ga.ga_len;
+}
+
+/// Return true if "val" is a valid 'spelllang' value.
+bool valid_spelllang(const char_u *val)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  return valid_name(val, ".-_,@");
+}
+
+/// Return true if "val" is a valid 'spellfile' value.
+bool valid_spellfile(const char_u *val)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  for (const char_u *s = val; *s != NUL; s++) {
+    if (!vim_isfilec(*s) && *s != ',' && *s != ' ') {
+      return false;
+    }
+  }
+  return true;
+}
+
+char *did_set_spell_option(bool is_spellfile)
+{
+  char *errmsg = NULL;
+
+  if (is_spellfile) {
+    int l = (int)STRLEN(curwin->w_s->b_p_spf);
+    if (l > 0
+        && (l < 4 || STRCMP(curwin->w_s->b_p_spf + l - 4, ".add") != 0)) {
+      errmsg = e_invarg;
+    }
+  }
+
+  if (errmsg == NULL) {
+    FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+      if (wp->w_buffer == curbuf && wp->w_p_spell) {
+        errmsg = did_set_spelllang(wp);
+        break;
+      }
+    }
+  }
+
+  return errmsg;
+}
+
+/// Set curbuf->b_cap_prog to the regexp program for 'spellcapcheck'.
+/// Return error message when failed, NULL when OK.
+char *compile_cap_prog(synblock_T *synblock)
+  FUNC_ATTR_NONNULL_ALL
+{
+  regprog_T *rp = synblock->b_cap_prog;
+  char_u *re;
+
+  if (synblock->b_p_spc == NULL || *synblock->b_p_spc == NUL) {
+    synblock->b_cap_prog = NULL;
+  } else {
+    // Prepend a ^ so that we only match at one column
+    re = concat_str((char_u *)"^", synblock->b_p_spc);
+    synblock->b_cap_prog = vim_regcomp((char *)re, RE_MAGIC);
+    xfree(re);
+    if (synblock->b_cap_prog == NULL) {
+      synblock->b_cap_prog = rp;         // restore the previous program
+      return e_invarg;
+    }
+  }
+
+  vim_regfree(rp);
+  return NULL;
 }

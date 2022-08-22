@@ -107,6 +107,12 @@ module.cmds = {
     func='ex_listdo',
   },
   {
+    command='argdedupe',
+    flags=TRLBAR,
+    addr_type='ADDR_NONE',
+    func='ex_argdedupe',
+  },
+  {
     command='argedit',
     flags=bit.bor(BANG, NEEDARG, RANGE, ZEROR, FILES, CMDARG, ARGOPT, TRLBAR),
     addr_type='ADDR_ARGUMENTS',
@@ -3175,7 +3181,7 @@ module.cmds = {
   },
   {
     command='wincmd',
-    flags=bit.bor(NEEDARG, WORD1, RANGE, CMDWIN, LOCK_OK),
+    flags=bit.bor(NEEDARG, WORD1, RANGE, COUNT, CMDWIN, LOCK_OK),
     addr_type='ADDR_OTHER',
     func='ex_wincmd',
   },

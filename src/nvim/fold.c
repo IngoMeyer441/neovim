@@ -14,6 +14,7 @@
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
+#include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_session.h"
@@ -31,7 +32,6 @@
 #include "nvim/option.h"
 #include "nvim/os/input.h"
 #include "nvim/plines.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
@@ -863,7 +863,7 @@ int foldMoveTo(const bool updown, const int dir, const long count)
           if (fp - (fold_T *)gap->ga_data >= gap->ga_len) {
             break;
           }
-          --fp;
+          fp--;
         } else {
           if (fp == (fold_T *)gap->ga_data) {
             break;
@@ -1793,7 +1793,7 @@ static void foldtext_cleanup(char_u *str)
   char_u *cms_start = (char_u *)skipwhite((char *)curbuf->b_p_cms);
   size_t cms_slen = STRLEN(cms_start);
   while (cms_slen > 0 && ascii_iswhite(cms_start[cms_slen - 1])) {
-    --cms_slen;
+    cms_slen--;
   }
 
   // locate "%s" in 'commentstring', use the part before and after it.
@@ -1805,7 +1805,7 @@ static void foldtext_cleanup(char_u *str)
 
     // exclude white space before "%s"
     while (cms_slen > 0 && ascii_iswhite(cms_start[cms_slen - 1])) {
-      --cms_slen;
+      cms_slen--;
     }
 
     // skip "%s" and white space after it

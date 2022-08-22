@@ -18,6 +18,7 @@
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
+#include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
@@ -41,6 +42,7 @@
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
+#include "nvim/optionstr.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/os_defs.h"
@@ -49,7 +51,6 @@
 #include "nvim/path.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/sha256.h"
 #include "nvim/shada.h"
@@ -632,7 +633,7 @@ int readfile(char *fname, char *sfname, linenr_T from, linenr_T lines_to_skip,
     }
 
     if (aborting()) {       // autocmds may abort script processing
-      --no_wait_return;
+      no_wait_return--;
       msg_scroll = msg_save;
       curbuf->b_p_ro = TRUE;            // must use "w!" now
       return FAIL;
@@ -1197,11 +1198,11 @@ retry:
           }
 
           // Deal with a bad byte and continue with the next.
-          ++fromp;
-          --from_size;
+          fromp++;
+          from_size--;
           if (bad_char_behavior == BAD_KEEP) {
             *top++ = *(fromp - 1);
-            --to_size;
+            to_size--;
           } else if (bad_char_behavior != BAD_DROP) {
             *top++ = (char)bad_char_behavior;
             to_size--;
@@ -1239,7 +1240,7 @@ retry:
             // Check for a trailing incomplete UTF-8 sequence
             tail = ptr + size - 1;
             while (tail > ptr && (*tail & 0xc0) == 0x80) {
-              --tail;
+              tail--;
             }
             if (tail + utf_byte2len(*tail) <= ptr + size) {
               tail = NULL;
@@ -1557,7 +1558,7 @@ rewind_retry:
      * Keep it fast!
      */
     if (fileformat == EOL_MAC) {
-      --ptr;
+      ptr--;
       while (++ptr, --size >= 0) {
         // catch most common case first
         if ((c = *ptr) != NUL && c != CAR && c != NL) {
@@ -1578,20 +1579,20 @@ rewind_retry:
             if (read_undo_file) {
               sha256_update(&sha_ctx, (char_u *)line_start, (size_t)len);
             }
-            ++lnum;
+            lnum++;
             if (--read_count == 0) {
               error = true;                     // break loop
               line_start = ptr;                 // nothing left to write
               break;
             }
           } else {
-            --skip_count;
+            skip_count--;
           }
           line_start = ptr + 1;
         }
       }
     } else {
-      --ptr;
+      ptr--;
       while (++ptr, --size >= 0) {
         if ((c = *ptr) != NUL && c != NL) {        // catch most common case
           continue;
@@ -1634,14 +1635,14 @@ rewind_retry:
             if (read_undo_file) {
               sha256_update(&sha_ctx, (char_u *)line_start, (size_t)len);
             }
-            ++lnum;
+            lnum++;
             if (--read_count == 0) {
               error = true;                         // break loop
               line_start = ptr;                 // nothing left to write
               break;
             }
           } else {
-            --skip_count;
+            skip_count--;
           }
           line_start = ptr + 1;
         }
@@ -2000,7 +2001,7 @@ static linenr_T readfile_linenr(linenr_T linecnt, char_u *p, char_u *endp)
   lnum = curbuf->b_ml.ml_line_count - linecnt + 1;
   for (s = p; s < endp; ++s) {
     if (*s == '\n') {
-      ++lnum;
+      lnum++;
     }
   }
   return lnum;
@@ -2478,7 +2479,7 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
       } else {                                                    // less lines
         end -= old_line_count - buf->b_ml.ml_line_count;
         if (end < start) {
-          --no_wait_return;
+          no_wait_return--;
           msg_scroll = msg_save;
           emsg(_("E204: Autocommand changed number of lines in unexpected way"));
           return FAIL;
@@ -4820,8 +4821,8 @@ int check_timestamps(int focus)
         }
       }
     }
-    --no_wait_return;
-    need_check_timestamps = FALSE;
+    no_wait_return--;
+    need_check_timestamps = false;
     if (need_wait_return && didit == 2) {
       // make sure msg isn't overwritten
       msg_puts("\n");
@@ -5681,7 +5682,7 @@ char *file_pat_to_reg_pat(const char *pat, const char *pat_end, char *allow_dirs
       reg_pat[i++] = '.';
       reg_pat[i++] = '*';
       while (p[1] == '*') {  // "**" matches like "*"
-        ++p;
+        p++;
       }
       break;
     case '.':
@@ -5769,7 +5770,7 @@ char *file_pat_to_reg_pat(const char *pat, const char *pat_end, char *allow_dirs
     case '}':
       reg_pat[i++] = '\\';
       reg_pat[i++] = ')';
-      --nested;
+      nested--;
       break;
     case ',':
       if (nested) {

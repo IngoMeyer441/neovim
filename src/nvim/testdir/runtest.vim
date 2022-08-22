@@ -114,6 +114,13 @@ if has('win32')
   let $PROMPT = '$P$G'
 endif
 
+if has('mac')
+  " In MacOS, when starting a shell in a terminal, a bash deprecation warning
+  " message is displayed. This breaks the terminal test. Disable the warning
+  " message.
+  let $BASH_SILENCE_DEPRECATION_WARNING = 1
+endif
+
 " Prepare for calling test_garbagecollect_now().
 let v:testing = 1
 
@@ -257,6 +264,7 @@ endfunc
 func EarlyExit(test)
   " It's OK for the test we use to test the quit detection.
   if a:test != 'Test_zz_quit_detected()'
+    call add(v:errors, v:errmsg)
     call add(v:errors, 'Test caused Vim to exit: ' . a:test)
   endif
 

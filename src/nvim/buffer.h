@@ -4,10 +4,10 @@
 #include "nvim/eval/typval.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/func_attr.h"
+#include "nvim/grid_defs.h"  // for StlClickRecord
 #include "nvim/macros.h"
 #include "nvim/memline.h"
 #include "nvim/pos.h"  // for linenr_T
-#include "nvim/screen.h"  // for StlClickRecord
 
 // Values for buflist_getfile()
 enum getf_values {
@@ -61,6 +61,9 @@ enum bfa_values {
   BFA_KEEP_UNDO    = 4,  // do not free undo information
   BFA_IGNORE_ABORT = 8,  // do not abort for aborting()
 };
+
+EXTERN char *msg_loclist INIT(= N_("[Location List]"));
+EXTERN char *msg_qflist INIT(= N_("[Quickfix List]"));
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "buffer.h.generated.h"

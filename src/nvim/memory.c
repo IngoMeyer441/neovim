@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "nvim/api/extmark.h"
+#include "nvim/arglist.h"
 #include "nvim/context.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/eval.h"
@@ -630,6 +631,7 @@ char *arena_memdupz(Arena *arena, const char *buf, size_t size)
 # include "nvim/file_search.h"
 # include "nvim/fold.h"
 # include "nvim/getchar.h"
+# include "nvim/grid.h"
 # include "nvim/mark.h"
 # include "nvim/mbyte.h"
 # include "nvim/memline.h"
@@ -641,7 +643,6 @@ char *arena_memdupz(Arena *arena, const char *buf, size_t size)
 # include "nvim/path.h"
 # include "nvim/quickfix.h"
 # include "nvim/regexp.h"
-# include "nvim/screen.h"
 # include "nvim/search.h"
 # include "nvim/spell.h"
 # include "nvim/syntax.h"

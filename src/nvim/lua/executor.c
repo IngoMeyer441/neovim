@@ -15,12 +15,14 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/change.h"
 #include "nvim/cursor.h"
+#include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/time.h"
+#include "nvim/ex_cmds.h"
 #include "nvim/ex_getln.h"
 #include "nvim/extmark.h"
 #include "nvim/func_attr.h"
@@ -38,7 +40,6 @@
 #include "nvim/os/os.h"
 #include "nvim/profile.h"
 #include "nvim/runtime.h"
-#include "nvim/screen.h"
 #include "nvim/undo.h"
 #include "nvim/usercmd.h"
 #include "nvim/version.h"
@@ -1318,7 +1319,7 @@ int nlua_source_using_linegetter(LineGetter fgetline, void *cookie, char *name)
   current_sctx.sc_sid = SID_STR;
   current_sctx.sc_seq = 0;
   current_sctx.sc_lnum = 0;
-  estack_push(ETYPE_SCRIPT, NULL, 0);
+  estack_push(ETYPE_SCRIPT, name, 0);
 
   garray_T ga;
   char_u *line = NULL;
@@ -1939,8 +1940,13 @@ int nlua_do_ucmd(ucmd_T *cmd, exarg_T *eap, bool preview)
 
   // Split args by unescaped whitespace |<f-args>| (nargs dependent)
   if (cmd->uc_argt & EX_NOSPC) {
-    // Commands where nargs = 1 or "?" fargs is the same as args
-    lua_rawseti(lstate, -2, 1);
+    if ((cmd->uc_argt & EX_NEEDARG) || STRLEN(eap->arg)) {
+      // For commands where nargs is 1 or "?" and argument is passed, fargs = { args }
+      lua_rawseti(lstate, -2, 1);
+    } else {
+      // if nargs = "?" and no argument is passed, fargs = {}
+      lua_pop(lstate, 1);  // Pop the reference of opts.args
+    }
   } else if (eap->args == NULL) {
     // For commands with more than one possible argument, split if argument list isn't available.
     lua_pop(lstate, 1);  // Pop the reference of opts.args

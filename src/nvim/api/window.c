@@ -12,12 +12,12 @@
 #include "nvim/ascii.h"
 #include "nvim/buffer.h"
 #include "nvim/cursor.h"
+#include "nvim/drawscreen.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/globals.h"
 #include "nvim/lua/executor.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
-#include "nvim/screen.h"
 #include "nvim/syntax.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -425,4 +425,29 @@ Object nvim_win_call(Window window, LuaRef fun, Error *err)
   });
   try_end(err);
   return res;
+}
+
+/// Set highlight namespace for a window. This will use highlights defined in
+/// this namespace, but fall back to global highlights (ns=0) when missing.
+///
+/// This takes predecence over the 'winhighlight' option.
+///
+/// @param ns_id the namespace to use
+/// @param[out] err Error details, if any
+void nvim_win_set_hl_ns(Window window, Integer ns_id, Error *err)
+  FUNC_API_SINCE(10)
+{
+  win_T *win = find_window_by_handle(window, err);
+  if (!win) {
+    return;
+  }
+
+  // -1 is allowed as inherit global namespace
+  if (ns_id < -1) {
+    api_set_error(err, kErrorTypeValidation, "no such namespace");
+  }
+
+  win->w_ns_hl = (NS)ns_id;
+  win->w_hl_needs_update = true;
+  redraw_later(win, NOT_VALID);
 }

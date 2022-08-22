@@ -17,6 +17,7 @@
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
+#include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
@@ -46,7 +47,6 @@
 #include "nvim/os/time.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
@@ -288,13 +288,13 @@ void shift_line(int left, int round, int amount, int call_changed_bytes)
 {
   int count;
   int i, j;
-  int p_sw = (int)get_sw_value_indent(curbuf);
+  const int sw_val = (int)get_sw_value_indent(curbuf);
 
   count = get_indent();  // get current indent
 
   if (round) {  // round off indent
-    i = count / p_sw;  // number of p_sw rounded down
-    j = count % p_sw;  // extra spaces
+    i = count / sw_val;  // number of 'shiftwidth' rounded down
+    j = count % sw_val;  // extra spaces
     if (j && left) {  // first remove extra spaces
       amount--;
     }
@@ -306,15 +306,15 @@ void shift_line(int left, int round, int amount, int call_changed_bytes)
     } else {
       i += amount;
     }
-    count = i * p_sw;
+    count = i * sw_val;
   } else {  // original vi indent
     if (left) {
-      count -= p_sw * amount;
+      count -= sw_val * amount;
       if (count < 0) {
         count = 0;
       }
     } else {
-      count += p_sw * amount;
+      count += sw_val * amount;
     }
   }
 
@@ -334,9 +334,8 @@ static void shift_block(oparg_T *oap, int amount)
   const int oldstate = State;
   char_u *newp;
   const int oldcol = curwin->w_cursor.col;
-  int p_sw = (int)get_sw_value_indent(curbuf);
-  long *p_vts = curbuf->b_p_vts_array;
-  const long p_ts = curbuf->b_p_ts;
+  const int sw_val = (int)get_sw_value_indent(curbuf);
+  const int ts_val = (int)curbuf->b_p_ts;
   struct block_def bd;
   int incr;
   int i = 0, j = 0;
@@ -351,8 +350,8 @@ static void shift_block(oparg_T *oap, int amount)
   }
 
   // total is number of screen columns to be inserted/removed
-  int total = (int)((unsigned)amount * (unsigned)p_sw);
-  if ((total / p_sw) != amount) {
+  int total = (int)((unsigned)amount * (unsigned)sw_val);
+  if ((total / sw_val) != amount) {
     return;   // multiplication overflow
   }
 
@@ -387,7 +386,7 @@ static void shift_block(oparg_T *oap, int amount)
     // OK, now total=all the VWS reqd, and textstart points at the 1st
     // non-ws char in the block.
     if (!curbuf->b_p_et) {
-      tabstop_fromto(ws_vcol, ws_vcol + total, p_ts, p_vts, &i, &j);
+      tabstop_fromto(ws_vcol, ws_vcol + total, ts_val, curbuf->b_p_vts_array, &i, &j);
     } else {
       j = total;
     }
@@ -511,7 +510,7 @@ static void shift_block(oparg_T *oap, int amount)
 /// Caller must prepare for undo.
 static void block_insert(oparg_T *oap, char_u *s, int b_insert, struct block_def *bdp)
 {
-  int p_ts;
+  int ts_val;
   int count = 0;                // extra spaces to replace a cut TAB
   int spaces = 0;               // non-zero if cutting a TAB
   colnr_T offset;               // pointer along new line
@@ -530,18 +529,18 @@ static void block_insert(oparg_T *oap, char_u *s, int b_insert, struct block_def
     oldp = ml_get(lnum);
 
     if (b_insert) {
-      p_ts = bdp->start_char_vcols;
+      ts_val = bdp->start_char_vcols;
       spaces = bdp->startspaces;
       if (spaces != 0) {
-        count = p_ts - 1;         // we're cutting a TAB
+        count = ts_val - 1;         // we're cutting a TAB
       }
       offset = bdp->textcol;
     } else {  // append
-      p_ts = bdp->end_char_vcols;
+      ts_val = bdp->end_char_vcols;
       if (!bdp->is_short) {     // spaces = padding after block
-        spaces = (bdp->endspaces ? p_ts - bdp->endspaces : 0);
+        spaces = (bdp->endspaces ? ts_val - bdp->endspaces : 0);
         if (spaces != 0) {
-          count = p_ts - 1;           // we're cutting a TAB
+          count = ts_val - 1;           // we're cutting a TAB
         }
         offset = bdp->textcol + bdp->textlen - (spaces != 0);
       } else {  // spaces = padding to block edge
@@ -565,7 +564,7 @@ static void block_insert(oparg_T *oap, char_u *s, int b_insert, struct block_def
     assert(count >= 0);
     // Make sure the allocated size matches what is actually copied below.
     newp = xmalloc(STRLEN(oldp) + (size_t)spaces + s_len
-                   + (spaces > 0 && !bdp->is_short ? (size_t)p_ts - (size_t)spaces : 0)
+                   + (spaces > 0 && !bdp->is_short ? (size_t)ts_val - (size_t)spaces : 0)
                    + (size_t)count + 1);
 
     // copy up to shifted part
@@ -584,7 +583,7 @@ static void block_insert(oparg_T *oap, char_u *s, int b_insert, struct block_def
     if (spaces > 0 && !bdp->is_short) {
       if (*oldp == TAB) {
         // insert post-padding
-        memset(newp + offset + spaces, ' ', (size_t)(p_ts - spaces));
+        memset(newp + offset + spaces, ' ', (size_t)(ts_val - spaces));
         // We're splitting a TAB, don't copy it.
         oldp++;
         // We allowed for that TAB, remember this now
@@ -1927,8 +1926,8 @@ static int op_replace(oparg_T *oap, int c)
       // times.
       if (utf_char2cells(c) > 1) {
         if ((numc & 1) && !bd.is_short) {
-          ++bd.endspaces;
-          ++n;
+          bd.endspaces++;
+          n++;
         }
         numc = numc / 2;
       }
@@ -3104,7 +3103,7 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
             if (y_array != NULL) {
               *ptr = NUL;
             }
-            ++ptr;
+            ptr++;
             // A trailing '\n' makes the register linewise.
             if (*ptr == NUL) {
               y_type = kMTLineWise;
@@ -3442,12 +3441,9 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
         }
       }
       curbuf->b_op_start = curwin->w_cursor;
-    }
-    /*
-     * Line mode: BACKWARD is the same as FORWARD on the previous line
-     */
-    else if (dir == BACKWARD) {
-      --lnum;
+    } else if (dir == BACKWARD) {
+      // Line mode: BACKWARD is the same as FORWARD on the previous line
+      lnum--;
     }
     new_cursor = curwin->w_cursor;
 
@@ -3586,7 +3582,7 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
             new_lnum++;
           }
           lnum++;
-          ++nr_lines;
+          nr_lines++;
           if (flags & PUT_FIXINDENT) {
             old_pos = curwin->w_cursor;
             curwin->w_cursor.lnum = lnum;
@@ -4001,7 +3997,7 @@ char_u *skip_comment(char_u *line, bool process, bool include_space, bool *is_co
         || *comment_flags == ':') {
       break;
     }
-    ++comment_flags;
+    comment_flags++;
   }
 
   // If we found a colon, it means that we are not processing a line
@@ -4285,7 +4281,7 @@ static int same_leader(linenr_T lnum, int leader1_len, char_u *leader1_flags, in
       }
     } else {
       while (ascii_iswhite(line1[idx1])) {
-        ++idx1;
+        idx1++;
       }
     }
   }
@@ -4698,7 +4694,7 @@ static int fmt_check_par(linenr_T lnum, int *leader_len, char_u **leader_flags, 
      */
     flags = *leader_flags;
     while (*flags && *flags != ':' && *flags != COM_END) {
-      ++flags;
+      flags++;
     }
   }
 
@@ -6139,6 +6135,23 @@ static void op_colon(oparg_T *oap)
   // do_cmdline() does the rest
 }
 
+/// callback function for 'operatorfunc'
+static Callback opfunc_cb;
+
+/// Process the 'operatorfunc' option value.
+/// @return  OK or FAIL
+int set_operatorfunc_option(void)
+{
+  return option_set_callback_func(p_opfunc, &opfunc_cb);
+}
+
+#if defined(EXITFREE)
+void free_operatorfunc_option(void)
+{
+  callback_free(&opfunc_cb);
+}
+#endif
+
 /// Handle the "g@" operator: call 'operatorfunc'.
 static void op_function(const oparg_T *oap)
   FUNC_ATTR_NONNULL_ALL
@@ -6176,7 +6189,10 @@ static void op_function(const oparg_T *oap)
     // Reset finish_op so that mode() returns the right value.
     finish_op = false;
 
-    (void)call_func_retnr((char *)p_opfunc, 1, argv);
+    typval_T rettv;
+    if (callback_call(&opfunc_cb, 1, argv, &rettv)) {
+      tv_clear(&rettv);
+    }
 
     virtual_op = save_virtual_op;
     finish_op = save_finish_op;

@@ -13,6 +13,7 @@
 
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
+#include "nvim/grid.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/lib/kvec.h"
@@ -22,8 +23,7 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/os/os.h"
-#include "nvim/popupmnu.h"
-#include "nvim/screen.h"
+#include "nvim/popupmenu.h"
 #include "nvim/ugrid.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"

@@ -18,6 +18,7 @@
 #include "nvim/change.h"
 #include "nvim/cursor.h"
 #include "nvim/decoration.h"
+#include "nvim/drawscreen.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/extmark.h"

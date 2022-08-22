@@ -22,6 +22,7 @@
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
 #include "nvim/digraph.h"
+#include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/userfunc.h"
@@ -34,7 +35,8 @@
 #include "nvim/fold.h"
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
-#include "nvim/grid_defs.h"
+#include "nvim/grid.h"
+#include "nvim/help.h"
 #include "nvim/indent.h"
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
@@ -55,7 +57,6 @@
 #include "nvim/plines.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
@@ -1281,10 +1282,10 @@ static void normal_redraw(NormalState *s)
 
   if (VIsual_active) {
     redraw_curbuf_later(INVERTED);  // update inverted part
-    update_screen(INVERTED);
+    update_screen(0);
   } else if (must_redraw) {
     update_screen(0);
-  } else if (redraw_cmdline || clear_cmdline) {
+  } else if (redraw_cmdline || clear_cmdline || redraw_mode) {
     showmode();
   }
 
@@ -1321,7 +1322,7 @@ static void normal_redraw(NormalState *s)
   did_emsg = false;
   msg_didany = false;  // reset lines_left in msg_start()
   may_clear_sb_text();  // clear scroll-back text on next msg
-  showruler(false);
+  show_cursor_info(false);
 
   setcursor();
 }
@@ -1837,7 +1838,8 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
       }
       if (jump_flags) {
         jump_flags = jump_to_mouse(jump_flags, NULL, which_button);
-        update_curbuf(VIsual_active ? INVERTED : VALID);
+        redraw_curbuf_later(VIsual_active ? INVERTED : VALID);
+        update_screen(0);
         setcursor();
         ui_flush();  // Update before showing popup menu
       }
@@ -6930,6 +6932,10 @@ static void nv_esc(cmdarg_T *cap)
       }
     }
 
+    if (restart_edit != 0) {
+      redraw_mode = true;  // remove "-- (insert) --"
+    }
+
     restart_edit = 0;
 
     if (cmdwin_type != 0) {
@@ -6937,10 +6943,10 @@ static void nv_esc(cmdarg_T *cap)
       got_int = false;          // don't stop executing autocommands et al.
       return;
     }
-  } else if (cmdwin_type != 0 && ex_normal_busy) {
+  } else if (cmdwin_type != 0 && ex_normal_busy && typebuf_was_empty) {
     // When :normal runs out of characters while in the command line window
-    // vgetorpeek() will return ESC.  Exit the cmdline window to break the
-    // loop.
+    // vgetorpeek() will repeatedly return ESC.  Exit the cmdline window to
+    // break the loop.
     cmdwin_result = K_IGNORE;
     return;
   }

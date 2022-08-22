@@ -7,12 +7,14 @@
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
+#include "nvim/arglist.h"
 #include "nvim/ascii.h"
 #include "nvim/assert.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand.h"
 #include "nvim/cmdhist.h"
 #include "nvim/context.h"
 #include "nvim/cursor.h"
@@ -27,12 +29,14 @@
 #include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
+#include "nvim/ex_cmds.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
 #include "nvim/file_search.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
+#include "nvim/getchar.h"
 #include "nvim/globals.h"
 #include "nvim/highlight_group.h"
 #include "nvim/if_cscope.h"
@@ -54,12 +58,12 @@
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/optionstr.h"
 #include "nvim/os/dl.h"
-#include "nvim/os/input.h"
 #include "nvim/os/shell.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
-#include "nvim/popupmnu.h"
+#include "nvim/popupmenu.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
@@ -371,77 +375,6 @@ static void f_appendbufline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   } else {
     const linenr_T lnum = tv_get_lnum_buf(&argvars[1], buf);
     set_buffer_lines(buf, lnum, true, &argvars[2], rettv);
-  }
-}
-
-static void f_argc(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  if (argvars[0].v_type == VAR_UNKNOWN) {
-    // use the current window
-    rettv->vval.v_number = ARGCOUNT;
-  } else if (argvars[0].v_type == VAR_NUMBER
-             && tv_get_number(&argvars[0]) == -1) {
-    // use the global argument list
-    rettv->vval.v_number = GARGCOUNT;
-  } else {
-    // use the argument list of the specified window
-    win_T *wp = find_win_by_nr_or_id(&argvars[0]);
-    if (wp != NULL) {
-      rettv->vval.v_number = WARGCOUNT(wp);
-    } else {
-      rettv->vval.v_number = -1;
-    }
-  }
-}
-
-/// "argidx()" function
-static void f_argidx(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = curwin->w_arg_idx;
-}
-
-/// "arglistid" function
-static void f_arglistid(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = -1;
-  win_T *wp = find_tabwin(&argvars[0], &argvars[1]);
-  if (wp != NULL) {
-    rettv->vval.v_number = wp->w_alist->id;
-  }
-}
-
-/// "argv(nr)" function
-static void f_argv(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  aentry_T *arglist = NULL;
-  int argcount = -1;
-
-  if (argvars[0].v_type != VAR_UNKNOWN) {
-    if (argvars[1].v_type == VAR_UNKNOWN) {
-      arglist = ARGLIST;
-      argcount = ARGCOUNT;
-    } else if (argvars[1].v_type == VAR_NUMBER
-               && tv_get_number(&argvars[1]) == -1) {
-      arglist = GARGLIST;
-      argcount = GARGCOUNT;
-    } else {
-      win_T *wp = find_win_by_nr_or_id(&argvars[1]);
-      if (wp != NULL) {
-        // Use the argument list of the specified window
-        arglist = WARGLIST(wp);
-        argcount = WARGCOUNT(wp);
-      }
-    }
-    rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = NULL;
-    int idx = (int)tv_get_number_chk(&argvars[0], NULL);
-    if (arglist != NULL && idx >= 0 && idx < argcount) {
-      rettv->vval.v_string = xstrdup((const char *)alist_name(&arglist[idx]));
-    } else if (idx == -1) {
-      get_arglist_as_rettv(arglist, argcount, rettv);
-    }
-  } else {
-    get_arglist_as_rettv(ARGLIST, ARGCOUNT, rettv);
   }
 }
 
@@ -2122,10 +2055,10 @@ static void f_expandcmd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   };
   eap.argt |= EX_NOSPC;
 
+  emsg_off++;
   expand_filename(&eap, &cmdstr, &errormsg);
-  if (errormsg != NULL && *errormsg != NUL) {
-    emsg(errormsg);
-  }
+  emsg_off--;
+
   rettv->vval.v_string = cmdstr;
 }
 
@@ -2704,147 +2637,6 @@ static void f_getchangelist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   }
 }
 
-/// "getchar()" and "getcharstr()" functions
-static void getchar_common(typval_T *argvars, typval_T *rettv)
-  FUNC_ATTR_NONNULL_ALL
-{
-  varnumber_T n;
-  bool error = false;
-
-  no_mapping++;
-  allow_keys++;
-  for (;;) {
-    // Position the cursor.  Needed after a message that ends in a space,
-    // or if event processing caused a redraw.
-    ui_cursor_goto(msg_row, msg_col);
-
-    if (argvars[0].v_type == VAR_UNKNOWN) {
-      // getchar(): blocking wait.
-      // TODO(bfredl): deduplicate shared logic with state_enter ?
-      if (!char_avail()) {
-        (void)os_inchar(NULL, 0, -1, 0, main_loop.events);
-        if (!multiqueue_empty(main_loop.events)) {
-          state_handle_k_event();
-          continue;
-        }
-      }
-      n = safe_vgetc();
-    } else if (tv_get_number_chk(&argvars[0], &error) == 1) {
-      // getchar(1): only check if char avail
-      n = vpeekc_any();
-    } else if (error || vpeekc_any() == NUL) {
-      // illegal argument or getchar(0) and no char avail: return zero
-      n = 0;
-    } else {
-      // getchar(0) and char avail() != NUL: get a character.
-      // Note that vpeekc_any() returns K_SPECIAL for K_IGNORE.
-      n = safe_vgetc();
-    }
-
-    if (n == K_IGNORE
-        || n == K_MOUSEMOVE
-        || n == K_VER_SCROLLBAR
-        || n == K_HOR_SCROLLBAR) {
-      continue;
-    }
-    break;
-  }
-  no_mapping--;
-  allow_keys--;
-
-  if (!ui_has_messages()) {
-    // redraw the screen after getchar()
-    update_screen(CLEAR);
-  }
-
-  set_vim_var_nr(VV_MOUSE_WIN, 0);
-  set_vim_var_nr(VV_MOUSE_WINID, 0);
-  set_vim_var_nr(VV_MOUSE_LNUM, 0);
-  set_vim_var_nr(VV_MOUSE_COL, 0);
-
-  rettv->vval.v_number = n;
-  if (n != 0 && (IS_SPECIAL(n) || mod_mask != 0)) {
-    char_u temp[10];                // modifier: 3, mbyte-char: 6, NUL: 1
-    int i = 0;
-
-    // Turn a special key into three bytes, plus modifier.
-    if (mod_mask != 0) {
-      temp[i++] = K_SPECIAL;
-      temp[i++] = KS_MODIFIER;
-      temp[i++] = (char_u)mod_mask;
-    }
-    if (IS_SPECIAL(n)) {
-      temp[i++] = K_SPECIAL;
-      temp[i++] = (char_u)K_SECOND(n);
-      temp[i++] = K_THIRD(n);
-    } else {
-      i += utf_char2bytes((int)n, (char *)temp + i);
-    }
-    assert(i < 10);
-    temp[i++] = NUL;
-    rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = (char *)vim_strsave(temp);
-
-    if (is_mouse_key((int)n)) {
-      int row = mouse_row;
-      int col = mouse_col;
-      int grid = mouse_grid;
-      linenr_T lnum;
-      win_T *wp;
-      int winnr = 1;
-
-      if (row >= 0 && col >= 0) {
-        // Find the window at the mouse coordinates and compute the
-        // text position.
-        win_T *const win = mouse_find_win(&grid, &row, &col);
-        if (win == NULL) {
-          return;
-        }
-        (void)mouse_comp_pos(win, &row, &col, &lnum);
-        for (wp = firstwin; wp != win; wp = wp->w_next) {
-          winnr++;
-        }
-        set_vim_var_nr(VV_MOUSE_WIN, winnr);
-        set_vim_var_nr(VV_MOUSE_WINID, wp->handle);
-        set_vim_var_nr(VV_MOUSE_LNUM, lnum);
-        set_vim_var_nr(VV_MOUSE_COL, col + 1);
-      }
-    }
-  }
-}
-
-/// "getchar()" function
-static void f_getchar(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  getchar_common(argvars, rettv);
-}
-
-/// "getcharstr()" function
-static void f_getcharstr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  getchar_common(argvars, rettv);
-
-  if (rettv->v_type == VAR_NUMBER) {
-    char temp[7];   // mbyte-char: 6, NUL: 1
-    const varnumber_T n = rettv->vval.v_number;
-    int i = 0;
-
-    if (n != 0) {
-      i += utf_char2bytes((int)n, (char *)temp);
-    }
-    assert(i < 7);
-    temp[i++] = NUL;
-    rettv->v_type = VAR_STRING;
-    rettv->vval.v_string = xstrdup(temp);
-  }
-}
-
-/// "getcharmod()" function
-static void f_getcharmod(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = mod_mask;
-}
-
 static void getpos_both(typval_T *argvars, typval_T *rettv, bool getcurpos, bool charcol)
 {
   pos_T *fp = NULL;
@@ -2959,84 +2751,6 @@ static void f_getcmdwintype(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   rettv->vval.v_string = NULL;
   rettv->vval.v_string = xmallocz(1);
   rettv->vval.v_string[0] = (char)cmdwin_type;
-}
-
-/// "getcompletion()" function
-static void f_getcompletion(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  char_u *pat;
-  expand_T xpc;
-  bool filtered = false;
-  int options = WILD_SILENT | WILD_USE_NL | WILD_ADD_SLASH
-                | WILD_NO_BEEP | WILD_HOME_REPLACE;
-
-  if (argvars[1].v_type != VAR_STRING) {
-    semsg(_(e_invarg2), "type must be a string");
-    return;
-  }
-  const char *const type = tv_get_string(&argvars[1]);
-
-  if (argvars[2].v_type != VAR_UNKNOWN) {
-    filtered = (bool)tv_get_number_chk(&argvars[2], NULL);
-  }
-
-  if (p_wic) {
-    options |= WILD_ICASE;
-  }
-
-  // For filtered results, 'wildignore' is used
-  if (!filtered) {
-    options |= WILD_KEEP_ALL;
-  }
-
-  if (argvars[0].v_type != VAR_STRING) {
-    emsg(_(e_invarg));
-    return;
-  }
-  const char *pattern = tv_get_string(&argvars[0]);
-
-  if (strcmp(type, "cmdline") == 0) {
-    set_one_cmd_context(&xpc, pattern);
-    xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
-    xpc.xp_col = (int)STRLEN(pattern);
-    goto theend;
-  }
-
-  ExpandInit(&xpc);
-  xpc.xp_pattern = (char *)pattern;
-  xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
-  xpc.xp_context = cmdcomplete_str_to_type(type);
-  if (xpc.xp_context == EXPAND_NOTHING) {
-    semsg(_(e_invarg2), type);
-    return;
-  }
-
-  if (xpc.xp_context == EXPAND_MENUS) {
-    set_context_in_menu_cmd(&xpc, "menu", xpc.xp_pattern, false);
-    xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
-  }
-
-  if (xpc.xp_context == EXPAND_CSCOPE) {
-    set_context_in_cscope_cmd(&xpc, (const char *)xpc.xp_pattern, CMD_cscope);
-    xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
-  }
-
-  if (xpc.xp_context == EXPAND_SIGN) {
-    set_context_in_sign_cmd(&xpc, (char_u *)xpc.xp_pattern);
-    xpc.xp_pattern_len = STRLEN(xpc.xp_pattern);
-  }
-
-theend:
-  pat = addstar((char_u *)xpc.xp_pattern, xpc.xp_pattern_len, xpc.xp_context);
-  ExpandOne(&xpc, pat, NULL, options, WILD_ALL_KEEP);
-  tv_list_alloc_ret(rettv, xpc.xp_numfiles);
-
-  for (int i = 0; i < xpc.xp_numfiles; i++) {
-    tv_list_append_string(rettv->vval.v_list, (const char *)xpc.xp_files[i],
-                          -1);
-  }
-  xfree(pat);
-  ExpandCleanup(&xpc);
 }
 
 /// `getcwd([{win}[, {tab}]])` function
@@ -3308,13 +3022,6 @@ static void f_getline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   get_buffer_lines(curbuf, lnum, end, retlist, rettv);
 }
 
-/// "getloclist()" function
-static void f_getloclist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  win_T *wp = find_win_by_nr_or_id(&argvars[0]);
-  get_qf_loc_list(false, wp, &argvars[1], rettv);
-}
-
 /// "getmarklist()" function
 static void f_getmarklist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
@@ -3395,12 +3102,6 @@ static void f_getcursorcharpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 static void f_getpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   getpos_both(argvars, rettv, false, false);
-}
-
-/// "getqflist()" functions
-static void f_getqflist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  get_qf_loc_list(true, NULL, &argvars[0], rettv);
 }
 
 /// Common between getreg(), getreginfo() and getregtype(): get the register
@@ -4778,7 +4479,7 @@ static void f_jobstart(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     if (new_cwd && *new_cwd != NUL) {
       cwd = new_cwd;
       // The new cwd must be a directory.
-      if (!os_isdir_executable((const char *)cwd)) {
+      if (!os_isdir((const char_u *)cwd)) {
         semsg(_(e_invarg2), "expected valid directory");
         shell_free_argv(argv);
         return;
@@ -7928,9 +7629,9 @@ static void f_setenv(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 
   if (argvars[1].v_type == VAR_SPECIAL
       && argvars[1].vval.v_special == kSpecialVarNull) {
-    os_unsetenv(name);
+    vim_unsetenv_ext(name);
   } else {
-    os_setenv(name, tv_get_string_buf(&argvars[1], valbuf), 1);
+    vim_setenv_ext(name, tv_get_string_buf(&argvars[1], valbuf));
   }
 }
 
@@ -7972,108 +7673,10 @@ static void f_setline(typval_T *argvars, typval_T *rettv, FunPtr fptr)
   set_buffer_lines(curbuf, lnum, false, &argvars[1], rettv);
 }
 
-/// Create quickfix/location list from VimL values
-///
-/// Used by `setqflist()` and `setloclist()` functions. Accepts invalid
-/// args argument in which case errors out, including VAR_UNKNOWN parameters.
-///
-/// @param[in,out]  wp  Window to create location list for. May be NULL in
-///                     which case quickfix list will be created.
-/// @param[in]  args  [list, action, what]
-/// @param[in]  args[0]  Quickfix list contents.
-/// @param[in]  args[1]  Optional. Action to perform:
-///                      append to an existing list, replace its content,
-///                      or create a new one.
-/// @param[in]  args[2]  Optional. Quickfix list properties or title.
-///                      Defaults to caller function name.
-/// @param[out]  rettv  Return value: 0 in case of success, -1 otherwise.
-static void set_qf_ll_list(win_T *wp, typval_T *args, typval_T *rettv)
-  FUNC_ATTR_NONNULL_ARG(2, 3)
-{
-  static char *e_invact = N_("E927: Invalid action: '%s'");
-  const char *title = NULL;
-  char action = ' ';
-  static int recursive = 0;
-  rettv->vval.v_number = -1;
-  dict_T *what = NULL;
-
-  typval_T *list_arg = &args[0];
-  if (list_arg->v_type != VAR_LIST) {
-    emsg(_(e_listreq));
-    return;
-  } else if (recursive != 0) {
-    emsg(_(e_au_recursive));
-    return;
-  }
-
-  typval_T *action_arg = &args[1];
-  if (action_arg->v_type == VAR_UNKNOWN) {
-    // Option argument was not given.
-    goto skip_args;
-  } else if (action_arg->v_type != VAR_STRING) {
-    emsg(_(e_stringreq));
-    return;
-  }
-  const char *const act = tv_get_string_chk(action_arg);
-  if ((*act == 'a' || *act == 'r' || *act == ' ' || *act == 'f')
-      && act[1] == NUL) {
-    action = *act;
-  } else {
-    semsg(_(e_invact), act);
-    return;
-  }
-
-  typval_T *const what_arg = &args[2];
-  if (what_arg->v_type == VAR_UNKNOWN) {
-    // Option argument was not given.
-    goto skip_args;
-  } else if (what_arg->v_type == VAR_STRING) {
-    title = tv_get_string_chk(what_arg);
-    if (!title) {
-      // Type error. Error already printed by tv_get_string_chk().
-      return;
-    }
-  } else if (what_arg->v_type == VAR_DICT && what_arg->vval.v_dict != NULL) {
-    what = what_arg->vval.v_dict;
-  } else {
-    emsg(_(e_dictreq));
-    return;
-  }
-
-skip_args:
-  if (!title) {
-    title = (wp ? ":setloclist()" : ":setqflist()");
-  }
-
-  recursive++;
-  list_T *const l = list_arg->vval.v_list;
-  if (set_errorlist(wp, l, action, (char *)title, what) == OK) {
-    rettv->vval.v_number = 0;
-  }
-  recursive--;
-}
-
-/// "setloclist()" function
-static void f_setloclist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  rettv->vval.v_number = -1;
-
-  win_T *win = find_win_by_nr_or_id(&argvars[0]);
-  if (win != NULL) {
-    set_qf_ll_list(win, &argvars[1], rettv);
-  }
-}
-
 /// "setpos()" function
 static void f_setpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
   set_position(argvars, rettv, false);
-}
-
-/// "setqflist()" function
-static void f_setqflist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
-{
-  set_qf_ll_list(NULL, argvars, rettv);
 }
 
 /// Translate a register type string to the yank type and block length
@@ -9572,7 +9175,7 @@ static void f_termopen(typval_T *argvars, typval_T *rettv, FunPtr fptr)
     if (new_cwd && *new_cwd != NUL) {
       cwd = new_cwd;
       // The new cwd must be a directory.
-      if (!os_isdir_executable(cwd)) {
+      if (!os_isdir((const char_u *)cwd)) {
         semsg(_(e_invarg2), "expected valid directory");
         shell_free_argv(argv);
         return;
@@ -10030,7 +9633,7 @@ static void f_visualmode(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 /// "wildmenumode()" function
 static void f_wildmenumode(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 {
-  if (wild_menu_showing || ((State & MODE_CMDLINE) && pum_visible())) {
+  if (wild_menu_showing || ((State & MODE_CMDLINE) && cmdline_pum_active())) {
     rettv->vval.v_number = 1;
   }
 }

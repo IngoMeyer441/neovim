@@ -312,6 +312,17 @@ Note: In the future more global options can be made |global-local|.  Using
 ":setlocal" on a global option might work differently then.
 
 
+						*option-value-function*
+Some options ('completefunc', 'imactivatefunc', 'imstatusfunc', 'omnifunc',
+'operatorfunc', 'quickfixtextfunc' and 'tagfunc') are set to a function name
+or a function reference or a lambda function.  Examples:
+>
+	set opfunc=MyOpFunc
+	set opfunc=function("MyOpFunc")
+	set opfunc=funcref("MyOpFunc")
+	set opfunc={t\ ->\ MyOpFunc(t)}
+<
+
 Setting the filetype
 
 :setf[iletype] [FALLBACK] {filetype}			*:setf* *:setfiletype*
@@ -618,7 +629,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	When on, Vim will change the current working directory whenever you
 	open a file, switch buffers, delete a buffer or open/close a window.
 	It will change to the directory containing the file which was opened
-	or selected.
+	or selected.  When a buffer has no name it also has no directory, thus
+	the current directory won't change when navigating to it.
 	Note: When this option is on some plugins may not work.
 
 				*'arabic'* *'arab'* *'noarabic'* *'noarab'*
@@ -1326,7 +1338,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	When 'cmdheight' is zero, there is no command-line unless it is being
 	used.  Some informative messages will not be displayed, any other
-	messages will cause the |hit-enter| prompt.
+	messages will cause the |hit-enter| prompt.  Expect some other
+	unexpected behavior too.
 
 						*'cmdwinheight'* *'cwh'*
 'cmdwinheight' 'cwh'	number	(default 7)
@@ -4401,7 +4414,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 'operatorfunc' 'opfunc'	string	(default: empty)
 			global
 	This option specifies a function to be called by the |g@| operator.
-	See |:map-operator| for more info and an example.
+	See |:map-operator| for more info and an example.  The value can be
+	the name of a function, a |lambda| or a |Funcref|. See
+	|option-value-function| for more information.
 
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
@@ -4695,8 +4710,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	customize the information displayed in the quickfix or location window
 	for each entry in the corresponding quickfix or location list.  See
 	|quickfix-window-function| for an explanation of how to write the
-	function and an example. The value can be the name of a function or a
-	lambda.
+	function and an example.  The value can be the name of a function, a
+	|lambda| or a |Funcref|. See |option-value-function| for more
+	information.
 
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
@@ -7004,7 +7020,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'wildoptions'* *'wop'*
 'wildoptions' 'wop'	string	(default "pum,tagfile")
 			global
-	List of words that change how |cmdline-completion| is done.
+	A list of words that change how |cmdline-completion| is done.
+	The following values are supported:
 	  pum		Display the completion matches using the popup menu
 			in the same style as the |ins-completion-menu|.
 	  tagfile	When using CTRL-D to list matching tags, the kind of
@@ -7095,10 +7112,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 'winhighlight' 'winhl'	string (default empty)
 			local to window
 	Window-local highlights.  Comma-delimited list of highlight
-	|group-name| pairs "{hl-builtin}:{hl},..." where each {hl-builtin} is
-	a built-in |highlight-groups| item to be overridden by {hl} group in
-	the window.  Only built-in |highlight-groups| are supported, not
-	syntax highlighting (use |:ownsyntax| for that).
+	|group-name| pairs "{hl-from}:{hl-to},..." where each {hl-from} is
+	a |highlight-groups| item to be overridden by {hl-to} group in
+	the window.
+
+	Note: highlight namespaces take precedence over 'winhighlight'.
+	See |nvim_win_set_hl_ns| and |nvim_set_hl|.
 
 	Highlights of vertical separators are determined by the window to the
 	left of the separator.  The 'tabline' highlight of a tabpage is

@@ -21,16 +21,18 @@
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
+#include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/fold.h"
 #include "nvim/getchar.h"
+#include "nvim/grid.h"
+#include "nvim/highlight.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
 #include "nvim/plines.h"
-#include "nvim/popupmnu.h"
-#include "nvim/screen.h"
+#include "nvim/popupmenu.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/window.h"
@@ -114,7 +116,7 @@ static void redraw_for_cursorcolumn(win_T *wp)
   FUNC_ATTR_NONNULL_ALL
 {
   if ((wp->w_valid & VALID_VIRTCOL) == 0 && !pum_visible()) {
-    if (wp->w_p_cuc || ((HL_ATTR(HLF_LC) || wp->w_hl_ids[HLF_LC]) && using_hlsearch())) {
+    if (wp->w_p_cuc || ((HL_ATTR(HLF_LC) || win_hl_attr(wp, HLF_LC)) && using_hlsearch())) {
       // When 'cursorcolumn' is set or "CurSearch" is in use
       // need to redraw with SOME_VALID.
       redraw_later(wp, SOME_VALID);
@@ -1056,7 +1058,7 @@ bool scrolldown(long line_count, int byfold)
       // A sequence of folded lines only counts for one logical line
       linenr_T first;
       if (hasFolding(curwin->w_topline, &first, NULL)) {
-        ++done;
+        done++;
         if (!byfold) {
           line_count -= curwin->w_topline - first - 1;
         }
@@ -1092,7 +1094,7 @@ bool scrolldown(long line_count, int byfold)
   while (wrow >= curwin->w_height_inner && curwin->w_cursor.lnum > 1) {
     linenr_T first;
     if (hasFolding(curwin->w_cursor.lnum, &first, NULL)) {
-      --wrow;
+      wrow--;
       if (first == 1) {
         curwin->w_cursor.lnum = 1;
       } else {
@@ -1406,8 +1408,8 @@ void scroll_cursor_top(int min_scroll, int always)
   }
 
   if (hasFolding(curwin->w_cursor.lnum, &top, &bot)) {
-    --top;
-    ++bot;
+    top--;
+    bot++;
   } else {
     top = curwin->w_cursor.lnum - 1;
     bot = curwin->w_cursor.lnum + 1;
@@ -1453,8 +1455,8 @@ void scroll_cursor_top(int min_scroll, int always)
 
     extra += i;
     new_topline = top;
-    --top;
-    ++bot;
+    top--;
+    bot++;
   }
 
   /*
@@ -1664,7 +1666,7 @@ void scroll_cursor_bot(int min_scroll, int set_topbot)
     for (i = 0; i < scrolled && boff.lnum < curwin->w_botline;) {
       botline_forw(curwin, &boff);
       i += boff.height;
-      ++line_count;
+      line_count++;
     }
     if (i < scrolled) {         // below curwin->w_botline, don't scroll
       line_count = 9999;
@@ -1726,7 +1728,7 @@ void scroll_cursor_halfway(int atend)
       } else {
         ++below;                    // count a "~" line
         if (atend) {
-          ++used;
+          used++;
         }
       }
     }
@@ -1835,7 +1837,7 @@ void cursor_correct(void)
       if (topline < botline) {
         above += win_get_fill(curwin, topline + 1);
       }
-      ++topline;
+      topline++;
     }
   }
   if (topline == botline || botline == 0) {

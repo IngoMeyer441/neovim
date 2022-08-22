@@ -8,9 +8,9 @@
 
 #include "nvim/ascii.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand.h"
 #include "nvim/eval.h"
 #include "nvim/ex_docmd.h"
-#include "nvim/ex_getln.h"
 #include "nvim/file_search.h"
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
@@ -227,7 +227,7 @@ char_u *get_past_head(const char_u *path)
 #endif
 
   while (vim_ispathsep(*retval)) {
-    ++retval;
+    retval++;
   }
 
   return (char_u *)retval;
@@ -666,8 +666,8 @@ static size_t do_path_expand(garray_T *gap, const char_u *path, size_t wildoff, 
   for (p = buf + wildoff; p < s; ++p) {
     if (rem_backslash(p)) {
       STRMOVE(p, p + 1);
-      --e;
-      --s;
+      e--;
+      s--;
     }
   }
 
@@ -695,11 +695,11 @@ static size_t do_path_expand(garray_T *gap, const char_u *path, size_t wildoff, 
   regmatch.rm_ic = true;  // Always ignore case on Windows.
 #endif
   if (flags & (EW_NOERROR | EW_NOTWILD)) {
-    ++emsg_silent;
+    emsg_silent++;
   }
   regmatch.regprog = vim_regcomp(pat, RE_MAGIC);
   if (flags & (EW_NOERROR | EW_NOTWILD)) {
-    --emsg_silent;
+    emsg_silent--;
   }
   xfree(pat);
 
@@ -725,7 +725,7 @@ static size_t do_path_expand(garray_T *gap, const char_u *path, size_t wildoff, 
     // Find all matching entries.
     char_u *name;
     scandir_next_with_dots(NULL);  // initialize
-    while ((name = (char_u *)scandir_next_with_dots(&dir)) != NULL) {
+    while (!got_int && (name = (char_u *)scandir_next_with_dots(&dir)) != NULL) {
       if ((name[0] != '.'
            || starts_with_dot
            || ((flags & EW_DODOT)
@@ -742,9 +742,9 @@ static size_t do_path_expand(garray_T *gap, const char_u *path, size_t wildoff, 
            * find matches. */
           STRCPY(buf + len, "/**");
           STRCPY(buf + len + 3, path_end);
-          ++stardepth;
+          stardepth++;
           (void)do_path_expand(gap, buf, len + 1, flags, true);
-          --stardepth;
+          stardepth--;
         }
 
         STRCPY(buf + len, path_end);
@@ -774,8 +774,10 @@ static size_t do_path_expand(garray_T *gap, const char_u *path, size_t wildoff, 
   xfree(buf);
   vim_regfree(regmatch.regprog);
 
+  // When interrupted the matches probably won't be used and sorting can be
+  // slow, thus skip it.
   size_t matches = (size_t)(gap->ga_len - start_len);
-  if (matches > 0) {
+  if (matches > 0 && !got_int) {
     qsort(((char_u **)gap->ga_data) + start_len, matches,
           sizeof(char_u *), pstrcmp);
   }
@@ -1254,7 +1256,7 @@ int gen_expand_wildcards(int num_pat, char **pat, int *num_file, char ***file, i
    */
   ga_init(&ga, (int)sizeof(char_u *), 30);
 
-  for (int i = 0; i < num_pat; ++i) {
+  for (int i = 0; i < num_pat && !got_int; i++) {
     add_pat = -1;
     p = (char_u *)pat[i];
 
@@ -1401,7 +1403,7 @@ static int expand_backtick(garray_T *gap, char_u *pat, int flags)
     cmd = skipwhite(cmd);               // skip over white space
     p = cmd;
     while (*p != NUL && *p != '\r' && *p != '\n') {  // skip over entry
-      ++p;
+      p++;
     }
     // add an entry if it is not empty
     if (p > cmd) {
@@ -1409,11 +1411,11 @@ static int expand_backtick(garray_T *gap, char_u *pat, int flags)
       *p = NUL;
       addfile(gap, (char_u *)cmd, flags);
       *p = i;
-      ++cnt;
+      cnt++;
     }
     cmd = p;
     while (*cmd != NUL && (*cmd == '\r' || *cmd == '\n')) {
-      ++cmd;
+      cmd++;
     }
   }
 
@@ -1656,12 +1658,12 @@ void simplify_filename(char_u *filename)
             *p = NUL;
           } else {
             if (p > start && tail[-1] == '.') {
-              --p;
+              p--;
             }
             STRMOVE(p, tail);                   // strip previous component
           }
 
-          --components;
+          components--;
         }
       } else if (p == start && !relative) {     // leading "/.." or "/../"
         STRMOVE(p, tail);                       // strip ".." or "../"
@@ -2205,17 +2207,14 @@ int expand_wildcards(int num_pat, char **pat, int *num_files, char ***files, int
     }
   }
 
-  //
   // Move the names where 'suffixes' match to the end.
-  //
+  // Skip when interrupted, the result probably won't be used.
   assert(*num_files == 0 || *files != NULL);
-  if (*num_files > 1) {
+  if (*num_files > 1 && !got_int) {
     non_suf_match = 0;
     for (i = 0; i < *num_files; i++) {
       if (!match_suffix((char_u *)(*files)[i])) {
-        //
         // Move the name without matching suffix to the front of the list.
-        //
         p = (char_u *)(*files)[i];
         for (j = i; j > non_suf_match; j--) {
           (*files)[j] = (*files)[j - 1];

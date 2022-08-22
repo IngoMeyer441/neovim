@@ -8,13 +8,14 @@
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
+#include "nvim/drawscreen.h"
 #include "nvim/fold.h"
+#include "nvim/grid.h"
 #include "nvim/memline.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/os_unix.h"
 #include "nvim/plines.h"
-#include "nvim/screen.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
@@ -386,7 +387,7 @@ retnomove:
       count = 0;
       for (first = true; curwin->w_topline < curbuf->b_ml.ml_line_count;) {
         if (curwin->w_topfill > 0) {
-          ++count;
+          count++;
         } else {
           count += plines_win(curwin, curwin->w_topline, true);
         }
@@ -514,7 +515,7 @@ bool mouse_comp_pos(win_T *win, int *rowp, int *colp, linenr_T *lnump)
       break;                    // past end of file
     }
     row -= count;
-    ++lnum;
+    lnum++;
   }
 
   if (!retval) {

@@ -6,11 +6,14 @@
 #include <stdbool.h>
 
 #include "nvim/api/private/helpers.h"
+#include "nvim/api/vim.h"
+#include "nvim/arglist.h"
 #include "nvim/ascii.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
+#include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/vars.h"
@@ -25,7 +28,9 @@
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
+#include "nvim/grid.h"
 #include "nvim/hashtab.h"
+#include "nvim/highlight.h"
 #include "nvim/main.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
@@ -37,13 +42,13 @@
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
+#include "nvim/optionstr.h"
 #include "nvim/os/os.h"
 #include "nvim/os_unix.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
@@ -698,7 +703,7 @@ win_T *win_new_float(win_T *wp, bool last, FloatConfig fconfig, Error *err)
     win_remove(wp, NULL);
     win_append(lastwin_nofloating(), wp);
   }
-  wp->w_floating = 1;
+  wp->w_floating = true;
   wp->w_status_height = 0;
   wp->w_winbar_height = 0;
   wp->w_hsep_height = 0;
@@ -728,13 +733,15 @@ void win_set_minimal_style(win_T *wp)
                    : concat_str(old, (char_u *)",eob: "));
     free_string_option(old);
   }
-  if (wp->w_hl_ids[HLF_EOB] != -1) {
-    char_u *old = wp->w_p_winhl;
-    wp->w_p_winhl = ((*old == NUL)
-                     ? (char_u *)xstrdup("EndOfBuffer:")
-                     : concat_str(old, (char_u *)",EndOfBuffer:"));
-    free_string_option(old);
-  }
+
+  // TODO(bfredl): this could use a highlight namespace directly,
+  // and avoid pecularities around window options
+  char_u *old = wp->w_p_winhl;
+  wp->w_p_winhl = ((*old == NUL)
+                   ? (char_u *)xstrdup("EndOfBuffer:")
+                   : concat_str(old, (char_u *)",EndOfBuffer:"));
+  free_string_option(old);
+  parse_winhl_opt(wp);
 
   // signcolumn: use 'auto'
   if (wp->w_p_scl[0] != 'a' || STRLEN(wp->w_p_scl) >= 8) {
@@ -1670,7 +1677,7 @@ int win_count(void)
   int count = 0;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    ++count;
+    count++;
   }
   return count;
 }
@@ -2459,7 +2466,7 @@ void close_windows(buf_T *buf, bool keep_curwin)
   tabpage_T *tp, *nexttp;
   int h = tabline_height();
 
-  ++RedrawingDisabled;
+  RedrawingDisabled++;
 
   // Start from lastwin to close floating windows with the same buffer first.
   // When the autocommand window is involved win_close() may need to print an error message.
@@ -2496,7 +2503,7 @@ void close_windows(buf_T *buf, bool keep_curwin)
     }
   }
 
-  --RedrawingDisabled;
+  RedrawingDisabled--;
 
   redraw_tabline = true;
   if (h != tabline_height()) {
@@ -3820,7 +3827,7 @@ static int frame_minwidth(frame_T *topfrp, win_T *next_curwin)
       m = (int)p_wmw + topfrp->fr_win->w_vsep_width;
       // Current window is minimal one column wide
       if (p_wmw == 0 && topfrp->fr_win == curwin && next_curwin == NULL) {
-        ++m;
+        m++;
       }
     }
   } else if (topfrp->fr_layout == FR_COL) {
@@ -4093,7 +4100,7 @@ int win_new_tabpage(int after, char_u *filename)
         n = 2;
         for (tp = first_tabpage; tp->tp_next != NULL
              && n < after; tp = tp->tp_next) {
-          ++n;
+          n++;
         }
       }
       newtp->tp_next = tp->tp_next;
@@ -4239,7 +4246,7 @@ tabpage_T *find_tabpage(int n)
   int i = 1;
 
   for (tp = first_tabpage; tp != NULL && i != n; tp = tp->tp_next) {
-    ++i;
+    i++;
   }
   return tp;
 }
@@ -4254,7 +4261,7 @@ int tabpage_index(tabpage_T *ftp)
   tabpage_T *tp;
 
   for (tp = first_tabpage; tp != NULL && tp != ftp; tp = tp->tp_next) {
-    ++i;
+    i++;
   }
   return i;
 }
@@ -4516,7 +4523,7 @@ void tabpage_move(int nr)
   }
 
   for (tp = first_tabpage; tp->tp_next != NULL && n < nr; tp = tp->tp_next) {
-    ++n;
+    n++;
   }
 
   if (tp == curtab || (nr > 0 && tp->tp_next != NULL
@@ -4863,10 +4870,17 @@ static void win_enter_ext(win_T *const wp, const int flags)
     redraw_later(curwin, VALID);  // causes status line redraw
   }
 
-  if (HL_ATTR(HLF_INACTIVE)
-      || (prevwin && prevwin->w_hl_ids[HLF_INACTIVE])
-      || curwin->w_hl_ids[HLF_INACTIVE]) {
-    redraw_all_later(NOT_VALID);
+  // change background color according to NormalNC,
+  // but only if actually defined (otherwise no extra redraw)
+  if (curwin->w_hl_attr_normal != curwin->w_hl_attr_normalnc) {
+    // TODO(bfredl): eventually we should be smart enough
+    // to only recompose the window, not redraw it.
+    redraw_later(curwin, NOT_VALID);
+  }
+  if (prevwin) {
+    if (prevwin->w_hl_attr_normal != prevwin->w_hl_attr_normalnc) {
+      redraw_later(prevwin, NOT_VALID);
+    }
   }
 
   // set window height to desired minimal value
@@ -5034,6 +5048,8 @@ static win_T *win_alloc(win_T *after, bool hidden)
   new_wp->w_floating = 0;
   new_wp->w_float_config = FLOAT_CONFIG_INIT;
   new_wp->w_viewport_invalid = true;
+
+  new_wp->w_ns_hl = -1;
 
   // use global option for global-local options
   new_wp->w_p_so = -1;
@@ -5551,7 +5567,7 @@ static void frame_setheight(frame_T *curfrp, int height)
   }
 
   if (curfrp->fr_parent == NULL) {
-    // topframe: can only change the command line
+    // topframe: can only change the command line height
     if (height > ROWS_AVAIL) {
       // If height is greater than the available space, try to create space for
       // the frame by reducing 'cmdheight' if possible, while making sure
@@ -5914,6 +5930,13 @@ void win_drag_status_line(win_T *dragwin, int offset)
   int row;
   bool up;                      // if true, drag status line up, otherwise down
   int n;
+  static bool p_ch_was_zero = false;
+
+  // If the user explicitly set 'cmdheight' to zero, then allow for dragging
+  // the status line making it zero again.
+  if (p_ch == 0) {
+    p_ch_was_zero = true;
+  }
 
   fr = dragwin->w_frame;
   curfr = fr;
@@ -5964,6 +5987,8 @@ void win_drag_status_line(win_T *dragwin, int offset)
     room = Rows - cmdline_row;
     if (curfr->fr_next != NULL) {
       room -= (int)p_ch + global_stl_height();
+    } else if (!p_ch_was_zero) {
+      room--;
     }
     if (room < 0) {
       room = 0;
@@ -6019,7 +6044,7 @@ void win_drag_status_line(win_T *dragwin, int offset)
     clear_cmdline = true;
   }
   cmdline_row = row;
-  p_ch = MAX(Rows - cmdline_row, 0);
+  p_ch = MAX(Rows - cmdline_row, p_ch_was_zero ? 0 : 1);
   curtab->tp_ch_used = p_ch;
   redraw_all_later(SOME_VALID);
   showmode();
@@ -6225,7 +6250,7 @@ void scroll_to_fraction(win_T *wp, int prev_height)
         if (lnum == 1) {
           // first line in buffer is folded
           line_size = 1;
-          --sline;
+          sline--;
           break;
         }
         lnum--;
@@ -6382,6 +6407,19 @@ void command_height(void)
   // GUI starts up, we can't be sure in what order things happen.  And when
   // p_ch was changed in another tab page.
   curtab->tp_ch_used = p_ch;
+
+  // If the space for the command line is already more than 'cmdheight' there
+  // is nothing to do (window size must have decreased).
+  if (p_ch > old_p_ch && cmdline_row <= Rows - p_ch) {
+    return;
+  }
+
+  // If cmdline_row is smaller than what it is supposed to be for 'cmdheight'
+  // then set old_p_ch to what it would be, so that the windows get resized
+  // properly for the new value.
+  if (cmdline_row < Rows - p_ch) {
+    old_p_ch = Rows - cmdline_row;
+  }
 
   // Find bottom frame with width of screen.
   frp = lastwin_nofloating()->w_frame;
@@ -6563,7 +6601,7 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
 
     if (ptr[len] == '\\' && ptr[len + 1] == ' ') {
       // Skip over the "\" in "\ ".
-      ++len;
+      len++;
     }
     len += (size_t)(utfc_ptr2len(ptr + len));
   }
@@ -6574,7 +6612,7 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
    */
   if (len > 2 && vim_strchr(".,:;!", ptr[len - 1]) != NULL
       && ptr[len - 2] != '.') {
-    --len;
+    len--;
   }
 
   if (file_lnum != NULL) {
@@ -7230,6 +7268,88 @@ static bool frame_check_width(const frame_T *topfrp, int width)
     }
   }
   return true;
+}
+
+/// Simple int comparison function for use with qsort()
+static int int_cmp(const void *a, const void *b)
+{
+  return *(const int *)a - *(const int *)b;
+}
+
+/// Handle setting 'colorcolumn' or 'textwidth' in window "wp".
+///
+/// @return error message, NULL if it's OK.
+char *check_colorcolumn(win_T *wp)
+{
+  char *s;
+  int col;
+  unsigned int count = 0;
+  int color_cols[256];
+  int j = 0;
+
+  if (wp->w_buffer == NULL) {
+    return NULL;      // buffer was closed
+  }
+
+  for (s = (char *)wp->w_p_cc; *s != NUL && count < 255;) {
+    if (*s == '-' || *s == '+') {
+      // -N and +N: add to 'textwidth'
+      col = (*s == '-') ? -1 : 1;
+      s++;
+      if (!ascii_isdigit(*s)) {
+        return e_invarg;
+      }
+      col = col * getdigits_int(&s, true, 0);
+      if (wp->w_buffer->b_p_tw == 0) {
+        goto skip;          // 'textwidth' not set, skip this item
+      }
+      assert((col >= 0
+              && wp->w_buffer->b_p_tw <= INT_MAX - col
+              && wp->w_buffer->b_p_tw + col >= INT_MIN)
+             || (col < 0
+                 && wp->w_buffer->b_p_tw >= INT_MIN - col
+                 && wp->w_buffer->b_p_tw + col <= INT_MAX));
+      col += (int)wp->w_buffer->b_p_tw;
+      if (col < 0) {
+        goto skip;
+      }
+    } else if (ascii_isdigit(*s)) {
+      col = getdigits_int(&s, true, 0);
+    } else {
+      return e_invarg;
+    }
+    color_cols[count++] = col - 1;      // 1-based to 0-based
+skip:
+    if (*s == NUL) {
+      break;
+    }
+    if (*s != ',') {
+      return e_invarg;
+    }
+    if (*++s == NUL) {
+      return e_invarg;        // illegal trailing comma as in "set cc=80,"
+    }
+  }
+
+  xfree(wp->w_p_cc_cols);
+  if (count == 0) {
+    wp->w_p_cc_cols = NULL;
+  } else {
+    wp->w_p_cc_cols = xmalloc(sizeof(int) * (count + 1));
+    // sort the columns for faster usage on screen redraw inside
+    // win_line()
+    qsort(color_cols, count, sizeof(int), int_cmp);
+
+    for (unsigned int i = 0; i < count; i++) {
+      // skip duplicates
+      if (j == 0 || wp->w_p_cc_cols[j - 1] != color_cols[i]) {
+        wp->w_p_cc_cols[j++] = color_cols[i];
+      }
+    }
+    wp->w_p_cc_cols[j] = -1;        // end marker
+  }
+
+  return NULL;    // no error
 }
 
 int win_getid(typval_T *argvars)
