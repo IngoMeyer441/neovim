@@ -47,7 +47,7 @@ static int match_add(win_T *wp, const char *const grp, const char *const pat, in
   matchitem_T *m;
   int hlg_id;
   regprog_T *regprog = NULL;
-  int rtype = SOME_VALID;
+  int rtype = UPD_SOME_VALID;
 
   if (*grp == NUL || (pat != NULL && *pat == NUL)) {
     return -1;
@@ -193,7 +193,7 @@ static int match_add(win_T *wp, const char *const grp, const char *const pat, in
       }
       m->pos.toplnum = toplnum;
       m->pos.botlnum = botlnum;
-      rtype = VALID;
+      rtype = UPD_VALID;
     }
   }
 
@@ -227,7 +227,7 @@ static int match_delete(win_T *wp, int id, bool perr)
 {
   matchitem_T *cur = wp->w_match_head;
   matchitem_T *prev = cur;
-  int rtype = SOME_VALID;
+  int rtype = UPD_SOME_VALID;
 
   if (id < 1) {
     if (perr) {
@@ -268,7 +268,7 @@ static int match_delete(win_T *wp, int id, bool perr)
       wp->w_buffer->b_mod_bot = cur->pos.botlnum;
       wp->w_buffer->b_mod_xlines = 0;
     }
-    rtype = VALID;
+    rtype = UPD_VALID;
   }
   xfree(cur);
   redraw_later(wp, rtype);
@@ -287,7 +287,7 @@ void clear_matches(win_T *wp)
     xfree(wp->w_match_head);
     wp->w_match_head = m;
   }
-  redraw_later(wp, SOME_VALID);
+  redraw_later(wp, UPD_SOME_VALID);
 }
 
 /// Get match from ID 'id' in window 'wp'.
@@ -859,7 +859,7 @@ static int matchadd_dict_arg(typval_T *tv, const char **conceal_char, win_T **wi
 }
 
 /// "clearmatches()" function
-void f_clearmatches(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_clearmatches(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   win_T *win = get_optional_window(argvars, 0);
 
@@ -869,7 +869,7 @@ void f_clearmatches(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "getmatches()" function
-void f_getmatches(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_getmatches(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   matchitem_T *cur;
   int i;
@@ -924,7 +924,7 @@ void f_getmatches(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "setmatches()" function
-void f_setmatches(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_setmatches(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   dict_T *d;
   list_T *s = NULL;
@@ -1027,7 +1027,7 @@ void f_setmatches(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "matchadd()" function
-void f_matchadd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_matchadd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   char grpbuf[NUMBUFLEN];
   char patbuf[NUMBUFLEN];
@@ -1069,7 +1069,7 @@ void f_matchadd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "matchaddpo()" function
-void f_matchaddpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_matchaddpos(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   rettv->vval.v_number = -1;
 
@@ -1120,7 +1120,7 @@ void f_matchaddpos(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "matcharg()" function
-void f_matcharg(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_matcharg(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   const int id = (int)tv_get_number(&argvars[0]);
 
@@ -1143,7 +1143,7 @@ void f_matcharg(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "matchdelete()" function
-void f_matchdelete(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_matchdelete(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   win_T *win = get_optional_window(argvars, 1);
   if (win == NULL) {

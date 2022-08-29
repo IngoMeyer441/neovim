@@ -140,16 +140,16 @@ int buf_init_chartab(buf_T *buf, int global)
     const char_u *p;
     if (i == 0) {
       // first round: 'isident'
-      p = p_isi;
+      p = (char_u *)p_isi;
     } else if (i == 1) {
       // second round: 'isprint'
-      p = p_isp;
+      p = (char_u *)p_isp;
     } else if (i == 2) {
       // third round: 'isfname'
-      p = p_isf;
+      p = (char_u *)p_isf;
     } else {  // i == 3
       // fourth round: 'iskeyword'
-      p = buf->b_p_isk;
+      p = (char_u *)buf->b_p_isk;
     }
 
     while (*p) {
@@ -1655,7 +1655,7 @@ int hex2nr(int c)
 
 /// Convert two hex characters to a byte.
 /// Return -1 if one of the characters is not hex.
-int hexhex2nr(char_u *p)
+int hexhex2nr(const char_u *p)
   FUNC_ATTR_PURE
 {
   if (!ascii_isxdigit(p[0]) || !ascii_isxdigit(p[1])) {

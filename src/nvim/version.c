@@ -2016,7 +2016,7 @@ void ex_version(exarg_T *eap)
 
 /// Output a string for the version message.  If it's going to wrap, output a
 /// newline, unless the message is too long to fit on the screen anyway.
-/// When "wrap" is TRUE wrap the string in [].
+/// When "wrap" is true wrap the string in [].
 /// @param s
 /// @param wrap
 static void version_msg_wrap(char *s, int wrap)
@@ -2072,7 +2072,7 @@ void list_in_columns(char **items, int size, int current)
   // Find the length of the longest item, use that + 1 as the column width.
   int i;
   for (i = 0; size < 0 ? items[i] != NULL : i < size; i++) {
-    int l = vim_strsize((char *)items[i]) + (i == current ? 2 : 0);
+    int l = vim_strsize(items[i]) + (i == current ? 2 : 0);
 
     if (l > width) {
       width = l;
@@ -2084,7 +2084,7 @@ void list_in_columns(char **items, int size, int current)
   if (Columns < width) {
     // Not enough screen columns - show one per line
     for (i = 0; i < item_count; i++) {
-      version_msg_wrap((char *)items[i], i == current);
+      version_msg_wrap(items[i], i == current);
       if (msg_col > 0 && i < item_count - 1) {
         msg_putchar('\n');
       }
@@ -2106,7 +2106,7 @@ void list_in_columns(char **items, int size, int current)
       if (idx == current) {
         msg_putchar('[');
       }
-      msg_puts((char *)items[idx]);
+      msg_puts(items[idx]);
       if (idx == current) {
         msg_putchar(']');
       }
@@ -2200,7 +2200,7 @@ void maybe_intro_message(void)
   if (buf_is_empty(curbuf)
       && (curbuf->b_fname == NULL)
       && (firstwin->w_next == NULL)
-      && (vim_strchr((char *)p_shm, SHM_INTRO) == NULL)) {
+      && (vim_strchr(p_shm, SHM_INTRO) == NULL)) {
     intro_message(false);
   }
 }
@@ -2209,7 +2209,7 @@ void maybe_intro_message(void)
 /// Only used when starting Vim on an empty file, without a file name.
 /// Or with the ":intro" command (for Sven :-).
 ///
-/// @param colon TRUE for ":intro"
+/// @param colon true for ":intro"
 void intro_message(int colon)
 {
   int i;
@@ -2256,7 +2256,7 @@ void intro_message(int colon)
   row = blanklines / 2;
 
   if (((row >= 2) && (Columns >= 50)) || colon) {
-    for (i = 0; i < (int)ARRAY_SIZE(lines); ++i) {
+    for (i = 0; i < (int)ARRAY_SIZE(lines); i++) {
       p = lines[i];
 
       if (sponsor != 0) {
@@ -2326,6 +2326,6 @@ static void do_intro_line(long row, char_u *mesg, int attr)
 void ex_intro(exarg_T *eap)
 {
   screenclear();
-  intro_message(TRUE);
-  wait_return(TRUE);
+  intro_message(true);
+  wait_return(true);
 }

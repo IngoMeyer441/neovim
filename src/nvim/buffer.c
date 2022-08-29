@@ -165,11 +165,12 @@ static int read_buffer(int read_stdin, exarg_T *eap, int flags)
 ///
 /// @param read_stdin  read file from stdin
 /// @param eap  for forced 'ff' and 'fenc' or NULL
-/// @param flags  extra flags for readfile()
+/// @param flags_arg  extra flags for readfile()
 ///
 /// @return  FAIL for failure, OK otherwise.
-int open_buffer(int read_stdin, exarg_T *eap, int flags)
+int open_buffer(int read_stdin, exarg_T *eap, int flags_arg)
 {
+  int flags = flags_arg;
   int retval = OK;
   bufref_T old_curbuf;
   long old_tw = curbuf->b_p_tw;
@@ -224,6 +225,13 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags)
   // mark cursor position as being invalid
   curwin->w_valid = 0;
 
+  // A buffer without an actual file should not use the buffer name to read a
+  // file.
+  if (bt_nofileread(curbuf)) {
+    flags |= READ_NOFILE;
+  }
+
+  // Read the file if there is one.
   if (curbuf->b_ffname != NULL) {
 #ifdef UNIX
     int save_bin = curbuf->b_p_bin;
@@ -804,6 +812,18 @@ static void free_buffer(buf_T *buf)
   }
 }
 
+/// Free the b_wininfo list for buffer "buf".
+static void clear_wininfo(buf_T *buf)
+{
+  wininfo_T *wip;
+
+  while (buf->b_wininfo != NULL) {
+    wip = buf->b_wininfo;
+    buf->b_wininfo = wip->wi_next;
+    free_wininfo(wip, buf);
+  }
+}
+
 /// Free stuff in the buffer for ":bdel" and when wiping out the buffer.
 ///
 /// @param buf  Buffer pointer
@@ -836,18 +856,6 @@ static void free_buffer_stuff(buf_T *buf, int free_flags)
   XFREE_CLEAR(buf->b_start_fenc);
 
   buf_updates_unload(buf, false);
-}
-
-/// Free the b_wininfo list for buffer "buf".
-static void clear_wininfo(buf_T *buf)
-{
-  wininfo_T *wip;
-
-  while (buf->b_wininfo != NULL) {
-    wip = buf->b_wininfo;
-    buf->b_wininfo = wip->wi_next;
-    free_wininfo(wip, buf);
-  }
 }
 
 /// Go to another buffer.  Handles the result of the ATTENTION dialog.
@@ -1623,7 +1631,7 @@ void enter_buffer(buf_T *buf)
   }
   curbuf->b_last_used = time(NULL);
 
-  redraw_later(curwin, NOT_VALID);
+  redraw_later(curwin, UPD_NOT_VALID);
 }
 
 /// Change to the directory of the current buffer.
@@ -3166,14 +3174,14 @@ void maketitle(void)
 
         use_sandbox = was_set_insecurely(curwin, "titlestring", 0);
         build_stl_str_hl(curwin, buf, sizeof(buf),
-                         (char *)p_titlestring, use_sandbox,
+                         p_titlestring, use_sandbox,
                          0, maxlen, NULL, NULL);
         title_str = buf;
         if (called_emsg > called_emsg_before) {
           set_string_option_direct("titlestring", -1, "", OPT_FREE, SID_ERROR);
         }
       } else {
-        title_str = (char *)p_titlestring;
+        title_str = p_titlestring;
       }
     } else {
       // Format: "fname + (path) (1 of 2) - VIM".
@@ -3280,13 +3288,13 @@ void maketitle(void)
 
         use_sandbox = was_set_insecurely(curwin, "iconstring", 0);
         build_stl_str_hl(curwin, icon_str, sizeof(buf),
-                         (char *)p_iconstring, use_sandbox,
+                         p_iconstring, use_sandbox,
                          0, 0, NULL, NULL);
         if (called_emsg > called_emsg_before) {
           set_string_option_direct("iconstring", -1, "", OPT_FREE, SID_ERROR);
         }
       } else {
-        icon_str = (char *)p_iconstring;
+        icon_str = p_iconstring;
       }
     } else {
       char *buf_p;
@@ -3826,13 +3834,25 @@ bool bt_terminal(const buf_T *const buf)
 }
 
 /// @return  true if "buf" is a "nofile", "acwrite", "terminal" or "prompt"
-///          buffer.  This means the buffer name is not a file name.
+///          buffer.  This means the buffer name may not be a file name,
+///          at least not for writing the buffer.
 bool bt_nofilename(const buf_T *const buf)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
   return buf != NULL && ((buf->b_p_bt[0] == 'n' && buf->b_p_bt[2] == 'f')
                          || buf->b_p_bt[0] == 'a'
                          || buf->terminal
+                         || buf->b_p_bt[0] == 'p');
+}
+
+/// @return  true if "buf" is a "nofile", "quickfix", "terminal" or "prompt"
+///          buffer.  This means the buffer is not to be read from a file.
+static bool bt_nofileread(const buf_T *const buf)
+  FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  return buf != NULL && ((buf->b_p_bt[0] == 'n' && buf->b_p_bt[2] == 'f')
+                         || buf->b_p_bt[0] == 't'
+                         || buf->b_p_bt[0] == 'q'
                          || buf->b_p_bt[0] == 'p');
 }
 
@@ -4034,7 +4054,7 @@ void buf_signcols_add_check(buf_T *buf, sign_entry_T *added)
       buf->b_signcols.max++;
     }
     buf->b_signcols.size++;
-    redraw_buf_later(buf, NOT_VALID);
+    redraw_buf_later(buf, UPD_NOT_VALID);
     return;
   }
 
@@ -4055,7 +4075,7 @@ void buf_signcols_add_check(buf_T *buf, sign_entry_T *added)
     buf->b_signcols.size = linesum;
     buf->b_signcols.max = linesum;
     buf->b_signcols.sentinel = added->se_lnum;
-    redraw_buf_later(buf, NOT_VALID);
+    redraw_buf_later(buf, UPD_NOT_VALID);
   }
 }
 
@@ -4074,7 +4094,7 @@ int buf_signcols(buf_T *buf, int maximum)
     if (signcols != buf->b_signcols.size) {
       buf->b_signcols.size = signcols;
       buf->b_signcols.max = maximum;
-      redraw_buf_later(buf, NOT_VALID);
+      redraw_buf_later(buf, UPD_NOT_VALID);
     }
 
     buf->b_signcols.valid = true;
@@ -4183,14 +4203,19 @@ void wipe_buffer(buf_T *buf, bool aucmd)
 /// @param bufnr     Buffer to switch to, or 0 to create a new buffer.
 ///
 /// @see curbufIsChanged()
-void buf_open_scratch(handle_T bufnr, char *bufname)
+///
+/// @return  FAIL for failure, OK otherwise
+int buf_open_scratch(handle_T bufnr, char *bufname)
 {
-  (void)do_ecmd((int)bufnr, NULL, NULL, NULL, ECMD_ONE, ECMD_HIDE, NULL);
+  if (do_ecmd((int)bufnr, NULL, NULL, NULL, ECMD_ONE, ECMD_HIDE, NULL) == FAIL) {
+    return FAIL;
+  }
   apply_autocmds(EVENT_BUFFILEPRE, NULL, NULL, false, curbuf);
   (void)setfname(curbuf, bufname, NULL, true);
   apply_autocmds(EVENT_BUFFILEPOST, NULL, NULL, false, curbuf);
-  set_option_value("bh", 0L, "hide", OPT_LOCAL);
-  set_option_value("bt", 0L, "nofile", OPT_LOCAL);
-  set_option_value("swf", 0L, NULL, OPT_LOCAL);
+  set_option_value_give_err("bh", 0L, "hide", OPT_LOCAL);
+  set_option_value_give_err("bt", 0L, "nofile", OPT_LOCAL);
+  set_option_value_give_err("swf", 0L, NULL, OPT_LOCAL);
   RESET_BINDING(curwin);
+  return OK;
 }

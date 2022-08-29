@@ -14,11 +14,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uv.h>
 
 #include "nvim/api/private/helpers.h"
 #include "nvim/buffer.h"
 #include "nvim/lib/kvec.h"
+#include "nvim/log.h"
 #include "nvim/lua/treesitter.h"
+#include "nvim/map.h"
 #include "nvim/memline.h"
 #include "tree_sitter/api.h"
 
@@ -85,6 +88,10 @@ static struct luaL_Reg node_meta[] = {
   { "prev_sibling", node_prev_sibling },
   { "next_named_sibling", node_next_named_sibling },
   { "prev_named_sibling", node_prev_named_sibling },
+  { "named_children", node_named_children },
+  { "root", node_root },
+  { "byte_length", node_byte_length },
+
   { NULL, NULL }
 };
 
@@ -145,18 +152,27 @@ int tslua_has_language(lua_State *L)
   return 1;
 }
 
+// Creates the language into the internal language map.
+//
+// Returns true if the language is correctly loaded in the language map
 int tslua_add_language(lua_State *L)
 {
   const char *path = luaL_checkstring(L, 1);
   const char *lang_name = luaL_checkstring(L, 2);
+  const char *symbol_name = lang_name;
+
+  if (lua_gettop(L) >= 3 && !lua_isnil(L, 3)) {
+    symbol_name = luaL_checkstring(L, 3);
+  }
 
   if (pmap_has(cstr_t)(&langs, lang_name)) {
-    return 0;
+    lua_pushboolean(L, true);
+    return 1;
   }
 
 #define BUFSIZE 128
   char symbol_buf[BUFSIZE];
-  snprintf(symbol_buf, BUFSIZE, "tree_sitter_%s", lang_name);
+  snprintf(symbol_buf, BUFSIZE, "tree_sitter_%s", symbol_name);
 #undef BUFSIZE
 
   uv_lib_t lib;
@@ -179,6 +195,7 @@ int tslua_add_language(lua_State *L)
 
   TSLanguage *lang = lang_parser();
   if (lang == NULL) {
+    uv_dlclose(&lib);
     return luaL_error(L, "Failed to load parser %s: internal error", path);
   }
 
@@ -195,6 +212,19 @@ int tslua_add_language(lua_State *L)
   pmap_put(cstr_t)(&langs, xstrdup(lang_name), lang);
 
   lua_pushboolean(L, true);
+  return 1;
+}
+
+int tslua_remove_lang(lua_State *L)
+{
+  const char *lang_name = luaL_checkstring(L, 1);
+  bool present = pmap_has(cstr_t)(&langs, lang_name);
+  if (present) {
+    char *key = (char *)pmap_key(cstr_t)(&langs, lang_name);
+    pmap_del(cstr_t)(&langs, lang_name);
+    xfree(key);
+  }
+  lua_pushboolean(L, present);
   return 1;
 }
 
@@ -593,7 +623,7 @@ void push_tree(lua_State *L, TSTree *tree, bool do_copy)
   lua_setfenv(L, -2);  // [udata]
 }
 
-static TSTree **tree_check(lua_State *L, uint16_t index)
+static TSTree **tree_check(lua_State *L, int index)
 {
   TSTree **ud = luaL_checkudata(L, index, TS_META_TREE);
   return ud;
@@ -1033,6 +1063,57 @@ static int node_prev_named_sibling(lua_State *L)
   }
   TSNode sibling = ts_node_prev_named_sibling(node);
   push_node(L, sibling, 1);
+  return 1;
+}
+
+static int node_named_children(lua_State *L)
+{
+  TSNode source;
+  if (!node_check(L, 1, &source)) {
+    return 0;
+  }
+  TSTreeCursor cursor = ts_tree_cursor_new(source);
+
+  lua_newtable(L);
+  int curr_index = 0;
+
+  if (ts_tree_cursor_goto_first_child(&cursor)) {
+    do {
+      TSNode node = ts_tree_cursor_current_node(&cursor);
+      if (ts_node_is_named(node)) {
+        push_node(L, node, 1);
+        lua_rawseti(L, -2, ++curr_index);
+      }
+    } while (ts_tree_cursor_goto_next_sibling(&cursor));
+  }
+
+  ts_tree_cursor_delete(&cursor);
+  return 1;
+}
+
+static int node_root(lua_State *L)
+{
+  TSNode node;
+  if (!node_check(L, 1, &node)) {
+    return 0;
+  }
+
+  TSNode root = ts_tree_root_node(node.tree);
+  push_node(L, root, 1);
+  return 1;
+}
+
+static int node_byte_length(lua_State *L)
+{
+  TSNode node;
+  if (!node_check(L, 1, &node)) {
+    return 0;
+  }
+
+  uint32_t start_byte = ts_node_start_byte(node);
+  uint32_t end_byte = ts_node_end_byte(node);
+
+  lua_pushnumber(L, end_byte - start_byte);
   return 1;
 }
 

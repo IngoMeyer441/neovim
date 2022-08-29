@@ -106,7 +106,7 @@ static struct {
 /// Return NULL if there is no matching command.
 ///
 /// @param *p      end of the command (possibly including count)
-/// @param full    set to TRUE for a full match
+/// @param full    set to true for a full match
 /// @param xp      used for completion, NULL otherwise
 /// @param complp  completion flags or NULL
 char *find_ucmd(exarg_T *eap, char *p, int *full, expand_T *xp, int *complp)
@@ -1061,11 +1061,11 @@ bool uc_split_args_iter(const char *arg, size_t arglen, size_t *end, char *buf, 
       buf[l++] = arg[++pos];
     } else {
       buf[l++] = arg[pos];
-      if (ascii_iswhite(arg[pos + 1])) {
-        *end = pos + 1;
-        *len = l;
-        return false;
-      }
+    }
+    if (ascii_iswhite(arg[pos + 1])) {
+      *end = pos + 1;
+      *len = l;
+      return false;
     }
   }
 

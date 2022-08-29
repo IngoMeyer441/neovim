@@ -159,27 +159,6 @@ EXTERN colnr_T dollar_vcol INIT(= -1);
 
 // Variables for Insert mode completion.
 
-// Length in bytes of the text being completed (this is deleted to be replaced
-// by the match.)
-EXTERN int compl_length INIT(= 0);
-
-// Set when doing something for completion that may call edit() recursively,
-// which is not allowed. Also used to disable folding during completion
-EXTERN bool compl_busy INIT(= false);
-
-// List of flags for method of completion.
-EXTERN int compl_cont_status INIT(= 0);
-#define CONT_ADDING    1       // "normal" or "adding" expansion
-#define CONT_INTRPT   (2 + 4)  // a ^X interrupted the current expansion
-                               // it's set only iff N_ADDS is set
-#define CONT_N_ADDS    4       // next ^X<> will add-new or expand-current
-#define CONT_S_IPOS    8       // next ^X<> will set initial_pos?
-                               // if so, word-wise-expansion will set SOL
-#define CONT_SOL       16      // pattern includes start of line, just for
-                               // word-wise expansion, not set for ^X^L
-#define CONT_LOCAL     32      // for ctrl_x_mode 0, ^X^P/^X^N do a local
-                               // expansion, (eg use complete=.)
-
 EXTERN char_u *edit_submode INIT(= NULL);        // msg for CTRL-X submode
 EXTERN char_u *edit_submode_pre INIT(= NULL);    // prepended to edit_submode
 EXTERN char_u *edit_submode_extra INIT(= NULL);  // appended to edit_submode
@@ -580,6 +559,8 @@ EXTERN bool can_si INIT(= false);
 // one indent will be removed.
 EXTERN bool can_si_back INIT(= false);
 
+EXTERN int old_indent INIT(= 0);  ///< for ^^D command in insert mode
+
 // w_cursor before formatting text.
 EXTERN pos_T saved_cursor INIT(= { 0, 0, 0 });
 
@@ -776,7 +757,7 @@ EXTERN int keep_help_flag INIT(= false);  // doing :ta from help file
 // When a string option is NULL (which only happens in out-of-memory
 // situations), it is set to empty_option, to avoid having to check for NULL
 // everywhere.
-EXTERN char_u *empty_option INIT(= (char_u *)"");
+EXTERN char *empty_option INIT(= "");
 
 EXTERN bool redir_off INIT(= false);        // no redirection for a moment
 EXTERN FILE *redir_fd INIT(= NULL);         // message redirection file
@@ -816,7 +797,6 @@ EXTERN char *last_chdir_reason INIT(= NULL);
 EXTERN bool km_stopsel INIT(= false);
 EXTERN bool km_startsel INIT(= false);
 
-EXTERN int cedit_key INIT(= -1);     ///< key value of 'cedit' option
 EXTERN int cmdwin_type INIT(= 0);    ///< type of cmdline window or 0
 EXTERN int cmdwin_result INIT(= 0);  ///< result of cmdline window or 0
 EXTERN int cmdwin_level INIT(= 0);   ///< cmdline recursion level
@@ -940,7 +920,7 @@ EXTERN char e_patnotf2[] INIT(= N_("E486: Pattern not found: %s"));
 EXTERN char e_positive[] INIT(= N_("E487: Argument must be positive"));
 EXTERN char e_prev_dir[] INIT(= N_("E459: Cannot go back to previous directory"));
 
-EXTERN char e_quickfix[] INIT(= N_("E42: No Errors"));
+EXTERN char e_no_errors[] INIT(= N_("E42: No Errors"));
 EXTERN char e_loclist[] INIT(= N_("E776: No location list"));
 EXTERN char e_re_damg[] INIT(= N_("E43: Damaged match string"));
 EXTERN char e_re_corr[] INIT(= N_("E44: Corrupted regexp program"));
@@ -1020,6 +1000,8 @@ EXTERN char e_cannot_define_autocommands_for_all_events[] INIT(= N_("E1155: Cann
 EXTERN char e_resulting_text_too_long[] INIT(= N_("E1240: Resulting text too long"));
 
 EXTERN char e_line_number_out_of_range[] INIT(= N_("E1247: Line number out of range"));
+
+EXTERN char e_highlight_group_name_invalid_char[] INIT(= N_("E5248: Invalid character in group name"));
 
 EXTERN char e_highlight_group_name_too_long[] INIT(= N_("E1249: Highlight group name too long"));
 

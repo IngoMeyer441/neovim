@@ -277,7 +277,7 @@ static bool use_cursor_line_sign(win_T *wp, linenr_T lnum)
 }
 
 // Get information needed to display the sign in line 'lnum' in window 'wp'.
-// If 'nrcol' is TRUE, the sign is going to be displayed in the number column.
+// If 'nrcol' is true, the sign is going to be displayed in the number column.
 // Otherwise the sign is going to be displayed in the sign column.
 //
 // @param count max number of signs
@@ -1247,7 +1247,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
           }
           char_attr = 0;
         } else if (filler_todo > 0) {
-          // draw "deleted" diff line(s)
+          // Draw "deleted" diff line(s)
           if (char2cells(wp->w_p_fcs_chars.diff) > 1) {
             c_extra = '-';
             c_final = NUL;
@@ -2082,7 +2082,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
       if (wp->w_p_cole > 0
           && (wp != curwin || lnum != wp->w_cursor.lnum || conceal_cursor_line(wp))
           && ((syntax_flags & HL_CONCEAL) != 0 || has_match_conc > 0 || decor_conceal > 0)
-          && !(lnum_in_visual_area && vim_strchr((char *)wp->w_p_cocu, 'v') == NULL)) {
+          && !(lnum_in_visual_area && vim_strchr(wp->w_p_cocu, 'v') == NULL)) {
         char_attr = conceal_attr;
         if (((prev_syntax_id != syntax_seqnr && (syntax_flags & HL_CONCEAL) != 0)
              || has_match_conc > 1 || decor_conceal > 1)

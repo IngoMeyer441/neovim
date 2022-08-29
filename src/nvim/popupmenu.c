@@ -156,7 +156,6 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed, i
     if (pum_external) {
       if (array_changed) {
         Arena arena = ARENA_EMPTY;
-        arena_start(&arena, &ui_ext_fixblk);
         Array arr = arena_array(&arena, (size_t)size);
         for (int i = 0; i < size; i++) {
           Array item = arena_array(&arena, 4);
@@ -168,7 +167,7 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed, i
         }
         ui_call_popupmenu_show(arr, selected, pum_win_row, cursor_col,
                                pum_anchor_grid);
-        arena_mem_free(arena_finish(&arena), &ui_ext_fixblk);
+        arena_mem_free(arena_finish(&arena));
       } else {
         ui_call_popupmenu_select(selected);
         return;
@@ -704,7 +703,7 @@ static bool pum_set_selected(int n, int repeat)
     if ((pum_array[pum_selected].pum_info != NULL)
         && (Rows > 10)
         && (repeat <= 1)
-        && (vim_strchr((char *)p_cot, 'p') != NULL)) {
+        && (vim_strchr(p_cot, 'p') != NULL)) {
       win_T *curwin_save = curwin;
       tabpage_T *curtab_save = curtab;
       int res = OK;
@@ -744,11 +743,11 @@ static bool pum_set_selected(int n, int repeat)
           if (res == OK) {
             // Edit a new, empty buffer. Set options for a "wipeout"
             // buffer.
-            set_option_value("swf", 0L, NULL, OPT_LOCAL);
-            set_option_value("bl", 0L, NULL, OPT_LOCAL);
-            set_option_value("bt", 0L, "nofile", OPT_LOCAL);
-            set_option_value("bh", 0L, "wipe", OPT_LOCAL);
-            set_option_value("diff", 0L, NULL, OPT_LOCAL);
+            set_option_value_give_err("swf", 0L, NULL, OPT_LOCAL);
+            set_option_value_give_err("bl", 0L, NULL, OPT_LOCAL);
+            set_option_value_give_err("bt", 0L, "nofile", OPT_LOCAL);
+            set_option_value_give_err("bh", 0L, "wipe", OPT_LOCAL);
+            set_option_value_give_err("diff", 0L, NULL, OPT_LOCAL);
           }
         }
 
@@ -802,7 +801,7 @@ static bool pum_set_selected(int n, int repeat)
 
             // Return cursor to where we were
             validate_cursor();
-            redraw_later(curwin, SOME_VALID);
+            redraw_later(curwin, UPD_SOME_VALID);
 
             // When the preview window was resized we need to
             // update the view on the buffer.  Only go back to

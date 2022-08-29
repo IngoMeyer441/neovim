@@ -65,6 +65,8 @@
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/tag.h"
+#include "nvim/textformat.h"
+#include "nvim/textobject.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/vim.h"
@@ -523,7 +525,7 @@ static bool normal_handle_special_visual_command(NormalState *s)
       && (nv_cmds[s->idx].cmd_flags & NV_STS)
       && !(mod_mask & MOD_MASK_SHIFT)) {
     end_visual_mode();
-    redraw_curbuf_later(INVERTED);
+    redraw_curbuf_later(UPD_INVERTED);
   }
 
   // Keys that work different when 'keymodel' contains "startsel"
@@ -1281,7 +1283,7 @@ static void normal_redraw(NormalState *s)
   validate_cursor();
 
   if (VIsual_active) {
-    redraw_curbuf_later(INVERTED);  // update inverted part
+    redraw_curbuf_later(UPD_INVERTED);  // update inverted part
     update_screen(0);
   } else if (must_redraw) {
     update_screen(0);
@@ -1838,7 +1840,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
       }
       if (jump_flags) {
         jump_flags = jump_to_mouse(jump_flags, NULL, which_button);
-        redraw_curbuf_later(VIsual_active ? INVERTED : VALID);
+        redraw_curbuf_later(VIsual_active ? UPD_INVERTED : UPD_VALID);
         update_screen(0);
         setcursor();
         ui_flush();  // Update before showing popup menu
@@ -2186,7 +2188,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
       curwin->w_set_curswant = true;
     }
     if (is_click) {
-      redraw_curbuf_later(INVERTED);            // update the inversion
+      redraw_curbuf_later(UPD_INVERTED);  // update the inversion
     }
   } else if (VIsual_active && !old_active) {
     if (mod_mask & MOD_MASK_ALT) {
@@ -2311,7 +2313,7 @@ void reset_VIsual_and_resel(void)
 {
   if (VIsual_active) {
     end_visual_mode();
-    redraw_curbuf_later(INVERTED);      // delete the inversion later
+    redraw_curbuf_later(UPD_INVERTED);  // delete the inversion later
   }
   VIsual_reselect = false;
 }
@@ -2321,7 +2323,7 @@ void reset_VIsual(void)
 {
   if (VIsual_active) {
     end_visual_mode();
-    redraw_curbuf_later(INVERTED);      // delete the inversion later
+    redraw_curbuf_later(UPD_INVERTED);  // delete the inversion later
     VIsual_reselect = false;
   }
 }
@@ -2652,8 +2654,8 @@ void clear_showcmd(void)
     lines = bot - top + 1;
 
     if (VIsual_mode == Ctrl_V) {
-      char_u *const saved_sbr = p_sbr;
-      char_u *const saved_w_sbr = curwin->w_p_sbr;
+      char *const saved_sbr = p_sbr;
+      char *const saved_w_sbr = curwin->w_p_sbr;
 
       // Make 'sbr' empty for a moment to get the correct size.
       p_sbr = empty_option;
@@ -2956,7 +2958,7 @@ void check_scrollbind(linenr_T topline_diff, long leftcol_diff)
         }
       }
 
-      redraw_later(curwin, VALID);
+      redraw_later(curwin, UPD_VALID);
       cursor_correct();
       curwin->w_redr_status = true;
     }
@@ -3490,7 +3492,7 @@ void scroll_redraw(int up, long count)
   if (moved) {
     curwin->w_viewport_invalid = true;
   }
-  redraw_later(curwin, VALID);
+  redraw_later(curwin, UPD_VALID);
 }
 
 /// Get the count specified after a 'z' command. Only the 'z<CR>', 'zl', 'zh',
@@ -3656,7 +3658,7 @@ static void nv_zet(cmdarg_T *cap)
 
   case 't':
     scroll_cursor_top(0, true);
-    redraw_later(curwin, VALID);
+    redraw_later(curwin, UPD_VALID);
     set_fraction(curwin);
     break;
 
@@ -3667,7 +3669,7 @@ static void nv_zet(cmdarg_T *cap)
 
   case 'z':
     scroll_cursor_halfway(true);
-    redraw_later(curwin, VALID);
+    redraw_later(curwin, UPD_VALID);
     set_fraction(curwin);
     break;
 
@@ -3690,7 +3692,7 @@ static void nv_zet(cmdarg_T *cap)
 
   case 'b':
     scroll_cursor_bot(0, true);
-    redraw_later(curwin, VALID);
+    redraw_later(curwin, UPD_VALID);
     set_fraction(curwin);
     break;
 
@@ -3742,7 +3744,7 @@ static void nv_zet(cmdarg_T *cap)
       }
       if (curwin->w_leftcol != col) {
         curwin->w_leftcol = col;
-        redraw_later(curwin, NOT_VALID);
+        redraw_later(curwin, UPD_NOT_VALID);
       }
     }
     break;
@@ -3763,7 +3765,7 @@ static void nv_zet(cmdarg_T *cap)
       }
       if (curwin->w_leftcol != col) {
         curwin->w_leftcol = col;
-        redraw_later(curwin, NOT_VALID);
+        redraw_later(curwin, UPD_NOT_VALID);
       }
     }
     break;
@@ -4098,7 +4100,7 @@ static void nv_clear(cmdarg_T *cap)
     FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
       wp->w_s->b_syn_slow = false;
     }
-    redraw_later(curwin, CLEAR);
+    redraw_later(curwin, UPD_CLEAR);
   }
 }
 
@@ -4275,14 +4277,13 @@ static void nv_ident(cmdarg_T *cap)
   // Allocate buffer to put the command in.  Inserting backslashes can
   // double the length of the word.  p_kp / curbuf->b_p_kp could be added
   // and some numbers.
-  char_u *kp = *curbuf->b_p_kp == NUL ? p_kp : curbuf->b_p_kp;  // 'keywordprg'
-  assert(*kp != NUL);  // option.c:do_set() should default to ":help" if empty.
-  bool kp_ex = (*kp == ':');  // 'keywordprg' is an ex command
-  bool kp_help = (STRCMP(kp, ":he") == 0 || STRCMP(kp, ":help") == 0);
+  char_u *kp = *curbuf->b_p_kp == NUL ? p_kp : (char_u *)curbuf->b_p_kp;  // 'keywordprg'
+  bool kp_help = (*kp == NUL || STRCMP(kp, ":he") == 0 || STRCMP(kp, ":help") == 0);
   if (kp_help && *skipwhite(ptr) == NUL) {
     emsg(_(e_noident));   // found white space only
     return;
   }
+  bool kp_ex = (*kp == ':');  // 'keywordprg' is an ex command
   size_t buf_size = n * 2 + 30 + STRLEN(kp);
   char *buf = xmalloc(buf_size);
   buf[0] = NUL;
@@ -4566,9 +4567,9 @@ static void nv_right(cmdarg_T *cap)
       //    <Space> wraps to next line if 'whichwrap' has 's'.
       //        'l' wraps to next line if 'whichwrap' has 'l'.
       // CURS_RIGHT wraps to next line if 'whichwrap' has '>'.
-      if (((cap->cmdchar == ' ' && vim_strchr((char *)p_ww, 's') != NULL)
-           || (cap->cmdchar == 'l' && vim_strchr((char *)p_ww, 'l') != NULL)
-           || (cap->cmdchar == K_RIGHT && vim_strchr((char *)p_ww, '>') != NULL))
+      if (((cap->cmdchar == ' ' && vim_strchr(p_ww, 's') != NULL)
+           || (cap->cmdchar == 'l' && vim_strchr(p_ww, 'l') != NULL)
+           || (cap->cmdchar == K_RIGHT && vim_strchr(p_ww, '>') != NULL))
           && curwin->w_cursor.lnum < curbuf->b_ml.ml_line_count) {
         // When deleting we also count the NL as a character.
         // Set cap->oap->inclusive when last char in the line is
@@ -4636,9 +4637,9 @@ static void nv_left(cmdarg_T *cap)
       //                 'h' wraps to previous line if 'whichwrap' has 'h'.
       //           CURS_LEFT wraps to previous line if 'whichwrap' has '<'.
       if ((((cap->cmdchar == K_BS || cap->cmdchar == Ctrl_H)
-            && vim_strchr((char *)p_ww, 'b') != NULL)
-           || (cap->cmdchar == 'h' && vim_strchr((char *)p_ww, 'h') != NULL)
-           || (cap->cmdchar == K_LEFT && vim_strchr((char *)p_ww, '<') != NULL))
+            && vim_strchr(p_ww, 'b') != NULL)
+           || (cap->cmdchar == 'h' && vim_strchr(p_ww, 'h') != NULL)
+           || (cap->cmdchar == K_LEFT && vim_strchr(p_ww, '<') != NULL))
           && curwin->w_cursor.lnum > 1) {
         curwin->w_cursor.lnum--;
         coladvance(MAXCOL);
@@ -5552,7 +5553,7 @@ static void n_swapchar(cmdarg_T *cap)
     return;
   }
 
-  if (LINEEMPTY(curwin->w_cursor.lnum) && vim_strchr((char *)p_ww, '~') == NULL) {
+  if (LINEEMPTY(curwin->w_cursor.lnum) && vim_strchr(p_ww, '~') == NULL) {
     clearopbeep(cap->oap);
     return;
   }
@@ -5568,7 +5569,7 @@ static void n_swapchar(cmdarg_T *cap)
     did_change |= swapchar(cap->oap->op_type, &curwin->w_cursor);
     inc_cursor();
     if (gchar_cursor() == NUL) {
-      if (vim_strchr((char *)p_ww, '~') != NULL
+      if (vim_strchr(p_ww, '~') != NULL
           && curwin->w_cursor.lnum < curbuf->b_ml.ml_line_count) {
         curwin->w_cursor.lnum++;
         curwin->w_cursor.col = 0;
@@ -5819,7 +5820,7 @@ static void nv_visual(cmdarg_T *cap)
       showmode();
       may_trigger_modechanged();
     }
-    redraw_curbuf_later(INVERTED);          // update the inversion
+    redraw_curbuf_later(UPD_INVERTED);  // update the inversion
   } else {                // start Visual mode
     if (cap->count0 > 0 && resel_VIsual_mode != NUL) {
       // use previously selected part
@@ -5865,7 +5866,7 @@ static void nv_visual(cmdarg_T *cap)
       } else {
         curwin->w_set_curswant = true;
       }
-      redraw_curbuf_later(INVERTED);            // show the inversion
+      redraw_curbuf_later(UPD_INVERTED);  // show the inversion
     } else {
       if (!cap->arg) {
         // start Select mode when 'selectmode' contains "cmd"
@@ -5900,7 +5901,7 @@ void start_selection(void)
 void may_start_select(int c)
 {
   VIsual_select = (c == 'o' || (stuff_empty() && typebuf_typed()))
-                  && vim_strchr((char *)p_slm, c) != NULL;
+                  && vim_strchr(p_slm, c) != NULL;
 }
 
 /// Start Visual mode "c".
@@ -5931,7 +5932,7 @@ static void n_start_visual_mode(int c)
   }
   // Only need to redraw this line, unless still need to redraw an old
   // Visual area (when 'lazyredraw' is set).
-  if (curwin->w_redr_type < INVERTED) {
+  if (curwin->w_redr_type < UPD_INVERTED) {
     curwin->w_old_cursor_lnum = curwin->w_cursor.lnum;
     curwin->w_old_visual_lnum = curwin->w_cursor.lnum;
   }
@@ -6018,7 +6019,7 @@ static void nv_gv_cmd(cmdarg_T *cap)
     may_start_select('c');
   }
   setmouse();
-  redraw_curbuf_later(INVERTED);
+  redraw_curbuf_later(UPD_INVERTED);
   showmode();
 }
 
@@ -6901,7 +6902,7 @@ static void nv_normal(cmdarg_T *cap)
     }
     if (VIsual_active) {
       end_visual_mode();                // stop Visual
-      redraw_curbuf_later(INVERTED);
+      redraw_curbuf_later(UPD_INVERTED);
     }
   } else {
     clearopbeep(cap->oap);
@@ -6955,7 +6956,7 @@ static void nv_esc(cmdarg_T *cap)
     end_visual_mode();          // stop Visual
     check_cursor_col();         // make sure cursor is not beyond EOL
     curwin->w_set_curswant = true;
-    redraw_curbuf_later(INVERTED);
+    redraw_curbuf_later(UPD_INVERTED);
   } else if (no_reason) {
     vim_beep(BO_ESC);
   }
@@ -7075,8 +7076,8 @@ static void nv_object(cmdarg_T *cap)
     include = true;         // "ax" = an object: include white space
   }
   // Make sure (), [], {} and <> are in 'matchpairs'
-  mps_save = curbuf->b_p_mps;
-  curbuf->b_p_mps = (char_u *)"(:),{:},[:],<:>";
+  mps_save = (char_u *)curbuf->b_p_mps;
+  curbuf->b_p_mps = "(:),{:},[:],<:>";
 
   switch (cap->nchar) {
   case 'w':       // "aw" = a word
@@ -7130,7 +7131,7 @@ static void nv_object(cmdarg_T *cap)
     break;
   }
 
-  curbuf->b_p_mps = mps_save;
+  curbuf->b_p_mps = (char *)mps_save;
   if (!flag) {
     clearopbeep(cap->oap);
   }

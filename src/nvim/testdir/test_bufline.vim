@@ -19,7 +19,7 @@ func Test_setbufline_getbufline()
   let b = bufnr('%')
   wincmd w
   call assert_equal(1, setbufline(b, 5, ['x']))
-  call assert_equal(1, setbufline(bufnr('$') + 1, 1, ['x']))
+  call assert_equal(1, ['x']->setbufline(bufnr('$') + 1, 1))
   call assert_equal(0, setbufline(b, 4, ['d', 'e']))
   call assert_equal(['c'], b->getbufline(3))
   call assert_equal(['d'], getbufline(b, 4))
@@ -185,6 +185,26 @@ func Test_deletebufline_select_mode()
 
   exe "bwipe! " .. bufnr
   bwipe!
+endfunc
+
+func Test_setbufline_startup_nofile()
+  let before =<< trim [CODE]
+    set shortmess+=F
+    file Xresult
+    set buftype=nofile
+    call setbufline('', 1, 'success')
+  [CODE]
+  let after =<< trim [CODE]
+    set buftype=
+    write
+    quit
+  [CODE]
+
+  if !RunVim(before, after, '--clean')
+    return
+  endif
+  call assert_equal(['success'], readfile('Xresult'))
+  call delete('Xresult')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

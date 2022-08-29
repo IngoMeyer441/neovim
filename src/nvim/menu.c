@@ -419,7 +419,7 @@ static int add_menu_path(const char *const menu_path, vimmenu_T *menuarg, const 
     p = (call_data == NULL) ? NULL : xstrdup(call_data);
 
     // loop over all modes, may add more than one
-    for (i = 0; i < MENU_MODES; ++i) {
+    for (i = 0; i < MENU_MODES; i++) {
       if (modes & (1 << i)) {
         // free any old menu
         free_menu_string(menu, i);
@@ -914,7 +914,7 @@ static void show_menus_recursive(vimmenu_T *menu, int modes, int depth)
  */
 static vimmenu_T *expand_menu = NULL;
 static int expand_modes = 0x0;
-static int expand_emenu;                // TRUE for ":emenu" command
+static int expand_emenu;                // true for ":emenu" command
 
 /*
  * Work out what to complete when doing command line completion of menu names.
@@ -933,7 +933,7 @@ char *set_context_in_menu_cmd(expand_T *xp, const char *cmd, char *arg, bool for
   xp->xp_context = EXPAND_UNSUCCESSFUL;
 
   // Check for priority numbers, enable and disable
-  for (p = arg; *p; ++p) {
+  for (p = arg; *p; p++) {
     if (!ascii_isdigit(*p) && *p != '.') {
       break;
     }
@@ -957,7 +957,7 @@ char *set_context_in_menu_cmd(expand_T *xp, const char *cmd, char *arg, bool for
 
   arg = after_dot = p;
 
-  for (; *p && !ascii_iswhite(*p); ++p) {
+  for (; *p && !ascii_iswhite(*p); p++) {
     if ((*p == '\\' || *p == Ctrl_V) && p[1] != NUL) {
       p++;
     } else if (*p == '.') {
@@ -1056,7 +1056,7 @@ char *get_menu_name(expand_T *xp, int idx)
     } else {
       str = menu->dname;
       if (menu->en_dname == NULL) {
-        should_advance = TRUE;
+        should_advance = true;
       }
     }
   } else {
@@ -1163,10 +1163,8 @@ char *menu_name_skip(char *const name)
   return p;
 }
 
-/*
- * Return TRUE when "name" matches with menu "menu".  The name is compared in
- * two ways: raw menu name and menu name without '&'.  ignore part after a TAB.
- */
+/// Return true when "name" matches with menu "menu".  The name is compared in
+/// two ways: raw menu name and menu name without '&'.  ignore part after a TAB.
 static bool menu_name_equal(const char *const name, const vimmenu_T *const menu)
 {
   if (menu->en_name != NULL
@@ -1181,7 +1179,7 @@ static bool menu_namecmp(const char *const name, const char *const mname)
 {
   int i;
 
-  for (i = 0; name[i] != NUL && name[i] != TAB; ++i) {
+  for (i = 0; name[i] != NUL && name[i] != TAB; i++) {
     if (name[i] != mname[i]) {
       break;
     }
@@ -1405,10 +1403,8 @@ bool menu_is_toolbar(const char *const name)
   return STRNCMP(name, "ToolBar", 7) == 0;
 }
 
-/*
- * Return TRUE if the name is a menu separator identifier: Starts and ends
- * with '-'
- */
+/// Return true if the name is a menu separator identifier: Starts and ends
+/// with '-'
 int menu_is_separator(char *name)
 {
   return name[0] == '-' && name[STRLEN(name) - 1] == '-';
@@ -1945,7 +1941,7 @@ static void menuitem_getinfo(const char *menu_name, const vimmenu_T *menu, int m
 
 /// "menu_info()" function
 /// Return information about a menu (including all the child menus)
-void f_menu_info(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_menu_info(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   tv_dict_alloc_ret(rettv);
   dict_T *const retdict = rettv->vval.v_dict;

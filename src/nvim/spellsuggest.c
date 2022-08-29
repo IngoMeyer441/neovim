@@ -360,7 +360,7 @@ int spell_check_sps(void)
   sps_flags = 0;
   sps_limit = 9999;
 
-  for (p = (char *)p_sps; *p != NUL;) {
+  for (p = p_sps; *p != NUL;) {
     copy_option_part(&p, (char *)buf, MAXPATHL, ",");
 
     f = 0;
@@ -758,7 +758,7 @@ static void spell_find_suggest(char_u *badptr, int badlen, suginfo_T *su, int ma
   }
 
   // Make a copy of 'spellsuggest', because the expression may change it.
-  sps_copy = vim_strsave(p_sps);
+  sps_copy = vim_strsave((char_u *)p_sps);
 
   // Loop over the items in 'spellsuggest'.
   for (p = (char *)sps_copy; *p != NUL;) {
@@ -3100,7 +3100,7 @@ static void add_suggestion(suginfo_T *su, garray_T *gap, const char_u *goodword,
     // being replaced "thes," -> "these" is a different suggestion from
     // "thes" -> "these".
     stp = &SUG(*gap, 0);
-    for (i = gap->ga_len; --i >= 0; ++stp) {
+    for (i = gap->ga_len; --i >= 0; stp++) {
       if (stp->st_wordlen == goodlen
           && stp->st_orglen == badlen
           && STRNCMP(stp->st_word, goodword, goodlen) == 0) {

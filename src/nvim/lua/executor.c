@@ -990,7 +990,7 @@ int nlua_in_fast_event(lua_State *lstate)
 
 static bool viml_func_is_fast(const char *name)
 {
-  const EvalFuncDef *const fdef = find_internal_func((const char *)name);
+  const EvalFuncDef *const fdef = find_internal_func(name);
   if (fdef) {
     return fdef->fast;
   }
@@ -1093,7 +1093,7 @@ static int nlua_rpc(lua_State *lstate, bool request)
     Object result = rpc_send_call(chan_id, name, args, &res_mem, &err);
     if (!ERROR_SET(&err)) {
       nlua_push_Object(lstate, result, false);
-      arena_mem_free(res_mem, NULL);
+      arena_mem_free(res_mem);
     }
   } else {
     if (!rpc_send_event(chan_id, name, args)) {
@@ -1578,7 +1578,7 @@ void ex_luado(exarg_T *const eap)
   }
   lua_pop(lstate, 1);
   check_cursor();
-  update_screen(NOT_VALID);
+  update_screen(UPD_NOT_VALID);
 }
 
 /// Run lua file
@@ -1661,6 +1661,9 @@ static void nlua_add_treesitter(lua_State *const lstate) FUNC_ATTR_NONNULL_ALL
 
   lua_pushcfunction(lstate, tslua_has_language);
   lua_setfield(lstate, -2, "_ts_has_language");
+
+  lua_pushcfunction(lstate, tslua_remove_lang);
+  lua_setfield(lstate, -2, "_ts_remove_language");
 
   lua_pushcfunction(lstate, tslua_inspect_lang);
   lua_setfield(lstate, -2, "_ts_inspect_language");

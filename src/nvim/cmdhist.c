@@ -90,14 +90,14 @@ static char *(history_names[]) = {
 /// arguments of the ":history command.
 char *get_history_arg(expand_T *xp, int idx)
 {
-  static char_u compl[2] = { NUL, NUL };
-  char *short_names = ":=@>?/";
-  int short_names_count = (int)STRLEN(short_names);
-  int history_name_count = ARRAY_SIZE(history_names) - 1;
+  const char *short_names = ":=@>?/";
+  const int short_names_count = (int)STRLEN(short_names);
+  const int history_name_count = ARRAY_SIZE(history_names) - 1;
 
   if (idx < short_names_count) {
-    compl[0] = (char_u)short_names[idx];
-    return (char *)compl;
+    xp->xp_buf[0] = short_names[idx];
+    xp->xp_buf[1] = NUL;
+    return xp->xp_buf;
   }
   if (idx < short_names_count + history_name_count) {
     return history_names[idx - short_names_count];
@@ -494,7 +494,7 @@ static int del_history_idx(int histype, int idx)
 }
 
 /// "histadd()" function
-void f_histadd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_histadd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   HistoryType histype;
 
@@ -517,7 +517,7 @@ void f_histadd(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "histdel()" function
-void f_histdel(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_histdel(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   int n;
   const char *const str = tv_get_string_chk(&argvars[0]);  // NULL on type error
@@ -540,7 +540,7 @@ void f_histdel(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "histget()" function
-void f_histget(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_histget(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   HistoryType type;
   int idx;
@@ -562,7 +562,7 @@ void f_histget(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "histnr()" function
-void f_histnr(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_histnr(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   const char *const histname = tv_get_string_chk(&argvars[0]);
   HistoryType i = histname == NULL

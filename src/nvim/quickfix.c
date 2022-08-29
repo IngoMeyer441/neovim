@@ -67,9 +67,9 @@ struct qfline_S {
   char *qf_module;      ///< module name for this error
   char *qf_pattern;     ///< search pattern for the error
   char *qf_text;        ///< description of the error
-  char qf_viscol;       ///< set to TRUE if qf_col and qf_end_col is
+  char qf_viscol;       ///< set to true if qf_col and qf_end_col is
   //   screen column
-  char qf_cleared;      ///< set to TRUE if line has been deleted
+  char qf_cleared;      ///< set to true if line has been deleted
   char qf_type;         ///< type of the error (mostly 'E'); 1 for :helpgrep
   char qf_valid;        ///< valid error message detected
 };
@@ -100,7 +100,7 @@ typedef struct qf_list_S {
   qfline_T *qf_ptr;          ///< pointer to the current error
   int qf_count;                 ///< number of errors (0 means empty list)
   int qf_index;                 ///< current index in the error list
-  int qf_nonevalid;             ///< TRUE if not a single valid entry found
+  int qf_nonevalid;             ///< true if not a single valid entry found
   char *qf_title;        ///< title derived from the command that created
                          ///< the error list or set by setqflist
   typval_T *qf_ctx;          ///< context set by setqflist/setloclist
@@ -1000,7 +1000,7 @@ static int qf_setup_state(qfstate_T *pstate, char *restrict enc, const char *res
 {
   pstate->vc.vc_type = CONV_NONE;
   if (enc != NULL && *enc != NUL) {
-    convert_setup(&pstate->vc, (char_u *)enc, p_enc);
+    convert_setup(&pstate->vc, (char_u *)enc, (char_u *)p_enc);
   }
 
   if (efile != NULL
@@ -1091,7 +1091,7 @@ static int qf_init_ext(qf_info_T *qi, int qf_idx, const char *restrict efile, bu
 
   // Use the local value of 'errorformat' if it's set.
   if (errorformat == p_efm && tv == NULL && buf && *buf->b_p_efm != NUL) {
-    efm = (char *)buf->b_p_efm;
+    efm = buf->b_p_efm;
   } else {
     efm = errorformat;
   }
@@ -1891,7 +1891,7 @@ static qf_info_T *ll_get_or_alloc_list(win_T *wp)
 /// Get the quickfix/location list stack to use for the specified Ex command.
 /// For a location list command, returns the stack for the current window.  If
 /// the location list is not found, then returns NULL and prints an error
-/// message if 'print_emsg' is TRUE.
+/// message if 'print_emsg' is true.
 static qf_info_T *qf_cmd_get_stack(exarg_T *eap, int print_emsg)
 {
   qf_info_T *qi = &ql_info;
@@ -2511,7 +2511,7 @@ static win_T *qf_find_win_with_normal_buf(void)
 }
 
 // Go to a window in any tabpage containing the specified file.  Returns true
-// if successfully jumped to the window. Otherwise returns FALSE.
+// if successfully jumped to the window. Otherwise returns false.
 static bool qf_goto_tabwin_with_file(int fnum)
 {
   FOR_ALL_TAB_WINDOWS(tp, wp) {
@@ -2923,7 +2923,7 @@ void qf_jump(qf_info_T *qi, int dir, int errornr, int forceit)
 // If 'newwin' is true, then open the file in a new window.
 static void qf_jump_newwin(qf_info_T *qi, int dir, int errornr, int forceit, bool newwin)
 {
-  char *old_swb = (char *)p_swb;
+  char *old_swb = p_swb;
   unsigned old_swb_flags = swb_flags;
   const bool old_KeyTyped = KeyTyped;           // getting file may reset it
 
@@ -2932,7 +2932,7 @@ static void qf_jump_newwin(qf_info_T *qi, int dir, int errornr, int forceit, boo
   }
 
   if (qf_stack_empty(qi) || qf_list_empty(qf_get_curlist(qi))) {
-    emsg(_(e_quickfix));
+    emsg(_(e_no_errors));
     return;
   }
 
@@ -2994,10 +2994,10 @@ theend:
     qfl->qf_ptr = qf_ptr;
     qfl->qf_index = qf_index;
   }
-  if (p_swb != (char_u *)old_swb && p_swb == empty_option) {
+  if (p_swb != old_swb && p_swb == empty_option) {
     // Restore old 'switchbuf' value, but not when an autocommand or
     // modeline has changed the value.
-    p_swb = (char_u *)old_swb;
+    p_swb = old_swb;
     swb_flags = old_swb_flags;
   }
   decr_quickfix_busy();
@@ -3111,7 +3111,7 @@ void qf_list(exarg_T *eap)
   }
 
   if (qf_stack_empty(qi) || qf_list_empty(qf_get_curlist(qi))) {
-    emsg(_(e_quickfix));
+    emsg(_(e_no_errors));
     return;
   }
 
@@ -3180,7 +3180,7 @@ static void qf_fmt_text(const char *restrict text, char *restrict buf, int bufsi
   int i;
   const char *p = (char *)text;
 
-  for (i = 0; *p != NUL && i < bufsize - 1; ++i) {
+  for (i = 0; *p != NUL && i < bufsize - 1; i++) {
     if (*p == '\n') {
       buf[i] = ' ';
       while (*++p != NUL) {
@@ -3263,13 +3263,13 @@ void qf_age(exarg_T *eap)
         emsg(_("E380: At bottom of quickfix stack"));
         break;
       }
-      --qi->qf_curlist;
+      qi->qf_curlist--;
     } else {
       if (qi->qf_curlist >= qi->qf_listcount - 1) {
         emsg(_("E381: At top of quickfix stack"));
         break;
       }
-      ++qi->qf_curlist;
+      qi->qf_curlist++;
     }
   }
   qf_msg(qi, qi->qf_curlist, "");
@@ -3393,7 +3393,7 @@ bool qf_mark_adjust(win_T *wp, linenr_T line1, linenr_T line2, linenr_T amount,
           found_one = true;
           if (qfp->qf_lnum >= line1 && qfp->qf_lnum <= line2) {
             if (amount == MAXLNUM) {
-              qfp->qf_cleared = TRUE;
+              qfp->qf_cleared = true;
             } else {
               qfp->qf_lnum += amount;
             }
@@ -3467,7 +3467,7 @@ void qf_view_result(bool split)
     qi = GET_LOC_LIST(curwin);
   }
   if (qf_list_empty(qf_get_curlist(qi))) {
-    emsg(_(e_quickfix));
+    emsg(_(e_no_errors));
     return;
   }
 
@@ -3558,12 +3558,12 @@ static int qf_goto_cwindow(const qf_info_T *qi, bool resize, int sz, bool vertsp
 static void qf_set_cwindow_options(void)
 {
   // switch off 'swapfile'
-  set_option_value("swf", 0L, NULL, OPT_LOCAL);
-  set_option_value("bt", 0L, "quickfix", OPT_LOCAL);
-  set_option_value("bh", 0L, "hide", OPT_LOCAL);
+  set_option_value_give_err("swf", 0L, NULL, OPT_LOCAL);
+  set_option_value_give_err("bt", 0L, "quickfix", OPT_LOCAL);
+  set_option_value_give_err("bh", 0L, "hide", OPT_LOCAL);
   RESET_BINDING(curwin);
   curwin->w_p_diff = false;
-  set_option_value("fdm", 0L, "manual", OPT_LOCAL);
+  set_option_value_give_err("fdm", 0L, "manual", OPT_LOCAL);
 }
 
 // Open a new quickfix or location list window, load the quickfix buffer and
@@ -3710,7 +3710,7 @@ static void qf_win_goto(win_T *win, linenr_T lnum)
   curwin->w_cursor.coladd = 0;
   curwin->w_curswant = 0;
   update_topline(curwin);              // scroll to show the line
-  redraw_later(curwin, VALID);
+  redraw_later(curwin, UPD_VALID);
   curwin->w_redr_status = true;  // update ruler
   curwin = old_curwin;
   curbuf = curwin->w_buffer;
@@ -3747,7 +3747,7 @@ linenr_T qf_current_entry(win_T *wp)
 }
 
 /// Update the cursor position in the quickfix window to the current error.
-/// Return TRUE if there is a quickfix window.
+/// Return true if there is a quickfix window.
 ///
 /// @param old_qf_index  previous qf_index or zero
 static bool qf_win_pos_update(qf_info_T *qi, int old_qf_index)
@@ -3834,7 +3834,7 @@ static buf_T *qf_find_buf(qf_info_T *qi)
 /// @return  OK or FAIL
 int qf_process_qftf_option(void)
 {
-  return option_set_callback_func(p_qftf, &qftf_cb);
+  return option_set_callback_func((char_u *)p_qftf, &qftf_cb);
 }
 
 /// Update the w:quickfix_title variable in the quickfix/location list window in
@@ -3898,7 +3898,7 @@ static void qf_update_buffer(qf_info_T *qi, qfline_T *old_last)
     // Only redraw when added lines are visible.  This avoids flickering when
     // the added lines are not visible.
     if ((win = qf_find_win(qi)) != NULL && old_line_count < win->w_botline) {
-      redraw_buf_later(buf, NOT_VALID);
+      redraw_buf_later(buf, UPD_NOT_VALID);
     }
   }
 }
@@ -4108,7 +4108,7 @@ static void qf_fill_buffer(qf_list_T *qfl, buf_T *buf, qfline_T *old_last, int q
     // resembles reading a file into a buffer, it's more logical when using
     // autocommands.
     curbuf->b_ro_locked++;
-    set_option_value("ft", 0L, "qf", OPT_LOCAL);
+    set_option_value_give_err("ft", 0L, "qf", OPT_LOCAL);
     curbuf->b_p_ma = false;
 
     keep_filetype = true;                 // don't detect 'filetype'
@@ -4118,7 +4118,7 @@ static void qf_fill_buffer(qf_list_T *qfl, buf_T *buf, qfline_T *old_last, int q
     curbuf->b_ro_locked--;
 
     // make sure it will be redrawn
-    redraw_curbuf_later(NOT_VALID);
+    redraw_curbuf_later(UPD_NOT_VALID);
   }
 
   // Restore KeyTyped, setting 'filetype' may reset it.
@@ -4175,7 +4175,7 @@ static void qf_jump_first(qf_info_T *qi, unsigned save_qfid, int forceit)
   }
 }
 
-// Return TRUE when using ":vimgrep" for ":grep".
+// Return true when using ":vimgrep" for ":grep".
 int grep_internal(cmdidx_T cmdidx)
 {
   return (cmdidx == CMD_grep
@@ -4183,7 +4183,7 @@ int grep_internal(cmdidx_T cmdidx)
           || cmdidx == CMD_grepadd
           || cmdidx == CMD_lgrepadd)
          && STRCMP("internal",
-                   *curbuf->b_p_gp == NUL ? p_gp : curbuf->b_p_gp) == 0;
+                   *curbuf->b_p_gp == NUL ? p_gp : (char_u *)curbuf->b_p_gp) == 0;
 }
 
 // Return the make/grep autocmd name.
@@ -4241,7 +4241,7 @@ static char *make_get_fullcmd(const char *makecmd, const char *fname)
 // Used for ":make", ":lmake", ":grep", ":lgrep", ":grepadd", and ":lgrepadd"
 void ex_make(exarg_T *eap)
 {
-  char *enc = (*curbuf->b_p_menc != NUL) ? (char *)curbuf->b_p_menc : (char *)p_menc;
+  char *enc = (*curbuf->b_p_menc != NUL) ? curbuf->b_p_menc : (char *)p_menc;
 
   // Redirect ":grep" to ":vimgrep" if 'grepprg' is "internal".
   if (grep_internal(eap->cmdidx)) {
@@ -4328,7 +4328,7 @@ static char *get_mef_name(void)
 
   char *p;
 
-  for (p = p_mef; *p; ++p) {
+  for (p = p_mef; *p; p++) {
     if (p[0] == '#' && p[1] == '#') {
       break;
     }
@@ -4832,7 +4832,7 @@ static void qf_get_nth_below_entry(qfline_T *entry_arg, linenr_T n, bool linewis
 }
 
 /// Get the nth quickfix entry above the specified entry.  Searches backwards in
-/// the list. If linewise is TRUE, then treat multiple entries on a single line
+/// the list. If linewise is true, then treat multiple entries on a single line
 /// as one.
 static void qf_get_nth_above_entry(qfline_T *entry, linenr_T n, bool linewise, int *errornr)
   FUNC_ATTR_NONNULL_ALL
@@ -4898,7 +4898,7 @@ void ex_cbelow(exarg_T *eap)
                       || eap->cmdidx == CMD_cafter) ? BUF_HAS_QF_ENTRY : BUF_HAS_LL_ENTRY;
 
   if (!(curbuf->b_has_qf_entry & buf_has_flag)) {
-    emsg(_(e_quickfix));
+    emsg(_(e_no_errors));
     return;
   }
 
@@ -4910,7 +4910,7 @@ void ex_cbelow(exarg_T *eap)
   qf_list_T *qfl = qf_get_curlist(qi);
   // check if the list has valid errors
   if (!qf_list_has_valid_entries(qfl)) {
-    emsg(_(e_quickfix));
+    emsg(_(e_no_errors));
     return;
   }
 
@@ -4981,7 +4981,7 @@ void ex_cfile(exarg_T *eap)
     set_string_option_direct("ef", -1, eap->arg, OPT_FREE, 0);
   }
 
-  char *enc = (*curbuf->b_p_menc != NUL) ? (char *)curbuf->b_p_menc : (char *)p_menc;
+  char *enc = (*curbuf->b_p_menc != NUL) ? curbuf->b_p_menc : (char *)p_menc;
 
   if (is_loclist_cmd(eap->cmdidx)) {
     wp = curwin;
@@ -5140,6 +5140,7 @@ static bool vgr_match_buflines(qf_list_T *qfl, char *fname, buf_T *buf, char *sp
   FUNC_ATTR_NONNULL_ARG(1, 3, 4, 5, 6)
 {
   bool found_match = false;
+  const size_t pat_len = STRLEN(spat);
 
   for (linenr_T lnum = 1; lnum <= buf->b_ml.ml_line_count && *tomatch > 0; lnum++) {
     colnr_T col = 0;
@@ -5181,7 +5182,6 @@ static bool vgr_match_buflines(qf_list_T *qfl, char *fname, buf_T *buf, char *sp
         }
       }
     } else {
-      const size_t pat_len = STRLEN(spat);
       char *const str = (char *)ml_get_buf(buf, lnum, false);
       int score;
       uint32_t matches[MAX_FUZZY_MATCHES];
@@ -5305,7 +5305,7 @@ static int vgr_process_args(exarg_T *eap, vgr_args_T *args)
   }
 
   // Parse the list of arguments, wildcards have already been expanded.
-  if (get_arglist_exp((char_u *)p, &args->fcount, &args->fnames, true) == FAIL) {
+  if (get_arglist_exp(p, &args->fcount, &args->fnames, true) == FAIL) {
     return FAIL;
   }
   if (args->fcount == 0) {
@@ -5429,7 +5429,7 @@ static int vgr_process_files(win_T *wp, qf_info_T *qi, vgr_args_T *cmd_args, boo
           // options!
           aco_save_T aco;
           aucmd_prepbuf(&aco, buf);
-          apply_autocmds(EVENT_FILETYPE, (char *)buf->b_p_ft, buf->b_fname, true, buf);
+          apply_autocmds(EVENT_FILETYPE, buf->b_p_ft, buf->b_fname, true, buf);
           do_modelines(OPT_NOWIN);
           aucmd_restbuf(&aco);
         }
@@ -5609,7 +5609,7 @@ static buf_T *load_dummy_buffer(char *fname, char *dirname_start, char *resultin
     if (readfile_result == OK
         && !got_int
         && !(curbuf->b_flags & BF_NEW)) {
-      failed = FALSE;
+      failed = false;
       if (curbuf != newbuf) {
         // Bloody autocommands changed the buffer!  Can happen when
         // using netrw and editing a remote file.  Use the current
@@ -5677,7 +5677,7 @@ static void wipe_dummy_buffer(buf_T *buf, char *dirname_start)
     cleanup_T cs;
 
     // Reset the error/interrupt/exception state here so that aborting()
-    // returns FALSE when wiping out the buffer.  Otherwise it doesn't
+    // returns false when wiping out the buffer.  Otherwise it doesn't
     // work when got_int is set.
     enter_cleanup(&cs);
 
@@ -7033,7 +7033,7 @@ static void hgr_search_in_rtp(qf_list_T *qfl, regmatch_T *p_regmatch, const char
   FUNC_ATTR_NONNULL_ARG(1, 2)
 {
   // Go through all directories in 'runtimepath'
-  char *p = (char *)p_rtp;
+  char *p = p_rtp;
   while (*p != NUL && !got_int) {
     copy_option_part(&p, (char *)NameBuff, MAXPATHL, ",");
 
@@ -7062,9 +7062,10 @@ void ex_helpgrep(exarg_T *eap)
     }
   }
 
+  bool updated = false;
   // Make 'cpoptions' empty, the 'l' flag should not be used here.
   char *const save_cpo = p_cpo;
-  p_cpo = (char *)empty_option;
+  p_cpo = empty_option;
 
   bool new_qi = false;
   if (is_loclist_cmd(eap->cmdidx)) {
@@ -7092,14 +7093,24 @@ void ex_helpgrep(exarg_T *eap)
     qfl->qf_ptr = qfl->qf_start;
     qfl->qf_index = 1;
     qf_list_changed(qfl);
-    qf_update_buffer(qi, NULL);
+    updated = true;
   }
 
-  if ((char_u *)p_cpo == empty_option) {
+  if (p_cpo == empty_option) {
     p_cpo = save_cpo;
   } else {
-    // Darn, some plugin changed the value.
-    free_string_option((char_u *)save_cpo);
+    // Darn, some plugin changed the value.  If it's still empty it was
+    // changed and restored, need to restore in the complicated way.
+    if (*p_cpo == NUL) {
+      set_option_value_give_err("cpo", 0L, save_cpo, 0);
+    }
+    free_string_option(save_cpo);
+  }
+
+  if (updated) {
+    // This may open a window and source scripts, do this after 'cpo' was
+    // restored.
+    qf_update_buffer(qi, NULL);
   }
 
   if (au_name != NULL) {
@@ -7158,14 +7169,14 @@ static void get_qf_loc_list(int is_qf, win_T *wp, typval_T *what_arg, typval_T *
 }
 
 /// "getloclist()" function
-void f_getloclist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_getloclist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   win_T *wp = find_win_by_nr_or_id(&argvars[0]);
   get_qf_loc_list(false, wp, &argvars[1], rettv);
 }
 
 /// "getqflist()" functions
-void f_getqflist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_getqflist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   get_qf_loc_list(true, NULL, &argvars[0], rettv);
 }
@@ -7252,7 +7263,7 @@ skip_args:
 }
 
 /// "setloclist()" function
-void f_setloclist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_setloclist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   rettv->vval.v_number = -1;
 
@@ -7263,7 +7274,7 @@ void f_setloclist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "setqflist()" function
-void f_setqflist(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_setqflist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   set_qf_ll_list(NULL, argvars, rettv);
 }

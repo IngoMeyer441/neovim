@@ -609,7 +609,7 @@ static void syn_sync(win_T *wp, linenr_T start_lnum, synstate_T *last_valid)
     /*
      * Skip lines that end in a backslash.
      */
-    for (; start_lnum > 1; --start_lnum) {
+    for (; start_lnum > 1; start_lnum--) {
       line = ml_get(start_lnum - 1);
       if (*line == NUL || *(line + STRLEN(line) - 1) != '\\') {
         break;
@@ -687,7 +687,7 @@ static void syn_sync(win_T *wp, linenr_T start_lnum, synstate_T *last_valid)
        */
       validate_current_state();
 
-      for (current_lnum = lnum; current_lnum < end_lnum; ++current_lnum) {
+      for (current_lnum = lnum; current_lnum < end_lnum; current_lnum++) {
         syn_start_line();
         for (;;) {
           had_sync_point = syn_finish_line(true);
@@ -812,9 +812,7 @@ static void restore_chartab(char_u *chartab)
   }
 }
 
-/*
- * Return TRUE if the line-continuation pattern matches in line "lnum".
- */
+/// Return true if the line-continuation pattern matches in line "lnum".
 static int syn_match_linecont(linenr_T lnum)
 {
   if (syn_block->b_syn_linecont_prog != NULL) {
@@ -832,7 +830,7 @@ static int syn_match_linecont(linenr_T lnum)
     restore_chartab(buf_chartab);
     return r;
   }
-  return FALSE;
+  return false;
 }
 
 /*
@@ -878,7 +876,7 @@ static void syn_update_ends(bool startofline)
         cur_si->si_m_endpos.lnum = 0;
         cur_si->si_m_endpos.col = 0;
         cur_si->si_h_endpos = cur_si->si_m_endpos;
-        cur_si->si_ends = TRUE;
+        cur_si->si_ends = true;
       }
     }
   }
@@ -894,7 +892,7 @@ static void syn_update_ends(bool startofline)
    */
   int i = current_state.ga_len - 1;
   if (keepend_level >= 0) {
-    for (; i > keepend_level; --i) {
+    for (; i > keepend_level; i--) {
       if (CUR_STATE(i).si_flags & HL_EXTEND) {
         break;
       }
@@ -1186,7 +1184,7 @@ static void syn_stack_free_entry(synblock_T *block, synstate_T *p)
   clear_syn_state(p);
   p->sst_next = block->b_sst_firstfree;
   block->b_sst_firstfree = p;
-  ++block->b_sst_freecount;
+  block->b_sst_freecount++;
 }
 
 /*
@@ -1225,7 +1223,7 @@ static synstate_T *store_current_state(void)
    * If the current state contains a start or end pattern that continues
    * from the previous line, we can't use it.  Don't store it then.
    */
-  for (i = current_state.ga_len - 1; i >= 0; --i) {
+  for (i = current_state.ga_len - 1; i >= 0; i--) {
     cur_si = &CUR_STATE(i);
     if (cur_si->si_h_startpos.lnum >= current_lnum
         || cur_si->si_m_endpos.lnum >= current_lnum
@@ -1273,7 +1271,7 @@ static synstate_T *store_current_state(void)
       // list, after *sp
       p = syn_block->b_sst_firstfree;
       syn_block->b_sst_firstfree = p->sst_next;
-      --syn_block->b_sst_freecount;
+      syn_block->b_sst_freecount--;
       if (sp == NULL) {
         // Insert in front of the list
         p->sst_next = syn_block->b_sst_first;
@@ -1302,7 +1300,7 @@ static synstate_T *store_current_state(void)
     } else {
       bp = sp->sst_union.sst_stack;
     }
-    for (i = 0; i < sp->sst_stacksize; ++i) {
+    for (i = 0; i < sp->sst_stacksize; i++) {
       bp[i].bs_idx = CUR_STATE(i).si_idx;
       bp[i].bs_flags = (int)CUR_STATE(i).si_flags;
       bp[i].bs_seqnr = CUR_STATE(i).si_seqnr;
@@ -1336,7 +1334,7 @@ static void load_current_state(synstate_T *from)
     } else {
       bp = from->sst_union.sst_stack;
     }
-    for (i = 0; i < from->sst_stacksize; ++i) {
+    for (i = 0; i < from->sst_stacksize; i++) {
       CUR_STATE(i).si_idx = bp[i].bs_idx;
       CUR_STATE(i).si_flags = bp[i].bs_flags;
       CUR_STATE(i).si_seqnr = bp[i].bs_seqnr;
@@ -1345,7 +1343,7 @@ static void load_current_state(synstate_T *from)
       if (keepend_level < 0 && (CUR_STATE(i).si_flags & HL_KEEPEND)) {
         keepend_level = i;
       }
-      CUR_STATE(i).si_ends = FALSE;
+      CUR_STATE(i).si_ends = false;
       CUR_STATE(i).si_m_lnum = 0;
       if (CUR_STATE(i).si_idx >= 0) {
         CUR_STATE(i).si_next_list =
@@ -1551,7 +1549,7 @@ static bool syn_finish_line(const bool syncing)
 /// "col" is normally 0 for the first use in a line, and increments by one each
 /// time.  It's allowed to skip characters and to stop before the end of the
 /// line.  But only a "col" after a previously used column is allowed.
-/// When "can_spell" is not NULL set it to TRUE when spell-checking should be
+/// When "can_spell" is not NULL set it to true when spell-checking should be
 /// done.
 ///
 /// @param keep_state  keep state of char at "col"
@@ -1732,7 +1730,7 @@ static int syn_current_attr(const bool syncing, const bool displaying, bool *con
               cur_si->si_m_endpos.col = endcol;
               cur_si->si_h_endpos.lnum = current_lnum;
               cur_si->si_h_endpos.col = endcol;
-              cur_si->si_ends = TRUE;
+              cur_si->si_ends = true;
               cur_si->si_end_idx = 0;
               cur_si->si_flags = flags;
               cur_si->si_seqnr = next_seqnr++;
@@ -2024,7 +2022,7 @@ static int syn_current_attr(const bool syncing, const bool displaying, bool *con
   current_flags = 0;
   current_seqnr = 0;
   if (cur_si != NULL) {
-    for (int idx = current_state.ga_len - 1; idx >= 0; --idx) {
+    for (int idx = current_state.ga_len - 1; idx >= 0; idx--) {
       sip = &CUR_STATE(idx);
       if ((current_lnum > sip->si_h_startpos.lnum
            || (current_lnum == sip->si_h_startpos.lnum
@@ -2046,10 +2044,8 @@ static int syn_current_attr(const bool syncing, const bool displaying, bool *con
     if (can_spell != NULL) {
       struct sp_syn sps;
 
-      /*
-       * set "can_spell" to TRUE if spell checking is supposed to be
-       * done in the current item.
-       */
+      // set "can_spell" to true if spell checking is supposed to be
+      // done in the current item.
       if (syn_block->b_spell_cluster_id == 0) {
         // There is no @Spell cluster: Do spelling for items without
         // @NoSpell cluster.
@@ -2192,7 +2188,7 @@ static stateitem_T *push_next_match(void)
     } else {
       cur_si->si_m_endpos = next_match_m_endpos;
       cur_si->si_h_endpos = next_match_h_endpos;
-      cur_si->si_ends = TRUE;
+      cur_si->si_ends = true;
       cur_si->si_flags |= next_match_flags;
       cur_si->si_eoe_pos = next_match_eoe_pos;
       cur_si->si_end_idx = next_match_end_idx;
@@ -2216,7 +2212,7 @@ static stateitem_T *push_next_match(void)
       cur_si->si_m_lnum = current_lnum;
       cur_si->si_m_endpos = next_match_eos_pos;
       cur_si->si_h_endpos = next_match_eos_pos;
-      cur_si->si_ends = TRUE;
+      cur_si->si_ends = true;
       cur_si->si_end_idx = 0;
       cur_si->si_flags = HL_MATCH;
       cur_si->si_seqnr = next_seqnr++;
@@ -2406,7 +2402,7 @@ static void check_keepend(void)
    * won't do anything.  If there is no "extend" item "i" will be
    * "keepend_level" and all "keepend" items will work normally.
    */
-  for (i = current_state.ga_len - 1; i > keepend_level; --i) {
+  for (i = current_state.ga_len - 1; i > keepend_level; i--) {
     if (CUR_STATE(i).si_flags & HL_EXTEND) {
       break;
     }
@@ -2416,13 +2412,13 @@ static void check_keepend(void)
   maxpos.col = 0;
   maxpos_h.lnum = 0;
   maxpos_h.col = 0;
-  for (; i < current_state.ga_len; ++i) {
+  for (; i < current_state.ga_len; i++) {
     sip = &CUR_STATE(i);
     if (maxpos.lnum != 0) {
       limit_pos_zero(&sip->si_m_endpos, &maxpos);
       limit_pos_zero(&sip->si_h_endpos, &maxpos_h);
       limit_pos_zero(&sip->si_eoe_pos, &maxpos);
-      sip->si_ends = TRUE;
+      sip->si_ends = true;
     }
     if (sip->si_ends && (sip->si_flags & HL_KEEPEND)) {
       if (maxpos.lnum == 0
@@ -2482,12 +2478,12 @@ static void update_si_end(stateitem_T *sip, int startcol, bool force)
     // No end pattern matched.
     if (SYN_ITEMS(syn_block)[sip->si_idx].sp_flags & HL_ONELINE) {
       // a "oneline" never continues in the next line
-      sip->si_ends = TRUE;
+      sip->si_ends = true;
       sip->si_m_endpos.lnum = current_lnum;
       sip->si_m_endpos.col = (colnr_T)STRLEN(syn_getcurline());
     } else {
       // continues in the next line
-      sip->si_ends = FALSE;
+      sip->si_ends = false;
       sip->si_m_endpos.lnum = 0;
     }
     sip->si_h_endpos = sip->si_m_endpos;
@@ -2496,7 +2492,7 @@ static void update_si_end(stateitem_T *sip, int startcol, bool force)
     sip->si_m_endpos = endpos;
     sip->si_h_endpos = hl_endpos;
     sip->si_eoe_pos = end_endpos;
-    sip->si_ends = TRUE;
+    sip->si_ends = true;
     sip->si_end_idx = end_idx;
   }
 }
@@ -2519,7 +2515,7 @@ static void pop_current_state(void)
 {
   if (!GA_EMPTY(&current_state)) {
     unref_extmatch(CUR_STATE(current_state.ga_len - 1).si_extmatch);
-    --current_state.ga_len;
+    current_state.ga_len--;
   }
   // after the end of a pattern, try matching a keyword or pattern
   next_match_idx = -1;
@@ -2613,7 +2609,7 @@ static void find_endpos(int idx, lpos_T *startpos, lpos_T *m_endpos, lpos_T *hl_
      * Find end pattern that matches first after "matchcol".
      */
     best_idx = -1;
-    for (idx = start_idx; idx < syn_block->b_syn_patterns.ga_len; ++idx) {
+    for (idx = start_idx; idx < syn_block->b_syn_patterns.ga_len; idx++) {
       int lc_col = matchcol;
 
       spp = &(SYN_ITEMS(syn_block)[idx]);
@@ -2888,7 +2884,7 @@ static char_u *syn_getcurline(void)
 
 /*
  * Call vim_regexec() to find a match with "rmp" in "syn_buf".
- * Returns TRUE when there is a match.
+ * Returns true when there is a match.
  */
 static int syn_regexec(regmmatch_T *rmp, linenr_T lnum, colnr_T col, syn_time_T *st)
 {
@@ -2916,9 +2912,9 @@ static int syn_regexec(regmmatch_T *rmp, linenr_T lnum, colnr_T col, syn_time_T 
     if (profile_cmp(pt, st->slowest) < 0) {
       st->slowest = pt;
     }
-    ++st->count;
+    st->count++;
     if (r > 0) {
-      ++st->match;
+      st->match++;
     }
   }
   if (timed_out && !syn_win->w_s->b_syn_slow) {
@@ -2929,9 +2925,9 @@ static int syn_regexec(regmmatch_T *rmp, linenr_T lnum, colnr_T col, syn_time_T 
   if (r > 0) {
     rmp->startpos[0].lnum += lnum;
     rmp->endpos[0].lnum += lnum;
-    return TRUE;
+    return true;
   }
-  return FALSE;
+  return false;
 }
 
 /// Check one position in a line for a matching keyword.
@@ -3143,7 +3139,7 @@ static void syn_cmd_spell(exarg_T *eap, int syncing)
   }
 
   // assume spell checking changed, force a redraw
-  redraw_later(curwin, NOT_VALID);
+  redraw_later(curwin, UPD_NOT_VALID);
 }
 
 /// Handle ":syntax iskeyword" command.
@@ -3162,7 +3158,7 @@ static void syn_cmd_iskeyword(exarg_T *eap, int syncing)
     msg_puts("\n");
     if (curwin->w_s->b_syn_isk != empty_option) {
       msg_puts("syntax iskeyword ");
-      msg_outtrans((char *)curwin->w_s->b_syn_isk);
+      msg_outtrans(curwin->w_s->b_syn_isk);
     } else {
       msg_outtrans(_("syntax iskeyword not set"));
     }
@@ -3172,18 +3168,18 @@ static void syn_cmd_iskeyword(exarg_T *eap, int syncing)
       clear_string_option(&curwin->w_s->b_syn_isk);
     } else {
       memmove(save_chartab, curbuf->b_chartab, (size_t)32);
-      save_isk = curbuf->b_p_isk;
-      curbuf->b_p_isk = vim_strsave(arg);
+      save_isk = (char_u *)curbuf->b_p_isk;
+      curbuf->b_p_isk = (char *)vim_strsave(arg);
 
       buf_init_chartab(curbuf, false);
       memmove(curwin->w_s->b_syn_chartab, curbuf->b_chartab, (size_t)32);
       memmove(curbuf->b_chartab, save_chartab, (size_t)32);
       clear_string_option(&curwin->w_s->b_syn_isk);
       curwin->w_s->b_syn_isk = curbuf->b_p_isk;
-      curbuf->b_p_isk = save_isk;
+      curbuf->b_p_isk = (char *)save_isk;
     }
   }
-  redraw_later(curwin, NOT_VALID);
+  redraw_later(curwin, UPD_NOT_VALID);
 }
 
 /*
@@ -3282,7 +3278,7 @@ static void syn_remove_pattern(synblock_T *block, int idx)
 
   spp = &(SYN_ITEMS(block)[idx]);
   if (spp->sp_flags & HL_FOLD) {
-    --block->b_syn_folditems;
+    block->b_syn_folditems--;
   }
   syn_clear_pattern(block, idx);
   memmove(spp, spp + 1, sizeof(synpat_T) * (size_t)(block->b_syn_patterns.ga_len - idx - 1));
@@ -3383,7 +3379,7 @@ static void syn_cmd_clear(exarg_T *eap, int syncing)
       arg = (char_u *)skipwhite((char *)arg_end);
     }
   }
-  redraw_curbuf_later(SOME_VALID);
+  redraw_curbuf_later(UPD_SOME_VALID);
   syn_stack_free_all(curwin->w_s);              // Need to recompute all syntax.
 }
 
@@ -3471,7 +3467,7 @@ void syn_maybe_enable(void)
 
 /// Handle ":syntax [list]" command: list current syntax words.
 ///
-/// @param syncing  when TRUE: list syncing items
+/// @param syncing  when true: list syncing items
 static void syn_cmd_list(exarg_T *eap, int syncing)
 {
   char_u *arg = (char_u *)eap->arg;
@@ -3526,7 +3522,7 @@ static void syn_cmd_list(exarg_T *eap, int syncing)
     for (int id = 1; id <= highlight_num_groups() && !got_int; id++) {
       syn_list_one(id, syncing, false);
     }
-    for (int id = 0; id < curwin->w_s->b_syn_clusters.ga_len && !got_int; ++id) {
+    for (int id = 0; id < curwin->w_s->b_syn_clusters.ga_len && !got_int; id++) {
       syn_list_cluster(id);
     }
   } else {
@@ -3702,7 +3698,7 @@ static void syn_list_flags(struct name_list *nlist, int flags, int attr)
 {
   int i;
 
-  for (i = 0; nlist[i].flag != 0; ++i) {
+  for (i = 0; nlist[i].flag != 0; i++) {
     if (flags & nlist[i].flag) {
       msg_puts_attr(nlist[i].name, attr);
       msg_putchar(' ');
@@ -3925,7 +3921,7 @@ static void syn_clear_keyword(int id, hashtab_T *ht)
 
   hash_lock(ht);
   todo = (int)ht->ht_used;
-  for (hi = ht->ht_array; todo > 0; ++hi) {
+  for (hi = ht->ht_array; todo > 0; hi++) {
     if (HASHITEM_EMPTY(hi)) {
       continue;
     }
@@ -3967,7 +3963,7 @@ static void clear_keywtab(hashtab_T *ht)
   keyentry_T *kp_next;
 
   todo = (int)ht->ht_used;
-  for (hi = ht->ht_array; todo > 0; ++hi) {
+  for (hi = ht->ht_array; todo > 0; hi++) {
     if (!HASHITEM_EMPTY(hi)) {
       todo--;
       for (kp = HI2KE(hi); kp != NULL; kp = kp_next) {
@@ -4006,7 +4002,7 @@ static void add_keyword(char_u *const name, const int id, const int flags,
   kp->k_char = conceal_char;
   kp->k_syn.cont_in_list = copy_id_list(cont_in_list);
   if (cont_in_list != NULL) {
-    curwin->w_s->b_syn_containedin = TRUE;
+    curwin->w_s->b_syn_containedin = true;
   }
   kp->next_list = copy_id_list(next_list);
 
@@ -4039,17 +4035,13 @@ static void add_keyword(char_u *const name, const int id, const int flags,
 ///
 /// @return          a pointer to the first argument.
 ///                  Return NULL if the end of the command was found instead of further args.
-static char_u *get_group_name(char_u *arg, char_u **name_end)
+static char *get_group_name(char *arg, char **name_end)
 {
-  char_u *rest;
+  *name_end = (char *)skiptowhite((char_u *)arg);
+  char *rest = skipwhite(*name_end);
 
-  *name_end = skiptowhite(arg);
-  rest = (char_u *)skipwhite((char *)(*name_end));
-
-  /*
-   * Check if there are enough arguments.  The first argument may be a
-   * pattern, where '|' is allowed, so only check for NUL.
-   */
+  // Check if there are enough arguments.  The first argument may be a
+  // pattern, where '|' is allowed, so only check for NUL.
   if (ends_excmd(*arg) || *rest == NUL) {
     return NULL;
   }
@@ -4063,11 +4055,11 @@ static char_u *get_group_name(char_u *arg, char_u **name_end)
 ///
 /// @param arg   next argument to be checked
 /// @param opt   various things
-/// @param skip  TRUE if skipping over command
+/// @param skip  true if skipping over command
 ///
 /// @return      a pointer to the next argument (which isn't an option).
 ///              Return NULL for any error;
-static char_u *get_syn_options(char_u *arg, syn_opt_arg_T *opt, int *conceal_char, int skip)
+static char_u *get_syn_options(char *arg, syn_opt_arg_T *opt, int *conceal_char, int skip)
 {
   char_u *gname_start, *gname;
   int syn_id;
@@ -4120,8 +4112,8 @@ static char_u *get_syn_options(char_u *arg, syn_opt_arg_T *opt, int *conceal_cha
     for (fidx = ARRAY_SIZE(flagtab); --fidx >= 0;) {
       p = flagtab[fidx].name;
       int i;
-      for (i = 0, len = 0; p[i] != NUL; i += 2, ++len) {
-        if (arg[len] != (char_u)p[i] && arg[len] != (char_u)p[i + 1]) {
+      for (i = 0, len = 0; p[i] != NUL; i += 2, len++) {
+        if (arg[len] != p[i] && arg[len] != p[i + 1]) {
           break;
         }
       }
@@ -4161,16 +4153,16 @@ static char_u *get_syn_options(char_u *arg, syn_opt_arg_T *opt, int *conceal_cha
       }
     } else if (flagtab[fidx].argtype == 11 && arg[5] == '=') {
       // cchar=?
-      *conceal_char = utf_ptr2char((char *)arg + 6);
-      arg += utfc_ptr2len((char *)arg + 6) - 1;
+      *conceal_char = utf_ptr2char(arg + 6);
+      arg += utfc_ptr2len(arg + 6) - 1;
       if (!vim_isprintc_strict(*conceal_char)) {
         emsg(_("E844: invalid cchar value"));
         return NULL;
       }
-      arg = (char_u *)skipwhite((char *)arg + 7);
+      arg = skipwhite(arg + 7);
     } else {
       opt->flags |= flagtab[fidx].flags;
-      arg = (char_u *)skipwhite((char *)arg + len);
+      arg = skipwhite(arg + len);
 
       if (flagtab[fidx].flags == HL_SYNC_HERE
           || flagtab[fidx].flags == HL_SYNC_THERE) {
@@ -4178,12 +4170,12 @@ static char_u *get_syn_options(char_u *arg, syn_opt_arg_T *opt, int *conceal_cha
           emsg(_("E393: group[t]here not accepted here"));
           return NULL;
         }
-        gname_start = arg;
-        arg = skiptowhite(arg);
-        if (gname_start == arg) {
+        gname_start = (char_u *)arg;
+        arg = (char *)skiptowhite((char_u *)arg);
+        if (gname_start == (char_u *)arg) {
           return NULL;
         }
-        gname = vim_strnsave(gname_start, (size_t)(arg - gname_start));
+        gname = vim_strnsave(gname_start, (size_t)((char_u *)arg - gname_start));
         if (STRCMP(gname, "NONE") == 0) {
           *opt->sync_idx = NONE_IDX;
         } else {
@@ -4204,7 +4196,7 @@ static char_u *get_syn_options(char_u *arg, syn_opt_arg_T *opt, int *conceal_cha
         }
 
         xfree(gname);
-        arg = (char_u *)skipwhite((char *)arg);
+        arg = skipwhite(arg);
       } else if (flagtab[fidx].flags == HL_FOLD
                  && foldmethodIsSyntax(curwin)) {
         // Need to update folds later.
@@ -4213,7 +4205,7 @@ static char_u *get_syn_options(char_u *arg, syn_opt_arg_T *opt, int *conceal_cha
     }
   }
 
-  return arg;
+  return (char_u *)arg;
 }
 
 /*
@@ -4244,16 +4236,16 @@ static void syn_incl_toplevel(int id, int *flagsp)
  */
 static void syn_cmd_include(exarg_T *eap, int syncing)
 {
-  char_u *arg = (char_u *)eap->arg;
+  char *arg = eap->arg;
   int sgl_id = 1;
-  char_u *group_name_end;
-  char_u *rest;
+  char *group_name_end;
+  char *rest;
   char *errormsg = NULL;
   int prev_toplvl_grp;
   int prev_syn_inc_tag;
   bool source = false;
 
-  eap->nextcmd = (char *)find_nextcmd(arg);
+  eap->nextcmd = (char *)find_nextcmd((char_u *)arg);
   if (eap->skip) {
     return;
   }
@@ -4265,12 +4257,12 @@ static void syn_cmd_include(exarg_T *eap, int syncing)
       emsg(_("E397: Filename required"));
       return;
     }
-    sgl_id = syn_check_cluster(arg, (int)(group_name_end - arg));
+    sgl_id = syn_check_cluster((char_u *)arg, (int)(group_name_end - arg));
     if (sgl_id == 0) {
       return;
     }
     // separate_nextcmd() and expand_filename() depend on this
-    eap->arg = (char *)rest;
+    eap->arg = rest;
   }
 
   /*
@@ -4318,13 +4310,13 @@ static void syn_cmd_include(exarg_T *eap, int syncing)
  */
 static void syn_cmd_keyword(exarg_T *eap, int syncing)
 {
-  char_u *arg = (char_u *)eap->arg;
-  char_u *group_name_end;
+  char *arg = eap->arg;
+  char *group_name_end;
   int syn_id;
-  char_u *rest;
-  char_u *keyword_copy = NULL;
-  char_u *p;
-  char_u *kw;
+  char *rest;
+  char *keyword_copy = NULL;
+  char *p;
+  char *kw;
   syn_opt_arg_T syn_opt_arg;
   int cnt;
   int conceal_char = NUL;
@@ -4335,7 +4327,7 @@ static void syn_cmd_keyword(exarg_T *eap, int syncing)
     if (eap->skip) {
       syn_id = -1;
     } else {
-      syn_id = syn_check_group((char *)arg, (size_t)(group_name_end - arg));
+      syn_id = syn_check_group(arg, (size_t)(group_name_end - arg));
     }
     if (syn_id != 0) {
       // Allocate a buffer, for removing backslashes in the keyword.
@@ -4354,8 +4346,8 @@ static void syn_cmd_keyword(exarg_T *eap, int syncing)
       // 1: collect the options and copy the keywords to keyword_copy.
       cnt = 0;
       p = keyword_copy;
-      for (; rest != NULL && !ends_excmd(*rest); rest = (char_u *)skipwhite((char *)rest)) {
-        rest = get_syn_options(rest, &syn_opt_arg, &conceal_char, eap->skip);
+      for (; rest != NULL && !ends_excmd(*rest); rest = skipwhite(rest)) {
+        rest = (char *)get_syn_options(rest, &syn_opt_arg, &conceal_char, eap->skip);
         if (rest == NULL || ends_excmd(*rest)) {
           break;
         }
@@ -4376,11 +4368,11 @@ static void syn_cmd_keyword(exarg_T *eap, int syncing)
 
         // 2: Add an entry for each keyword.
         for (kw = keyword_copy; --cnt >= 0; kw += STRLEN(kw) + 1) {
-          for (p = (char_u *)vim_strchr((char *)kw, '[');;) {
+          for (p = vim_strchr(kw, '[');;) {
             if (p != NULL) {
               *p = NUL;
             }
-            add_keyword(kw, syn_id, syn_opt_arg.flags,
+            add_keyword((char_u *)kw, syn_id, syn_opt_arg.flags,
                         syn_opt_arg.cont_in_list,
                         syn_opt_arg.next_list, conceal_char);
             if (p == NULL) {
@@ -4399,7 +4391,7 @@ static void syn_cmd_keyword(exarg_T *eap, int syncing)
               kw = p + 1;
               break;   // skip over the "]"
             }
-            const int l = utfc_ptr2len((char *)p + 1);
+            const int l = utfc_ptr2len(p + 1);
 
             memmove(p, p + 1, (size_t)l);
             p += l;
@@ -4415,12 +4407,12 @@ error:
   }
 
   if (rest != NULL) {
-    eap->nextcmd = (char *)check_nextcmd(rest);
+    eap->nextcmd = (char *)check_nextcmd((char_u *)rest);
   } else {
     semsg(_(e_invarg2), arg);
   }
 
-  redraw_curbuf_later(SOME_VALID);
+  redraw_curbuf_later(UPD_SOME_VALID);
   syn_stack_free_all(curwin->w_s);              // Need to recompute all syntax.
 }
 
@@ -4428,12 +4420,11 @@ error:
 ///
 /// Also ":syntax sync match {name} [[grouphere | groupthere] {group-name}] .."
 ///
-/// @param syncing  TRUE for ":syntax sync match .. "
+/// @param syncing  true for ":syntax sync match .. "
 static void syn_cmd_match(exarg_T *eap, int syncing)
 {
-  char_u *arg = (char_u *)eap->arg;
-  char_u *group_name_end;
-  char_u *rest;
+  char *arg = eap->arg;
+  char *group_name_end;
   synpat_T item;                // the item found in the line
   int syn_id;
   syn_opt_arg_T syn_opt_arg;
@@ -4441,7 +4432,7 @@ static void syn_cmd_match(exarg_T *eap, int syncing)
   int conceal_char = NUL;
 
   // Isolate the group name, check for validity
-  rest = get_group_name(arg, &group_name_end);
+  char *rest = get_group_name(arg, &group_name_end);
 
   // Get options before the pattern
   syn_opt_arg.flags = 0;
@@ -4451,28 +4442,28 @@ static void syn_cmd_match(exarg_T *eap, int syncing)
   syn_opt_arg.cont_list = NULL;
   syn_opt_arg.cont_in_list = NULL;
   syn_opt_arg.next_list = NULL;
-  rest = get_syn_options(rest, &syn_opt_arg, &conceal_char, eap->skip);
+  rest = (char *)get_syn_options(rest, &syn_opt_arg, &conceal_char, eap->skip);
 
   // get the pattern.
   init_syn_patterns();
   CLEAR_FIELD(item);
-  rest = get_syn_pattern(rest, &item);
+  rest = (char *)get_syn_pattern((char_u *)rest, &item);
   if (vim_regcomp_had_eol() && !(syn_opt_arg.flags & HL_EXCLUDENL)) {
     syn_opt_arg.flags |= HL_HAS_EOL;
   }
 
   // Get options after the pattern
-  rest = get_syn_options(rest, &syn_opt_arg, &conceal_char, eap->skip);
+  rest = (char *)get_syn_options(rest, &syn_opt_arg, &conceal_char, eap->skip);
 
   if (rest != NULL) {           // all arguments are valid
     /*
      * Check for trailing command and illegal trailing arguments.
      */
-    eap->nextcmd = (char *)check_nextcmd(rest);
+    eap->nextcmd = (char *)check_nextcmd((char_u *)rest);
     if (!ends_excmd(*rest) || eap->skip) {
       rest = NULL;
     } else {
-      if ((syn_id = syn_check_group((char *)arg, (size_t)(group_name_end - arg))) != 0) {
+      if ((syn_id = syn_check_group(arg, (size_t)(group_name_end - arg))) != 0) {
         syn_incl_toplevel(syn_id, &syn_opt_arg.flags);
         /*
          * Store the pattern in the syn_items list
@@ -4490,7 +4481,7 @@ static void syn_cmd_match(exarg_T *eap, int syncing)
         spp->sp_syn.cont_in_list = syn_opt_arg.cont_in_list;
         spp->sp_cchar = conceal_char;
         if (syn_opt_arg.cont_in_list != NULL) {
-          curwin->w_s->b_syn_containedin = TRUE;
+          curwin->w_s->b_syn_containedin = true;
         }
         spp->sp_next_list = syn_opt_arg.next_list;
 
@@ -4499,10 +4490,10 @@ static void syn_cmd_match(exarg_T *eap, int syncing)
           curwin->w_s->b_syn_sync_flags |= SF_MATCH;
         }
         if (syn_opt_arg.flags & HL_FOLD) {
-          ++curwin->w_s->b_syn_folditems;
+          curwin->w_s->b_syn_folditems++;
         }
 
-        redraw_curbuf_later(SOME_VALID);
+        redraw_curbuf_later(UPD_SOME_VALID);
         syn_stack_free_all(curwin->w_s);          // Need to recompute all syntax.
         return;           // don't free the progs and patterns now
       }
@@ -4526,15 +4517,15 @@ static void syn_cmd_match(exarg_T *eap, int syncing)
 /// Handle ":syntax region {group-name} [matchgroup={group-name}]
 ///              start {start} .. [skip {skip}] end {end} .. [{options}]".
 ///
-/// @param syncing  TRUE for ":syntax sync region .."
+/// @param syncing  true for ":syntax sync region .."
 static void syn_cmd_region(exarg_T *eap, int syncing)
 {
-  char_u *arg = (char_u *)eap->arg;
-  char_u *group_name_end;
-  char_u *rest;                    // next arg, NULL on error
-  char_u *key_end;
-  char_u *key = NULL;
-  char_u *p;
+  char *arg = eap->arg;
+  char *group_name_end;
+  char *rest;                    // next arg, NULL on error
+  char *key_end;
+  char *key = NULL;
+  char *p;
   int item;
 #define ITEM_START          0
 #define ITEM_SKIP           1
@@ -4577,7 +4568,7 @@ static void syn_cmd_region(exarg_T *eap, int syncing)
   // get the options, patterns and matchgroup.
   while (rest != NULL && !ends_excmd(*rest)) {
     // Check for option arguments
-    rest = get_syn_options(rest, &syn_opt_arg, &conceal_char, eap->skip);
+    rest = (char *)get_syn_options(rest, &syn_opt_arg, &conceal_char, eap->skip);
     if (rest == NULL || ends_excmd(*rest)) {
       break;
     }
@@ -4588,7 +4579,7 @@ static void syn_cmd_region(exarg_T *eap, int syncing)
       key_end++;
     }
     xfree(key);
-    key = vim_strnsave_up(rest, (size_t)(key_end - rest));
+    key = (char *)vim_strnsave_up((char_u *)rest, (size_t)(key_end - rest));
     if (STRCMP(key, "MATCHGROUP") == 0) {
       item = ITEM_MATCHGROUP;
     } else if (STRCMP(key, "START") == 0) {
@@ -4604,30 +4595,30 @@ static void syn_cmd_region(exarg_T *eap, int syncing)
     } else {
       break;
     }
-    rest = (char_u *)skipwhite((char *)key_end);
+    rest = skipwhite(key_end);
     if (*rest != '=') {
       rest = NULL;
       semsg(_("E398: Missing '=': %s"), arg);
       break;
     }
-    rest = (char_u *)skipwhite((char *)rest + 1);
+    rest = skipwhite(rest + 1);
     if (*rest == NUL) {
       not_enough = true;
       break;
     }
 
     if (item == ITEM_MATCHGROUP) {
-      p = skiptowhite(rest);
+      p = (char *)skiptowhite((char_u *)rest);
       if ((p - rest == 4 && STRNCMP(rest, "NONE", 4) == 0) || eap->skip) {
         matchgroup_id = 0;
       } else {
-        matchgroup_id = syn_check_group((char *)rest, (size_t)(p - rest));
+        matchgroup_id = syn_check_group(rest, (size_t)(p - rest));
         if (matchgroup_id == 0) {
           illegal = true;
           break;
         }
       }
-      rest = (char_u *)skipwhite((char *)p);
+      rest = skipwhite(p);
     } else {
       /*
        * Allocate room for a syn_pattern, and link it in the list of
@@ -4648,7 +4639,7 @@ static void syn_cmd_region(exarg_T *eap, int syncing)
         assert(item == ITEM_SKIP || item == ITEM_END);
         reg_do_extmatch = REX_USE;
       }
-      rest = get_syn_pattern(rest, ppp->pp_synp);
+      rest = (char *)get_syn_pattern((char_u *)rest, ppp->pp_synp);
       reg_do_extmatch = 0;
       if (item == ITEM_END && vim_regcomp_had_eol()
           && !(syn_opt_arg.flags & HL_EXCLUDENL)) {
@@ -4675,18 +4666,18 @@ static void syn_cmd_region(exarg_T *eap, int syncing)
      * Check for trailing garbage or command.
      * If OK, add the item.
      */
-    eap->nextcmd = (char *)check_nextcmd(rest);
+    eap->nextcmd = (char *)check_nextcmd((char_u *)rest);
     if (!ends_excmd(*rest) || eap->skip) {
       rest = NULL;
     } else {
       ga_grow(&(curwin->w_s->b_syn_patterns), pat_count);
-      if ((syn_id = syn_check_group((char *)arg, (size_t)(group_name_end - arg))) != 0) {
+      if ((syn_id = syn_check_group(arg, (size_t)(group_name_end - arg))) != 0) {
         syn_incl_toplevel(syn_id, &syn_opt_arg.flags);
         /*
          * Store the start/skip/end in the syn_items list
          */
         int idx = curwin->w_s->b_syn_patterns.ga_len;
-        for (item = ITEM_START; item <= ITEM_END; ++item) {
+        for (item = ITEM_START; item <= ITEM_END; item++) {
           for (ppp = pat_ptrs[item]; ppp != NULL; ppp = ppp->pp_next) {
             SYN_ITEMS(curwin->w_s)[idx] = *(ppp->pp_synp);
             SYN_ITEMS(curwin->w_s)[idx].sp_syncing = syncing;
@@ -4705,7 +4696,7 @@ static void syn_cmd_region(exarg_T *eap, int syncing)
               SYN_ITEMS(curwin->w_s)[idx].sp_syn.cont_in_list =
                 syn_opt_arg.cont_in_list;
               if (syn_opt_arg.cont_in_list != NULL) {
-                curwin->w_s->b_syn_containedin = TRUE;
+                curwin->w_s->b_syn_containedin = true;
               }
               SYN_ITEMS(curwin->w_s)[idx].sp_next_list =
                 syn_opt_arg.next_list;
@@ -4713,12 +4704,12 @@ static void syn_cmd_region(exarg_T *eap, int syncing)
             curwin->w_s->b_syn_patterns.ga_len++;
             idx++;
             if (syn_opt_arg.flags & HL_FOLD) {
-              ++curwin->w_s->b_syn_folditems;
+              curwin->w_s->b_syn_folditems++;
             }
           }
         }
 
-        redraw_curbuf_later(SOME_VALID);
+        redraw_curbuf_later(UPD_SOME_VALID);
         syn_stack_free_all(curwin->w_s);  // Need to recompute all syntax.
         success = true;                   // don't free the progs and patterns now
       }
@@ -4728,7 +4719,7 @@ static void syn_cmd_region(exarg_T *eap, int syncing)
   /*
    * Free the allocated memory.
    */
-  for (item = ITEM_START; item <= ITEM_END; ++item) {
+  for (item = ITEM_START; item <= ITEM_END; item++) {
     for (ppp = pat_ptrs[item]; ppp != NULL; ppp = ppp_next) {
       if (!success && ppp->pp_synp != NULL) {
         vim_regfree(ppp->pp_synp->sp_prog);
@@ -4968,14 +4959,14 @@ static int syn_add_cluster(char_u *name)
  */
 static void syn_cmd_cluster(exarg_T *eap, int syncing)
 {
-  char_u *arg = (char_u *)eap->arg;
-  char_u *group_name_end;
-  char_u *rest;
+  char *arg = eap->arg;
+  char *group_name_end;
+  char *rest;
   bool got_clstr = false;
   int opt_len;
   int list_op;
 
-  eap->nextcmd = (char *)find_nextcmd(arg);
+  eap->nextcmd = (char *)find_nextcmd((char_u *)arg);
   if (eap->skip) {
     return;
   }
@@ -4983,7 +4974,7 @@ static void syn_cmd_cluster(exarg_T *eap, int syncing)
   rest = get_group_name(arg, &group_name_end);
 
   if (rest != NULL) {
-    int scl_id = syn_check_cluster(arg, (int)(group_name_end - arg));
+    int scl_id = syn_check_cluster((char_u *)arg, (int)(group_name_end - arg));
     if (scl_id == 0) {
       return;
     }
@@ -5021,7 +5012,7 @@ static void syn_cmd_cluster(exarg_T *eap, int syncing)
     }
 
     if (got_clstr) {
-      redraw_curbuf_later(SOME_VALID);
+      redraw_curbuf_later(UPD_SOME_VALID);
       syn_stack_free_all(curwin->w_s);          // Need to recompute all.
     }
   }
@@ -5070,7 +5061,7 @@ static char_u *get_syn_pattern(char_u *arg, synpat_T *ci)
 
   // Make 'cpoptions' empty, to avoid the 'l' flag
   cpo_save = p_cpo;
-  p_cpo = "";
+  p_cpo = empty_option;
   ci->sp_prog = vim_regcomp((char *)ci->sp_pattern, RE_MAGIC);
   p_cpo = cpo_save;
 
@@ -5154,7 +5145,7 @@ static void syn_cmd_sync(exarg_T *eap, int syncing)
   char *cpo_save;
 
   if (ends_excmd(*arg_start)) {
-    syn_cmd_list(eap, TRUE);
+    syn_cmd_list(eap, true);
     return;
   }
 
@@ -5189,7 +5180,7 @@ static void syn_cmd_sync(exarg_T *eap, int syncing)
         arg_end = (char *)key + 9;
       }
       if (arg_end[-1] != '=' || !ascii_isdigit(*arg_end)) {
-        illegal = TRUE;
+        illegal = true;
         break;
       }
       linenr_T n = getdigits_int32(&arg_end, false, 0);
@@ -5214,7 +5205,7 @@ static void syn_cmd_sync(exarg_T *eap, int syncing)
       }
       if (curwin->w_s->b_syn_linecont_pat != NULL) {
         emsg(_("E403: syntax sync: line continuations pattern specified twice"));
-        finished = TRUE;
+        finished = true;
         break;
       }
       arg_end = (char *)skip_regexp(next_arg + 1, *next_arg, true, NULL);
@@ -5226,14 +5217,14 @@ static void syn_cmd_sync(exarg_T *eap, int syncing)
       if (!eap->skip) {
         // store the pattern and compiled regexp program
         curwin->w_s->b_syn_linecont_pat =
-          vim_strnsave(next_arg + 1, (size_t)(arg_end - (char *)next_arg) - 1);
+          (char *)vim_strnsave(next_arg + 1, (size_t)(arg_end - (char *)next_arg) - 1);
         curwin->w_s->b_syn_linecont_ic = curwin->w_s->b_syn_ic;
 
         // Make 'cpoptions' empty, to avoid the 'l' flag
         cpo_save = p_cpo;
-        p_cpo = "";
+        p_cpo = empty_option;
         curwin->w_s->b_syn_linecont_prog =
-          vim_regcomp((char *)curwin->w_s->b_syn_linecont_pat, RE_MAGIC);
+          vim_regcomp(curwin->w_s->b_syn_linecont_pat, RE_MAGIC);
         p_cpo = cpo_save;
         syn_clear_time(&curwin->w_s->b_syn_linecont_time);
 
@@ -5247,15 +5238,15 @@ static void syn_cmd_sync(exarg_T *eap, int syncing)
     } else {
       eap->arg = (char *)next_arg;
       if (STRCMP(key, "MATCH") == 0) {
-        syn_cmd_match(eap, TRUE);
+        syn_cmd_match(eap, true);
       } else if (STRCMP(key, "REGION") == 0) {
-        syn_cmd_region(eap, TRUE);
+        syn_cmd_region(eap, true);
       } else if (STRCMP(key, "CLEAR") == 0) {
-        syn_cmd_clear(eap, TRUE);
+        syn_cmd_clear(eap, true);
       } else {
-        illegal = TRUE;
+        illegal = true;
       }
-      finished = TRUE;
+      finished = true;
       break;
     }
     arg_start = next_arg;
@@ -5265,7 +5256,7 @@ static void syn_cmd_sync(exarg_T *eap, int syncing)
     semsg(_("E404: Illegal arguments: %s"), arg_start);
   } else if (!finished) {
     eap->nextcmd = (char *)check_nextcmd(arg_start);
-    redraw_curbuf_later(SOME_VALID);
+    redraw_curbuf_later(UPD_SOME_VALID);
     syn_stack_free_all(curwin->w_s);            // Need to recompute all syntax.
   }
 }
@@ -5279,7 +5270,7 @@ static void syn_cmd_sync(exarg_T *eap, int syncing)
 /// @param list    where to store the resulting list, if not NULL, the list is silently skipped!
 ///
 /// @return        FAIL for some error, OK for success.
-static int get_id_list(char_u **const arg, const int keylen, int16_t **const list, const bool skip)
+static int get_id_list(char **const arg, const int keylen, int16_t **const list, const bool skip)
 {
   char *p = NULL;
   char *end;
@@ -5296,7 +5287,7 @@ static int get_id_list(char_u **const arg, const int keylen, int16_t **const lis
   // grow when a regexp is used.  In that case round 1 is done once again.
   for (int round = 1; round <= 2; round++) {
     // skip "contains"
-    p = skipwhite((char *)(*arg) + keylen);
+    p = skipwhite(*arg + keylen);
     if (*p != '=') {
       semsg(_("E405: Missing equal sign: %s"), *arg);
       break;
@@ -5364,7 +5355,7 @@ static int get_id_list(char_u **const arg, const int keylen, int16_t **const lis
             break;
           }
 
-          regmatch.rm_ic = TRUE;
+          regmatch.rm_ic = true;
           id = 0;
           for (int i = highlight_num_groups(); --i >= 0;) {
             if (vim_regexec(&regmatch, (char *)highlight_group_name(i), (colnr_T)0)) {
@@ -5421,7 +5412,7 @@ static int get_id_list(char_u **const arg, const int keylen, int16_t **const lis
     }
   }
 
-  *arg = (char_u *)p;
+  *arg = p;
   if (failed || retval == NULL) {
     xfree(retval);
     return FAIL;
@@ -5472,7 +5463,7 @@ static int in_id_list(stateitem_T *cur_si, int16_t *list, struct sp_syn *ssp, in
   static int depth = 0;
   int r;
 
-  // If ssp has a "containedin" list and "cur_si" is in it, return TRUE.
+  // If ssp has a "containedin" list and "cur_si" is in it, return true.
   if (cur_si != NULL && ssp->cont_in_list != NULL
       && !(cur_si->si_flags & HL_MATCH)) {
     // Ignore transparent items without a contains argument.  Double check
@@ -5486,12 +5477,12 @@ static int in_id_list(stateitem_T *cur_si, int16_t *list, struct sp_syn *ssp, in
                                           &(SYN_ITEMS(syn_block)[cur_si->si_idx].sp_syn),
                                           SYN_ITEMS(syn_block)[cur_si->si_idx].sp_flags &
                                           HL_CONTAINED)) {
-      return TRUE;
+      return true;
     }
   }
 
   if (list == NULL) {
-    return FALSE;
+    return false;
   }
 
   /*
@@ -5502,33 +5493,31 @@ static int in_id_list(stateitem_T *cur_si, int16_t *list, struct sp_syn *ssp, in
     return !contained;
   }
 
-  /*
-   * If the first item is "ALLBUT", return TRUE if "id" is NOT in the
-   * contains list.  We also require that "id" is at the same ":syn include"
-   * level as the list.
-   */
+  // If the first item is "ALLBUT", return true if "id" is NOT in the
+  // contains list.  We also require that "id" is at the same ":syn include"
+  // level as the list.
   item = *list;
   if (item >= SYNID_ALLBUT && item < SYNID_CLUSTER) {
     if (item < SYNID_TOP) {
       // ALL or ALLBUT: accept all groups in the same file
       if (item - SYNID_ALLBUT != ssp->inc_tag) {
-        return FALSE;
+        return false;
       }
     } else if (item < SYNID_CONTAINED) {
       // TOP: accept all not-contained groups in the same file
       if (item - SYNID_TOP != ssp->inc_tag || contained) {
-        return FALSE;
+        return false;
       }
     } else {
       // CONTAINED: accept all contained groups in the same file
       if (item - SYNID_CONTAINED != ssp->inc_tag || !contained) {
-        return FALSE;
+        return false;
       }
     }
     item = *++list;
-    retval = FALSE;
+    retval = false;
   } else {
-    retval = TRUE;
+    retval = true;
   }
 
   /*
@@ -5675,7 +5664,8 @@ static enum {
   EXP_SUBCMD,       // expand ":syn" sub-commands
   EXP_CASE,         // expand ":syn case" arguments
   EXP_SPELL,        // expand ":syn spell" arguments
-  EXP_SYNC,  // expand ":syn sync" arguments
+  EXP_SYNC,         // expand ":syn sync" arguments
+  EXP_CLUSTER,      // expand ":syn list @cluster" arguments
 } expand_what;
 
 /*
@@ -5723,10 +5713,16 @@ void set_context_in_syntax_cmd(expand_T *xp, const char *arg)
         expand_what = EXP_SPELL;
       } else if (STRNICMP(arg, "sync", p - arg) == 0) {
         expand_what = EXP_SYNC;
+      } else if (STRNICMP(arg, "list", p - arg) == 0) {
+        p = skipwhite(p);
+        if (*p == '@') {
+          expand_what = EXP_CLUSTER;
+        } else {
+          xp->xp_context = EXPAND_HIGHLIGHT;
+        }
       } else if (STRNICMP(arg, "keyword", p - arg) == 0
                  || STRNICMP(arg, "region", p - arg) == 0
-                 || STRNICMP(arg, "match", p - arg) == 0
-                 || STRNICMP(arg, "list", p - arg) == 0) {
+                 || STRNICMP(arg, "match", p - arg) == 0) {
         xp->xp_context = EXPAND_HIGHLIGHT;
       } else {
         xp->xp_context = EXPAND_NOTHING;
@@ -5760,6 +5756,14 @@ char *get_syntax_name(expand_T *xp, int idx)
       "maxlines=", "minlines=", "region", NULL };
     return sync_args[idx];
   }
+  case EXP_CLUSTER:
+    if (idx < curwin->w_s->b_syn_clusters.ga_len) {
+      vim_snprintf(xp->xp_buf, EXPAND_BUF_LEN, "@%s",
+                   SYN_CLSTR(curwin->w_s)[idx].scl_name);
+      return xp->xp_buf;
+    } else {
+      return NULL;
+    }
   }
   return NULL;
 }
@@ -5832,7 +5836,7 @@ int syn_get_stack_item(int i)
 {
   if (i >= current_state.ga_len) {
     // Need to invalidate the state, because we didn't properly finish it
-    // for the last character, "keep_state" was TRUE.
+    // for the last character, "keep_state" was true.
     invalidate_current_state();
     current_col = MAXCOL;
     return -1;
@@ -5927,7 +5931,7 @@ static void syntime_clear(void)
     msg(_(msg_no_items));
     return;
   }
-  for (int idx = 0; idx < curwin->w_s->b_syn_patterns.ga_len; ++idx) {
+  for (int idx = 0; idx < curwin->w_s->b_syn_patterns.ga_len; idx++) {
     spp = &(SYN_ITEMS(curwin->w_s)[idx]);
     syn_clear_time(&spp->sp_time);
   }
@@ -5976,7 +5980,7 @@ static void syntime_report(void)
   proftime_T total_total = profile_zero();
   int total_count = 0;
   time_entry_T *p;
-  for (int idx = 0; idx < curwin->w_s->b_syn_patterns.ga_len; ++idx) {
+  for (int idx = 0; idx < curwin->w_s->b_syn_patterns.ga_len; idx++) {
     synpat_T *spp = &(SYN_ITEMS(curwin->w_s)[idx]);
     if (spp->sp_time.count > 0) {
       p = GA_APPEND_VIA_PTR(time_entry_T, &ga);
@@ -6002,7 +6006,7 @@ static void syntime_report(void)
 
   msg_puts_title(_("  TOTAL      COUNT  MATCH   SLOWEST     AVERAGE   NAME               PATTERN"));
   msg_puts("\n");
-  for (int idx = 0; idx < ga.ga_len && !got_int; ++idx) {
+  for (int idx = 0; idx < ga.ga_len && !got_int; idx++) {
     p = ((time_entry_T *)ga.ga_data) + idx;
 
     msg_puts(profile_msg(p->total));

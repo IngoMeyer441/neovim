@@ -784,7 +784,8 @@ browsedir({title}, {initdir})
 		browsing is not possible, an empty string is returned.
 
 bufadd({name})						*bufadd()*
-		Add a buffer to the buffer list with String {name}.
+		Add a buffer to the buffer list with name {name} (must be a
+		String).
 		If a buffer for file {name} already exists, return that buffer
 		number.  Otherwise return the buffer number of the newly
 		created buffer.  When {name} is an empty string then a new
@@ -835,7 +836,8 @@ bufload({buf})						*bufload()*
 		Ensure the buffer {buf} is loaded.  When the buffer name
 		refers to an existing file then the file is read.  Otherwise
 		the buffer will be empty.  If the buffer was already loaded
-		then there is no change.
+		then there is no change.  If the buffer is not related to a
+		file the no file is read (e.g., when 'buftype' is "nofile").
 		If there is an existing swap file for the file of the buffer,
 		there will be no dialog, the buffer will be loaded anyway.
 		The {buf} argument is used like with |bufexists()|.
@@ -1027,7 +1029,7 @@ chanclose({id} [, {stream}])				*chanclose()*
 		are closed. If the channel is a pty, this will then close the
 		pty master, sending SIGHUP to the job process.
 		For a socket, there is only one stream, and {stream} should be
-		ommited.
+		omitted.
 
 chansend({id}, {data})					*chansend()*
 		Send data to channel {id}. For a job, it writes it to the
@@ -1136,6 +1138,9 @@ chdir({dir})						*chdir()*
 			   " ... do some work
 			   call chdir(save_dir)
 			endif
+
+<		Can also be used as a |method|: >
+			GetDir()->chdir()
 <
 cindent({lnum})						*cindent()*
 		Get the amount of indent for line {lnum} according the C
@@ -1525,6 +1530,18 @@ cursor({list})
 
 		Can also be used as a |method|: >
 			GetCursorPos()->cursor()
+
+debugbreak({pid})					*debugbreak()*
+		Specifically used to interrupt a program being debugged.  It
+		will cause process {pid} to get a SIGTRAP.  Behavior for other
+		processes is undefined. See |terminal-debugger|.
+		{Sends a SIGINT to a process {pid} other than MS-Windows}
+
+		Returns |TRUE| if successfully interrupted the program.
+		Otherwise returns |FALSE|.
+
+		Can also be used as a |method|: >
+			GetPid()->debugbreak()
 
 deepcopy({expr} [, {noref}])				*deepcopy()* *E698*
 		Make a copy of {expr}.  For Numbers and Strings this isn't
@@ -1967,18 +1984,6 @@ exp({expr})						*exp()*
 		Can also be used as a |method|: >
 			Compute()->exp()
 
-debugbreak({pid})					*debugbreak()*
-		Specifically used to interrupt a program being debugged.  It
-		will cause process {pid} to get a SIGTRAP.  Behavior for other
-		processes is undefined. See |terminal-debugger|.
-		{Sends a SIGINT to a process {pid} other than MS-Windows}
-
-		Returns |TRUE| if successfully interrupted the program.
-		Otherwise returns |FALSE|.
-
-		Can also be used as a |method|: >
-			GetPid()->debugbreak()
-
 expand({string} [, {nosuf} [, {list}]])				*expand()*
 		Expand wildcards and the following special keywords in 
 		{string}.  'wildignorecase' applies.
@@ -2010,6 +2015,8 @@ expand({string} [, {nosuf} [, {list}]])				*expand()*
 					a function
 			<SID>		"<SNR>123_"  where "123" is the
 					current script ID  |<SID>|
+			<script>	sourced script file, or script file
+					where the current function was defined
 			<stack>		call stack
 			<cword>		word under the cursor
 			<cWORD>		WORD under the cursor
@@ -2043,6 +2050,9 @@ expand({string} [, {nosuf} [, {list}]])				*expand()*
 		is not defined, an empty string is used.  Using "%:p" in a
 		buffer with no name, results in the current directory, with a
 		'/' added.
+		When 'verbose' is set then expanding '%', '#' and <> items
+		will result in an error message if the argument cannot be
+		expanded.
 
 		When {string} does not start with '%', '#' or '<', it is
 		expanded like a file name is expanded on the command line.
@@ -4963,7 +4973,7 @@ matchadd({group}, {pattern} [, {priority} [, {id} [, {dict}]]])
 		highlighted matches. The dict can have the following members:
 
 			conceal	    Special character to show instead of the
-				    match (only for |hl-Conceal| highlighed
+				    match (only for |hl-Conceal| highlighted
 				    matches, see |:syn-cchar|)
 			window	    Instead of the current window use the
 				    window with this number or window ID.
@@ -6417,8 +6427,10 @@ search({pattern} [, {flags} [, {stopline} [, {timeout} [, {skip}]]]])
 		starts in column zero and then matches before the cursor are
 		skipped.  When the 'c' flag is present in 'cpo' the next
 		search starts after the match.  Without the 'c' flag the next
-		search starts one column further.  This matters for
-		overlapping matches.
+		search starts one column after the start of the match.  This
+		matters for overlapping matches.  See |cpo-c|.  You can also
+		insert "\ze" to change where the match ends, see  |/\ze|.
+
 		When searching backwards and the 'z' flag is given then the
 		search starts in column zero, thus no match in the current
 		line will be found (unless wrapping around the end of the
@@ -7697,14 +7709,13 @@ stdpath({what})					*stdpath()* *E6100*
 		config       String  User configuration directory. |init.vim|
 		                     is stored here.
 		config_dirs  List    Other configuration directories.
-		data         String  User data directory. The |shada-file|
-		                     is stored here.
+		data         String  User data directory.
 		data_dirs    List    Other data directories.
 		log          String  Logs directory (for use by plugins too).
 		run          String  Run directory: temporary, local storage
 				     for sockets, named pipes, etc.
 		state        String  Session state directory: storage for file
-				     drafts, undo, shada, etc.
+				     drafts, undo, |shada|, etc.
 
 		Example: >
 			:echo stdpath("config")

@@ -150,7 +150,7 @@ static void showmap(mapblock_T *mp, bool local)
 {
   size_t len = 1;
 
-  if (message_filtered(mp->m_keys) && message_filtered(mp->m_str)
+  if (message_filtered(mp->m_keys) && message_filtered((char_u *)mp->m_str)
       && (mp->m_desc == NULL || message_filtered((char_u *)mp->m_desc))) {
     return;
   }
@@ -203,7 +203,7 @@ static void showmap(mapblock_T *mp, bool local)
   } else if (mp->m_str[0] == NUL) {
     msg_puts_attr("<Nop>", HL_ATTR(HLF_8));
   } else {
-    msg_outtrans_special(mp->m_str, false, 0);
+    msg_outtrans_special((char_u *)mp->m_str, false, 0);
   }
 
   if (mp->m_desc != NULL) {
@@ -293,7 +293,7 @@ static bool set_maparg_lhs_rhs(const char *const orig_lhs, const size_t orig_lhs
       replaced = replace_termcodes(orig_rhs, orig_rhs_len, &rhs_buf, REPTERM_DO_LT, NULL,
                                    cpo_flags);
       mapargs->rhs_len = STRLEN(replaced);
-      // XXX: replace_termcodes may produce an empty string even if orig_rhs is non-empty
+      // NB: replace_termcodes may produce an empty string even if orig_rhs is non-empty
       // (e.g. a single ^V, see :h map-empty-rhs)
       mapargs->rhs_is_noop = orig_rhs_len != 0 && mapargs->rhs_len == 0;
       mapargs->rhs = (char_u *)replaced;
@@ -449,8 +449,8 @@ static void map_add(buf_T *buf, mapblock_T **map_table, mapblock_T **abbr_table,
   }
 
   mp->m_keys = vim_strsave(keys);
-  mp->m_str = args->rhs;
-  mp->m_orig_str = args->orig_rhs;
+  mp->m_str = (char *)args->rhs;
+  mp->m_orig_str = (char *)args->orig_rhs;
   mp->m_luaref = args->rhs_lua;
   if (!simplified) {
     args->rhs = NULL;
@@ -704,7 +704,7 @@ static int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev,
           } else {                          // do we have a match?
             if (round) {              // second round: Try unmap "rhs" string
               n = (int)STRLEN(mp->m_str);
-              p = mp->m_str;
+              p = (char_u *)mp->m_str;
             } else {
               n = mp->m_keylen;
               p = mp->m_keys;
@@ -761,8 +761,8 @@ static int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev,
                     XFREE_CLEAR(mp->m_str);
                     XFREE_CLEAR(mp->m_orig_str);
                   }
-                  mp->m_str = args->rhs;
-                  mp->m_orig_str = args->orig_rhs;
+                  mp->m_str = (char *)args->rhs;
+                  mp->m_orig_str = (char *)args->orig_rhs;
                   mp->m_luaref = args->rhs_lua;
                   if (!keyround1_simplified) {
                     args->rhs = NULL;
@@ -1113,7 +1113,7 @@ int map_to_exists_mode(const char *const rhs, const int mode, const bool abbr)
         mp = maphash[hash];
       }
       for (; mp; mp = mp->m_next) {
-        if ((mp->m_mode & mode) && strstr((char *)mp->m_str, rhs) != NULL) {
+        if ((mp->m_mode & mode) && strstr(mp->m_str, rhs) != NULL) {
           return true;
         }
       }
@@ -1506,7 +1506,7 @@ bool check_abbr(int c, char_u *ptr, int col, int mincol)
       if (mp->m_expr) {
         s = eval_map_expr(mp, c);
       } else {
-        s = mp->m_str;
+        s = (char_u *)mp->m_str;
       }
       if (s != NULL) {
         // insert the to string
@@ -1542,7 +1542,7 @@ char_u *eval_map_expr(mapblock_T *mp, int c)
   // Remove escaping of K_SPECIAL, because "str" is in a format to be used as
   // typeahead.
   if (mp->m_luaref == LUA_NOREF) {
-    expr = vim_strsave(mp->m_str);
+    expr = vim_strsave((char_u *)mp->m_str);
     vim_unescape_ks(expr);
   }
 
@@ -1639,7 +1639,7 @@ int makemap(FILE *fd, buf_T *buf)
         if (mp->m_luaref != LUA_NOREF) {
           continue;
         }
-        for (p = mp->m_str; *p != NUL; p++) {
+        for (p = (char_u *)mp->m_str; *p != NUL; p++) {
           if (p[0] == K_SPECIAL && p[1] == KS_EXTRA
               && p[2] == KE_SNR) {
             break;
@@ -1785,7 +1785,7 @@ int makemap(FILE *fd, buf_T *buf)
           if (putc(' ', fd) < 0
               || put_escstr(fd, mp->m_keys, 0) == FAIL
               || putc(' ', fd) < 0
-              || put_escstr(fd, mp->m_str, 1) == FAIL
+              || put_escstr(fd, (char_u *)mp->m_str, 1) == FAIL
               || put_eol(fd) < 0) {
             return FAIL;
           }
@@ -1956,7 +1956,7 @@ char_u *check_map(char_u *keys, int mode, int exact, int ign_mod, int abbr, mapb
               *local_ptr = local;
             }
             *rhs_lua = mp->m_luaref;
-            return mp->m_luaref == LUA_NOREF ? mp->m_str : NULL;
+            return mp->m_luaref == LUA_NOREF ? (char_u *)mp->m_str : NULL;
           }
         }
       }
@@ -1967,7 +1967,7 @@ char_u *check_map(char_u *keys, int mode, int exact, int ign_mod, int abbr, mapb
 }
 
 /// "hasmapto()" function
-void f_hasmapto(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_hasmapto(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   const char *mode;
   const char *const name = tv_get_string(&argvars[0]);
@@ -2127,7 +2127,7 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
 }
 
 /// "mapset()" function
-void f_mapset(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_mapset(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   char buf[NUMBUFLEN];
   const char *which = tv_get_string_buf_chk(&argvars[0], buf);
@@ -2195,13 +2195,13 @@ void f_mapset(typval_T *argvars, typval_T *rettv, FunPtr fptr)
 }
 
 /// "maparg()" function
-void f_maparg(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_maparg(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   get_maparg(argvars, rettv, true);
 }
 
 /// "mapcheck()" function
-void f_mapcheck(typval_T *argvars, typval_T *rettv, FunPtr fptr)
+void f_mapcheck(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   get_maparg(argvars, rettv, false);
 }
@@ -2322,7 +2322,7 @@ void langmap_set(void)
   ga_clear(&langmap_mapga);                 // clear the previous map first
   langmap_init();                           // back to one-to-one map
 
-  for (p = p_langmap; p[0] != NUL;) {
+  for (p = (char_u *)p_langmap; p[0] != NUL;) {
     for (p2 = p; p2[0] != NUL && p2[0] != ',' && p2[0] != ';';
          MB_PTR_ADV(p2)) {
       if (p2[0] == '\\' && p2[1] != NUL) {

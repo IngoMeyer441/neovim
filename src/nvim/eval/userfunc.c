@@ -852,7 +852,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rett
     saveRedobuff(&save_redo);
     did_save_redo = true;
   }
-  ++fp->uf_calls;
+  fp->uf_calls++;
   // check for CTRL-C hit
   line_breakcheck();
   // prepare the funccall_T structure
@@ -893,7 +893,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rett
     v->di_tv.v_type = VAR_DICT;
     v->di_tv.v_lock = VAR_UNLOCKED;
     v->di_tv.vval.v_dict = selfdict;
-    ++selfdict->dv_refcount;
+    selfdict->dv_refcount++;
   }
 
   // Init a: variables, unless none found (in lambda).
@@ -1071,7 +1071,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rett
         || (fc->caller != NULL && fc->caller->func->uf_profiling));
 
   if (func_or_func_caller_profiling) {
-    ++fp->uf_tm_count;
+    fp->uf_tm_count++;
     call_start = profile_start();
     fp->uf_tm_children = profile_zero();
   }
@@ -1083,7 +1083,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rett
   const sctx_T save_current_sctx = current_sctx;
   current_sctx = fp->uf_script_ctx;
   save_did_emsg = did_emsg;
-  did_emsg = FALSE;
+  did_emsg = false;
 
   if (default_arg_err && (fp->uf_flags & FC_ABORT)) {
     did_emsg = true;
@@ -1885,6 +1885,8 @@ theend:
   return name;
 }
 
+#define MAX_FUNC_NESTING 50
+
 /// ":function"
 void ex_function(exarg_T *eap)
 {
@@ -1927,7 +1929,7 @@ void ex_function(exarg_T *eap)
   if (ends_excmd(*eap->arg)) {
     if (!eap->skip) {
       todo = (int)func_hashtab.ht_used;
-      for (hi = func_hashtab.ht_array; todo > 0 && !got_int; ++hi) {
+      for (hi = func_hashtab.ht_array; todo > 0 && !got_int; hi++) {
         if (!HASHITEM_EMPTY(hi)) {
           todo--;
           fp = HI2UF(hi);
@@ -1960,7 +1962,7 @@ void ex_function(exarg_T *eap)
         regmatch.rm_ic = p_ic;
 
         todo = (int)func_hashtab.ht_used;
-        for (hi = func_hashtab.ht_array; todo > 0 && !got_int; ++hi) {
+        for (hi = func_hashtab.ht_array; todo > 0 && !got_int; hi++) {
           if (!HASHITEM_EMPTY(hi)) {
             todo--;
             fp = HI2UF(hi);
@@ -2010,14 +2012,14 @@ void ex_function(exarg_T *eap)
       xfree(fudi.fd_newkey);
       return;
     } else {
-      eap->skip = TRUE;
+      eap->skip = true;
     }
   }
 
   // An error in a function call during evaluation of an expression in magic
   // braces should not cause the function not to be defined.
   saved_did_emsg = did_emsg;
-  did_emsg = FALSE;
+  did_emsg = false;
 
   //
   // ":function func" with only function name: list function.
@@ -2304,8 +2306,12 @@ void ex_function(exarg_T *eap)
         p += eval_fname_script((const char *)p);
         xfree(trans_function_name((char **)&p, true, 0, NULL, NULL));
         if (*skipwhite((char *)p) == '(') {
-          nesting++;
-          indent += 2;
+          if (nesting == MAX_FUNC_NESTING - 1) {
+            emsg(_("E1058: function nesting too deep"));
+          } else {
+            nesting++;
+            indent += 2;
+          }
         }
       }
 
@@ -2847,7 +2853,7 @@ void ex_return(exarg_T *eap)
 {
   char_u *arg = (char_u *)eap->arg;
   typval_T rettv;
-  int returning = FALSE;
+  int returning = false;
 
   if (current_funccal == NULL) {
     emsg(_("E133: :return not inside a function"));
@@ -3029,8 +3035,8 @@ end:
 /// @param is_cmd     set when called due to a ":return" command.
 /// @param rettv      may point to a typval_T with the return rettv.
 ///
-/// @return  TRUE when the return can be carried out,
-///          FALSE when the return gets pending.
+/// @return  true when the return can be carried out,
+///          false when the return gets pending.
 int do_return(exarg_T *eap, int reanimate, int is_cmd, void *rettv)
 {
   int idx;
@@ -3080,7 +3086,7 @@ int do_return(exarg_T *eap, int reanimate, int is_cmd, void *rettv)
     }
     report_make_pending(CSTP_RETURN, rettv);
   } else {
-    current_funccal->returned = TRUE;
+    current_funccal->returned = true;
 
     // If the return is carried out now, store the return value.  For
     // a return immediately after reanimation, the value is already
@@ -3172,7 +3178,7 @@ char *get_func_line(int c, void *cookie, int indent, bool do_concat)
   return (char *)retval;
 }
 
-/// @return  TRUE if the currently active function should be ended, because a
+/// @return  true if the currently active function should be ended, because a
 ///          return was encountered or an error occurred.  Used inside a ":while".
 int func_has_ended(void *cookie)
 {
@@ -3184,7 +3190,7 @@ int func_has_ended(void *cookie)
          || fcp->returned;
 }
 
-/// @return  TRUE if cookie indicates a function which "abort"s on errors.
+/// @return  true if cookie indicates a function which "abort"s on errors.
 int func_has_abort(void *cookie)
 {
   return ((funccall_T *)cookie)->func->uf_flags & FC_ABORT;
@@ -3275,7 +3281,7 @@ int func_level(void *cookie)
   return ((funccall_T *)cookie)->level;
 }
 
-/// @return  TRUE when a function was ended by a ":return" command.
+/// @return  true when a function was ended by a ":return" command.
 int current_func_returned(void)
 {
   return current_funccal->returned;

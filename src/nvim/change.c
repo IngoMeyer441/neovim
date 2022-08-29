@@ -26,6 +26,7 @@
 #include "nvim/plines.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
+#include "nvim/textformat.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 
@@ -96,8 +97,7 @@ void changed(void)
 
     // Create a swap file if that is wanted.
     // Don't do this for "nofile" and "nowrite" buffer types.
-    if (curbuf->b_may_swap
-        && !bt_dontwrite(curbuf)) {
+    if (curbuf->b_may_swap && !bt_dontwrite(curbuf)) {
       bool save_need_wait_return = need_wait_return;
 
       need_wait_return = false;
@@ -223,8 +223,8 @@ static void changed_common(linenr_T lnum, colnr_T col, linenr_T lnume, linenr_T 
   FOR_ALL_TAB_WINDOWS(tp, wp) {
     if (wp->w_buffer == curbuf) {
       // Mark this window to be redrawn later.
-      if (wp->w_redr_type < VALID) {
-        wp->w_redr_type = VALID;
+      if (wp->w_redr_type < UPD_VALID) {
+        wp->w_redr_type = UPD_VALID;
       }
 
       // Check if a change in the buffer has invalidated the cached
@@ -301,17 +301,17 @@ static void changed_common(linenr_T lnum, colnr_T col, linenr_T lnume, linenr_T 
       // requires a redraw.
       if (wp->w_p_rnu && xtra != 0) {
         wp->w_last_cursor_lnum_rnu = 0;
-        redraw_later(wp, VALID);
+        redraw_later(wp, UPD_VALID);
       }
 
       // Cursor line highlighting probably need to be updated with
-      // "VALID" if it's below the change.
+      // "UPD_VALID" if it's below the change.
       // If the cursor line is inside the change we need to redraw more.
       if (wp->w_p_cul) {
         if (xtra == 0) {
-          redraw_later(wp, VALID);
+          redraw_later(wp, UPD_VALID);
         } else if (lnum <= wp->w_last_cursorline) {
-          redraw_later(wp, SOME_VALID);
+          redraw_later(wp, UPD_SOME_VALID);
         }
       }
     }
@@ -319,8 +319,8 @@ static void changed_common(linenr_T lnum, colnr_T col, linenr_T lnume, linenr_T 
 
   // Call update_screen() later, which checks out what needs to be redrawn,
   // since it notices b_mod_set and then uses b_mod_*.
-  if (must_redraw < VALID) {
-    must_redraw = VALID;
+  if (must_redraw < UPD_VALID) {
+    must_redraw = UPD_VALID;
   }
 
   // when the cursor line is changed always trigger CursorMoved
@@ -364,7 +364,7 @@ void changed_bytes(linenr_T lnum, colnr_T col)
   if (curwin->w_p_diff) {
     FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
       if (wp->w_p_diff && wp != curwin) {
-        redraw_later(wp, VALID);
+        redraw_later(wp, UPD_VALID);
         linenr_T wlnum = diff_lnum_win(lnum, wp);
         if (wlnum > 0) {
           changedOneline(wp->w_buffer, wlnum);
@@ -493,7 +493,7 @@ void changed_lines(linenr_T lnum, colnr_T col, linenr_T lnume, linenr_T xtra, bo
 
     FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
       if (wp->w_p_diff && wp != curwin) {
-        redraw_later(wp, VALID);
+        redraw_later(wp, UPD_VALID);
         wlnum = diff_lnum_win(lnum, wp);
         if (wlnum > 0) {
           changed_lines_buf(wp->w_buffer, wlnum,
@@ -534,11 +534,62 @@ void unchanged(buf_T *buf, int ff, bool always_inc_changedtick)
   }
 }
 
+/// Save the current values of 'fileformat' and 'fileencoding', so that we know
+/// the file must be considered changed when the value is different.
+void save_file_ff(buf_T *buf)
+{
+  buf->b_start_ffc = (unsigned char)(*buf->b_p_ff);
+  buf->b_start_eol = buf->b_p_eol;
+  buf->b_start_bomb = buf->b_p_bomb;
+
+  // Only use free/alloc when necessary, they take time.
+  if (buf->b_start_fenc == NULL
+      || STRCMP(buf->b_start_fenc, buf->b_p_fenc) != 0) {
+    xfree(buf->b_start_fenc);
+    buf->b_start_fenc = xstrdup(buf->b_p_fenc);
+  }
+}
+
+/// Return true if 'fileformat' and/or 'fileencoding' has a different value
+/// from when editing started (save_file_ff() called).
+/// Also when 'endofline' was changed and 'binary' is set, or when 'bomb' was
+/// changed and 'binary' is not set.
+/// Also when 'endofline' was changed and 'fixeol' is not set.
+/// When "ignore_empty" is true don't consider a new, empty buffer to be
+/// changed.
+bool file_ff_differs(buf_T *buf, bool ignore_empty)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  // In a buffer that was never loaded the options are not valid.
+  if (buf->b_flags & BF_NEVERLOADED) {
+    return false;
+  }
+  if (ignore_empty
+      && (buf->b_flags & BF_NEW)
+      && buf->b_ml.ml_line_count == 1
+      && *ml_get_buf(buf, (linenr_T)1, false) == NUL) {
+    return false;
+  }
+  if (buf->b_start_ffc != *buf->b_p_ff) {
+    return true;
+  }
+  if ((buf->b_p_bin || !buf->b_p_fixeol) && buf->b_start_eol != buf->b_p_eol) {
+    return true;
+  }
+  if (!buf->b_p_bin && buf->b_start_bomb != buf->b_p_bomb) {
+    return true;
+  }
+  if (buf->b_start_fenc == NULL) {
+    return *buf->b_p_fenc != NUL;
+  }
+  return STRCMP(buf->b_start_fenc, buf->b_p_fenc) != 0;
+}
+
 /// Insert string "p" at the cursor position.  Stops at a NUL byte.
 /// Handles Replace mode and multi-byte characters.
-void ins_bytes(char_u *p)
+void ins_bytes(char *p)
 {
-  ins_bytes_len(p, STRLEN(p));
+  ins_bytes_len((char_u *)p, STRLEN(p));
 }
 
 /// Insert string "p" with length "len" at the cursor position.
@@ -1309,10 +1360,10 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
 
         // Doing "O" on the end of a comment inserts the middle leader.
         // Find the string for the middle leader, searching backwards.
-        while (p > (char *)curbuf->b_p_com && *p != ',') {
+        while (p > curbuf->b_p_com && *p != ',') {
           p--;
         }
-        for (lead_repl = p; lead_repl > (char *)curbuf->b_p_com
+        for (lead_repl = p; lead_repl > curbuf->b_p_com
              && lead_repl[-1] != ':'; lead_repl--) {}
         lead_repl_len = (int)(p - lead_repl);
 
@@ -1795,7 +1846,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
     // Insert new stuff into line again
     curwin->w_cursor.col = 0;
     curwin->w_cursor.coladd = 0;
-    ins_bytes(p_extra);         // will call changed_bytes()
+    ins_bytes((char *)p_extra);         // will call changed_bytes()
     xfree(p_extra);
     next_line = NULL;
   }
@@ -1814,16 +1865,16 @@ theend:
 /// If "fixpos" is true fix the cursor position when done.
 void truncate_line(int fixpos)
 {
-  char_u *newp;
+  char *newp;
   linenr_T lnum = curwin->w_cursor.lnum;
   colnr_T col = curwin->w_cursor.col;
 
   if (col == 0) {
-    newp = vim_strsave((char_u *)"");
+    newp = xstrdup("");
   } else {
-    newp = vim_strnsave(ml_get(lnum), (size_t)col);
+    newp = (char *)vim_strnsave(ml_get(lnum), (size_t)col);
   }
-  ml_replace(lnum, (char *)newp, false);
+  ml_replace(lnum, newp, false);
 
   // mark the buffer as changed and prepare for displaying
   changed_bytes(lnum, curwin->w_cursor.col);
@@ -1900,7 +1951,7 @@ int get_leader_len(char *line, char **flags, bool backward, bool include_space)
   while (line[i] != NUL) {
     // scan through the 'comments' option for a match
     int found_one = false;
-    for (list = (char *)curbuf->b_p_com; *list;) {
+    for (list = curbuf->b_p_com; *list;) {
       // Get one option part into part_buf[].  Advance "list" to next
       // one.  Put "string" at start of string.
       if (!got_com && flags != NULL) {
@@ -2037,7 +2088,7 @@ int get_last_leader_offset(char *line, char **flags)
   while (--i >= lower_check_bound) {
     // scan through the 'comments' option for a match
     int found_one = false;
-    for (list = (char *)curbuf->b_p_com; *list;) {
+    for (list = curbuf->b_p_com; *list;) {
       char *flags_save = list;
 
       // Get one option part into part_buf[].  Advance list to next one.
@@ -2122,7 +2173,7 @@ int get_last_leader_offset(char *line, char **flags)
       }
       len1 = (int)STRLEN(com_leader);
 
-      for (list = (char *)curbuf->b_p_com; *list;) {
+      for (list = curbuf->b_p_com; *list;) {
         char *flags_save = list;
 
         (void)copy_option_part(&list, part_buf2, COM_MAX_LEN, ",");

@@ -3,6 +3,7 @@
 source check.vim
 source screendump.vim
 source view_util.vim
+source shared.vim
 
 func Test_complete_tab()
   call writefile(['testfile'], 'Xtestfile')
@@ -243,7 +244,7 @@ func Test_match_completion()
     return
   endif
   hi Aardig ctermfg=green
-  call feedkeys(":match \<Tab>\<Home>\"\<CR>", 'xt')
+  call feedkeys(":match A\<Tab>\<Home>\"\<CR>", 'xt')
   call assert_equal('"match Aardig', getreg(':'))
   call feedkeys(":match \<S-Tab>\<Home>\"\<CR>", 'xt')
   call assert_equal('"match none', getreg(':'))
@@ -254,9 +255,7 @@ func Test_highlight_completion()
     return
   endif
   hi Aardig ctermfg=green
-  call feedkeys(":hi \<Tab>\<Home>\"\<CR>", 'xt')
-  call assert_equal('"hi Aardig', getreg(':'))
-  call feedkeys(":hi default \<Tab>\<Home>\"\<CR>", 'xt')
+  call feedkeys(":hi default A\<Tab>\<Home>\"\<CR>", 'xt')
   call assert_equal('"hi default Aardig', getreg(':'))
   call feedkeys(":hi clear Aa\<Tab>\<Home>\"\<CR>", 'xt')
   call assert_equal('"hi clear Aardig', getreg(':'))
@@ -514,6 +513,7 @@ func Test_getcompletion()
   call delete('Xtags')
   set tags&
 
+  call assert_fails("call getcompletion('\\\\@!\\\\@=', 'buffer')", 'E871:')
   call assert_fails('call getcompletion("", "burp")', 'E475:')
   call assert_fails('call getcompletion("abc", [])', 'E475:')
 endfunc
@@ -1450,6 +1450,32 @@ func Test_cmdwin_tabpage()
   call assert_fails("silent norm q/g	", 'E11:')
   call assert_fails("silent norm q/g	:I\<Esc>", 'E492:')
   tabclose!
+endfunc
+
+func Test_cmdwin_interrupted()
+  CheckScreendump
+
+  " aborting the :smile output caused the cmdline window to use the current
+  " buffer.
+  let lines =<< trim [SCRIPT]
+    au WinNew * smile
+  [SCRIPT]
+  call writefile(lines, 'XTest_cmdwin')
+
+  let buf = RunVimInTerminal('-S XTest_cmdwin', {'rows': 18})
+  " open cmdwin
+  call term_sendkeys(buf, "q:")
+  call WaitForAssert({-> assert_match('-- More --', term_getline(buf, 18))})
+  " quit more prompt for :smile command
+  call term_sendkeys(buf, "q")
+  call WaitForAssert({-> assert_match('^$', term_getline(buf, 18))})
+  " execute a simple command
+  call term_sendkeys(buf, "aecho 'done'\<CR>")
+  call VerifyScreenDump(buf, 'Test_cmdwin_interrupted', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
+  call delete('XTest_cmdwin')
 endfunc
 
 " Test for backtick expression in the command line
