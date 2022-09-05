@@ -394,7 +394,7 @@ void decor_redraw_signs(buf_T *buf, int row, int *num_signs, SignTextAttrs sattr
       }
       if (j < SIGN_SHOW_MAX) {
         sattrs[j] = (SignTextAttrs) {
-          .text = decor->sign_text,
+          .text = (char *)decor->sign_text,
           .hl_attr_id = decor->sign_hl_id == 0 ? 0 : syn_id2attr(decor->sign_hl_id),
           .priority = decor->priority
         };
@@ -547,7 +547,7 @@ int decor_virt_lines(win_T *wp, linenr_T lnum, VirtLines *lines)
   }
 
   int virt_lines = 0;
-  int row = (int)MAX(lnum - 2, 0);
+  int row = MAX(lnum - 2, 0);
   int end_row = (int)lnum;
   MarkTreeIter itr[1] = { 0 };
   marktree_itr_get(buf->b_marktree, row, 0,  itr);
@@ -558,7 +558,7 @@ int decor_virt_lines(win_T *wp, linenr_T lnum, VirtLines *lines)
     } else if (marktree_decor_level(mark) < kDecorLevelVirtLine) {
       goto next_mark;
     }
-    bool above = mark.pos.row > (int)(lnum - 2);
+    bool above = mark.pos.row > (lnum - 2);
     Decoration *decor = mark.decor_full;
     if (decor && decor->virt_lines_above == above) {
       virt_lines += (int)kv_size(decor->virt_lines);

@@ -1,13 +1,11 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
-/*
- * CSCOPE support for Vim added by Andy Kahn <kahn@zk3.dec.com>
- * Ported to Win32 by Sergey Khorev <sergey.khorev@gmail.com>
- *
- * The basic idea/structure of cscope for Vim was borrowed from Nvi.  There
- * might be a few lines of code that look similar to what Nvi has.
- */
+// CSCOPE support for Vim added by Andy Kahn <kahn@zk3.dec.com>
+// Ported to Win32 by Sergey Khorev <sergey.khorev@gmail.com>
+//
+// The basic idea/structure of cscope for Vim was borrowed from Nvi.  There
+// might be a few lines of code that look similar to what Nvi has.
 
 #include <assert.h>
 #include <errno.h>
@@ -78,10 +76,8 @@ static enum {
   EXP_CSCOPE_KILL,  // expand ":cscope kill" arguments
 } expand_what;
 
-/*
- * Function given to ExpandGeneric() to obtain the cscope command
- * expansion.
- */
+// Function given to ExpandGeneric() to obtain the cscope command
+// expansion.
 char *get_cscope_name(expand_T *xp, int idx)
 {
   int current_idx;
@@ -140,9 +136,7 @@ char *get_cscope_name(expand_T *xp, int idx)
   }
 }
 
-/*
- * Handle command line completion for :cscope command.
- */
+// Handle command line completion for :cscope command.
 void set_context_in_cscope_cmd(expand_T *xp, const char *arg, cmdidx_T cmdidx)
 {
   // Default: expand subcommands.
@@ -153,10 +147,10 @@ void set_context_in_cscope_cmd(expand_T *xp, const char *arg, cmdidx_T cmdidx)
 
   // (part of) subcommand already typed
   if (*arg != NUL) {
-    const char *p = (const char *)skiptowhite((const char_u *)arg);
+    const char *p = (const char *)skiptowhite(arg);
     if (*p != NUL) {  // Past first word.
       xp->xp_pattern = skipwhite(p);
-      if (*skiptowhite((char_u *)xp->xp_pattern) != NUL) {
+      if (*skiptowhite(xp->xp_pattern) != NUL) {
         xp->xp_context = EXPAND_NOTHING;
       } else if (STRNICMP(arg, "add", p - arg) == 0) {
         xp->xp_context = EXPAND_FILES;
@@ -304,33 +298,31 @@ void cs_print_tags(void)
   cs_manage_matches(NULL, NULL, 0, Print);
 }
 
-/*
- * "cscope_connection([{num} , {dbpath} [, {prepend}]])" function
- *
- *              Checks for the existence of a |cscope| connection.  If no
- *              parameters are specified, then the function returns:
- *
- *              0, if cscope was not available (not compiled in), or if there
- *              are no cscope connections; or
- *              1, if there is at least one cscope connection.
- *
- *              If parameters are specified, then the value of {num}
- *              determines how existence of a cscope connection is checked:
- *
- *              {num}   Description of existence check
- *              -----   ------------------------------
- *              0       Same as no parameters (e.g., "cscope_connection()").
- *              1       Ignore {prepend}, and use partial string matches for
- *                      {dbpath}.
- *              2       Ignore {prepend}, and use exact string matches for
- *                      {dbpath}.
- *              3       Use {prepend}, use partial string matches for both
- *                      {dbpath} and {prepend}.
- *              4       Use {prepend}, use exact string matches for both
- *                      {dbpath} and {prepend}.
- *
- *              Note: All string comparisons are case sensitive!
- */
+// "cscope_connection([{num} , {dbpath} [, {prepend}]])" function
+//
+//              Checks for the existence of a |cscope| connection.  If no
+//              parameters are specified, then the function returns:
+//
+//              0, if cscope was not available (not compiled in), or if there
+//              are no cscope connections; or
+//              1, if there is at least one cscope connection.
+//
+//              If parameters are specified, then the value of {num}
+//              determines how existence of a cscope connection is checked:
+//
+//              {num}   Description of existence check
+//              -----   ------------------------------
+//              0       Same as no parameters (e.g., "cscope_connection()").
+//              1       Ignore {prepend}, and use partial string matches for
+//                      {dbpath}.
+//              2       Ignore {prepend}, and use exact string matches for
+//                      {dbpath}.
+//              3       Use {prepend}, use partial string matches for both
+//                      {dbpath} and {prepend}.
+//              4       Use {prepend}, use exact string matches for both
+//                      {dbpath} and {prepend}.
+//
+//              Note: All string comparisons are case sensitive!
 bool cs_connection(int num, char_u *dbpath, char_u *ppath)
 {
   if (num < 0 || num > 4 || (num > 0 && !dbpath)) {
@@ -379,9 +371,8 @@ bool cs_connection(int num, char_u *dbpath, char_u *ppath)
   return false;
 }  // cs_connection
 
-/*
- * PRIVATE functions
- ****************************************************************************/
+// PRIVATE functions
+// **************************************************************************
 
 /// Add cscope database or a directory name (to look for cscope.out)
 /// to the cscope connection list.
@@ -423,7 +414,7 @@ static int cs_add_common(char *arg1, char *arg2, char *flags)
   // get the filename (arg1), expand it, and try to stat it
   fname = xmalloc(MAXPATHL + 1);
 
-  expand_env((char_u *)arg1, (char_u *)fname, MAXPATHL);
+  expand_env(arg1, fname, MAXPATHL);
   size_t len = STRLEN(fname);
   fbuf = fname;
   (void)modify_fname(":p", false, &usedlen, &fname, &fbuf, &len);
@@ -445,8 +436,8 @@ staterr:
   // get the prepend path (arg2), expand it, and see if it exists
   if (arg2 != NULL) {
     ppath = xmalloc(MAXPATHL + 1);
-    expand_env((char_u *)arg2, (char_u *)ppath, MAXPATHL);
-    if (!os_path_exists((char_u *)ppath)) {
+    expand_env(arg2, ppath, MAXPATHL);
+    if (!os_path_exists(ppath)) {
       goto staterr;
     }
   }
@@ -684,10 +675,8 @@ static int cs_create_connection(size_t i)
   char *prog, *cmd, *ppath = NULL;
 
 #if defined(UNIX)
-  /*
-   * Cscope reads from to_cs[0] and writes to from_cs[1]; vi reads from
-   * from_cs[0] and writes to to_cs[1].
-   */
+  // Cscope reads from to_cs[0] and writes to from_cs[1]; vi reads from
+  // from_cs[0] and writes to to_cs[1].
   to_cs[0] = to_cs[1] = from_cs[0] = from_cs[1] = -1;
   if (pipe(to_cs) < 0 || pipe(from_cs) < 0) {
     (void)emsg(_("E566: Could not create cscope pipes"));
@@ -757,14 +746,14 @@ err_closing:
 #endif
     // expand the cscope exec for env var's
     prog = xmalloc(MAXPATHL + 1);
-    expand_env((char_u *)p_csprg, (char_u *)prog, MAXPATHL);
+    expand_env(p_csprg, prog, MAXPATHL);
 
     // alloc space to hold the cscope command
     size_t len = strlen(prog) + strlen(csinfo[i].fname) + 32;
     if (csinfo[i].ppath) {
       // expand the prepend path for env var's
       ppath = xmalloc(MAXPATHL + 1);
-      expand_env((char_u *)csinfo[i].ppath, (char_u *)ppath, MAXPATHL);
+      expand_env(csinfo[i].ppath, ppath, MAXPATHL);
 
       len += strlen(ppath);
     }
@@ -896,10 +885,8 @@ static int cs_find(exarg_T *eap)
     return false;
   }
 
-  /*
-   * Let's replace the NULs written by strtok() with spaces - we need the
-   * spaces to correctly display the quickfix/location list window's title.
-   */
+  // Let's replace the NULs written by strtok() with spaces - we need the
+  // spaces to correctly display the quickfix/location list window's title.
   for (int i = 0; i < eap_arg_len; i++) {
     if (NUL == eap->arg[i]) {
       eap->arg[i] = ' ';
@@ -1041,10 +1028,8 @@ static bool cs_find_common(char *opt, char *pat, int forceit, int verbose, bool 
 
         apply_autocmds(EVENT_QUICKFIXCMDPOST, "cscope", curbuf->b_fname, true, curbuf);
         if (use_ll) {
-          /*
-           * In the location list window, use the displayed location
-           * list. Otherwise, use the location list for the window.
-           */
+          // In the location list window, use the displayed location
+          // list. Otherwise, use the location list for the window.
           qi = (bt_quickfix(wp->w_buffer) && wp->w_llist_ref != NULL)
                ?  wp->w_llist_ref : wp->w_llist;
         }
@@ -1431,11 +1416,9 @@ retry:
   }
   *p = '\0';
 
-  /*
-   * cscope output is in the following format:
-   *
-   *    <filename> <context> <line number> <pattern>
-   */
+  // cscope output is in the following format:
+  //
+  //    <filename> <context> <line number> <pattern>
   char *saveptr = NULL;
   if ((name = os_strtok(buf, (const char *)" ", &saveptr)) == NULL) {
     return NULL;
@@ -1651,7 +1634,7 @@ static void cs_print_tags_priv(char **matches, char **cntxts,
     }
     (void)snprintf(buf, bufsize, csfmt_str, i + 1, lno);
     msg_puts_attr(buf, HL_ATTR(HLF_CM));
-    msg_outtrans_long_attr((char_u *)cs_pathcomponents(fname), HL_ATTR(HLF_CM));
+    msg_outtrans_long_attr(cs_pathcomponents(fname), HL_ATTR(HLF_CM));
 
     // compute the required space for the context
     char *context = cntxts[i] ? cntxts[i] : globalcntx;
@@ -1673,11 +1656,11 @@ static void cs_print_tags_priv(char **matches, char **cntxts,
       msg_putchar('\n');
     }
     msg_advance(12);
-    msg_outtrans_long_attr((char_u *)buf, 0);
+    msg_outtrans_long_attr(buf, 0);
     msg_putchar('\n');
     if (extra != NULL) {
       msg_advance(13);
-      msg_outtrans_long_attr((char_u *)extra, 0);
+      msg_outtrans_long_attr(extra, 0);
     }
 
     // restore matches[i]
@@ -1786,9 +1769,7 @@ static int cs_read_prompt(size_t i)
 }
 
 #if defined(UNIX) && defined(SIGALRM)
-/*
- * Used to catch and ignore SIGALRM below.
- */
+// Used to catch and ignore SIGALRM below.
 static void sig_handler(int s)
 {
   // do nothing
@@ -1847,25 +1828,21 @@ static void cs_release_csp(size_t i, bool freefnpp)
       os_delay(50L, false);       // sleep 50 ms
     }
 # endif
-    /*
-     * If the cscope process is still running: kill it.
-     * Safety check: If the PID would be zero here, the entire X session
-     * would be killed.  -1 and 1 are dangerous as well.
-     */
+    // If the cscope process is still running: kill it.
+    // Safety check: If the PID would be zero here, the entire X session
+    // would be killed.  -1 and 1 are dangerous as well.
     if (pid < 0 && csinfo[i].pid > 1) {
 # ifdef ECHILD
       bool alive = true;
 
       if (waitpid_errno == ECHILD) {
-        /*
-         * When using 'vim -g', vim is forked and cscope process is
-         * no longer a child process but a sibling.  So waitpid()
-         * fails with errno being ECHILD (No child processes).
-         * Don't send SIGKILL to cscope immediately but wait
-         * (polling) for it to exit normally as result of sending
-         * the "q" command, hence giving it a chance to clean up
-         * its temporary files.
-         */
+        // When using 'vim -g', vim is forked and cscope process is
+        // no longer a child process but a sibling.  So waitpid()
+        // fails with errno being ECHILD (No child processes).
+        // Don't send SIGKILL to cscope immediately but wait
+        // (polling) for it to exit normally as result of sending
+        // the "q" command, hence giving it a chance to clean up
+        // its temporary files.
         int waited;
 
         sleep(0);
@@ -1974,11 +1951,9 @@ static char *cs_resolve_file(size_t i, char *name)
   char *fullname;
   char_u *csdir = NULL;
 
-  /*
-   * Ppath is freed when we destroy the cscope connection.
-   * Fullname is freed after cs_make_vim_style_matches, after it's been
-   * copied into the tag buffer used by Vim.
-   */
+  // Ppath is freed when we destroy the cscope connection.
+  // Fullname is freed after cs_make_vim_style_matches, after it's been
+  // copied into the tag buffer used by Vim.
   size_t len = strlen(name) + 2;
   if (csinfo[i].ppath != NULL) {
     len += strlen(csinfo[i].ppath);
@@ -2035,7 +2010,7 @@ static int cs_show(exarg_T *eap)
     }
   }
 
-  wait_return(true);
+  wait_return(false);
   return CSCOPE_SUCCESS;
 }
 

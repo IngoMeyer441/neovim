@@ -469,35 +469,37 @@ int update_screen(int type)
       }
       msg_grid_set_pos(Rows - (int)p_ch, false);
       msg_grid_invalid = false;
-    } else if (msg_scrolled > Rows - 5) {  // clearing is faster
-      type = UPD_CLEAR;
     } else if (type != UPD_CLEAR) {
-      check_for_delay(false);
-      grid_ins_lines(&default_grid, 0, msg_scrolled, Rows, 0, Columns);
-      FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-        if (wp->w_floating) {
-          continue;
-        }
-        if (wp->w_winrow < msg_scrolled) {
-          if (W_ENDROW(wp) > msg_scrolled
-              && wp->w_redr_type < UPD_REDRAW_TOP
-              && wp->w_lines_valid > 0
-              && wp->w_topline == wp->w_lines[0].wl_lnum) {
-            wp->w_upd_rows = msg_scrolled - wp->w_winrow;
-            wp->w_redr_type = UPD_REDRAW_TOP;
-          } else {
-            wp->w_redr_type = UPD_NOT_VALID;
-            if (wp->w_winrow + wp->w_winbar_height <= msg_scrolled) {
-              wp->w_redr_status = true;
+      if (msg_scrolled > Rows - 5) {  // redrawing is faster
+        type = UPD_NOT_VALID;
+      } else {
+        check_for_delay(false);
+        grid_ins_lines(&default_grid, 0, msg_scrolled, Rows, 0, Columns);
+        FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+          if (wp->w_floating) {
+            continue;
+          }
+          if (wp->w_winrow < msg_scrolled) {
+            if (W_ENDROW(wp) > msg_scrolled
+                && wp->w_redr_type < UPD_REDRAW_TOP
+                && wp->w_lines_valid > 0
+                && wp->w_topline == wp->w_lines[0].wl_lnum) {
+              wp->w_upd_rows = msg_scrolled - wp->w_winrow;
+              wp->w_redr_type = UPD_REDRAW_TOP;
+            } else {
+              wp->w_redr_type = UPD_NOT_VALID;
+              if (wp->w_winrow + wp->w_winbar_height <= msg_scrolled) {
+                wp->w_redr_status = true;
+              }
             }
           }
         }
+        if (is_stl_global && Rows - p_ch - 1 <= msg_scrolled) {
+          curwin->w_redr_status = true;
+        }
+        redraw_cmdline = true;
+        redraw_tabline = true;
       }
-      if (is_stl_global && Rows - p_ch - 1 <= msg_scrolled) {
-        curwin->w_redr_status = true;
-      }
-      redraw_cmdline = true;
-      redraw_tabline = true;
     }
     msg_scrolled = 0;
     msg_scrolled_at_flush = 0;
@@ -746,6 +748,8 @@ void show_cursor_info(bool always)
   if (!always && !redrawing()) {
     return;
   }
+
+  win_check_ns_hl(curwin);
   if ((*p_stl != NUL || *curwin->w_p_stl != NUL)
       && (curwin->w_status_height || global_stl_height())) {
     redraw_custom_statusline(curwin);
@@ -762,6 +766,7 @@ void show_cursor_info(bool always)
     maketitle();
   }
 
+  win_check_ns_hl(NULL);
   // Redraw the tab pages line if needed.
   if (redraw_tabline) {
     draw_tabline();
@@ -1887,7 +1892,7 @@ win_update_start:
       int scr_row = wp->w_grid.rows - 1;
 
       // Last line isn't finished: Display "@@@" in the last screen line.
-      grid_puts_len(&wp->w_grid, (char_u *)"@@", MIN(wp->w_grid.cols, 2), scr_row, 0, at_attr);
+      grid_puts_len(&wp->w_grid, "@@", MIN(wp->w_grid.cols, 2), scr_row, 0, at_attr);
 
       grid_fill(&wp->w_grid, scr_row, scr_row + 1, 2, wp->w_grid.cols,
                 '@', ' ', at_attr);
@@ -2117,10 +2122,13 @@ void redraw_statuslines(void)
 {
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     if (wp->w_redr_status) {
+      win_check_ns_hl(wp);
       win_redr_winbar(wp);
       win_redr_status(wp);
     }
   }
+
+  win_check_ns_hl(NULL);
   if (redraw_tabline) {
     draw_tabline();
   }

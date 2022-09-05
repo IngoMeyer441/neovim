@@ -2622,6 +2622,11 @@ It is also possible to use `:eval`.  It does not support a range, but does
 allow for method chaining, e.g.: >
 	eval GetList()->Filter()->append('$')
 
+A function can also be called as part of evaluating an expression or when it
+is used as a method: >
+	let x = GetList()
+	let y = GetList()->Filter()
+
 
 AUTOMATICALLY LOADING FUNCTIONS ~
 							*autoload-functions*
@@ -3166,6 +3171,9 @@ text...
 			When {object} is a |Blob|, Vim always makes a copy to
 			iterate over.  Unlike with |List|, modifying the
 			|Blob| does not affect the iteration.
+
+			When {object} is a |String| each item is a string with
+			one character, plus any combining characters.
 
 :for [{var1}, {var2}, ...] in {listlist}
 :endfo[r]

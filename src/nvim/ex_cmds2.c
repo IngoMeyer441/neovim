@@ -200,9 +200,9 @@ void dialog_changed(buf_T *buf, bool checkall)
 
   dialog_msg((char *)buff, _("Save changes to \"%s\"?"), buf->b_fname);
   if (checkall) {
-    ret = vim_dialog_yesnoallcancel(VIM_QUESTION, NULL, (char_u *)buff, 1);
+    ret = vim_dialog_yesnoallcancel(VIM_QUESTION, NULL, buff, 1);
   } else {
-    ret = vim_dialog_yesnocancel(VIM_QUESTION, NULL, (char_u *)buff, 1);
+    ret = vim_dialog_yesnocancel(VIM_QUESTION, NULL, buff, 1);
   }
 
   if (ret == VIM_YES) {
@@ -252,7 +252,7 @@ bool dialog_close_terminal(buf_T *buf)
   dialog_msg(buff, _("Close \"%s\"?"),
              (buf->b_fname != NULL) ? buf->b_fname : "?");
 
-  int ret = vim_dialog_yesnocancel(VIM_QUESTION, NULL, (char_u *)buff, 1);
+  int ret = vim_dialog_yesnocancel(VIM_QUESTION, NULL, buff, 1);
 
   return ret == VIM_YES;
 }
@@ -364,7 +364,7 @@ bool check_changed_any(bool hidden, bool unload)
   exiting = false;
   // When ":confirm" used, don't give an error message.
   if (!(p_confirm || (cmdmod.cmod_flags & CMOD_CONFIRM))) {
-    // There must be a wait_return for this message, do_buffer()
+    // There must be a wait_return() for this message, do_buffer()
     // may cause a redraw.  But wait_return() is a no-op when vgetc()
     // is busy (Quit used from window menu), then make sure we don't
     // cause a scroll up.

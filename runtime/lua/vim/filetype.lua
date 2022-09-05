@@ -422,9 +422,11 @@ local extension = {
   gdb = 'gdb',
   gdmo = 'gdmo',
   mo = 'gdmo',
-  tres = 'gdresource',
   tscn = 'gdresource',
+  tres = 'gdresource',
   gd = 'gdscript',
+  gdshader = 'gdshader',
+  shader = 'gdshader',
   ged = 'gedcom',
   gmi = 'gemtext',
   gemini = 'gemtext',
@@ -900,7 +902,9 @@ local extension = {
   sig = function(path, bufnr)
     return require('vim.filetype.detect').sig(bufnr)
   end,
-  sil = 'sil',
+  sil = function(path, bufnr)
+    return require('vim.filetype.detect').sil(bufnr)
+  end,
   sim = 'simula',
   ['s85'] = 'sinda',
   sin = 'sinda',
@@ -1011,6 +1015,11 @@ local extension = {
   dsm = 'vb',
   ctl = 'vb',
   vbs = 'vb',
+  vdmpp = 'vdmpp',
+  vpp = 'vdmpp',
+  vdmrt = 'vdmrt',
+  vdmsl = 'vdmsl',
+  vdm = 'vdmsl',
   vr = 'vera',
   vri = 'vera',
   vrh = 'vera',

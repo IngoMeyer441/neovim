@@ -494,14 +494,14 @@ static int nlua_iconv(lua_State *lstate)
   size_t str_len = 0;
   const char *str = lua_tolstring(lstate, 1, &str_len);
 
-  char_u *from = enc_canonize(enc_skip((char_u *)lua_tolstring(lstate, 2, NULL)));
-  char_u *to   = enc_canonize(enc_skip((char_u *)lua_tolstring(lstate, 3, NULL)));
+  char_u *from = (char_u *)enc_canonize(enc_skip((char *)lua_tolstring(lstate, 2, NULL)));
+  char_u *to   = (char_u *)enc_canonize(enc_skip((char *)lua_tolstring(lstate, 3, NULL)));
 
   vimconv_T vimconv;
   vimconv.vc_type = CONV_NONE;
   convert_setup_ext(&vimconv, from, false, to, false);
 
-  char_u *ret = string_convert(&vimconv, (char_u *)str, &str_len);
+  char_u *ret = (char_u *)string_convert(&vimconv, (char *)str, &str_len);
 
   convert_setup(&vimconv, NULL, NULL);
 

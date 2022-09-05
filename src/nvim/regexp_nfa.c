@@ -5421,8 +5421,8 @@ retempty:
         && sub->list.multi[subidx].end_lnum == rex.lnum) {
       len = sub->list.multi[subidx].end_col
             - sub->list.multi[subidx].start_col;
-      if (cstrncmp(rex.line + sub->list.multi[subidx].start_col,
-                   rex.input, &len) == 0) {
+      if (cstrncmp((char *)rex.line + sub->list.multi[subidx].start_col,
+                   (char *)rex.input, &len) == 0) {
         *bytelen = len;
         return true;
       }
@@ -5441,7 +5441,7 @@ retempty:
       goto retempty;
     }
     len = (int)(sub->list.line[subidx].end - sub->list.line[subidx].start);
-    if (cstrncmp(sub->list.line[subidx].start, rex.input, &len) == 0) {
+    if (cstrncmp((char *)sub->list.line[subidx].start, (char *)rex.input, &len) == 0) {
       *bytelen = len;
       return true;
     }
@@ -5466,7 +5466,7 @@ static int match_zref(int subidx, int *bytelen)
   }
 
   len = (int)STRLEN(re_extmatch_in->matches[subidx]);
-  if (cstrncmp(re_extmatch_in->matches[subidx], rex.input, &len) == 0) {
+  if (cstrncmp((char *)re_extmatch_in->matches[subidx], (char *)rex.input, &len) == 0) {
     *bytelen = len;
     return true;
   }
@@ -5595,7 +5595,7 @@ static int recursive_regmatch(nfa_state_T *state, nfa_pim_T *pim, nfa_regprog_T 
       }
       if ((int)(rex.input - rex.line) >= state->val) {
         rex.input -= state->val;
-        rex.input -= utf_head_off(rex.line, rex.input);
+        rex.input -= utf_head_off((char *)rex.line, (char *)rex.input);
       } else {
         rex.input = rex.line;
       }
@@ -6643,13 +6643,13 @@ static int nfa_regmatch(nfa_regprog_T *prog, nfa_state_T *start, regsubs_T *subm
         break;
 
       case NFA_KWORD:           //  \k
-        result = vim_iswordp_buf(rex.input, rex.reg_buf);
+        result = vim_iswordp_buf((char *)rex.input, rex.reg_buf);
         ADD_STATE_IF_MATCH(t->state);
         break;
 
       case NFA_SKWORD:          //  \K
         result = !ascii_isdigit(curc)
-                 && vim_iswordp_buf(rex.input, rex.reg_buf);
+                 && vim_iswordp_buf((char *)rex.input, rex.reg_buf);
         ADD_STATE_IF_MATCH(t->state);
         break;
 
@@ -6910,7 +6910,7 @@ static int nfa_regmatch(nfa_regprog_T *prog, nfa_state_T *start, regsubs_T *subm
           result = col > t->state->val * ts;
         }
         if (!result) {
-          uintmax_t lts = win_linetabsize(wp, rex.line, col);
+          uintmax_t lts = win_linetabsize(wp, rex.reg_firstlnum + rex.lnum, rex.line, col);
           assert(t->state->val >= 0);
           result = nfa_re_num_cmp((uintmax_t)t->state->val, op, lts + 1);
         }
@@ -7362,15 +7362,15 @@ static long nfa_regtry(nfa_regprog_T *prog, colnr_T col, proftime_T *tm, int *ti
             && mpos->start_lnum == mpos->end_lnum
             && mpos->end_col >= mpos->start_col) {
           re_extmatch_out->matches[i] =
-            vim_strnsave(reg_getline(mpos->start_lnum) + mpos->start_col,
-                         (size_t)(mpos->end_col - mpos->start_col));
+            (char_u *)xstrnsave((char *)reg_getline(mpos->start_lnum) + mpos->start_col,
+                                (size_t)(mpos->end_col - mpos->start_col));
         }
       } else {
         struct linepos *lpos = &subs.synt.list.line[i];
 
         if (lpos->start != NULL && lpos->end != NULL) {
           re_extmatch_out->matches[i] =
-            vim_strnsave(lpos->start, (size_t)(lpos->end - lpos->start));
+            (char_u *)xstrnsave((char *)lpos->start, (size_t)(lpos->end - lpos->start));
         }
       }
     }

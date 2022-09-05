@@ -117,11 +117,11 @@ void internal_format(int textwidth, int second_indent, int flags, bool format_on
 
     // Don't break until after the comment leader
     if (do_comments) {
-      char_u *line = get_cursor_line_ptr();
+      char_u *line = (char_u *)get_cursor_line_ptr();
       leader_len = get_leader_len((char *)line, NULL, false, true);
       if (leader_len == 0 && curbuf->b_p_cin) {
         // Check for a line comment after code.
-        int comment_start = check_linecomment(line);
+        int comment_start = check_linecomment((char *)line);
         if (comment_start != MAXCOL) {
           leader_len = get_leader_len((char *)line + comment_start, NULL, false, true);
           if (leader_len != 0) {
@@ -411,7 +411,7 @@ void internal_format(int textwidth, int second_indent, int flags, bool format_on
             // add the additional whitespace needed after the
             // comment leader for the numbered list.
             for (int i = 0; i < padding; i++) {
-              ins_str((char_u *)" ");
+              ins_str(" ");
             }
             changed_bytes(curwin->w_cursor.lnum, leader_len);
           } else {
@@ -470,7 +470,7 @@ static int fmt_check_par(linenr_T lnum, int *leader_len, char_u **leader_flags, 
   char_u *flags = NULL;        // init for GCC
   char_u *ptr;
 
-  ptr = ml_get(lnum);
+  ptr = (char_u *)ml_get(lnum);
   if (do_comments) {
     *leader_len = get_leader_len((char *)ptr, (char **)leader_flags, false, true);
   } else {
@@ -493,7 +493,7 @@ static int fmt_check_par(linenr_T lnum, int *leader_len, char_u **leader_flags, 
 /// @return  true if line "lnum" ends in a white character.
 static bool ends_in_white(linenr_T lnum)
 {
-  char_u *s = ml_get(lnum);
+  char_u *s = (char_u *)ml_get(lnum);
   size_t l;
 
   if (*s == NUL) {
@@ -552,9 +552,9 @@ static bool same_leader(linenr_T lnum, int leader1_len, char_u *leader1_flags, i
 
   // Get current line and next line, compare the leaders.
   // The first line has to be saved, only one line can be locked at a time.
-  line1 = vim_strsave(ml_get(lnum));
+  line1 = vim_strsave((char_u *)ml_get(lnum));
   for (idx1 = 0; ascii_iswhite(line1[idx1]); idx1++) {}
-  line2 = ml_get(lnum + 1);
+  line2 = (char_u *)ml_get(lnum + 1);
   for (idx2 = 0; idx2 < leader2_len; idx2++) {
     if (!ascii_iswhite(line2[idx2])) {
       if (line1[idx1++] != line2[idx2]) {
@@ -586,7 +586,7 @@ static bool paragraph_start(linenr_T lnum)
   if (lnum <= 1) {
     return true;                // start of the file
   }
-  p = ml_get(lnum - 1);
+  p = (char_u *)ml_get(lnum - 1);
   if (*p == NUL) {
     return true;                // after empty line
   }
@@ -624,8 +624,8 @@ void auto_format(bool trailblank, bool prev_line)
 {
   pos_T pos;
   colnr_T len;
-  char_u *old;
-  char_u *new, *pnew;
+  char *old;
+  char *new, *pnew;
   int wasatend;
   int cc;
 
@@ -663,7 +663,7 @@ void auto_format(bool trailblank, bool prev_line)
   // With the 'c' flag in 'formatoptions' and 't' missing: only format
   // comments.
   if (has_format_option(FO_WRAP_COMS) && !has_format_option(FO_WRAP)
-      && get_leader_len((char *)old, NULL, false, true) == 0) {
+      && get_leader_len(old, NULL, false, true) == 0) {
     return;
   }
 
@@ -700,10 +700,10 @@ void auto_format(bool trailblank, bool prev_line)
     new = get_cursor_line_ptr();
     len = (colnr_T)STRLEN(new);
     if (curwin->w_cursor.col == len) {
-      pnew = vim_strnsave(new, (size_t)len + 2);
+      pnew = xstrnsave(new, (size_t)len + 2);
       pnew[len] = ' ';
       pnew[len + 1] = NUL;
-      ml_replace(curwin->w_cursor.lnum, (char *)pnew, false);
+      ml_replace(curwin->w_cursor.lnum, pnew, false);
       // remove the space later
       did_add_space = true;
     } else {

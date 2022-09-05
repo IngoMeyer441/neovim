@@ -81,7 +81,7 @@ static list_T *heredoc_get(exarg_T *eap, char *cmd)
   // The marker is the next word.
   if (*cmd != NUL && *cmd != '"') {
     marker = skipwhite(cmd);
-    p = (char *)skiptowhite((char_u *)marker);
+    p = skiptowhite(marker);
     if (*skipwhite(p) != NUL && *skipwhite(p) != '"') {
       semsg(_(e_trailing_arg), p);
       return NULL;
@@ -207,7 +207,7 @@ static void ex_let_const(exarg_T *eap, const bool is_const)
       list_func_vars(&first);
       list_vim_vars(&first);
     }
-    eap->nextcmd = (char *)check_nextcmd((char_u *)arg);
+    eap->nextcmd = check_nextcmd(arg);
   } else if (expr[0] == '=' && expr[1] == '<' && expr[2] == '<') {
     // HERE document
     list_T *l = heredoc_get(eap, expr + 3);
@@ -413,7 +413,7 @@ void list_hashtable_vars(hashtab_T *ht, const char *prefix, int empty, int *firs
       // apply :filter /pat/ to variable name
       xstrlcpy(buf, prefix, IOSIZE);
       xstrlcat(buf, (char *)di->di_key, IOSIZE);
-      if (message_filtered((char_u *)buf)) {
+      if (message_filtered(buf)) {
         continue;
       }
 
@@ -587,7 +587,7 @@ static char *ex_let_one(char *arg, typval_T *const tv, const bool copy, const bo
           char *s = vim_getenv(name);
 
           if (s != NULL) {
-            tofree = (char *)concat_str((const char_u *)s, (const char_u *)p);
+            tofree = concat_str(s, p);
             p = (const char *)tofree;
             xfree(s);
           }
@@ -663,8 +663,7 @@ static char *ex_let_one(char *arg, typval_T *const tv, const bool copy, const bo
           } else if (opt_type == gov_string && stringval != NULL && s != NULL) {
             // string
             char *const oldstringval = stringval;
-            stringval = (char *)concat_str((const char_u *)stringval,
-                                           (const char_u *)s);
+            stringval = concat_str(stringval, s);
             xfree(oldstringval);
             s = stringval;
           }
@@ -705,14 +704,13 @@ static char *ex_let_one(char *arg, typval_T *const tv, const bool copy, const bo
       if (p != NULL && op != NULL && *op == '.') {
         s = get_reg_contents(*arg == '@' ? '"' : *arg, kGRegExprSrc);
         if (s != NULL) {
-          ptofree = (char *)concat_str((char_u *)s, (const char_u *)p);
+          ptofree = concat_str(s, p);
           p = (const char *)ptofree;
           xfree(s);
         }
       }
       if (p != NULL) {
-        write_reg_contents(*arg == '@' ? '"' : *arg,
-                           (const char_u *)p, (ssize_t)STRLEN(p), false);
+        write_reg_contents(*arg == '@' ? '"' : *arg, p, (ssize_t)STRLEN(p), false);
         arg_end = arg + 1;
       }
       xfree(ptofree);
@@ -826,7 +824,7 @@ static void ex_unletlock(exarg_T *eap, char *argstart, int deep, ex_unletlock_ca
     arg = skipwhite(name_end);
   } while (!ends_excmd(*arg));
 
-  eap->nextcmd = (char *)check_nextcmd((char_u *)arg);
+  eap->nextcmd = check_nextcmd(arg);
 }
 
 // TODO(ZyX-I): move to eval/ex_cmds

@@ -553,9 +553,9 @@ char_u *expand_env_save_opt(char_u *src, bool one)
 /// @param src        Input string e.g. "$HOME/vim.hlp"
 /// @param dst[out]   Where to put the result
 /// @param dstlen     Maximum length of the result
-void expand_env(char_u *src, char_u *dst, int dstlen)
+void expand_env(char *src, char *dst, int dstlen)
 {
-  expand_env_esc(src, dst, dstlen, false, false, NULL);
+  expand_env_esc((char_u *)src, (char_u *)dst, dstlen, false, false, NULL);
 }
 
 /// Expand environment variable with path name and escaping.
@@ -765,12 +765,12 @@ static char *vim_version_dir(const char *vimdir)
     return NULL;
   }
   char *p = concat_fnames(vimdir, VIM_VERSION_NODOT, true);
-  if (os_isdir((char_u *)p)) {
+  if (os_isdir(p)) {
     return p;
   }
   xfree(p);
   p = concat_fnames(vimdir, RUNTIME_DIRNAME, true);
-  if (os_isdir((char_u *)p)) {
+  if (os_isdir(p)) {
     return p;
   }
   xfree(p);
@@ -976,7 +976,7 @@ char *vim_getenv(const char *name)
       assert(vim_path_end >= vim_path);
       vim_path = xstrndup(vim_path, (size_t)(vim_path_end - vim_path));
 
-      if (!os_isdir((char_u *)vim_path)) {
+      if (!os_isdir(vim_path)) {
         xfree(vim_path);
         vim_path = NULL;
       }

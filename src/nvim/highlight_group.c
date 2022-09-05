@@ -632,7 +632,9 @@ int load_colors(char_u *name)
     retval = source_runtime((char *)buf, DIP_START + DIP_OPT);
   }
   xfree(buf);
-  apply_autocmds(EVENT_COLORSCHEME, (char *)name, curbuf->b_fname, false, curbuf);
+  if (retval == OK) {
+    apply_autocmds(EVENT_COLORSCHEME, (char *)name, curbuf->b_fname, false, curbuf);
+  }
 
   recursive = false;
 
@@ -852,14 +854,14 @@ void do_highlight(const char *line, const bool forceit, const bool init)
   }
 
   // Isolate the name.
-  name_end = (const char *)skiptowhite((const char_u *)line);
+  name_end = (const char *)skiptowhite(line);
   linep = (const char *)skipwhite(name_end);
 
   // Check for "default" argument.
   if (strncmp(line, "default", (size_t)(name_end - line)) == 0) {
     dodefault = true;
     line = linep;
-    name_end = (const char *)skiptowhite((const char_u *)line);
+    name_end = (const char *)skiptowhite(line);
     linep = (const char *)skipwhite(name_end);
   }
 
@@ -891,9 +893,9 @@ void do_highlight(const char *line, const bool forceit, const bool init)
     int to_id;
     HlGroup *hlgroup = NULL;
 
-    from_end = (const char *)skiptowhite((const char_u *)from_start);
+    from_end = (const char *)skiptowhite(from_start);
     to_start = (const char *)skipwhite(from_end);
-    to_end   = (const char *)skiptowhite((const char_u *)to_start);
+    to_end   = (const char *)skiptowhite(to_start);
 
     if (ends_excmd((uint8_t)(*from_start))
         || ends_excmd((uint8_t)(*to_start))) {
@@ -969,7 +971,7 @@ void do_highlight(const char *line, const bool forceit, const bool init)
       redraw_all_later(UPD_NOT_VALID);
       return;
     }
-    name_end = (const char *)skiptowhite((const char_u *)line);
+    name_end = (const char *)skiptowhite(line);
     linep = (const char *)skipwhite(name_end);
   }
 
@@ -1054,7 +1056,7 @@ void do_highlight(const char *line, const bool forceit, const bool init)
         }
       } else {
         arg_start = linep;
-        linep = (const char *)skiptowhite((const char_u *)linep);
+        linep = (const char *)skiptowhite(linep);
       }
       if (linep == arg_start) {
         semsg(_("E417: missing argument: %s"), key_start);
@@ -1421,7 +1423,7 @@ static void highlight_list_one(const int id)
   const HlGroup *sgp = &hl_table[id - 1];  // index is ID minus one
   bool didh = false;
 
-  if (message_filtered(sgp->sg_name)) {
+  if (message_filtered((char *)sgp->sg_name)) {
     return;
   }
 
@@ -1466,19 +1468,21 @@ static void highlight_list_one(const int id)
   }
 }
 
-Dictionary get_global_hl_defs(void)
+Dictionary get_global_hl_defs(Arena *arena)
 {
-  Dictionary rv = ARRAY_DICT_INIT;
-  for (int i = 1; i <= highlight_ga.ga_len && !got_int; i++) {
+  Dictionary rv = arena_dict(arena, (size_t)highlight_ga.ga_len);
+  for (int i = 1; i <= highlight_ga.ga_len; i++) {
     Dictionary attrs = ARRAY_DICT_INIT;
     HlGroup *h = &hl_table[i - 1];
     if (h->sg_attr > 0) {
-      attrs = hlattrs2dict(NULL, syn_attr2entry(h->sg_attr), true);
+      attrs = arena_dict(arena, HLATTRS_DICT_SIZE);
+      hlattrs2dict(&attrs, syn_attr2entry(h->sg_attr), true);
     } else if (h->sg_link > 0) {
-      const char *link = (const char *)hl_table[h->sg_link - 1].sg_name;
-      PUT(attrs, "link", STRING_OBJ(cstr_to_string(link)));
+      attrs = arena_dict(arena, 1);
+      char *link = (char *)hl_table[h->sg_link - 1].sg_name;
+      PUT_C(attrs, "link", STRING_OBJ(cstr_as_string(link)));
     }
-    PUT(rv, (const char *)h->sg_name, DICTIONARY_OBJ(attrs));
+    PUT_C(rv, (char *)h->sg_name, DICTIONARY_OBJ(attrs));
   }
 
   return rv;
@@ -2074,13 +2078,13 @@ void set_context_in_highlight_cmd(expand_T *xp, const char *arg)
 
   // (part of) subcommand already typed
   if (*arg != NUL) {
-    const char *p = (const char *)skiptowhite((const char_u *)arg);
+    const char *p = (const char *)skiptowhite(arg);
     if (*p != NUL) {  // Past "default" or group name.
       include_default = 0;
       if (strncmp("default", arg, (unsigned)(p - arg)) == 0) {
         arg = (const char *)skipwhite(p);
         xp->xp_pattern = (char *)arg;
-        p = (const char *)skiptowhite((const char_u *)arg);
+        p = (const char *)skiptowhite(arg);
       }
       if (*p != NUL) {                          // past group name
         include_link = 0;
@@ -2090,10 +2094,10 @@ void set_context_in_highlight_cmd(expand_T *xp, const char *arg)
         if (strncmp("link", arg, (unsigned)(p - arg)) == 0
             || strncmp("clear", arg, (unsigned)(p - arg)) == 0) {
           xp->xp_pattern = skipwhite(p);
-          p = (const char *)skiptowhite((char_u *)xp->xp_pattern);
+          p = (const char *)skiptowhite(xp->xp_pattern);
           if (*p != NUL) {  // Past first group name.
             xp->xp_pattern = skipwhite(p);
-            p = (const char *)skiptowhite((char_u *)xp->xp_pattern);
+            p = (const char *)skiptowhite(xp->xp_pattern);
           }
         }
         if (*p != NUL) {  // Past group name(s).

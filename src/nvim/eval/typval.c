@@ -2533,7 +2533,7 @@ dict_T *tv_dict_copy(const vimconv_T *const conv, dict_T *const orig, const bool
       new_di = tv_dict_item_alloc((const char *)di->di_key);
     } else {
       size_t len = STRLEN(di->di_key);
-      char *const key = (char *)string_convert(conv, di->di_key, &len);
+      char *const key = (char *)string_convert(conv, (char *)di->di_key, &len);
       if (key == NULL) {
         new_di = tv_dict_item_alloc_len((const char *)di->di_key, len);
       } else {
@@ -3717,8 +3717,7 @@ varnumber_T tv_get_number_chk(const typval_T *const tv, bool *const ret_error)
   case VAR_STRING: {
     varnumber_T n = 0;
     if (tv->vval.v_string != NULL) {
-      vim_str2nr((char_u *)tv->vval.v_string, NULL, NULL, STR2NR_ALL, &n, NULL, 0,
-                 false);
+      vim_str2nr(tv->vval.v_string, NULL, NULL, STR2NR_ALL, &n, NULL, 0, false);
     }
     return n;
   }

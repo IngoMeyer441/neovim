@@ -209,6 +209,7 @@ let s:filename_checks = {
     \ 'gdmo': ['file.mo', 'file.gdmo'],
     \ 'gdresource': ['file.tscn', 'file.tres'],
     \ 'gdscript': ['file.gd'],
+    \ 'gdshader': ['file.gdshader', 'file.shader'],
     \ 'gedcom': ['file.ged', 'lltxxxxx.txt', '/tmp/lltmp', '/tmp/lltmp-file', 'any/tmp/lltmp', 'any/tmp/lltmp-file'],
     \ 'gemtext': ['file.gmi', 'file.gemini'],
     \ 'gift': ['file.gift'],
@@ -588,6 +589,9 @@ let s:filename_checks = {
     \ 'usw2kagtlog': ['usw2kagt.log', 'USW2KAGT.LOG', 'usw2kagt.file.log', 'USW2KAGT.FILE.LOG', 'file.usw2kagt.log', 'FILE.USW2KAGT.LOG'],
     \ 'vala': ['file.vala'],
     \ 'vb': ['file.sba', 'file.vb', 'file.vbs', 'file.dsm', 'file.ctl'],
+    \ 'vdmpp': ['file.vpp', 'file.vdmpp'],
+    \ 'vdmrt': ['file.vdmrt'],
+    \ 'vdmsl': ['file.vdm', 'file.vdmsl'],
     \ 'vera': ['file.vr', 'file.vri', 'file.vrh'],
     \ 'verilog': ['file.v'],
     \ 'verilogams': ['file.va', 'file.vams'],
@@ -1817,6 +1821,44 @@ func Test_sig_file()
   bwipe!
 
   call delete('Xfile.sig')
+  filetype off
+endfunc
+
+" Test dist#ft#FTsil()
+func Test_sil_file()
+  filetype on
+
+  split Xfile.sil
+  call assert_equal('sil', &filetype)
+  bwipe!
+
+  let lines =<< trim END
+  // valid
+  let protoErasedPathA = \ABCProtocol.a
+
+  // also valid
+  let protoErasedPathA =
+          \ABCProtocol.a
+  END
+  call writefile(lines, 'Xfile.sil')
+
+  split Xfile.sil
+  call assert_equal('sil', &filetype)
+  bwipe!
+
+  " SILE
+
+  call writefile(['% some comment'], 'Xfile.sil')
+  split Xfile.sil
+  call assert_equal('sile', &filetype)
+  bwipe!
+
+  call writefile(['\begin[papersize=a6]{document}foo\end{document}'], 'Xfile.sil')
+  split Xfile.sil
+  call assert_equal('sile', &filetype)
+  bwipe!
+
+  call delete('Xfile.sil')
   filetype off
 endfunc
 

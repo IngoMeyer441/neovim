@@ -926,6 +926,10 @@ func Test_cmdline_complete_various()
   call feedkeys(":all abc\<C-A>\<C-B>\"\<CR>", 'xt')
   call assert_equal("\"all abc\<C-A>", @:)
 
+  " completion for :wincmd with :horizontal modifier
+  call feedkeys(":horizontal wincm\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal("\"horizontal wincmd", @:)
+
   " completion for a command with a command modifier
   call feedkeys(":topleft new\<C-A>\<C-B>\"\<CR>", 'xt')
   call assert_equal("\"topleft new", @:)
@@ -1049,6 +1053,18 @@ func Test_cmdline_write_alternatefile()
   call assert_equal('foo-B-A', expand('%'))
   bw!
   bw!
+endfunc
+
+func Test_cmdline_expand_cur_alt_file()
+  enew
+  file http://some.com/file.txt
+  call feedkeys(":e %\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"e http://some.com/file.txt', @:)
+  edit another
+  call feedkeys(":e #\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"e http://some.com/file.txt', @:)
+  bwipe
+  bwipe http://some.com/file.txt
 endfunc
 
 " using a leading backslash here
@@ -1258,6 +1274,16 @@ func Test_cmdline_overstrike()
   call assert_equal('"テabキcdエディタ', @:, e)
 
   let &encoding = encoding_save
+endfunc
+
+func Test_cmdwin_bug()
+  let winid = win_getid()
+  sp
+  try
+    call feedkeys("q::call win_gotoid(" .. winid .. ")\<CR>:q\<CR>", 'x!')
+  catch /^Vim\%((\a\+)\)\=:E11/
+  endtry
+  bw!
 endfunc
 
 func Test_cmdwin_restore()
@@ -2183,6 +2209,59 @@ func Test_wildmenu_pum_disable_while_shown()
   call assert_equal(0, pumvisible())
   cunmap <F2>
   set wildoptions& wildmenu&
+endfunc
+
+func Test_setcmdline()
+  func SetText(text, pos)
+    autocmd CmdlineChanged * let g:cmdtype = expand('<afile>')
+    call assert_equal(0, setcmdline(a:text))
+    call assert_equal(a:text, getcmdline())
+    call assert_equal(len(a:text) + 1, getcmdpos())
+    call assert_equal(getcmdtype(), g:cmdtype)
+    unlet g:cmdtype
+    autocmd! CmdlineChanged
+
+    call assert_equal(0, setcmdline(a:text, a:pos))
+    call assert_equal(a:text, getcmdline())
+    call assert_equal(a:pos, getcmdpos())
+
+    call assert_fails('call setcmdline("' .. a:text .. '", -1)', 'E487:')
+    call assert_fails('call setcmdline({}, 0)', 'E928:')
+    call assert_fails('call setcmdline("' .. a:text .. '", {})', 'E728:')
+
+    return ''
+  endfunc
+
+  call feedkeys(":\<C-R>=SetText('set rtp?', 2)\<CR>\<CR>", 'xt')
+  call assert_equal('set rtp?', @:)
+
+  call feedkeys(":let g:str = input('? ')\<CR>", 't')
+  call feedkeys("\<C-R>=SetText('foo', 4)\<CR>\<CR>", 'xt')
+  call assert_equal('foo', g:str)
+  unlet g:str
+
+  delfunc SetText
+
+  " setcmdline() returns 1 when not editing the command line.
+  call assert_equal(1, 'foo'->setcmdline())
+
+  " Called in custom function
+  func CustomComplete(A, L, P)
+    call assert_equal(0, setcmdline("DoCmd "))
+    return "January\nFebruary\nMars\n"
+  endfunc
+
+  com! -nargs=* -complete=custom,CustomComplete DoCmd :
+  call feedkeys(":DoCmd \<C-A>\<C-B>\"\<CR>", 'tx')
+  call assert_equal('"DoCmd January February Mars', @:)
+  delcom DoCmd
+  delfunc CustomComplete
+
+  " Called in <expr>
+  cnoremap <expr>a setcmdline('let foo=')
+  call feedkeys(":a\<CR>", 'tx')
+  call assert_equal('let foo=0', @:)
+  cunmap a
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

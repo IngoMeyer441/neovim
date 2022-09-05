@@ -5,6 +5,7 @@ local command = helpers.command
 local feed = helpers.feed
 local feed_command = helpers.feed_command
 local exec = helpers.exec
+local pesc = helpers.pesc
 
 describe('cmdline', function()
   before_each(clear)
@@ -19,8 +20,6 @@ describe('cmdline', function()
       [3] = {reverse = true};
       [4] = {bold = true, foreground = Screen.colors.Blue1};
     }
-    -- TODO(bfredl): redraw with tabs is severly broken. fix it
-    feed_command [[ set display-=msgsep ]]
 
     feed_command([[call setline(1, range(30))]])
     screen:expect([[
@@ -61,7 +60,7 @@ describe('cmdline', function()
       {4:~                             }|
                                     |
                                     |
-      :tabnew                       |
+                                    |
     ]]}
 
     feed [[gt]]
@@ -160,7 +159,7 @@ describe('cmdwin', function()
     command('set more')
     command('autocmd WinNew * highlight')
     feed('q:')
-    screen:expect({any = '{3:%-%- More %-%-}^'})
+    screen:expect({any = pesc('{3:-- More --}^')})
     feed('q')
     screen:expect([[
                                     |

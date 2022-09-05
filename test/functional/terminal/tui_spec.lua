@@ -21,6 +21,7 @@ local nvim_set = helpers.nvim_set
 local ok = helpers.ok
 local read_file = helpers.read_file
 local funcs = helpers.funcs
+local meths = helpers.meths
 
 if helpers.pending_win32(pending) then return end
 
@@ -297,6 +298,199 @@ describe('TUI', function()
     ]], attrs)
   end)
 
+  it('accepts mouse wheel events #19992', function()
+    child_session:request('nvim_command', [[
+      set number nostartofline nowrap mousescroll=hor:1,ver:1
+      call setline(1, repeat([join(range(10), '----')], 10))
+      vsplit
+    ]])
+    screen:expect([[
+      {11:  1 }{1:0}----1----2----3----4│{11:  1 }0----1----2----3----|
+      {11:  2 }0----1----2----3----4│{11:  2 }0----1----2----3----|
+      {11:  3 }0----1----2----3----4│{11:  3 }0----1----2----3----|
+      {11:  4 }0----1----2----3----4│{11:  4 }0----1----2----3----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <ScrollWheelDown> in active window
+    feed_data('\027[<65;8;1M')
+    screen:expect([[
+      {11:  2 }{1:0}----1----2----3----4│{11:  1 }0----1----2----3----|
+      {11:  3 }0----1----2----3----4│{11:  2 }0----1----2----3----|
+      {11:  4 }0----1----2----3----4│{11:  3 }0----1----2----3----|
+      {11:  5 }0----1----2----3----4│{11:  4 }0----1----2----3----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <ScrollWheelDown> in inactive window
+    feed_data('\027[<65;48;1M')
+    screen:expect([[
+      {11:  2 }{1:0}----1----2----3----4│{11:  2 }0----1----2----3----|
+      {11:  3 }0----1----2----3----4│{11:  3 }0----1----2----3----|
+      {11:  4 }0----1----2----3----4│{11:  4 }0----1----2----3----|
+      {11:  5 }0----1----2----3----4│{11:  5 }0----1----2----3----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <ScrollWheelRight> in active window
+    feed_data('\027[<67;8;1M')
+    screen:expect([[
+      {11:  2 }{1:-}---1----2----3----4-│{11:  2 }0----1----2----3----|
+      {11:  3 }----1----2----3----4-│{11:  3 }0----1----2----3----|
+      {11:  4 }----1----2----3----4-│{11:  4 }0----1----2----3----|
+      {11:  5 }----1----2----3----4-│{11:  5 }0----1----2----3----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <ScrollWheelRight> in inactive window
+    feed_data('\027[<67;48;1M')
+    screen:expect([[
+      {11:  2 }{1:-}---1----2----3----4-│{11:  2 }----1----2----3----4|
+      {11:  3 }----1----2----3----4-│{11:  3 }----1----2----3----4|
+      {11:  4 }----1----2----3----4-│{11:  4 }----1----2----3----4|
+      {11:  5 }----1----2----3----4-│{11:  5 }----1----2----3----4|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <S-ScrollWheelDown> in active window
+    feed_data('\027[<69;8;1M')
+    screen:expect([[
+      {11:  5 }{1:-}---1----2----3----4-│{11:  2 }----1----2----3----4|
+      {11:  6 }----1----2----3----4-│{11:  3 }----1----2----3----4|
+      {11:  7 }----1----2----3----4-│{11:  4 }----1----2----3----4|
+      {11:  8 }----1----2----3----4-│{11:  5 }----1----2----3----4|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <S-ScrollWheelDown> in inactive window
+    feed_data('\027[<69;48;1M')
+    screen:expect([[
+      {11:  5 }{1:-}---1----2----3----4-│{11:  5 }----1----2----3----4|
+      {11:  6 }----1----2----3----4-│{11:  6 }----1----2----3----4|
+      {11:  7 }----1----2----3----4-│{11:  7 }----1----2----3----4|
+      {11:  8 }----1----2----3----4-│{11:  8 }----1----2----3----4|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <S-ScrollWheelRight> in active window
+    feed_data('\027[<71;8;1M')
+    screen:expect([[
+      {11:  5 }{1:-}---6----7----8----9 │{11:  5 }----1----2----3----4|
+      {11:  6 }----6----7----8----9 │{11:  6 }----1----2----3----4|
+      {11:  7 }----6----7----8----9 │{11:  7 }----1----2----3----4|
+      {11:  8 }----6----7----8----9 │{11:  8 }----1----2----3----4|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <S-ScrollWheelRight> in inactive window
+    feed_data('\027[<71;48;1M')
+    screen:expect([[
+      {11:  5 }{1:-}---6----7----8----9 │{11:  5 }5----6----7----8----|
+      {11:  6 }----6----7----8----9 │{11:  6 }5----6----7----8----|
+      {11:  7 }----6----7----8----9 │{11:  7 }5----6----7----8----|
+      {11:  8 }----6----7----8----9 │{11:  8 }5----6----7----8----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <ScrollWheelUp> in active window
+    feed_data('\027[<64;8;1M')
+    screen:expect([[
+      {11:  4 }----6----7----8----9 │{11:  5 }5----6----7----8----|
+      {11:  5 }{1:-}---6----7----8----9 │{11:  6 }5----6----7----8----|
+      {11:  6 }----6----7----8----9 │{11:  7 }5----6----7----8----|
+      {11:  7 }----6----7----8----9 │{11:  8 }5----6----7----8----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <ScrollWheelUp> in inactive window
+    feed_data('\027[<64;48;1M')
+    screen:expect([[
+      {11:  4 }----6----7----8----9 │{11:  4 }5----6----7----8----|
+      {11:  5 }{1:-}---6----7----8----9 │{11:  5 }5----6----7----8----|
+      {11:  6 }----6----7----8----9 │{11:  6 }5----6----7----8----|
+      {11:  7 }----6----7----8----9 │{11:  7 }5----6----7----8----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <ScrollWheelLeft> in active window
+    feed_data('\027[<66;8;1M')
+    screen:expect([[
+      {11:  4 }5----6----7----8----9│{11:  4 }5----6----7----8----|
+      {11:  5 }5{1:-}---6----7----8----9│{11:  5 }5----6----7----8----|
+      {11:  6 }5----6----7----8----9│{11:  6 }5----6----7----8----|
+      {11:  7 }5----6----7----8----9│{11:  7 }5----6----7----8----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <ScrollWheelLeft> in inactive window
+    feed_data('\027[<66;48;1M')
+    screen:expect([[
+      {11:  4 }5----6----7----8----9│{11:  4 }-5----6----7----8---|
+      {11:  5 }5{1:-}---6----7----8----9│{11:  5 }-5----6----7----8---|
+      {11:  6 }5----6----7----8----9│{11:  6 }-5----6----7----8---|
+      {11:  7 }5----6----7----8----9│{11:  7 }-5----6----7----8---|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <S-ScrollWheelUp> in active window
+    feed_data('\027[<68;8;1M')
+    screen:expect([[
+      {11:  1 }5----6----7----8----9│{11:  4 }-5----6----7----8---|
+      {11:  2 }5----6----7----8----9│{11:  5 }-5----6----7----8---|
+      {11:  3 }5----6----7----8----9│{11:  6 }-5----6----7----8---|
+      {11:  4 }5{1:-}---6----7----8----9│{11:  7 }-5----6----7----8---|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <S-ScrollWheelUp> in inactive window
+    feed_data('\027[<68;48;1M')
+    screen:expect([[
+      {11:  1 }5----6----7----8----9│{11:  1 }-5----6----7----8---|
+      {11:  2 }5----6----7----8----9│{11:  2 }-5----6----7----8---|
+      {11:  3 }5----6----7----8----9│{11:  3 }-5----6----7----8---|
+      {11:  4 }5{1:-}---6----7----8----9│{11:  4 }-5----6----7----8---|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <S-ScrollWheelLeft> in active window
+    feed_data('\027[<70;8;1M')
+    screen:expect([[
+      {11:  1 }0----1----2----3----4│{11:  1 }-5----6----7----8---|
+      {11:  2 }0----1----2----3----4│{11:  2 }-5----6----7----8---|
+      {11:  3 }0----1----2----3----4│{11:  3 }-5----6----7----8---|
+      {11:  4 }0----1----2----3----{1:4}│{11:  4 }-5----6----7----8---|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    -- <S-ScrollWheelLeft> in inactive window
+    feed_data('\027[<70;48;1M')
+    screen:expect([[
+      {11:  1 }0----1----2----3----4│{11:  1 }0----1----2----3----|
+      {11:  2 }0----1----2----3----4│{11:  2 }0----1----2----3----|
+      {11:  3 }0----1----2----3----4│{11:  3 }0----1----2----3----|
+      {11:  4 }0----1----2----3----{1:4}│{11:  4 }0----1----2----3----|
+      {5:[No Name] [+]             }{1:[No Name] [+]           }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+  end)
+
   it('accepts keypad keys from kitty keyboard protocol #19180', function()
     feed_data('i')
     feed_data(funcs.nr2char(57399)) -- KP_0
@@ -471,6 +665,57 @@ describe('TUI', function()
                                                         |
       {3:-- TERMINAL --}                                    |
     ]], attrs)
+  end)
+
+  it('mouse events work with right-click menu', function()
+    child_session:request('nvim_command', [[
+      call setline(1, 'popup menu test')
+      set mouse=a mousemodel=popup
+
+      aunmenu PopUp
+      menu PopUp.foo :let g:menustr = 'foo'<CR>
+      menu PopUp.bar :let g:menustr = 'bar'<CR>
+      menu PopUp.baz :let g:menustr = 'baz'<CR>
+      highlight Pmenu ctermbg=NONE ctermfg=NONE cterm=underline,reverse
+      highlight PmenuSel ctermbg=NONE ctermfg=NONE cterm=underline,reverse,bold
+    ]])
+    local attrs = screen:get_default_attr_ids()
+    attrs[11] = {underline = true, reverse = true}
+    attrs[12] = {underline = true, reverse = true, bold = true}
+    meths.input_mouse('right', 'press', '', 0, 0, 4)
+    screen:expect([[
+      {1:p}opup menu test                                   |
+      {4:~  }{11: foo }{4:                                          }|
+      {4:~  }{11: bar }{4:                                          }|
+      {4:~  }{11: baz }{4:                                          }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]], attrs)
+    meths.input_mouse('right', 'release', '', 0, 0, 4)
+    screen:expect_unchanged()
+    meths.input_mouse('move', '', '', 0, 3, 6)
+    screen:expect([[
+      {1:p}opup menu test                                   |
+      {4:~  }{11: foo }{4:                                          }|
+      {4:~  }{11: bar }{4:                                          }|
+      {4:~  }{12: baz }{4:                                          }|
+      {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]], attrs)
+    meths.input_mouse('left', 'press', '', 0, 2, 6)
+    screen:expect([[
+      {1:p}opup menu test                                   |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name] [+]                                     }|
+      :let g:menustr = 'bar'                            |
+      {3:-- TERMINAL --}                                    |
+    ]], attrs)
+    meths.input_mouse('left', 'release', '', 0, 2, 6)
+    screen:expect_unchanged()
   end)
 
   it('paste: Insert mode', function()

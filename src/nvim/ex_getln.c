@@ -1,9 +1,7 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
-/*
- * ex_getln.c: Functions for entering and editing an Ex command line.
- */
+// ex_getln.c: Functions for entering and editing an Ex command line.
 
 #include <assert.h>
 #include <inttypes.h>
@@ -255,7 +253,7 @@ static bool do_incsearch_highlighting(int firstc, int *search_delim, incsearch_s
   exarg_T ea = {
     .line1 = 1,
     .line2 = 1,
-    .cmd = (char *)ccline.cmdbuff,
+    .cmd = ccline.cmdbuff,
     .addr_type = ADDR_LINES,
   };
 
@@ -315,7 +313,7 @@ static bool do_incsearch_highlighting(int firstc, int *search_delim, incsearch_s
   p = skipwhite(p);
   delim = (delim_optional && vim_isIDc(*p)) ? ' ' : *p++;
   *search_delim = delim;
-  end = (char *)skip_regexp((char_u *)p, delim, p_magic, NULL);
+  end = skip_regexp(p, delim, p_magic, NULL);
 
   use_last_pat = end == p && *end == delim;
   if (end == p && !use_last_pat) {
@@ -328,7 +326,7 @@ static bool do_incsearch_highlighting(int firstc, int *search_delim, incsearch_s
     int empty;
 
     *end = NUL;
-    empty = empty_pattern((char_u *)p);
+    empty = empty_pattern(p);
     *end = c;
     if (empty) {
       goto theend;
@@ -336,7 +334,7 @@ static bool do_incsearch_highlighting(int firstc, int *search_delim, incsearch_s
   }
 
   // found a non-empty pattern or //
-  *skiplen = (int)((char_u *)p - ccline.cmdbuff);
+  *skiplen = (int)(p - ccline.cmdbuff);
   *patlen = (int)(end - p);
 
   // parse the address range
@@ -409,7 +407,7 @@ static void may_do_incsearch_highlighting(int firstc, long count, incsearch_stat
   int found;  // do_search() result
 
   // Use the previous pattern for ":s//".
-  next_char = ccline.cmdbuff[skiplen + patlen];
+  next_char = (char_u)ccline.cmdbuff[skiplen + patlen];
   use_last_pat = patlen == 0 && skiplen > 0
                  && ccline.cmdbuff[skiplen - 1] == next_char;
 
@@ -436,9 +434,9 @@ static void may_do_incsearch_highlighting(int firstc, long count, incsearch_stat
       .sa_tm = &tm,
     };
     found = do_search(NULL, firstc == ':' ? '/' : firstc, search_delim,
-                      ccline.cmdbuff + skiplen, count,
+                      (char_u *)ccline.cmdbuff + skiplen, count,
                       search_flags, &sia);
-    ccline.cmdbuff[skiplen + patlen] = next_char;
+    ccline.cmdbuff[skiplen + patlen] = (char)next_char;
     emsg_off--;
     if (curwin->w_cursor.lnum < search_first_line
         || curwin->w_cursor.lnum > search_last_line) {
@@ -487,13 +485,13 @@ static void may_do_incsearch_highlighting(int firstc, long count, incsearch_stat
   // Disable 'hlsearch' highlighting if the pattern matches
   // everything. Avoids a flash when typing "foo\|".
   if (!use_last_pat) {
-    next_char = ccline.cmdbuff[skiplen + patlen];
+    next_char = (char_u)ccline.cmdbuff[skiplen + patlen];
     ccline.cmdbuff[skiplen + patlen] = NUL;
     if (empty_pattern(ccline.cmdbuff) && !no_hlsearch) {
       redraw_all_later(UPD_SOME_VALID);
       set_no_hlsearch(true);
     }
-    ccline.cmdbuff[skiplen + patlen] = next_char;
+    ccline.cmdbuff[skiplen + patlen] = (char)next_char;
   }
 
   validate_cursor();
@@ -548,7 +546,7 @@ static int may_add_char_to_search(int firstc, int *c, incsearch_state_T *s)
       // command line has no uppercase characters, convert
       // the character to lowercase
       if (p_ic && p_scs
-          && !pat_has_uppercase(ccline.cmdbuff + skiplen)) {
+          && !pat_has_uppercase((char_u *)ccline.cmdbuff + skiplen)) {
         *c = mb_tolower(*c);
       }
       if (*c == search_delim
@@ -724,7 +722,7 @@ static uint8_t *command_line_enter(int firstc, long count, int indent, bool init
 
   if (ccline.input_fn) {
     s->xpc.xp_context = ccline.xp_context;
-    s->xpc.xp_pattern = (char *)ccline.cmdbuff;
+    s->xpc.xp_pattern = ccline.cmdbuff;
     s->xpc.xp_arg = (char *)ccline.xp_arg;
   }
 
@@ -854,7 +852,7 @@ static uint8_t *command_line_enter(int firstc, long count, int indent, bool init
                      s->histype == HIST_SEARCH ? s->firstc : NUL);
       if (s->firstc == ':') {
         xfree(new_last_cmdline);
-        new_last_cmdline = vim_strsave(ccline.cmdbuff);
+        new_last_cmdline = xstrdup(ccline.cmdbuff);
       }
     }
 
@@ -897,7 +895,7 @@ theend:
   xfree(ccline.last_colors.cmdbuff);
   kv_destroy(ccline.last_colors.colors);
 
-  char_u *p = ccline.cmdbuff;
+  char_u *p = (char_u *)ccline.cmdbuff;
 
   if (ui_has(kUICmdline)) {
     ui_call_cmdline_hide(ccline.level);
@@ -918,7 +916,7 @@ theend:
     // Restore cmdheight
     set_option_value("ch", 0L, NULL, 0);
     // Redraw is needed for command line completion
-    redraw_all_later(UPD_CLEAR);
+    redraw_all_later(UPD_NOT_VALID);
 
     made_cmdheight_nonzero = false;
   }
@@ -1339,7 +1337,7 @@ static int may_do_command_line_next_incsearch(int firstc, long count, incsearch_
     skiplen = 0;
     patlen = (int)STRLEN(pat);
   } else {
-    pat = ccline.cmdbuff + skiplen;
+    pat = (char_u *)ccline.cmdbuff + skiplen;
   }
 
   if (next_match) {
@@ -1483,24 +1481,24 @@ static int command_line_handle_key(CommandLineState *s)
     }
 
     if (s->c == K_DEL) {
-      ccline.cmdpos += mb_off_next(ccline.cmdbuff,
-                                   ccline.cmdbuff + ccline.cmdpos);
+      ccline.cmdpos += mb_off_next((char_u *)ccline.cmdbuff,
+                                   (char_u *)ccline.cmdbuff + ccline.cmdpos);
     }
 
     if (ccline.cmdpos > 0) {
       char_u *p;
 
       int j = ccline.cmdpos;
-      p = mb_prevptr(ccline.cmdbuff, ccline.cmdbuff + j);
+      p = mb_prevptr((char_u *)ccline.cmdbuff, (char_u *)ccline.cmdbuff + j);
 
       if (s->c == Ctrl_W) {
-        while (p > ccline.cmdbuff && ascii_isspace(*p)) {
-          p = mb_prevptr(ccline.cmdbuff, p);
+        while (p > (char_u *)ccline.cmdbuff && ascii_isspace(*p)) {
+          p = mb_prevptr((char_u *)ccline.cmdbuff, p);
         }
 
         int i = mb_get_class(p);
-        while (p > ccline.cmdbuff && mb_get_class(p) == i) {
-          p = mb_prevptr(ccline.cmdbuff, p);
+        while (p > (char_u *)ccline.cmdbuff && mb_get_class(p) == i) {
+          p = mb_prevptr((char_u *)ccline.cmdbuff, p);
         }
 
         if (mb_get_class(p) != i) {
@@ -1508,7 +1506,7 @@ static int command_line_handle_key(CommandLineState *s)
         }
       }
 
-      ccline.cmdpos = (int)(p - ccline.cmdbuff);
+      ccline.cmdpos = (int)(p - (char_u *)ccline.cmdbuff);
       ccline.cmdlen -= j - ccline.cmdpos;
       int i = ccline.cmdpos;
 
@@ -1688,7 +1686,7 @@ static int command_line_handle_key(CommandLineState *s)
       }
 
       ccline.cmdspos += cells;
-      ccline.cmdpos += utfc_ptr2len((char *)ccline.cmdbuff + ccline.cmdpos);
+      ccline.cmdpos += utfc_ptr2len(ccline.cmdbuff + ccline.cmdpos);
     } while ((s->c == K_S_RIGHT || s->c == K_C_RIGHT
               || (mod_mask & (MOD_MASK_SHIFT|MOD_MASK_CTRL)))
              && ccline.cmdbuff[ccline.cmdpos] != ' ');
@@ -1761,7 +1759,7 @@ static int command_line_handle_key(CommandLineState *s)
 
       // Count ">" for double-wide char that doesn't fit.
       correct_screencol(ccline.cmdpos, cells, &ccline.cmdspos);
-      ccline.cmdpos += utfc_ptr2len((char *)ccline.cmdbuff + ccline.cmdpos) - 1;
+      ccline.cmdpos += utfc_ptr2len(ccline.cmdbuff + ccline.cmdpos) - 1;
       ccline.cmdspos += cells;
     }
     return command_line_not_changed(s);
@@ -1855,7 +1853,7 @@ static int command_line_handle_key(CommandLineState *s)
 
     // save current command string so it can be restored later
     if (s->lookfor == NULL) {
-      s->lookfor = vim_strsave(ccline.cmdbuff);
+      s->lookfor = vim_strsave((char_u *)ccline.cmdbuff);
       s->lookfor[ccline.cmdpos] = NUL;
     }
 
@@ -1874,7 +1872,7 @@ static int command_line_handle_key(CommandLineState *s)
       if (s->hiscnt == get_hislen()) {
         p = s->lookfor;                  // back to the old one
       } else {
-        p = get_histentry(s->histype)[s->hiscnt].hisstr;
+        p = (char_u *)get_histentry(s->histype)[s->hiscnt].hisstr;
       }
 
       if (s->histype == HIST_SEARCH
@@ -1892,7 +1890,7 @@ static int command_line_handle_key(CommandLineState *s)
             if (p[j] == old_firstc
                 && (j == 0 || p[j - 1] != '\\')) {
               if (i > 0) {
-                ccline.cmdbuff[len] = (char_u)s->firstc;
+                ccline.cmdbuff[len] = (char)s->firstc;
               }
             } else {
               // Escape new sep, unless it is already
@@ -1906,7 +1904,7 @@ static int command_line_handle_key(CommandLineState *s)
               }
 
               if (i > 0) {
-                ccline.cmdbuff[len] = p[j];
+                ccline.cmdbuff[len] = (char)p[j];
               }
             }
             len++;
@@ -2027,7 +2025,7 @@ static int command_line_not_changed(CommandLineState *s)
 
 /// Guess that the pattern matches everything.  Only finds specific cases, such
 /// as a trailing \|, which can happen while typing a pattern.
-static int empty_pattern(char_u *p)
+static int empty_pattern(char *p)
 {
   size_t n = STRLEN(p);
 
@@ -2281,7 +2279,7 @@ static bool cmdpreview_may_show(CommandLineState *s)
   CmdParseInfo cmdinfo;
   // Copy the command line so we can modify it.
   int cmdpreview_type = 0;
-  char *cmdline = xstrdup((char *)ccline.cmdbuff);
+  char *cmdline = xstrdup(ccline.cmdbuff);
   char *errormsg = NULL;
   emsg_off++;  // Block errors when parsing the command line, and don't update v:errmsg
   if (!parse_cmdline(cmdline, &ea, &cmdinfo, &errormsg)) {
@@ -2373,9 +2371,9 @@ end:
   return cmdpreview_type != 0;
 }
 
-static int command_line_changed(CommandLineState *s)
+/// Trigger CmdlineChanged autocommands.
+static void do_autocmd_cmdlinechanged(int firstc)
 {
-  // Trigger CmdlineChanged autocommands.
   if (has_event(EVENT_CMDLINECHANGED)) {
     TryState tstate;
     Error err = ERROR_INIT;
@@ -2383,7 +2381,7 @@ static int command_line_changed(CommandLineState *s)
     dict_T *dict = get_v_event(&save_v_event);
 
     char firstcbuf[2];
-    firstcbuf[0] = (char)(s->firstc > 0 ? s->firstc : '-');
+    firstcbuf[0] = (char)firstc;
     firstcbuf[1] = 0;
 
     // set v:event to a dictionary with information about the commandline
@@ -2403,6 +2401,12 @@ static int command_line_changed(CommandLineState *s)
       redrawcmd();
     }
   }
+}
+
+static int command_line_changed(CommandLineState *s)
+{
+  // Trigger CmdlineChanged autocommands.
+  do_autocmd_cmdlinechanged(s->firstc > 0 ? s->firstc : '-');
 
   if (s->firstc == ':'
       && current_sctx.sc_sid == 0    // only if interactive
@@ -2597,10 +2601,8 @@ bool text_locked(void)
   return textlock != 0;
 }
 
-/*
- * Give an error message for a command that isn't allowed while the cmdline
- * window is open or editing the cmdline in another way.
- */
+// Give an error message for a command that isn't allowed while the cmdline
+// window is open or editing the cmdline in another way.
 void text_locked_msg(void)
 {
   emsg(_(get_text_locked_msg()));
@@ -2653,7 +2655,7 @@ static int cmdline_charsize(int idx)
   if (cmdline_star > 0) {           // showing '*', always 1 position
     return 1;
   }
-  return ptr2cells((char *)ccline.cmdbuff + idx);
+  return ptr2cells(ccline.cmdbuff + idx);
 }
 
 /// Compute the offset of the cursor on the command line for the prompt and
@@ -2679,7 +2681,7 @@ int cmd_screencol(int bytepos)
   }
 
   for (int i = 0; i < ccline.cmdlen && i < bytepos;
-       i += utfc_ptr2len((char *)ccline.cmdbuff + i)) {
+       i += utfc_ptr2len(ccline.cmdbuff + i)) {
     int c = cmdline_charsize(i);
     // Count ">" for double-wide multi-byte char that doesn't fit.
     correct_screencol(i, c, &col);
@@ -2698,8 +2700,8 @@ int cmd_screencol(int bytepos)
 /// character that doesn't fit, so that a ">" must be displayed.
 static void correct_screencol(int idx, int cells, int *col)
 {
-  if (utfc_ptr2len((char *)ccline.cmdbuff + idx) > 1
-      && utf_ptr2cells((char *)ccline.cmdbuff + idx) > 1
+  if (utfc_ptr2len(ccline.cmdbuff + idx) > 1
+      && utf_ptr2cells(ccline.cmdbuff + idx) > 1
       && (*col) % Columns + cells > Columns) {
     (*col)++;
   }
@@ -2732,15 +2734,11 @@ bool cmdline_at_end(void)
   return (ccline.cmdpos >= ccline.cmdlen);
 }
 
-/*
- * Allocate a new command line buffer.
- * Assigns the new buffer to ccline.cmdbuff and ccline.cmdbufflen.
- */
+// Allocate a new command line buffer.
+// Assigns the new buffer to ccline.cmdbuff and ccline.cmdbufflen.
 static void alloc_cmdbuff(int len)
 {
-  /*
-   * give some extra space to avoid having to allocate all the time
-   */
+  // give some extra space to avoid having to allocate all the time
   if (len < 80) {
     len = 100;
   } else {
@@ -2758,7 +2756,7 @@ void realloc_cmdbuff(int len)
     return;  // no need to resize
   }
 
-  char_u *p = ccline.cmdbuff;
+  char_u *p = (char_u *)ccline.cmdbuff;
   alloc_cmdbuff(len);                   // will get some more
   // There isn't always a NUL after the command, but it may need to be
   // there, thus copy up to the NUL and add a NUL.
@@ -2775,7 +2773,7 @@ void realloc_cmdbuff(int len)
     // If xp_pattern points inside the old cmdbuff it needs to be adjusted
     // to point into the newly allocated memory.
     if (i >= 0 && i <= ccline.cmdlen) {
-      ccline.xpc->xp_pattern = (char *)ccline.cmdbuff + i;
+      ccline.xpc->xp_pattern = ccline.cmdbuff + i;
     }
   }
 }
@@ -2898,7 +2896,7 @@ static bool color_cmdline(CmdlineInfo *colored_ccline)
   bool arg_allocated = false;
   typval_T arg = {
     .v_type = VAR_STRING,
-    .vval.v_string = (char *)colored_ccline->cmdbuff,
+    .vval.v_string = colored_ccline->cmdbuff,
   };
   typval_T tv = { .v_type = VAR_UNKNOWN };
 
@@ -3082,10 +3080,8 @@ color_cmdline_error:
 #undef PRINT_ERRMSG
 }
 
-/*
- * Draw part of the cmdline at the current cursor position.  But draw stars
- * when cmdline_star is true.
- */
+// Draw part of the cmdline at the current cursor position.  But draw stars
+// when cmdline_star is true.
 static void draw_cmdline(int start, int len)
 {
   if (!color_cmdline(&ccline)) {
@@ -3101,16 +3097,16 @@ static void draw_cmdline(int start, int len)
   if (cmdline_star > 0) {
     for (int i = 0; i < len; i++) {
       msg_putchar('*');
-      i += utfc_ptr2len((char *)ccline.cmdbuff + start + i) - 1;
+      i += utfc_ptr2len(ccline.cmdbuff + start + i) - 1;
     }
   } else if (p_arshape && !p_tbidi && len > 0) {
     bool do_arabicshape = false;
     int mb_l;
     for (int i = start; i < start + len; i += mb_l) {
-      char_u *p = ccline.cmdbuff + i;
+      char_u *p = (char_u *)ccline.cmdbuff + i;
       int u8cc[MAX_MCO];
       int u8c = utfc_ptr2char_len(p, u8cc, start + len - i);
-      mb_l = utfc_ptr2len_len(p, start + len - i);
+      mb_l = utfc_ptr2len_len((char *)p, start + len - i);
       if (ARABIC_CHAR(u8c)) {
         do_arabicshape = true;
         break;
@@ -3134,7 +3130,7 @@ static void draw_cmdline(int start, int len)
     }
 
     int newlen = 0;
-    if (utf_iscomposing(utf_ptr2char((char *)ccline.cmdbuff + start))) {
+    if (utf_iscomposing(utf_ptr2char(ccline.cmdbuff + start))) {
       // Prepend a space to draw the leading composing char on.
       arshape_buf[0] = ' ';
       newlen = 1;
@@ -3143,10 +3139,10 @@ static void draw_cmdline(int start, int len)
     int prev_c = 0;
     int prev_c1 = 0;
     for (int i = start; i < start + len; i += mb_l) {
-      char_u *p = ccline.cmdbuff + i;
+      char_u *p = (char_u *)ccline.cmdbuff + i;
       int u8cc[MAX_MCO];
       int u8c = utfc_ptr2char_len(p, u8cc, start + len - i);
-      mb_l = utfc_ptr2len_len(p, start + len - i);
+      mb_l = utfc_ptr2len_len((char *)p, start + len - i);
       if (ARABIC_CHAR(u8c)) {
         int pc;
         int pc1 = 0;
@@ -3192,7 +3188,7 @@ static void draw_cmdline(int start, int len)
       }
     }
 
-    msg_outtrans_len((char_u *)arshape_buf, newlen);
+    msg_outtrans_len(arshape_buf, newlen);
   } else {
 draw_cmdline_no_arabicshape:
     if (kv_size(ccline.last_colors.colors)) {
@@ -3219,7 +3215,7 @@ static void ui_ext_cmdline_show(CmdlineInfo *line)
   if (cmdline_star) {
     content = arena_array(&arena, 1);
     size_t len = 0;
-    for (char_u *p = ccline.cmdbuff; *p; MB_PTR_ADV(p)) {
+    for (char_u *p = (char_u *)ccline.cmdbuff; *p; MB_PTR_ADV(p)) {
       len++;
     }
     char *buf = arena_alloc(&arena, len, false);
@@ -3336,11 +3332,9 @@ void cmdline_ui_flush(void)
   }
 }
 
-/*
- * Put a character on the command line.  Shifts the following text to the
- * right when "shift" is true.  Used for CTRL-V, CTRL-K, etc.
- * "c" must be printable (fit in one display cell)!
- */
+// Put a character on the command line.  Shifts the following text to the
+// right when "shift" is true.  Used for CTRL-V, CTRL-K, etc.
+// "c" must be printable (fit in one display cell)!
 void putcmdline(char c, int shift)
 {
   if (cmd_silent) {
@@ -3374,7 +3368,7 @@ void unputcmdline(void)
   if (ccline.cmdlen == ccline.cmdpos && !ui_has(kUICmdline)) {
     msg_putchar(' ');
   } else {
-    draw_cmdline(ccline.cmdpos, utfc_ptr2len((char *)ccline.cmdbuff + ccline.cmdpos));
+    draw_cmdline(ccline.cmdpos, utfc_ptr2len(ccline.cmdbuff + ccline.cmdpos));
   }
   msg_no_more = false;
   cursorcmd();
@@ -3382,14 +3376,12 @@ void unputcmdline(void)
   ui_cursor_shape();
 }
 
-/*
- * Put the given string, of the given length, onto the command line.
- * If len is -1, then STRLEN() is used to calculate the length.
- * If 'redraw' is true then the new part of the command line, and the remaining
- * part will be redrawn, otherwise it will not.  If this function is called
- * twice in a row, then 'redraw' should be false and redrawcmd() should be
- * called afterwards.
- */
+// Put the given string, of the given length, onto the command line.
+// If len is -1, then STRLEN() is used to calculate the length.
+// If 'redraw' is true then the new part of the command line, and the remaining
+// part will be redrawn, otherwise it will not.  If this function is called
+// twice in a row, then 'redraw' should be false and redrawcmd() should be
+// called afterwards.
 void put_on_cmdline(char_u *str, int len, int redraw)
 {
   int i;
@@ -3416,7 +3408,7 @@ void put_on_cmdline(char_u *str, int len, int redraw)
     // Count nr of bytes in cmdline that are overwritten by these
     // characters.
     for (i = ccline.cmdpos; i < ccline.cmdlen && m > 0;
-         i += utfc_ptr2len((char *)ccline.cmdbuff + i)) {
+         i += utfc_ptr2len(ccline.cmdbuff + i)) {
       m--;
     }
     if (i < ccline.cmdlen) {
@@ -3434,17 +3426,17 @@ void put_on_cmdline(char_u *str, int len, int redraw)
     // When the inserted text starts with a composing character,
     // backup to the character before it.  There could be two of them.
     i = 0;
-    c = utf_ptr2char((char *)ccline.cmdbuff + ccline.cmdpos);
+    c = utf_ptr2char(ccline.cmdbuff + ccline.cmdpos);
     while (ccline.cmdpos > 0 && utf_iscomposing(c)) {
       i = utf_head_off(ccline.cmdbuff, ccline.cmdbuff + ccline.cmdpos - 1) + 1;
       ccline.cmdpos -= i;
       len += i;
-      c = utf_ptr2char((char *)ccline.cmdbuff + ccline.cmdpos);
+      c = utf_ptr2char(ccline.cmdbuff + ccline.cmdpos);
     }
     if (i == 0 && ccline.cmdpos > 0 && arabic_maycombine(c)) {
       // Check the previous character for Arabic combining pair.
       i = utf_head_off(ccline.cmdbuff, ccline.cmdbuff + ccline.cmdpos - 1) + 1;
-      if (arabic_combine(utf_ptr2char((char *)ccline.cmdbuff + ccline.cmdpos - i), c)) {
+      if (arabic_combine(utf_ptr2char(ccline.cmdbuff + ccline.cmdpos - i), c)) {
         ccline.cmdpos -= i;
         len += i;
       } else {
@@ -3453,7 +3445,7 @@ void put_on_cmdline(char_u *str, int len, int redraw)
     }
     if (i != 0) {
       // Also backup the cursor position.
-      i = ptr2cells((char *)ccline.cmdbuff + ccline.cmdpos);
+      i = ptr2cells(ccline.cmdbuff + ccline.cmdpos);
       ccline.cmdspos -= i;
       msg_col -= i;
       if (msg_col < 0) {
@@ -3492,7 +3484,7 @@ void put_on_cmdline(char_u *str, int len, int redraw)
     if (ccline.cmdspos + c < m) {
       ccline.cmdspos += c;
     }
-    c = utfc_ptr2len((char *)ccline.cmdbuff + ccline.cmdpos) - 1;
+    c = utfc_ptr2len(ccline.cmdbuff + ccline.cmdpos) - 1;
     if (c > len - i - 1) {
       c = len - i - 1;
     }
@@ -3574,14 +3566,14 @@ static bool cmdline_paste(int regname, bool literally, bool remcr)
       int len;
 
       // Locate start of last word in the cmd buffer.
-      for (w = ccline.cmdbuff + ccline.cmdpos; w > ccline.cmdbuff;) {
-        len = utf_head_off(ccline.cmdbuff, w - 1) + 1;
+      for (w = (char_u *)ccline.cmdbuff + ccline.cmdpos; w > (char_u *)ccline.cmdbuff;) {
+        len = utf_head_off(ccline.cmdbuff, (char *)w - 1) + 1;
         if (!vim_iswordc(utf_ptr2char((char *)w - len))) {
           break;
         }
         w -= len;
       }
-      len = (int)((ccline.cmdbuff + ccline.cmdpos) - w);
+      len = (int)(((char_u *)ccline.cmdbuff + ccline.cmdpos) - w);
       if (p_ic ? STRNICMP(w, arg, len) == 0 : STRNCMP(w, arg, len) == 0) {
         p += len;
       }
@@ -3597,12 +3589,10 @@ static bool cmdline_paste(int regname, bool literally, bool remcr)
   return cmdline_paste_reg(regname, literally, remcr);
 }
 
-/*
- * Put a string on the command line.
- * When "literally" is true, insert literally.
- * When "literally" is false, insert as typed, but don't leave the command
- * line.
- */
+// Put a string on the command line.
+// When "literally" is true, insert literally.
+// When "literally" is false, insert as typed, but don't leave the command
+// line.
 void cmdline_paste_str(char_u *s, int literally)
 {
   int c, cv;
@@ -3669,9 +3659,7 @@ static void redrawcmdprompt(void)
   }
 }
 
-/*
- * Redraw what is currently on the command line.
- */
+// Redraw what is currently on the command line.
 void redrawcmd(void)
 {
   if (cmd_silent) {
@@ -3708,10 +3696,8 @@ void redrawcmd(void)
     putcmdline(ccline.special_char, ccline.special_shift);
   }
 
-  /*
-   * An emsg() before may have set msg_scroll. This is used in normal mode,
-   * in cmdline mode we can reset them now.
-   */
+  // An emsg() before may have set msg_scroll. This is used in normal mode,
+  // in cmdline mode we can reset them now.
   msg_scroll = false;           // next message overwrites cmdline
 
   // Typing ':' at the more prompt may set skip_redraw.  We don't want this
@@ -3788,12 +3774,10 @@ void gotocmdline(bool clr)
   cmd_cursor_goto(cmdline_row, 0);
 }
 
-/*
- * Check the word in front of the cursor for an abbreviation.
- * Called when the non-id character "c" has been entered.
- * When an abbreviation is recognized it is removed from the text with
- * backspaces and the replacement string is inserted, followed by "c".
- */
+// Check the word in front of the cursor for an abbreviation.
+// Called when the non-id character "c" has been entered.
+// When an abbreviation is recognized it is removed from the text with
+// backspaces and the replacement string is inserted, followed by "c".
 static int ccheck_abbr(int c)
 {
   int spos = 0;
@@ -3817,7 +3801,7 @@ static int ccheck_abbr(int c)
     spos = 0;
   }
 
-  return check_abbr(c, ccline.cmdbuff, ccline.cmdpos, spos);
+  return check_abbr(c, (char_u *)ccline.cmdbuff, ccline.cmdpos, spos);
 }
 
 /// Escape special characters in "fname", depending on "what":
@@ -3927,8 +3911,42 @@ static CmdlineInfo *get_ccline_ptr(void)
   }
 }
 
+/// Get the current command-line type.
+/// Returns ':' or '/' or '?' or '@' or '>' or '-'
+/// Only works when the command line is being edited.
+/// Returns NUL when something is wrong.
+static int get_cmdline_type(void)
+{
+  CmdlineInfo *p = get_ccline_ptr();
+
+  if (p == NULL) {
+    return NUL;
+  }
+  if (p->cmdfirstc == NUL) {
+    return (p->input_fn) ? '@' : '-';
+  }
+  return p->cmdfirstc;
+}
+
+/// Get the current command line in allocated memory.
+/// Only works when the command line is being edited.
+///
+/// @return  NULL when something is wrong.
+static char *get_cmdline_str(void)
+{
+  if (cmdline_star > 0) {
+    return NULL;
+  }
+  CmdlineInfo *p = get_ccline_ptr();
+
+  if (p == NULL) {
+    return NULL;
+  }
+  return xstrnsave(p->cmdbuff, (size_t)p->cmdlen);
+}
+
 /// Get the current command-line completion type.
-char_u *get_cmdline_completion(void)
+static char *get_cmdline_completion(void)
 {
   if (cmdline_star > 0) {
     return NULL;
@@ -3939,64 +3957,79 @@ char_u *get_cmdline_completion(void)
     set_expand_context(p->xpc);
     char *cmd_compl = get_user_cmd_complete(p->xpc, p->xpc->xp_context);
     if (cmd_compl != NULL) {
-      return vim_strsave((char_u *)cmd_compl);
+      return xstrdup(cmd_compl);
     }
   }
 
   return NULL;
 }
 
-/*
- * Get the current command line in allocated memory.
- * Only works when the command line is being edited.
- * Returns NULL when something is wrong.
- */
-char_u *get_cmdline_str(void)
+/// "getcmdcompltype()" function
+void f_getcmdcompltype(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  if (cmdline_star > 0) {
-    return NULL;
-  }
+  rettv->v_type = VAR_STRING;
+  rettv->vval.v_string = get_cmdline_completion();
+}
+
+/// "getcmdline()" function
+void f_getcmdline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  rettv->v_type = VAR_STRING;
+  rettv->vval.v_string = get_cmdline_str();
+}
+
+/// "getcmdpos()" function
+void f_getcmdpos(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  CmdlineInfo *p = get_ccline_ptr();
+  rettv->vval.v_number = p != NULL ? p->cmdpos + 1 : 0;
+}
+
+/// "getcmdscreenpos()" function
+void f_getcmdscreenpos(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  CmdlineInfo *p = get_ccline_ptr();
+  rettv->vval.v_number = p != NULL ? p->cmdspos + 1 : 0;
+}
+
+/// "getcmdtype()" function
+void f_getcmdtype(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  rettv->v_type = VAR_STRING;
+  rettv->vval.v_string = xmallocz(1);
+  rettv->vval.v_string[0] = (char)get_cmdline_type();
+}
+
+/// Set the command line str to "str".
+/// @return  1 when failed, 0 when OK.
+static int set_cmdline_str(const char *str, int pos)
+{
   CmdlineInfo *p = get_ccline_ptr();
 
   if (p == NULL) {
-    return NULL;
+    return 1;
   }
-  return vim_strnsave(p->cmdbuff, (size_t)p->cmdlen);
+
+  int len = (int)STRLEN(str);
+  realloc_cmdbuff(len + 1);
+  p->cmdlen = len;
+  STRCPY(p->cmdbuff, str);
+
+  p->cmdpos = pos < 0 || pos > p->cmdlen ? p->cmdlen : pos;
+  new_cmdpos = p->cmdpos;
+
+  redrawcmd();
+
+  // Trigger CmdlineChanged autocommands.
+  do_autocmd_cmdlinechanged(get_cmdline_type());
+
+  return 0;
 }
 
-/*
- * Get the current command line position, counted in bytes.
- * Zero is the first position.
- * Only works when the command line is being edited.
- * Returns -1 when something is wrong.
- */
-int get_cmdline_pos(void)
-{
-  CmdlineInfo *p = get_ccline_ptr();
-
-  if (p == NULL) {
-    return -1;
-  }
-  return p->cmdpos;
-}
-
-/// Get the command line cursor screen position.
-int get_cmdline_screen_pos(void)
-{
-  CmdlineInfo *p = get_ccline_ptr();
-
-  if (p == NULL) {
-    return -1;
-  }
-  return p->cmdspos;
-}
-
-/*
- * Set the command line byte position to "pos".  Zero is the first position.
- * Only works when the command line is being edited.
- * Returns 1 when failed, 0 when OK.
- */
-int set_cmdline_pos(int pos)
+/// Set the command line byte position to "pos".  Zero is the first position.
+/// Only works when the command line is being edited.
+/// @return  1 when failed, 0 when OK.
+static int set_cmdline_pos(int pos)
 {
   CmdlineInfo *p = get_ccline_ptr();
 
@@ -4014,23 +4047,39 @@ int set_cmdline_pos(int pos)
   return 0;
 }
 
-/*
- * Get the current command-line type.
- * Returns ':' or '/' or '?' or '@' or '>' or '-'
- * Only works when the command line is being edited.
- * Returns NUL when something is wrong.
- */
-int get_cmdline_type(void)
+/// "setcmdline()" function
+void f_setcmdline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  CmdlineInfo *p = get_ccline_ptr();
+  if (argvars[0].v_type != VAR_STRING || argvars[0].vval.v_string == NULL) {
+    emsg(_(e_stringreq));
+    return;
+  }
 
-  if (p == NULL) {
-    return NUL;
+  int pos = -1;
+  if (argvars[1].v_type != VAR_UNKNOWN) {
+    bool error = false;
+
+    pos = (int)tv_get_number_chk(&argvars[1], &error) - 1;
+    if (error) {
+      return;
+    }
+    if (pos < 0) {
+      emsg(_(e_positive));
+      return;
+    }
   }
-  if (p->cmdfirstc == NUL) {
-    return (p->input_fn) ? '@' : '-';
+
+  rettv->vval.v_number = set_cmdline_str(argvars[0].vval.v_string, pos);
+}
+
+/// "setcmdpos()" function
+void f_setcmdpos(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  const int pos = (int)tv_get_number(&argvars[0]) - 1;
+
+  if (pos >= 0) {
+    rettv->vval.v_number = set_cmdline_pos(pos);
   }
-  return p->cmdfirstc;
 }
 
 /// Return the first character of the current command line.
@@ -4055,7 +4104,7 @@ int get_list_range(char **str, int *num1, int *num2)
 
   *str = skipwhite((*str));
   if (**str == '-' || ascii_isdigit(**str)) {  // parse "from" part of range
-    vim_str2nr((char_u *)(*str), NULL, &len, 0, &num, NULL, 0, false);
+    vim_str2nr(*str, NULL, &len, 0, &num, NULL, 0, false);
     *str += len;
     *num1 = (int)num;
     first = true;
@@ -4063,7 +4112,7 @@ int get_list_range(char **str, int *num1, int *num2)
   *str = skipwhite((*str));
   if (**str == ',') {                   // parse "to" part of range
     *str = skipwhite((*str) + 1);
-    vim_str2nr((char_u *)(*str), NULL, &len, 0, &num, NULL, 0, false);
+    vim_str2nr(*str, NULL, &len, 0, &num, NULL, 0, false);
     if (len > 0) {
       *num2 = (int)num;
       *str = skipwhite((*str) + len);
@@ -4199,7 +4248,7 @@ static int open_cmdwin(void)
           i = 0;
         }
         if (get_histentry(histtype)[i].hisstr != NULL) {
-          ml_append(lnum++, (char *)get_histentry(histtype)[i].hisstr, (colnr_T)0, false);
+          ml_append(lnum++, get_histentry(histtype)[i].hisstr, (colnr_T)0, false);
         }
       } while (i != *get_hisidx(histtype));
     }
@@ -4207,7 +4256,7 @@ static int open_cmdwin(void)
 
   // Replace the empty last line with the current command-line and put the
   // cursor there.
-  ml_replace(curbuf->b_ml.ml_line_count, (char *)ccline.cmdbuff, true);
+  ml_replace(curbuf->b_ml.ml_line_count, ccline.cmdbuff, true);
   curwin->w_cursor.lnum = curbuf->b_ml.ml_line_count;
   curwin->w_cursor.col = ccline.cmdpos;
   changed_line_abv_curs();
@@ -4239,9 +4288,7 @@ static int open_cmdwin(void)
   RedrawingDisabled = 0;
   int save_count = save_batch_count();
 
-  /*
-   * Call the main loop until <CR> or CTRL-C is typed.
-   */
+  // Call the main loop until <CR> or CTRL-C is typed.
   normal_enter(true, false);
 
   RedrawingDisabled = i;
@@ -4277,7 +4324,7 @@ static int open_cmdwin(void)
 
       if (histtype == HIST_CMD) {
         // Execute the command directly.
-        ccline.cmdbuff = (char_u *)xstrdup(p);
+        ccline.cmdbuff = xstrdup(p);
         cmdwin_result = CAR;
       } else {
         // First need to cancel what we were doing.
@@ -4291,10 +4338,10 @@ static int open_cmdwin(void)
       // and don't modify the cmd window.
       ccline.cmdbuff = NULL;
     } else {
-      ccline.cmdbuff = vim_strsave(get_cursor_line_ptr());
+      ccline.cmdbuff = xstrdup(get_cursor_line_ptr());
     }
     if (ccline.cmdbuff == NULL) {
-      ccline.cmdbuff = vim_strsave((char_u *)"");
+      ccline.cmdbuff = xstrdup("");
       ccline.cmdlen = 0;
       ccline.cmdbufflen = 1;
       ccline.cmdpos = 0;

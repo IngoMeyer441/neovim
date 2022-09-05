@@ -198,13 +198,16 @@ void ui_refresh(void)
     ext_widgets[i] = true;
   }
 
+  UI *compositor = uis[0];
+
   bool inclusive = ui_override();
-  for (size_t i = 0; i < ui_count; i++) {
+  for (size_t i = 1; i < ui_count; i++) {
     UI *ui = uis[i];
     width = MIN(ui->width, width);
     height = MIN(ui->height, height);
     for (UIExtension j = 0; (int)j < kUIExtCount; j++) {
-      ext_widgets[j] &= (ui->ui_ext[j] || inclusive);
+      bool in_compositor = ui->composed && compositor->ui_ext[j];
+      ext_widgets[j] &= (ui->ui_ext[j] || in_compositor || inclusive);
     }
   }
 
@@ -565,7 +568,7 @@ void ui_check_mouse(void)
   // - 'a' is in 'mouse' and "c" is in MOUSE_A, or
   // - the current buffer is a help file and 'h' is in 'mouse' and we are in a
   //   normal editing mode (not at hit-return message).
-  for (char_u *p = (char_u *)p_mouse; *p; p++) {
+  for (char *p = p_mouse; *p; p++) {
     switch (*p) {
     case 'a':
       if (vim_strchr(MOUSE_A, checkfor) != NULL) {

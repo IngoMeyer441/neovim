@@ -2042,7 +2042,7 @@ void set_context_for_expression(expand_T *xp, char *arg, cmdidx_T cmdidx)
        || cmdidx == CMD_echomsg)
       && xp->xp_context == EXPAND_EXPRESSION) {
     for (;;) {
-      char *const n = (char *)skiptowhite((char_u *)arg);
+      char *const n = skiptowhite(arg);
 
       if (n == arg || ascii_iswhite_or_nul(*skipwhite(n))) {
         break;
@@ -2292,7 +2292,7 @@ int eval0(char *arg, typval_T *rettv, char **nextcmd, int evaluate)
     ret = FAIL;
   }
   if (nextcmd != NULL) {
-    *nextcmd = (char *)check_nextcmd((char_u *)p);
+    *nextcmd = check_nextcmd(p);
   }
 
   return ret;
@@ -2658,7 +2658,7 @@ static int eval5(char **arg, typval_T *rettv, int evaluate)
           tv_clear(&var2);
           return FAIL;
         }
-        p = (char *)concat_str((const char_u *)s1, (const char_u *)s2);
+        p = concat_str(s1, s2);
         tv_clear(rettv);
         rettv->v_type = VAR_STRING;
         rettv->vval.v_string = p;
@@ -2995,7 +2995,7 @@ static int eval7(char **arg, typval_T *rettv, int evaluate, int want_string)
       *arg = bp;
     } else {
       // decimal, hex or octal number
-      vim_str2nr((char_u *)(*arg), NULL, &len, STR2NR_ALL, &n, NULL, 0, true);
+      vim_str2nr(*arg, NULL, &len, STR2NR_ALL, &n, NULL, 0, true);
       if (len == 0) {
         semsg(_(e_invexpr2), *arg);
         ret = FAIL;
@@ -5858,13 +5858,8 @@ bool callback_call(Callback *const callback, const int argcount_in, typval_T *co
     break;
 
   case kCallbackLua:
-    rv = nlua_call_ref(callback->data.luaref, NULL, args, true, NULL);
-    switch (rv.type) {
-    case kObjectTypeBoolean:
-      return rv.data.boolean;
-    default:
-      return false;
-    }
+    rv = nlua_call_ref(callback->data.luaref, NULL, args, false, NULL);
+    return (rv.type == kObjectTypeBoolean && rv.data.boolean == true);
 
   case kCallbackNone:
     return false;
@@ -5985,7 +5980,7 @@ void timer_due_cb(TimeWatcher *tw, void *data)
   // Handle error message
   if (called_emsg > called_emsg_before && did_emsg) {
     timer->emsg_count++;
-    if (current_exception != NULL) {
+    if (did_throw) {
       discard_current_exception();
     }
   }
@@ -6369,7 +6364,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     }
     int len;
     if (charcol) {
-      len = mb_charlen(ml_get(pos.lnum));
+      len = mb_charlen((char_u *)ml_get(pos.lnum));
     } else {
       len = (int)STRLEN(ml_get(pos.lnum));
     }
@@ -6455,7 +6450,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     } else {
       pos.lnum = curwin->w_cursor.lnum;
       if (charcol) {
-        pos.col = (colnr_T)mb_charlen(get_cursor_line_ptr());
+        pos.col = (colnr_T)mb_charlen((char_u *)get_cursor_line_ptr());
       } else {
         pos.col = (colnr_T)STRLEN(get_cursor_line_ptr());
       }
@@ -7400,7 +7395,7 @@ hashtab_T *find_var_ht_dict(const char *name, const size_t name_len, const char 
         bool should_free;
         // should_free is ignored as script_sctx will be resolved to a fnmae
         // & new_script_item will consume it.
-        char *sc_name = (char *)get_scriptname(last_set, &should_free);
+        char *sc_name = get_scriptname(last_set, &should_free);
         new_script_item(sc_name, &current_sctx.sc_sid);
       }
     }
@@ -7527,9 +7522,9 @@ int var_item_copy(const vimconv_T *const conv, typval_T *const from, typval_T *c
     } else {
       to->v_type = VAR_STRING;
       to->v_lock = VAR_UNLOCKED;
-      if ((to->vval.v_string = (char *)string_convert((vimconv_T *)conv,
-                                                      (char_u *)from->vval.v_string,
-                                                      NULL))
+      if ((to->vval.v_string = string_convert((vimconv_T *)conv,
+                                              from->vval.v_string,
+                                              NULL))
           == NULL) {
         to->vval.v_string = xstrdup(from->vval.v_string);
       }
@@ -7639,7 +7634,7 @@ void ex_echo(exarg_T *eap)
     tv_clear(&rettv);
     arg = skipwhite(arg);
   }
-  eap->nextcmd = (char *)check_nextcmd((char_u *)arg);
+  eap->nextcmd = check_nextcmd(arg);
 
   if (eap->skip) {
     emsg_skip--;
@@ -7736,7 +7731,7 @@ void ex_execute(exarg_T *eap)
     emsg_skip--;
   }
 
-  eap->nextcmd = (char *)check_nextcmd((char_u *)arg);
+  eap->nextcmd = check_nextcmd(arg);
 }
 
 /// Skip over the name of an option: "&option", "&g:option" or "&l:option".
@@ -7980,7 +7975,7 @@ void option_last_set_msg(LastSet last_set)
 {
   if (last_set.script_ctx.sc_sid != 0) {
     bool should_free;
-    char *p = (char *)get_scriptname(last_set, &should_free);
+    char *p = get_scriptname(last_set, &should_free);
     verbose_enter();
     msg_puts(_("\n\tLast set from "));
     msg_puts(p);
@@ -8077,7 +8072,7 @@ repeat:
     }
 
     // Append a path separator to a directory.
-    if (os_isdir((char_u *)(*fnamep))) {
+    if (os_isdir(*fnamep)) {
       // Make room for one or two extra characters.
       *fnamep = xstrnsave(*fnamep, STRLEN(*fnamep) + 2);
       xfree(*bufp);          // free any allocated file name
@@ -8162,7 +8157,7 @@ repeat:
   while (src[*usedlen] == ':' && src[*usedlen + 1] == 'h') {
     valid |= VALID_HEAD;
     *usedlen += 2;
-    s = (char *)get_past_head((char_u *)(*fnamep));
+    s = get_past_head(*fnamep);
     while (tail > s && after_pathsep(s, tail)) {
       MB_PTR_BACK(*fnamep, tail);
     }
@@ -8630,7 +8625,7 @@ void invoke_prompt_callback(void)
   if (curbuf->b_prompt_callback.type == kCallbackNone) {
     return;
   }
-  char *text = (char *)ml_get(lnum);
+  char *text = ml_get(lnum);
   char *prompt = (char *)prompt_text();
   if (STRLEN(text) >= STRLEN(prompt)) {
     text += STRLEN(prompt);

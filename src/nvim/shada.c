@@ -882,10 +882,10 @@ static const void *shada_hist_iter(const void *const iter, const uint8_t history
       .data = {
         .history_item = {
           .histtype = history_type,
-          .string = (char *)hist_he.hisstr,
+          .string = hist_he.hisstr,
           .sep = (char)(history_type == HIST_SEARCH
-                         ? (char)hist_he.hisstr[STRLEN(hist_he.hisstr) + 1]
-                         : 0),
+                        ? hist_he.hisstr[STRLEN(hist_he.hisstr) + 1]
+                        : 0),
           .additional_elements = hist_he.additional_elements,
         }
       }
@@ -1008,7 +1008,7 @@ static inline void hms_to_he_array(const HistoryMergerState *const hms_p,
   HMLL_FORALL(&hms_p->hmll, cur_entry,  {
     hist->timestamp = cur_entry->data.timestamp;
     hist->hisnum = (int)(hist - hist_array) + 1;
-    hist->hisstr = (char_u *)cur_entry->data.data.history_item.string;
+    hist->hisstr = cur_entry->data.data.history_item.string;
     hist->additional_elements =
       cur_entry->data.data.history_item.additional_elements;
     hist++;
@@ -1477,7 +1477,7 @@ static char *shada_filename(const char *file)
       //     because various expansions must have already be done by the shell.
       //     If shell is not performing them then they should be done in main.c
       //     where arguments are parsed, *not here*.
-      expand_env((char_u *)file, &(NameBuff[0]), MAXPATHL);
+      expand_env((char *)file, &(NameBuff[0]), MAXPATHL);
       file = (const char *)&(NameBuff[0]);
     }
   }
@@ -3023,7 +3023,7 @@ shada_write_file_nomerge: {}
     if (tail != fname) {
       const char tail_save = *tail;
       *tail = NUL;
-      if (!os_isdir((char_u *)fname)) {
+      if (!os_isdir(fname)) {
         int ret;
         char *failed_dir;
         if ((ret = os_mkdir_recurse(fname, 0700, &failed_dir)) != 0) {
@@ -4001,7 +4001,7 @@ static bool shada_removable(const char *name)
     if (part[0] == 'r') {
       home_replace(NULL, part + 1, (char *)NameBuff, MAXPATHL, true);
       size_t n = STRLEN(NameBuff);
-      if (mb_strnicmp((char_u *)NameBuff, (char_u *)new_name, n) == 0) {
+      if (mb_strnicmp(NameBuff, new_name, n) == 0) {
         retval = true;
         break;
       }
