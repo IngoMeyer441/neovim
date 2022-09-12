@@ -651,7 +651,7 @@ static bool path_is_after(char *buf, size_t buflen)
   // "after" dir in SOME codepaths not not in ALL codepaths.
   return buflen >= 5
          && (!(buflen >= 6) || vim_ispathsep(buf[buflen - 6]))
-         && STRCMP(buf + buflen - 5, "after") == 0;
+         && strcmp(buf + buflen - 5, "after") == 0;
 }
 
 RuntimeSearchPath runtime_search_path_build(void)
@@ -1065,7 +1065,7 @@ static void add_pack_start_dir(char *fname, void *cookie)
       continue;
     }
     STRLCPY(buf, fname, MAXPATHL);
-    STRLCAT(buf, start_pat[i], sizeof buf);
+    xstrlcat(buf, start_pat[i], sizeof buf);
     if (pack_has_entries(buf)) {
       add_pack_dir_to_rtp(buf, true);
     }
@@ -2121,7 +2121,7 @@ scriptitem_T *get_current_script_id(char **fnamep, sctx_T *ret_sctx)
     // - If a script is deleted and another script is written, with a
     //   different name, the inode may be re-used.
     si = &SCRIPT_ITEM(script_sctx.sc_sid);
-    if (si->sn_name != NULL && FNAMECMP(si->sn_name, *fnamep) == 0) {
+    if (si->sn_name != NULL && path_fnamecmp(si->sn_name, *fnamep) == 0) {
       // Found it!
       break;
     }

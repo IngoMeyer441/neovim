@@ -332,7 +332,7 @@ static const char *input_cb(void *payload, uint32_t byte_index, TSPoint position
     *bytes_read = 0;
     return "";
   }
-  char *line = (char *)ml_get_buf(bp, (linenr_T)position.row + 1, false);
+  char *line = ml_get_buf(bp, (linenr_T)position.row + 1, false);
   size_t len = STRLEN(line);
   if (position.column > len) {
     *bytes_read = 0;
@@ -834,7 +834,7 @@ static int node_field(lua_State *L)
     do {
       const char *current_field = ts_tree_cursor_current_field_name(&cursor);
 
-      if (current_field != NULL && !STRCMP(field_name, current_field)) {
+      if (current_field != NULL && !strcmp(field_name, current_field)) {
         push_node(L, ts_tree_cursor_current_node(&cursor), 1);  // [table, node]
         lua_rawseti(L, -2, (int)++curr_index);
       }

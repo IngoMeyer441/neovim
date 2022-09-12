@@ -186,7 +186,7 @@ static inline void clear_hist_entry(histentry_T *hisptr)
 /// If 'move_to_front' is true, matching entry is moved to end of history.
 ///
 /// @param move_to_front  Move the entry to the front if it exists
-static int in_history(int type, char_u *str, int move_to_front, int sep)
+static int in_history(int type, char *str, int move_to_front, int sep)
 {
   int last_i = -1;
 
@@ -201,8 +201,8 @@ static int in_history(int type, char_u *str, int move_to_front, int sep)
 
     // For search history, check that the separator character matches as
     // well.
-    char_u *p = (char_u *)history[type][i].hisstr;
-    if (STRCMP(str, p) == 0
+    char *p = history[type][i].hisstr;
+    if (strcmp(str, p) == 0
         && (type != HIST_SEARCH || sep == p[STRLEN(p) + 1])) {
       if (!move_to_front) {
         return true;
@@ -217,7 +217,7 @@ static int in_history(int type, char_u *str, int move_to_front, int sep)
 
   if (last_i >= 0) {
     list_T *const list = history[type][i].additional_elements;
-    str = (char_u *)history[type][i].hisstr;
+    str = history[type][i].hisstr;
     while (i != hisidx[type]) {
       if (++i >= hislen) {
         i = 0;
@@ -227,7 +227,7 @@ static int in_history(int type, char_u *str, int move_to_front, int sep)
     }
     tv_list_unref(list);
     history[type][i].hisnum = ++hisnum[type];
-    history[type][i].hisstr = (char *)str;
+    history[type][i].hisstr = str;
     history[type][i].timestamp = os_time();
     history[type][i].additional_elements = NULL;
     return true;
@@ -304,7 +304,7 @@ void add_to_history(int histype, char *new_entry, int in_map, int sep)
     }
     last_maptick = -1;
   }
-  if (!in_history(histype, (char_u *)new_entry, true, sep)) {
+  if (!in_history(histype, new_entry, true, sep)) {
     if (++hisidx[histype] == hislen) {
       hisidx[histype] = 0;
     }
@@ -382,13 +382,13 @@ static int calc_hist_idx(int histype, int num)
 /// Get a history entry by its index.
 ///
 /// @param histype  may be one of the HIST_ values.
-static char_u *get_history_entry(int histype, int idx)
+static char *get_history_entry(int histype, int idx)
 {
   idx = calc_hist_idx(histype, idx);
   if (idx >= 0) {
-    return (char_u *)history[histype][idx].hisstr;
+    return history[histype][idx].hisstr;
   } else {
-    return (char_u *)"";
+    return "";
   }
 }
 
@@ -556,7 +556,7 @@ void f_histget(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       idx = (int)tv_get_number_chk(&argvars[1], NULL);
     }
     // -1 on type error
-    rettv->vval.v_string = (char *)vim_strsave(get_history_entry(type, idx));
+    rettv->vval.v_string = xstrdup(get_history_entry(type, idx));
   }
   rettv->v_type = VAR_STRING;
 }

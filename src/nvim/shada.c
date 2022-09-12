@@ -752,7 +752,7 @@ static int open_shada_file_for_reading(const char *const fname, ShaDaReadDef *sd
     return error;
   }
 
-  assert(STRCMP(p_enc, "utf-8") == 0);
+  assert(strcmp(p_enc, "utf-8") == 0);
 
   return 0;
 }
@@ -1053,7 +1053,7 @@ static buf_T *find_buffer(khash_t(fnamebufs) *const fname_bufs, const char *cons
   kh_key(fname_bufs, k) = xstrdup(fname);
   FOR_ALL_BUFFERS(buf) {
     if (buf->b_ffname != NULL) {
-      if (FNAMECMP(fname, buf->b_ffname) == 0) {
+      if (path_fnamecmp(fname, buf->b_ffname) == 0) {
         kh_val(fname_bufs, k) = buf;
         return buf;
       }
@@ -1238,7 +1238,7 @@ static void shada_read(ShaDaReadDef *const sd_reader, const int flags)
       // string is close to useless: you can only use it with :& or :~ and
       // that’s all because s//~ is not available until the first call to
       // regtilde. Vim was not calling this for some reason.
-      (void)(char *)regtilde((char_u *)cur_entry.data.sub_string.sub, p_magic, false);
+      (void)regtilde(cur_entry.data.sub_string.sub, p_magic, false);
       // Do not free shada entry: its allocated memory was saved above.
       break;
     case kSDItemHistoryEntry:
@@ -1313,9 +1313,9 @@ static void shada_read(ShaDaReadDef *const sd_reader, const int flags)
         MERGE_JUMPS(curwin->w_jumplistlen, curwin->w_jumplist, xfmark_T,
                     fmark.timestamp, fmark.mark, cur_entry,
                     (buf == NULL
-                       ? (jl_entry.fname != NULL
-                          && STRCMP(fm.fname, jl_entry.fname) == 0)
-                       : fm.fmark.fnum == jl_entry.fmark.fnum),
+                     ? (jl_entry.fname != NULL
+                        && strcmp(fm.fname, jl_entry.fname) == 0)
+                     : fm.fmark.fnum == jl_entry.fmark.fnum),
                     free_xfmark, SDE_TO_XFMARK, ADJUST_IDX, DUMMY_AFTERFREE);
 #undef SDE_TO_XFMARK
 #undef ADJUST_IDX
@@ -3098,7 +3098,7 @@ shada_write_file_nomerge: {}
         }
       }
 #endif
-      if (vim_rename((char_u *)tempname, (char_u *)fname) == -1) {
+      if (vim_rename(tempname, fname) == -1) {
         semsg(_(RNERR "Can't rename ShaDa file from %s to %s!"),
               tempname, fname);
       } else {

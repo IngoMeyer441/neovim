@@ -338,13 +338,13 @@ enc_alias_table[] =
   { NULL,              0 }
 };
 
-// Find encoding "name" in the list of canonical encoding names.
-// Returns -1 if not found.
-static int enc_canon_search(const char_u *name)
+/// Find encoding "name" in the list of canonical encoding names.
+/// Returns -1 if not found.
+static int enc_canon_search(const char *name)
   FUNC_ATTR_PURE
 {
   for (int i = 0; i < IDX_COUNT; i++) {
-    if (STRCMP(name, enc_canon_table[i].name) == 0) {
+    if (strcmp(name, enc_canon_table[i].name) == 0) {
       return i;
     }
   }
@@ -356,7 +356,7 @@ static int enc_canon_search(const char_u *name)
 int enc_canon_props(const char_u *name)
   FUNC_ATTR_PURE
 {
-  int i = enc_canon_search(name);
+  int i = enc_canon_search((char *)name);
   if (i >= 0) {
     return enc_canon_table[i].prop;
   } else if (STRNCMP(name, "2byte-", 6) == 0) {
@@ -379,7 +379,7 @@ int bomb_size(void)
 
   if (curbuf->b_p_bomb && !curbuf->b_p_bin) {
     if (*curbuf->b_p_fenc == NUL
-        || STRCMP(curbuf->b_p_fenc, "utf-8") == 0) {
+        || strcmp(curbuf->b_p_fenc, "utf-8") == 0) {
       n = 3;
     } else if (STRNCMP(curbuf->b_p_fenc, "ucs-2", 5) == 0
                || STRNCMP(curbuf->b_p_fenc, "utf-16", 6) == 0) {
@@ -1536,7 +1536,7 @@ void show_utf8(void)
 
   // Get the byte length of the char under the cursor, including composing
   // characters.
-  line = get_cursor_pos_ptr();
+  line = (char_u *)get_cursor_pos_ptr();
   len = utfc_ptr2len((char *)line);
   if (len == 0) {
     msg("NUL");
@@ -1891,7 +1891,7 @@ void utf_find_illegal(void)
 
   curwin->w_cursor.coladd = 0;
   for (;;) {
-    p = get_cursor_pos_ptr();
+    p = (char_u *)get_cursor_pos_ptr();
     if (vimconv.vc_type != CONV_NONE) {
       xfree(tofree);
       tofree = (char_u *)string_convert(&vimconv, (char *)p, NULL);
@@ -1908,12 +1908,12 @@ void utf_find_illegal(void)
       if (*p >= 0x80 && (len == 1
                          || utf_char2len(utf_ptr2char((char *)p)) != len)) {
         if (vimconv.vc_type == CONV_NONE) {
-          curwin->w_cursor.col += (colnr_T)(p - get_cursor_pos_ptr());
+          curwin->w_cursor.col += (colnr_T)(p - (char_u *)get_cursor_pos_ptr());
         } else {
           int l;
 
           len = (int)(p - tofree);
-          for (p = get_cursor_pos_ptr(); *p != NUL && len-- > 0; p += l) {
+          for (p = (char_u *)get_cursor_pos_ptr(); *p != NUL && len-- > 0; p += l) {
             l = utf_ptr2len((char *)p);
             curwin->w_cursor.col += l;
           }
@@ -1980,7 +1980,7 @@ void mb_check_adjust_col(void *win_)
 
   // Column 0 is always valid.
   if (oldcol != 0) {
-    char *p = (char *)ml_get_buf(win->w_buffer, win->w_cursor.lnum, false);
+    char *p = ml_get_buf(win->w_buffer, win->w_cursor.lnum, false);
     colnr_T len = (colnr_T)STRLEN(p);
 
     // Empty line or invalid column?
@@ -2114,27 +2114,27 @@ char *enc_skip(char *p)
 char *enc_canonize(char *enc)
   FUNC_ATTR_NONNULL_RET
 {
-  char_u *p, *s;
-  if (STRCMP(enc, "default") == 0) {
+  char *p, *s;
+  if (strcmp(enc, "default") == 0) {
     // Use the default encoding as found by set_init_1().
-    return (char *)vim_strsave(fenc_default);
+    return xstrdup(fenc_default);
   }
 
   // copy "enc" to allocated memory, with room for two '-'
-  char_u *r = xmalloc(STRLEN(enc) + 3);
+  char *r = xmalloc(STRLEN(enc) + 3);
   // Make it all lower case and replace '_' with '-'.
   p = r;
-  for (s = (char_u *)enc; *s != NUL; s++) {
+  for (s = enc; *s != NUL; s++) {
     if (*s == '_') {
       *p++ = '-';
     } else {
-      *p++ = (char_u)TOLOWER_ASC(*s);
+      *p++ = (char)TOLOWER_ASC(*s);
     }
   }
   *p = NUL;
 
   // Skip "2byte-" and "8bit-".
-  p = (char_u *)enc_skip((char *)r);
+  p = enc_skip(r);
 
   // Change "microsoft-cp" to "cp".  Used in some spell files.
   if (STRNCMP(p, "microsoft-cp", 12) == 0) {
@@ -2167,19 +2167,19 @@ char *enc_canonize(char *enc)
   } else if ((i = enc_alias_search(p)) >= 0) {
     // alias recognized, get canonical name
     xfree(r);
-    r = vim_strsave((char_u *)enc_canon_table[i].name);
+    r = xstrdup(enc_canon_table[i].name);
   }
-  return (char *)r;
+  return r;
 }
 
 /// Search for an encoding alias of "name".
 /// Returns -1 when not found.
-static int enc_alias_search(const char_u *name)
+static int enc_alias_search(const char *name)
 {
   int i;
 
   for (i = 0; enc_alias_table[i].name != NULL; i++) {
-    if (STRCMP(name, enc_alias_table[i].name) == 0) {
+    if (strcmp(name, enc_alias_table[i].name) == 0) {
       return enc_alias_table[i].canon;
     }
   }
@@ -2390,12 +2390,12 @@ static char_u *iconv_string(const vimconv_T *const vcp, char_u *str, size_t slen
 /// @return  FAIL when conversion is not supported, OK otherwise.
 int convert_setup(vimconv_T *vcp, char *from, char *to)
 {
-  return convert_setup_ext(vcp, (char_u *)from, true, (char_u *)to, true);
+  return convert_setup_ext(vcp, from, true, to, true);
 }
 
 /// As convert_setup(), but only when from_unicode_is_utf8 is true will all
 /// "from" unicode charsets be considered utf-8.  Same for "to".
-int convert_setup_ext(vimconv_T *vcp, char_u *from, bool from_unicode_is_utf8, char_u *to,
+int convert_setup_ext(vimconv_T *vcp, char *from, bool from_unicode_is_utf8, char *to,
                       bool to_unicode_is_utf8)
 {
   int from_prop;
@@ -2413,12 +2413,12 @@ int convert_setup_ext(vimconv_T *vcp, char_u *from, bool from_unicode_is_utf8, c
 
   // No conversion when one of the names is empty or they are equal.
   if (from == NULL || *from == NUL || to == NULL || *to == NUL
-      || STRCMP(from, to) == 0) {
+      || strcmp(from, to) == 0) {
     return OK;
   }
 
-  from_prop = enc_canon_props(from);
-  to_prop = enc_canon_props(to);
+  from_prop = enc_canon_props((char_u *)from);
+  to_prop = enc_canon_props((char_u *)to);
   if (from_unicode_is_utf8) {
     from_is_utf8 = from_prop & ENC_UNICODE;
   } else {
@@ -2448,8 +2448,8 @@ int convert_setup_ext(vimconv_T *vcp, char_u *from, bool from_unicode_is_utf8, c
 #ifdef HAVE_ICONV
   else {  // NOLINT(readability/braces)
     // Use iconv() for conversion.
-    vcp->vc_fd = (iconv_t)my_iconv_open(to_is_utf8 ? (char_u *)"utf-8" : to,
-                                        from_is_utf8 ? (char_u *)"utf-8" : from);
+    vcp->vc_fd = (iconv_t)my_iconv_open(to_is_utf8 ? (char_u *)"utf-8" : (char_u *)to,
+                                        from_is_utf8 ? (char_u *)"utf-8" : (char_u *)from);
     if (vcp->vc_fd != (iconv_t)-1) {
       vcp->vc_type = CONV_ICONV;
       vcp->vc_factor = 4;       // could be longer too...
@@ -2491,7 +2491,7 @@ char_u *string_convert_ext(const vimconv_T *const vcp, char_u *ptr, size_t *lenp
     len = *lenp;
   }
   if (len == 0) {
-    return vim_strsave((char_u *)"");
+    return (char_u *)xstrdup("");
   }
 
   switch (vcp->vc_type) {

@@ -573,9 +573,9 @@ static void diff_check_unchanged(tabpage_T *tp, diff_T *dp)
       if (dir == BACKWARD) {
         off_org = dp->df_count[i_org] - 1;
       }
-      char *line_org = (char *)vim_strsave(ml_get_buf(tp->tp_diffbuf[i_org],
-                                                      dp->df_lnum[i_org] + off_org,
-                                                      false));
+      char *line_org = xstrdup(ml_get_buf(tp->tp_diffbuf[i_org],
+                                          dp->df_lnum[i_org] + off_org,
+                                          false));
 
       int i_new;
       for (i_new = i_org + 1; i_new < DB_COUNT; i_new++) {
@@ -592,9 +592,9 @@ static void diff_check_unchanged(tabpage_T *tp, diff_T *dp)
           break;
         }
 
-        if (diff_cmp((char_u *)line_org, ml_get_buf(tp->tp_diffbuf[i_new],
-                                                    dp->df_lnum[i_new] + off_new,
-                                                    false)) != 0) {
+        if (diff_cmp(line_org, ml_get_buf(tp->tp_diffbuf[i_new],
+                                          dp->df_lnum[i_new] + off_new,
+                                          false)) != 0) {
           break;
         }
       }
@@ -750,7 +750,7 @@ static int diff_write_buffer(buf_T *buf, diffin_T *din)
 
   len = 0;
   for (linenr_T lnum = 1; lnum <= buf->b_ml.ml_line_count; lnum++) {
-    for (char_u *s = ml_get_buf(buf, lnum, false); *s != NUL;) {
+    for (char_u *s = (char_u *)ml_get_buf(buf, lnum, false); *s != NUL;) {
       if (diff_flags & DIFF_ICASE) {
         int c;
         char cbuf[MB_MAXBYTES + 1];
@@ -824,9 +824,9 @@ static void diff_try_update(diffio_T *dio, int idx_orig, exarg_T *eap)
     ga_init(&dio->dio_diff.dout_ga, sizeof(char *), 1000);
   } else {
     // We need three temp file names.
-    dio->dio_orig.din_fname = vim_tempname();
-    dio->dio_new.din_fname = vim_tempname();
-    dio->dio_diff.dout_fname = vim_tempname();
+    dio->dio_orig.din_fname = (char_u *)vim_tempname();
+    dio->dio_new.din_fname = (char_u *)vim_tempname();
+    dio->dio_diff.dout_fname = (char_u *)vim_tempname();
     if (dio->dio_orig.din_fname == NULL
         || dio->dio_new.din_fname == NULL
         || dio->dio_diff.dout_fname == NULL) {
@@ -1178,9 +1178,9 @@ void ex_diffpatch(exarg_T *eap)
 
   // We need two temp file names.
   // Name of original temp file.
-  char_u *tmp_orig = vim_tempname();
+  char_u *tmp_orig = (char_u *)vim_tempname();
   // Name of patched temp file.
-  char_u *tmp_new = vim_tempname();
+  char_u *tmp_new = (char_u *)vim_tempname();
 
   if ((tmp_orig == NULL) || (tmp_new == NULL)) {
     goto theend;
@@ -1920,11 +1920,11 @@ static bool diff_equal_entry(diff_T *dp, int idx1, int idx2)
   }
 
   for (int i = 0; i < dp->df_count[idx1]; i++) {
-    char *line = (char *)vim_strsave(ml_get_buf(curtab->tp_diffbuf[idx1],
-                                                dp->df_lnum[idx1] + i, false));
+    char *line = xstrdup(ml_get_buf(curtab->tp_diffbuf[idx1],
+                                    dp->df_lnum[idx1] + i, false));
 
-    int cmp = diff_cmp((char_u *)line, ml_get_buf(curtab->tp_diffbuf[idx2],
-                                                  dp->df_lnum[idx2] + i, false));
+    int cmp = diff_cmp(line, ml_get_buf(curtab->tp_diffbuf[idx2],
+                                        dp->df_lnum[idx2] + i, false));
     xfree(line);
 
     if (cmp != 0) {
@@ -1968,23 +1968,23 @@ static bool diff_equal_char(const char_u *const p1, const char_u *const p2, int 
 /// @param s2 The second string
 ///
 /// @return on-zero if the two strings are different.
-static int diff_cmp(char_u *s1, char_u *s2)
+static int diff_cmp(char *s1, char *s2)
 {
   if ((diff_flags & DIFF_IBLANK)
-      && (*(char_u *)skipwhite((char *)s1) == NUL || *skipwhite((char *)s2) == NUL)) {
+      && (*(char_u *)skipwhite(s1) == NUL || *skipwhite(s2) == NUL)) {
     return 0;
   }
 
   if ((diff_flags & (DIFF_ICASE | ALL_WHITE_DIFF)) == 0) {
-    return STRCMP(s1, s2);
+    return strcmp(s1, s2);
   }
 
   if ((diff_flags & DIFF_ICASE) && !(diff_flags & ALL_WHITE_DIFF)) {
     return mb_stricmp((const char *)s1, (const char *)s2);
   }
 
-  char *p1 = (char *)s1;
-  char *p2 = (char *)s2;
+  char *p1 = s1;
+  char *p2 = s2;
 
   // Ignore white space changes and possibly ignore case.
   while (*p1 != NUL && *p2 != NUL) {
@@ -2290,7 +2290,7 @@ bool diff_find_change(win_T *wp, linenr_T lnum, int *startp, int *endp)
   int l;
 
   // Make a copy of the line, the next ml_get() will invalidate it.
-  char *line_org = (char *)vim_strsave(ml_get_buf(wp->w_buffer, lnum, false));
+  char *line_org = xstrdup(ml_get_buf(wp->w_buffer, lnum, false));
 
   int idx = diff_buf_idx(wp->w_buffer);
   if (idx == DB_COUNT) {
@@ -2322,8 +2322,7 @@ bool diff_find_change(win_T *wp, linenr_T lnum, int *startp, int *endp)
         continue;
       }
       added = false;
-      line_new = (char *)ml_get_buf(curtab->tp_diffbuf[i],
-                                    dp->df_lnum[i] + off, false);
+      line_new = ml_get_buf(curtab->tp_diffbuf[i], dp->df_lnum[i] + off, false);
 
       // Search for start of difference
       si_org = si_new = 0;
@@ -2718,7 +2717,7 @@ void ex_diffgetput(exarg_T *eap)
         if (nr > curtab->tp_diffbuf[idx_from]->b_ml.ml_line_count) {
           break;
         }
-        p = (char *)vim_strsave(ml_get_buf(curtab->tp_diffbuf[idx_from], nr, false));
+        p = xstrdup(ml_get_buf(curtab->tp_diffbuf[idx_from], nr, false));
         ml_append(lnum + i - 1, p, 0, false);
         xfree(p);
         added++;

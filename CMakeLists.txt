@@ -6,12 +6,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(nvim C)
 
-if(POLICY CMP0065)
-  cmake_policy(SET CMP0065 NEW)
-endif()
-if(POLICY CMP0060)
-  cmake_policy(SET CMP0060 NEW)
-endif()
 if(POLICY CMP0075)
   cmake_policy(SET CMP0075 NEW)
 endif()
@@ -102,7 +96,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   # Work around some old, broken detection by CMake for knowing when to use the
   # isystem flag.  Apple's compilers have supported this for quite some time
   # now.
-  if(CMAKE_COMPILER_IS_GNUCC)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     set(CMAKE_INCLUDE_SYSTEM_FLAG_C "-isystem ")
   endif()
 endif()
@@ -127,22 +121,12 @@ endif()
 
 message(STATUS "CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
 
-# Build type.
-if(NOT CMAKE_BUILD_TYPE)
-  message(STATUS "CMAKE_BUILD_TYPE not specified, default is 'Debug'")
-  set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build" FORCE)
-else()
-  message(STATUS "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
-endif()
+set_default_buildtype()
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   set(DEBUG 1)
 else()
   set(DEBUG 0)
 endif()
-# Set available build types for CMake GUIs.
-# Other build types can still be set by -DCMAKE_BUILD_TYPE=...
-set_property(CACHE CMAKE_BUILD_TYPE PROPERTY
-  STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 
 # If not in a git repo (e.g., a tarball) these tokens define the complete
 # version string, else they are combined with the result of `git describe`.
@@ -186,7 +170,7 @@ if(CMAKE_C_FLAGS_RELEASE MATCHES "-O3")
   string(REPLACE "-O3" "-O2" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
 endif()
 
-if(CMAKE_COMPILER_IS_GNUCC)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU")
   check_c_compiler_flag(-Og HAS_OG_FLAG)
 else()
   set(HAS_OG_FLAG 0)

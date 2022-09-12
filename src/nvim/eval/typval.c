@@ -1016,7 +1016,7 @@ static int item_compare(const void *s1, const void *s2, bool keep_zero)
     if (sortinfo->item_compare_lc) {
       res = strcoll(p1, p2);
     } else {
-      res = sortinfo->item_compare_ic ? STRICMP(p1, p2): STRCMP(p1, p2);
+      res = sortinfo->item_compare_ic ? STRICMP(p1, p2): strcmp(p1, p2);
     }
   } else {
     double n1, n2;
@@ -1568,7 +1568,7 @@ bool tv_callback_equal(const Callback *cb1, const Callback *cb2)
   }
   switch (cb1->type) {
   case kCallbackFuncref:
-    return STRCMP(cb1->data.funcref, cb2->data.funcref) == 0;
+    return strcmp(cb1->data.funcref, cb2->data.funcref) == 0;
   case kCallbackPartial:
     // FIXME: this is inconsistent with tv_equal but is needed for precision
     // maybe change dictwatcheradd to return a watcher id instead?
@@ -2777,7 +2777,7 @@ static void tv_dict_list(typval_T *const tv, typval_T *const rettv, const DictLi
     switch (what) {
       case kDictListKeys:
         tv_item.v_type = VAR_STRING;
-        tv_item.vval.v_string = (char *)vim_strsave(di->di_key);
+        tv_item.vval.v_string = xstrdup((char *)di->di_key);
         break;
       case kDictListValues:
         tv_copy(&di->di_tv, &tv_item);

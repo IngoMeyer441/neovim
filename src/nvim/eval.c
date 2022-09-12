@@ -2997,7 +2997,9 @@ static int eval7(char **arg, typval_T *rettv, int evaluate, int want_string)
       // decimal, hex or octal number
       vim_str2nr(*arg, NULL, &len, STR2NR_ALL, &n, NULL, 0, true);
       if (len == 0) {
-        semsg(_(e_invexpr2), *arg);
+        if (evaluate) {
+          semsg(_(e_invexpr2), *arg);
+        }
         ret = FAIL;
         break;
       }
@@ -3909,7 +3911,7 @@ char *partial_name(partial_T *pt)
   FUNC_ATTR_PURE
 {
   if (pt->pt_name != NULL) {
-    return (char *)pt->pt_name;
+    return pt->pt_name;
   }
   return (char *)pt->pt_func->uf_name;
 }
@@ -3924,7 +3926,7 @@ static void partial_free(partial_T *pt)
   xfree(pt->pt_argv);
   tv_dict_unref(pt->pt_dict);
   if (pt->pt_name != NULL) {
-    func_unref(pt->pt_name);
+    func_unref((char_u *)pt->pt_name);
     xfree(pt->pt_name);
   } else {
     func_ptr_unref(pt->pt_func);
@@ -3996,13 +3998,11 @@ failret:
 bool func_equal(typval_T *tv1, typval_T *tv2, bool ic)
 {
   // empty and NULL function name considered the same
-  char_u *s1 =
-    (char_u *)(tv1->v_type == VAR_FUNC ? tv1->vval.v_string : partial_name(tv1->vval.v_partial));
+  char *s1 = tv1->v_type == VAR_FUNC ? tv1->vval.v_string : partial_name(tv1->vval.v_partial);
   if (s1 != NULL && *s1 == NUL) {
     s1 = NULL;
   }
-  char_u *s2 =
-    (char_u *)(tv2->v_type == VAR_FUNC ? tv2->vval.v_string : partial_name(tv2->vval.v_partial));
+  char *s2 = tv2->v_type == VAR_FUNC ? tv2->vval.v_string : partial_name(tv2->vval.v_partial);
   if (s2 != NULL && *s2 == NUL) {
     s2 = NULL;
   }
@@ -4010,7 +4010,7 @@ bool func_equal(typval_T *tv1, typval_T *tv2, bool ic)
     if (s1 != s2) {
       return false;
     }
-  } else if (STRCMP(s1, s2) != 0) {
+  } else if (strcmp(s1, s2) != 0) {
     return false;
   }
 
@@ -4478,7 +4478,7 @@ bool set_ref_in_item(typval_T *tv, int copyID, ht_stack_T **ht_stack, list_stack
 
     // A partial does not have a copyID, because it cannot contain itself.
     if (pt != NULL) {
-      abort = set_ref_in_func(pt->pt_name, pt->pt_func, copyID);
+      abort = set_ref_in_func((char_u *)pt->pt_name, pt->pt_func, copyID);
       if (pt->pt_dict != NULL) {
         typval_T dtv;
 
@@ -4582,21 +4582,20 @@ static int dict_get_tv(char **arg, typval_T *rettv, int evaluate, bool literal)
 {
   typval_T tv;
   char *key = NULL;
-  char *start = skipwhite(*arg + 1);
+  char *curly_expr = skipwhite(*arg + 1);
   char buf[NUMBUFLEN];
 
-  // First check if it's not a curly-braces thing: {expr}.
+  // First check if it's not a curly-braces expression: {expr}.
   // Must do this without evaluating, otherwise a function may be called
   // twice.  Unfortunately this means we need to call eval1() twice for the
   // first item.
-  // But {} is an empty Dictionary.
-  if (*start != '}') {
-    if (eval1(&start, &tv, false) == FAIL) {    // recursive!
-      return FAIL;
-    }
-    if (*skipwhite(start) == '}') {
-      return NOTDONE;
-    }
+  // "{}" is an empty Dictionary.
+  // "#{abc}" is never a curly-braces expression.
+  if (*curly_expr != '}'
+      && !literal
+      && eval1(&curly_expr, &tv, false) == OK
+      && *skipwhite(curly_expr) == '}') {
+    return NOTDONE;
   }
 
   dict_T *d = NULL;
@@ -4846,7 +4845,7 @@ void filter_map(typval_T *argvars, typval_T *rettv, int map)
             break;
           }
 
-          vimvars[VV_KEY].vv_str = (char *)vim_strsave(di->di_key);
+          vimvars[VV_KEY].vv_str = xstrdup((char *)di->di_key);
           int r = filter_map_one(&di->di_tv, expr, map, &rem);
           tv_clear(&vimvars[VV_KEY].vv_tv);
           if (r == FAIL || did_emsg) {
@@ -5113,7 +5112,7 @@ void common_function(typval_T *argvars, typval_T *rettv, bool is_funcref)
         func_ptr_ref(pt->pt_func);
         xfree(name);
       } else {
-        pt->pt_name = (char_u *)name;
+        pt->pt_name = name;
         func_ref((char_u *)name);
       }
 
@@ -6208,7 +6207,7 @@ char *save_tv_as_string(typval_T *tv, ptrdiff_t *const len, bool endnl)
     buf_T *buf = buflist_findnr((int)tv->vval.v_number);
     if (buf) {
       for (linenr_T lnum = 1; lnum <= buf->b_ml.ml_line_count; lnum++) {
-        for (char *p = (char *)ml_get_buf(buf, lnum, false); *p != NUL; p++) {
+        for (char *p = ml_get_buf(buf, lnum, false); *p != NUL; p++) {
           *len += 1;
         }
         *len += 1;
@@ -6226,7 +6225,7 @@ char *save_tv_as_string(typval_T *tv, ptrdiff_t *const len, bool endnl)
     char *ret = xmalloc((size_t)(*len) + 1);
     char *end = ret;
     for (linenr_T lnum = 1; lnum <= buf->b_ml.ml_line_count; lnum++) {
-      for (char *p = (char *)ml_get_buf(buf, lnum, false); *p != NUL; p++) {
+      for (char *p = ml_get_buf(buf, lnum, false); *p != NUL; p++) {
         *end++ = (*p == '\n') ? NUL : *p;
       }
       *end++ = '\n';
@@ -6275,7 +6274,7 @@ int buf_byteidx_to_charidx(buf_T *buf, linenr_T lnum, int byteidx)
     lnum = buf->b_ml.ml_line_count;
   }
 
-  char *str = (char *)ml_get_buf(buf, lnum, false);
+  char *str = ml_get_buf(buf, lnum, false);
 
   if (*str == NUL) {
     return 0;
@@ -6313,7 +6312,7 @@ int buf_charidx_to_byteidx(buf_T *buf, linenr_T lnum, int charidx)
     lnum = buf->b_ml.ml_line_count;
   }
 
-  char *str = (char *)ml_get_buf(buf, lnum, false);
+  char *str = ml_get_buf(buf, lnum, false);
 
   // Convert the character offset to a byte offset
   char *t = str;
@@ -6373,7 +6372,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     listitem_T *li = tv_list_find(l, 1L);
     if (li != NULL && TV_LIST_ITEM_TV(li)->v_type == VAR_STRING
         && TV_LIST_ITEM_TV(li)->vval.v_string != NULL
-        && STRCMP(TV_LIST_ITEM_TV(li)->vval.v_string, "$") == 0) {
+        && strcmp(TV_LIST_ITEM_TV(li)->vval.v_string, "$") == 0) {
       pos.col = len + 1;
     }
 
@@ -7821,7 +7820,7 @@ bool script_autoload(const char *const name, const size_t name_len, const bool r
   // "autoload/", it's always the same.
   int i = 0;
   for (; i < ga_loaded.ga_len; i++) {
-    if (STRCMP(((char **)ga_loaded.ga_data)[i] + 9, scriptname + 9) == 0) {
+    if (strcmp(((char **)ga_loaded.ga_data)[i] + 9, scriptname + 9) == 0) {
       break;
     }
   }
@@ -8118,7 +8117,7 @@ repeat:
 
         // Do not call shorten_fname() here since it removes the prefix
         // even though the path does not have a prefix.
-        if (FNAMENCMP(p, dirname, namelen) == 0) {
+        if (path_fnamencmp(p, dirname, namelen) == 0) {
           p += namelen;
           if (vim_ispathsep(*p)) {
             while (*p && vim_ispathsep(*p)) {
@@ -8330,7 +8329,7 @@ char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, char *flags
     while (vim_regexec_nl(&regmatch, (char_u *)str, (colnr_T)(tail - str))) {
       // Skip empty match except for first match.
       if (regmatch.startp[0] == regmatch.endp[0]) {
-        if ((char_u *)zero_width == regmatch.startp[0]) {
+        if (zero_width == regmatch.startp[0]) {
           // avoid getting stuck on a match with an empty string
           int i = utfc_ptr2len(tail);
           memmove((char_u *)ga.ga_data + ga.ga_len, tail, (size_t)i);
@@ -8338,7 +8337,7 @@ char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, char *flags
           tail += i;
           continue;
         }
-        zero_width = (char *)regmatch.startp[0];
+        zero_width = regmatch.startp[0];
       }
 
       // Get some space for a temporary buffer to do the substitution
@@ -8351,14 +8350,14 @@ char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, char *flags
                          (regmatch.endp[0] - regmatch.startp[0])));
 
       // copy the text up to where the match is
-      int i = (int)(regmatch.startp[0] - (char_u *)tail);
+      int i = (int)(regmatch.startp[0] - tail);
       memmove((char_u *)ga.ga_data + ga.ga_len, tail, (size_t)i);
       // add the substituted text
       (void)vim_regsub(&regmatch, (char_u *)sub, expr,
                        (char_u *)ga.ga_data + ga.ga_len + i, sublen,
                        REGSUB_COPY | REGSUB_MAGIC);
       ga.ga_len += i + sublen - 1;
-      tail = (char *)regmatch.endp[0];
+      tail = regmatch.endp[0];
       if (*tail == NUL) {
         break;
       }

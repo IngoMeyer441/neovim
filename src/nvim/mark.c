@@ -665,8 +665,8 @@ static void fname2fnum(xfmark_T *fm)
     }
 
     // Try to shorten the file name.
-    os_dirname(IObuff, IOSIZE);
-    p = path_shorten_fname((char_u *)NameBuff, IObuff);
+    os_dirname((char_u *)IObuff, IOSIZE);
+    p = (char_u *)path_shorten_fname(NameBuff, (char *)IObuff);
 
     // buflist_new() will call fmarks_check_names()
     (void)buflist_new((char *)NameBuff, (char *)p, (linenr_T)1, 0);
@@ -686,21 +686,21 @@ void fmarks_check_names(buf_T *buf)
   }
 
   for (i = 0; i < NGLOBALMARKS; i++) {
-    fmarks_check_one(&namedfm[i], name, buf);
+    fmarks_check_one(&namedfm[i], (char *)name, buf);
   }
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     for (i = 0; i < wp->w_jumplistlen; i++) {
-      fmarks_check_one(&wp->w_jumplist[i], name, buf);
+      fmarks_check_one(&wp->w_jumplist[i], (char *)name, buf);
     }
   }
 }
 
-static void fmarks_check_one(xfmark_T *fm, char_u *name, buf_T *buf)
+static void fmarks_check_one(xfmark_T *fm, char *name, buf_T *buf)
 {
   if (fm->fmark.fnum == 0
       && fm->fname != NULL
-      && FNAMECMP(name, fm->fname) == 0) {
+      && path_fnamecmp(name, fm->fname) == 0) {
     fm->fmark.fnum = buf->b_fnum;
     XFREE_CLEAR(fm->fname);
   }
@@ -992,22 +992,22 @@ void ex_delmarks(exarg_T *eap)
 void ex_jumps(exarg_T *eap)
 {
   int i;
-  char_u *name;
+  char *name;
 
   cleanup_jumplist(curwin, true);
   // Highlight title
   msg_puts_title(_("\n jump line  col file/text"));
   for (i = 0; i < curwin->w_jumplistlen && !got_int; i++) {
     if (curwin->w_jumplist[i].fmark.mark.lnum != 0) {
-      name = fm_getname(&curwin->w_jumplist[i].fmark, 16);
+      name = (char *)fm_getname(&curwin->w_jumplist[i].fmark, 16);
 
       // Make sure to output the current indicator, even when on an wiped
       // out buffer.  ":filter" may still skip it.
       if (name == NULL && i == curwin->w_jumplistidx) {
-        name = vim_strsave((char_u *)"-invalid-");
+        name = xstrdup("-invalid-");
       }
       // apply :filter /pat/ or file name not available
-      if (name == NULL || message_filtered((char *)name)) {
+      if (name == NULL || message_filtered(name)) {
         xfree(name);
         continue;
       }
@@ -1022,7 +1022,7 @@ void ex_jumps(exarg_T *eap)
                i > curwin->w_jumplistidx ? i - curwin->w_jumplistidx : curwin->w_jumplistidx - i,
                curwin->w_jumplist[i].fmark.mark.lnum, curwin->w_jumplist[i].fmark.mark.col);
       msg_outtrans((char *)IObuff);
-      msg_outtrans_attr((char *)name,
+      msg_outtrans_attr(name,
                         curwin->w_jumplist[i].fmark.fnum == curbuf->b_fnum
                         ? HL_ATTR(HLF_D) : 0);
       xfree(name);
@@ -1710,7 +1710,7 @@ void mark_mb_adjustpos(buf_T *buf, pos_T *lp)
   FUNC_ATTR_NONNULL_ALL
 {
   if (lp->col > 0 || lp->coladd > 1) {
-    const char_u *const p = ml_get_buf(buf, lp->lnum, false);
+    const char_u *const p = (char_u *)ml_get_buf(buf, lp->lnum, false);
     if (*p == NUL || (int)STRLEN(p) < lp->col) {
       lp->col = 0;
     } else {

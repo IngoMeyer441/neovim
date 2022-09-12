@@ -1959,9 +1959,9 @@ static int nfa_regatom(void)
       emsg(_(e_nopresub));
       return FAIL;
     }
-    for (lp = reg_prev_sub; *lp != NUL; MB_CPTR_ADV(lp)) {
+    for (lp = (char_u *)reg_prev_sub; *lp != NUL; MB_CPTR_ADV(lp)) {
       EMIT(utf_ptr2char((char *)lp));
-      if (lp != reg_prev_sub) {
+      if (lp != (char_u *)reg_prev_sub) {
         EMIT(NFA_CONCAT);
       }
     }
@@ -7402,8 +7402,8 @@ static long nfa_regexec_both(char_u *line, colnr_T startcol, proftime_T *tm, int
     rex.reg_endpos = rex.reg_mmatch->endpos;
   } else {
     prog = (nfa_regprog_T *)rex.reg_match->regprog;
-    rex.reg_startp = rex.reg_match->startp;
-    rex.reg_endp = rex.reg_match->endp;
+    rex.reg_startp = (char_u **)rex.reg_match->startp;
+    rex.reg_endp = (char_u **)rex.reg_match->endp;
   }
 
   // Be paranoid...
@@ -7593,7 +7593,7 @@ static regprog_T *nfa_regcomp(char_u *expr, int re_flags)
 #endif
   // Remember whether this pattern has any \z specials in it.
   prog->reghasz = re_has_z;
-  prog->pattern = vim_strsave(expr);
+  prog->pattern = xstrdup((char *)expr);
 #ifdef REGEXP_DEBUG
   nfa_regengine.expr = NULL;
 #endif

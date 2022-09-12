@@ -2733,7 +2733,7 @@ void buflist_list(exarg_T *eap)
       IObuff[len++] = ' ';
     } while (--i > 0 && len < IOSIZE - 18);
     if (vim_strchr(eap->arg, 't') && buf->b_last_used) {
-      undo_fmt_time(IObuff + len, (size_t)(IOSIZE - len), buf->b_last_used);
+      undo_fmt_time((char_u *)IObuff + len, (size_t)(IOSIZE - len), buf->b_last_used);
     } else {
       vim_snprintf((char *)IObuff + len, (size_t)(IOSIZE - len), _("line %" PRId64),
                    buf == curbuf ? (int64_t)curwin->w_cursor.lnum : (int64_t)buflist_findlnum(buf));
@@ -2965,7 +2965,7 @@ static bool otherfile_buf(buf_T *buf, char *ffname, FileID *file_id_p, bool file
   if (ffname == NULL || *ffname == NUL || buf->b_ffname == NULL) {
     return true;
   }
-  if (FNAMECMP(ffname, buf->b_ffname) == 0) {
+  if (path_fnamecmp(ffname, buf->b_ffname) == 0) {
     return false;
   }
   {
@@ -3335,7 +3335,7 @@ static bool value_change(char *str, char **last)
   FUNC_ATTR_WARN_UNUSED_RESULT
 {
   if ((str == NULL) != (*last == NULL)
-      || (str != NULL && *last != NULL && STRCMP(str, *last) != 0)) {
+      || (str != NULL && *last != NULL && strcmp(str, *last) != 0)) {
     xfree(*last);
     if (str == NULL) {
       *last = NULL;
@@ -4159,7 +4159,7 @@ bool buf_contents_changed(buf_T *buf)
     if (buf->b_ml.ml_line_count == curbuf->b_ml.ml_line_count) {
       differ = false;
       for (linenr_T lnum = 1; lnum <= curbuf->b_ml.ml_line_count; lnum++) {
-        if (STRCMP(ml_get_buf(buf, lnum, false), ml_get(lnum)) != 0) {
+        if (strcmp(ml_get_buf(buf, lnum, false), ml_get(lnum)) != 0) {
           differ = true;
           break;
         }

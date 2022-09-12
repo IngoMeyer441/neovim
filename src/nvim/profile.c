@@ -291,23 +291,23 @@ void ex_profile(exarg_T *eap)
     set_vim_var_nr(VV_PROFILING, 1L);
   } else if (do_profiling == PROF_NONE) {
     emsg(_("E750: First use \":profile start {fname}\""));
-  } else if (STRCMP(eap->arg, "stop") == 0) {
+  } else if (strcmp(eap->arg, "stop") == 0) {
     profile_dump();
     do_profiling = PROF_NONE;
     set_vim_var_nr(VV_PROFILING, 0L);
     profile_reset();
-  } else if (STRCMP(eap->arg, "pause") == 0) {
+  } else if (strcmp(eap->arg, "pause") == 0) {
     if (do_profiling == PROF_YES) {
       pause_time = profile_start();
     }
     do_profiling = PROF_PAUSED;
-  } else if (STRCMP(eap->arg, "continue") == 0) {
+  } else if (strcmp(eap->arg, "continue") == 0) {
     if (do_profiling == PROF_PAUSED) {
       pause_time = profile_end(pause_time);
       profile_set_wait(profile_add(profile_get_wait(), pause_time));
     }
     do_profiling = PROF_YES;
-  } else if (STRCMP(eap->arg, "dump") == 0) {
+  } else if (strcmp(eap->arg, "dump") == 0) {
     profile_dump();
   } else {
     // The rest is similar to ":breakadd".
@@ -728,7 +728,7 @@ static void script_dump_profile(FILE *fd)
         // Keep going till the end of file, so that trailing
         // continuation lines are listed.
         for (int i = 0;; i++) {
-          if (vim_fgets(IObuff, IOSIZE, sfd)) {
+          if (vim_fgets((char_u *)IObuff, IOSIZE, sfd)) {
             break;
           }
           // When a line has been truncated, append NL, taking care

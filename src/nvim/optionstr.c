@@ -107,6 +107,7 @@ static char *(p_fdc_values[]) = { "auto", "auto:1", "auto:2", "auto:3", "auto:4"
                                   "auto:6", "auto:7", "auto:8", "auto:9", "0", "1", "2", "3", "4",
                                   "5", "6", "7", "8", "9", NULL };
 static char *(p_cb_values[]) = { "unnamed", "unnamedplus", NULL };
+static char *(p_spo_values[]) = { "camel", "noplainbuffer", NULL };
 static char *(p_icm_values[]) = { "nosplit", "split", NULL };
 static char *(p_jop_values[]) = { "stack", "view", NULL };
 static char *(p_tpf_values[]) = { "BS", "HT", "FF", "ESC", "DEL", "C0", "C1", NULL };
@@ -252,7 +253,7 @@ void check_buf_options(buf_T *buf)
 
 /// Free the string allocated for an option.
 /// Checks for the string being empty_option. This may happen if we're out of
-/// memory, vim_strsave() returned NULL, which was replaced by empty_option by
+/// memory, xstrdup() returned NULL, which was replaced by empty_option by
 /// check_options().
 /// Does NOT check for P_ALLOCED flag!
 void free_string_option(char *p)
@@ -682,7 +683,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
       }
     }
   } else if (varp == &p_bex || varp == &p_pm) {  // 'backupext' and 'patchmode'
-    if (STRCMP(*p_bex == '.' ? p_bex + 1 : p_bex,
+    if (strcmp(*p_bex == '.' ? p_bex + 1 : p_bex,
                *p_pm == '.' ? p_pm + 1 : p_pm) == 0) {
       errmsg = e_backupext_and_patchmode_are_equal;
     }
@@ -730,7 +731,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
       }
     }
   } else if (varp == &p_hl) {  // 'highlight'
-    if (STRCMP(*varp, HIGHLIGHT_INIT) != 0) {
+    if (strcmp(*varp, HIGHLIGHT_INIT) != 0) {
       errmsg = e_unsupportedoption;
     }
   } else if (varp == &p_jop) {  // 'jumpoptions'
@@ -822,13 +823,13 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     }
 
     if (errmsg == NULL) {
-      // canonize the value, so that STRCMP() can be used on it
+      // canonize the value, so that strcmp() can be used on it
       p = enc_canonize(*varp);
       xfree(*varp);
       *varp = p;
       if (varp == &p_enc) {
         // only encoding=utf-8 allowed
-        if (STRCMP(p_enc, "utf-8") != 0) {
+        if (strcmp(p_enc, "utf-8") != 0) {
           errmsg = e_unsupportedoption;
         } else {
           spell_reload();
@@ -1125,7 +1126,8 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     // When 'spellcapcheck' is set compile the regexp program.
     errmsg = compile_cap_prog(curwin->w_s);
   } else if (varp == &(curwin->w_s->b_p_spo)) {  // 'spelloptions'
-    if (**varp != NUL && STRCMP("camel", *varp) != 0) {
+    if (opt_strings_flags(curwin->w_s->b_p_spo, p_spo_values, &(curwin->w_s->b_p_spo_flags),
+                          true) != OK) {
       errmsg = e_invarg;
     }
   } else if (varp == &p_sps) {  // 'spellsuggest'
@@ -1356,7 +1358,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     } else {
       if (opt_strings_flags(ve, p_ve_values, flags, true) != OK) {
         errmsg = e_invarg;
-      } else if (STRCMP(p_ve, oldval) != 0) {
+      } else if (strcmp(p_ve, oldval) != 0) {
         // Recompute cursor position in case the new 've' setting
         // changes something.
         validate_virtcol();
@@ -1391,7 +1393,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     if (!valid_filetype(*varp)) {
       errmsg = e_invarg;
     } else {
-      value_changed = STRCMP(oldval, *varp) != 0;
+      value_changed = strcmp(oldval, *varp) != 0;
 
       // Since we check the value, there is no need to set P_INSECURE,
       // even when the value comes from a modeline.
@@ -1401,7 +1403,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     if (!valid_filetype(*varp)) {
       errmsg = e_invarg;
     } else {
-      value_changed = STRCMP(oldval, *varp) != 0;
+      value_changed = strcmp(oldval, *varp) != 0;
 
       // Since we check the value, there is no need to set P_INSECURE,
       // even when the value comes from a modeline.

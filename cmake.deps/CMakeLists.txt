@@ -2,22 +2,18 @@
 cmake_minimum_required (VERSION 3.10)
 project(NVIM_DEPS C)
 
-# Needed for: check_c_compiler_flag()
-include(CheckCCompilerFlag)
-
 # Point CMake at any custom modules we may ship
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" "${PROJECT_SOURCE_DIR}/../cmake")
+
+include(CheckCCompilerFlag)
+include(Util)
 
 get_property(isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(NOT isMultiConfig)
   set(BUILD_TYPE_STRING -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 endif()
 
-# In Windows/MSVC CMAKE_BUILD_TYPE changes the paths/linking of the build
-# recipes (libuv, msgpack), make sure it is set
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
-endif()
+set_default_buildtype()
 
 set(DEFAULT_MAKE_CFLAGS CFLAGS+=-g)
 
@@ -177,12 +173,12 @@ set(UNIBILIUM_SHA256 29815283c654277ef77a3adcc8840db79ddbb20a0f0b0c8f648bd8cd49a
 set(LIBTERMKEY_URL https://www.leonerd.org.uk/code/libtermkey/libtermkey-0.22.tar.gz)
 set(LIBTERMKEY_SHA256 6945bd3c4aaa83da83d80a045c5563da4edd7d0374c62c0d35aec09eb3014600)
 
-set(LIBVTERM_URL https://www.leonerd.org.uk/code/libvterm/libvterm-0.1.4.tar.gz)
-set(LIBVTERM_SHA256 bc70349e95559c667672fc8c55b9527d9db9ada0fb80a3beda533418d782d3dd)
+set(LIBVTERM_URL https://www.leonerd.org.uk/code/libvterm/libvterm-0.3-RC1.tar.gz)
+set(LIBVTERM_SHA256 441d1c372b84a0df12525100ab06c0366260fb4f6252abd1665ee4fa571b5134)
 
-set(LUV_VERSION 1.44.2-0)
-set(LUV_URL https://github.com/luvit/luv/archive/1.44.2-0.tar.gz)
-set(LUV_SHA256 44ccda27035bfe683e6325a2a93f2c254be1eb76bde6efc2bd37c56a7af7b00a)
+set(LUV_VERSION 1.44.2-1)
+set(LUV_URL https://github.com/luvit/luv/archive/1.44.2-1.tar.gz)
+set(LUV_SHA256 f8c69908e17ec8ab370253d1508e23deaecfc0c4752d2efb77e427e579501104)
 
 set(LUA_COMPAT53_URL https://github.com/keplerproject/lua-compat-5.3/archive/v0.9.tar.gz)
 set(LUA_COMPAT53_SHA256 ad05540d2d96a48725bb79a1def35cf6652a4e2ec26376e2617c8ce2baa6f416)
@@ -207,6 +203,12 @@ set(LIBICONV_SHA256 ccf536620a45458d26ba83887a983b96827001e92a13847b45e4925cc891
 
 set(TREESITTER_C_URL https://github.com/tree-sitter/tree-sitter-c/archive/v0.20.2.tar.gz)
 set(TREESITTER_C_SHA256 af66fde03feb0df4faf03750102a0d265b007e5d957057b6b293c13116a70af2 )
+
+set(TREESITTER_LUA_URL https://github.com/MunifTanjim/tree-sitter-lua/archive/v0.0.12.tar.gz)
+set(TREESITTER_LUA_SHA256 b6d7c6d04e9101a2e589d25f1d61668301e776c0b8defa6eae8dd86272e9e7c3)
+
+set(TREESITTER_VIM_URL https://github.com/vigoux/tree-sitter-viml/archive/v0.2.0.tar.gz)
+set(TREESITTER_VIM_SHA256 608dcc31a7948cb66ae7f45494620e2e9face1af75598205541f80d782ec4501)
 
 set(TREESITTER_URL https://github.com/tree-sitter/tree-sitter/archive/v0.20.7.tar.gz)
 set(TREESITTER_SHA256 b355e968ec2d0241bbd96748e00a9038f83968f85d822ecb9940cbe4c42e182e)

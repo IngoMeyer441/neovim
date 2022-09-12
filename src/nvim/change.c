@@ -544,7 +544,7 @@ void save_file_ff(buf_T *buf)
 
   // Only use free/alloc when necessary, they take time.
   if (buf->b_start_fenc == NULL
-      || STRCMP(buf->b_start_fenc, buf->b_p_fenc) != 0) {
+      || strcmp(buf->b_start_fenc, buf->b_p_fenc) != 0) {
     xfree(buf->b_start_fenc);
     buf->b_start_fenc = xstrdup(buf->b_p_fenc);
   }
@@ -582,7 +582,7 @@ bool file_ff_differs(buf_T *buf, bool ignore_empty)
   if (buf->b_start_fenc == NULL) {
     return *buf->b_p_fenc != NUL;
   }
-  return STRCMP(buf->b_start_fenc, buf->b_p_fenc) != 0;
+  return strcmp(buf->b_start_fenc, buf->b_p_fenc) != 0;
 }
 
 /// Insert string "p" at the cursor position.  Stops at a NUL byte.
@@ -774,7 +774,7 @@ int del_char(bool fixpos)
 int del_chars(long count, int fixpos)
 {
   int bytes = 0;
-  char *p = (char *)get_cursor_pos_ptr();
+  char *p = get_cursor_pos_ptr();
   for (long i = 0; i < count && *p != NUL; i++) {
     int l = utfc_ptr2len(p);
     bytes += l;
@@ -1036,7 +1036,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
   colnr_T mincol = curwin->w_cursor.col + 1;
 
   // make a copy of the current line so we can mess with it
-  char *saved_line = (char *)vim_strsave((char_u *)get_cursor_line_ptr());
+  char *saved_line = xstrdup(get_cursor_line_ptr());
 
   if (State & VREPLACE_FLAG) {
     // With MODE_VREPLACE we make a copy of the next line, which we will be

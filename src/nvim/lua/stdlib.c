@@ -60,8 +60,8 @@ static int regex_match(lua_State *lstate, regprog_T **prog, char_u *str)
   *prog = rm.regprog;
 
   if (match) {
-    lua_pushinteger(lstate, (lua_Integer)(rm.startp[0] - str));
-    lua_pushinteger(lstate, (lua_Integer)(rm.endp[0] - str));
+    lua_pushinteger(lstate, (lua_Integer)(rm.startp[0] - (char *)str));
+    lua_pushinteger(lstate, (lua_Integer)(rm.endp[0] - (char *)str));
     return 2;
   }
   return 0;
@@ -111,7 +111,7 @@ static int regex_match_line(lua_State *lstate)
     return luaL_error(lstate, "invalid row");
   }
 
-  char_u *line = ml_get_buf(buf, rownr + 1, false);
+  char_u *line = (char_u *)ml_get_buf(buf, rownr + 1, false);
   size_t len = STRLEN(line);
 
   if (start < 0 || (size_t)start > len) {
@@ -499,7 +499,7 @@ static int nlua_iconv(lua_State *lstate)
 
   vimconv_T vimconv;
   vimconv.vc_type = CONV_NONE;
-  convert_setup_ext(&vimconv, from, false, to, false);
+  convert_setup_ext(&vimconv, (char *)from, false, (char *)to, false);
 
   char_u *ret = (char_u *)string_convert(&vimconv, (char *)str, &str_len);
 

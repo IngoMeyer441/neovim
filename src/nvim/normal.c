@@ -629,18 +629,18 @@ static void normal_redraw_mode_message(NormalState *s)
   // If need to redraw, and there is a "keep_msg", redraw before the
   // delay
   if (must_redraw && keep_msg != NULL && !emsg_on_display) {
-    char_u *kmsg;
+    char *kmsg;
 
-    kmsg = (char_u *)keep_msg;
+    kmsg = keep_msg;
     keep_msg = NULL;
     // Showmode() will clear keep_msg, but we want to use it anyway.
     // First update w_topline.
     setcursor();
     update_screen(0);
     // now reset it, otherwise it's put in the history again
-    keep_msg = (char *)kmsg;
+    keep_msg = kmsg;
 
-    kmsg = vim_strsave((char_u *)keep_msg);
+    kmsg = xstrdup(keep_msg);
     msg_attr((const char *)kmsg, keep_msg_attr);
     xfree(kmsg);
   }
@@ -1807,7 +1807,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
         return false;
       }
       jump_flags = 0;
-      if (STRCMP(p_mousem, "popup_setpos") == 0) {
+      if (strcmp(p_mousem, "popup_setpos") == 0) {
         // First set the cursor position before showing the popup
         // menu.
         if (VIsual_active) {
@@ -2180,7 +2180,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
           find_start_of_word(&VIsual);
           if (*p_sel == 'e' && *get_cursor_pos_ptr() != NUL) {
             curwin->w_cursor.col +=
-              utfc_ptr2len((char *)get_cursor_pos_ptr());
+              utfc_ptr2len(get_cursor_pos_ptr());
           }
           find_end_of_word(&curwin->w_cursor);
         }
@@ -2416,7 +2416,7 @@ size_t find_ident_at_pos(win_T *wp, linenr_T lnum, colnr_T startcol, char **text
 
   // if i == 0: try to find an identifier
   // if i == 1: try to find any non-white text
-  char_u *ptr = ml_get_buf(wp->w_buffer, lnum, false);
+  char_u *ptr = (char_u *)ml_get_buf(wp->w_buffer, lnum, false);
   for (i = (find_type & FIND_IDENT) ? 0 : 1; i < 2; i++) {
     // 1. skip to start of identifier/text
     col = startcol;
@@ -2675,9 +2675,9 @@ void clear_showcmd(void)
 
       if (cursor_bot) {
         s = ml_get_pos(&VIsual);
-        e = get_cursor_pos_ptr();
+        e = (char_u *)get_cursor_pos_ptr();
       } else {
-        s = get_cursor_pos_ptr();
+        s = (char_u *)get_cursor_pos_ptr();
         e = ml_get_pos(&VIsual);
       }
       while ((*p_sel != 'e') ? s <= e : s < e) {
@@ -3361,7 +3361,7 @@ static bool nv_screengo(oparg_T *oap, int dir, long dist)
       virtcol -= vim_strsize((char *)get_showbreak_value(curwin));
     }
 
-    int c = utf_ptr2char((char *)get_cursor_pos_ptr());
+    int c = utf_ptr2char(get_cursor_pos_ptr());
     if (dir == FORWARD && virtcol < curwin->w_curswant
         && (curwin->w_curswant <= (colnr_T)width1)
         && !vim_isprintc(c) && c > 255) {
@@ -4164,7 +4164,7 @@ void do_nv_ident(int c1, int c2)
 
 /// 'K' normal-mode command. Get the command to lookup the keyword under the
 /// cursor.
-static size_t nv_K_getcmd(cmdarg_T *cap, char_u *kp, bool kp_help, bool kp_ex, char **ptr_arg,
+static size_t nv_K_getcmd(cmdarg_T *cap, char *kp, bool kp_help, bool kp_ex, char **ptr_arg,
                           size_t n, char *buf, size_t buf_size)
 {
   if (kp_help) {
@@ -4201,8 +4201,8 @@ static size_t nv_K_getcmd(cmdarg_T *cap, char_u *kp, bool kp_help, bool kp_ex, c
 
   // When a count is given, turn it into a range.  Is this
   // really what we want?
-  bool isman = (STRCMP(kp, "man") == 0);
-  bool isman_s = (STRCMP(kp, "man -s") == 0);
+  bool isman = (strcmp(kp, "man") == 0);
+  bool isman_s = (strcmp(kp, "man -s") == 0);
   if (cap->count0 != 0 && !(isman || isman_s)) {
     snprintf(buf, buf_size, ".,.+%" PRId64, (int64_t)(cap->count0 - 1));
   }
@@ -4234,12 +4234,12 @@ static size_t nv_K_getcmd(cmdarg_T *cap, char_u *kp, bool kp_help, bool kp_ex, c
 static void nv_ident(cmdarg_T *cap)
 {
   char *ptr = NULL;
-  char_u *p;
+  char *p;
   size_t n = 0;                 // init for GCC
   int cmdchar;
   bool g_cmd;                   // "g" command
   bool tag_cmd = false;
-  char_u *aux_ptr;
+  char *aux_ptr;
 
   if (cap->cmdchar == 'g') {    // "g*", "g#", "g]" and "gCTRL-]"
     cmdchar = cap->nchar;
@@ -4275,8 +4275,8 @@ static void nv_ident(cmdarg_T *cap)
   // Allocate buffer to put the command in.  Inserting backslashes can
   // double the length of the word.  p_kp / curbuf->b_p_kp could be added
   // and some numbers.
-  char_u *kp = *curbuf->b_p_kp == NUL ? p_kp : (char_u *)curbuf->b_p_kp;  // 'keywordprg'
-  bool kp_help = (*kp == NUL || STRCMP(kp, ":he") == 0 || STRCMP(kp, ":help") == 0);
+  char *kp = *curbuf->b_p_kp == NUL ? (char *)p_kp : curbuf->b_p_kp;  // 'keywordprg'
+  bool kp_help = (*kp == NUL || strcmp(kp, ":he") == 0 || strcmp(kp, ":help") == 0);
   if (kp_help && *skipwhite(ptr) == NUL) {
     emsg(_(e_noident));   // found white space only
     return;
@@ -4336,10 +4336,10 @@ static void nv_ident(cmdarg_T *cap)
     ptr = xstrnsave(ptr, n);
     if (kp_ex) {
       // Escape the argument properly for an Ex command
-      p = (char_u *)vim_strsave_fnameescape((const char *)ptr, VSE_NONE);
+      p = vim_strsave_fnameescape((const char *)ptr, VSE_NONE);
     } else {
       // Escape the argument properly for a shell command
-      p = vim_strsave_shellescape((char_u *)ptr, true, true);
+      p = (char *)vim_strsave_shellescape((char_u *)ptr, true, true);
     }
     xfree(ptr);
     char *newbuf = xrealloc(buf, STRLEN(buf) + STRLEN(p) + 1);
@@ -4348,33 +4348,33 @@ static void nv_ident(cmdarg_T *cap)
     xfree(p);
   } else {
     if (cmdchar == '*') {
-      aux_ptr = (char_u *)(p_magic ? "/.*~[^$\\" : "/^$\\");
+      aux_ptr = (p_magic ? "/.*~[^$\\" : "/^$\\");
     } else if (cmdchar == '#') {
-      aux_ptr = (char_u *)(p_magic ? "/?.*~[^$\\" : "/?^$\\");
+      aux_ptr = (p_magic ? "/?.*~[^$\\" : "/?^$\\");
     } else if (tag_cmd) {
       if (curbuf->b_help) {
         // ":help" handles unescaped argument
-        aux_ptr = (char_u *)"";
+        aux_ptr = "";
       } else {
-        aux_ptr = (char_u *)"\\|\"\n[";
+        aux_ptr = "\\|\"\n[";
       }
     } else {
-      aux_ptr = (char_u *)"\\|\"\n*?[";
+      aux_ptr = "\\|\"\n*?[";
     }
 
-    p = (char_u *)buf + STRLEN(buf);
+    p = buf + STRLEN(buf);
     while (n-- > 0) {
       // put a backslash before \ and some others
-      if (vim_strchr((char *)aux_ptr, *ptr) != NULL) {
+      if (vim_strchr(aux_ptr, *ptr) != NULL) {
         *p++ = '\\';
       }
       // When current byte is a part of multibyte character, copy all
       // bytes of that character.
       const size_t len = (size_t)(utfc_ptr2len(ptr) - 1);
       for (size_t i = 0; i < len && n > 0; i++, n--) {
-        *p++ = (char_u)(*ptr++);
+        *p++ = *ptr++;
       }
-      *p++ = (char_u)(*ptr++);
+      *p++ = *ptr++;
     }
     *p = NUL;
   }
@@ -4451,7 +4451,7 @@ bool get_visual_text(cmdarg_T *cap, char **pp, size_t *lenp)
 static void nv_tagpop(cmdarg_T *cap)
 {
   if (!checkclearopq(cap->oap)) {
-    do_tag((char_u *)"", DT_POP, (int)cap->count1, false, true);
+    do_tag("", DT_POP, (int)cap->count1, false, true);
   }
 }
 
@@ -4600,7 +4600,7 @@ static void nv_right(cmdarg_T *cap)
       if (virtual_active()) {
         oneright();
       } else {
-        curwin->w_cursor.col += utfc_ptr2len((char *)get_cursor_pos_ptr());
+        curwin->w_cursor.col += utfc_ptr2len(get_cursor_pos_ptr());
       }
     }
   }
@@ -4648,7 +4648,7 @@ static void nv_left(cmdarg_T *cap)
         // Don't adjust op_end now, otherwise it won't work.
         if ((cap->oap->op_type == OP_DELETE || cap->oap->op_type == OP_CHANGE)
             && !LINEEMPTY(curwin->w_cursor.lnum)) {
-          char_u *cp = get_cursor_pos_ptr();
+          char_u *cp = (char_u *)get_cursor_pos_ptr();
 
           if (*cp != NUL) {
             curwin->w_cursor.col += utfc_ptr2len((char *)cp);
@@ -5360,7 +5360,7 @@ static void nv_replace(cmdarg_T *cap)
   }
 
   // Abort if not enough characters to replace.
-  ptr = get_cursor_pos_ptr();
+  ptr = (char_u *)get_cursor_pos_ptr();
   if (STRLEN(ptr) < (unsigned)cap->count1
       || (mb_charlen(ptr) < cap->count1)) {
     clearopbeep(cap->oap);

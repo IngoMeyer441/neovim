@@ -2355,6 +2355,7 @@ return {
       secure=true,
       expand=true,
       varname='p_spo',
+      redraw={'current_buffer'},
       defaults={if_true=""}
     },
     {
@@ -2867,7 +2868,8 @@ return {
     {
       full_name='winhighlight', abbreviation='winhl',
       short_desc=N_("Setup window-local highlights");
-      type='string', scope={'window'},
+      type='string', list='onecomma', scope={'window'},
+      deny_duplicates=true,
       alloced=true,
       redraw={'current_window'},
       defaults={if_true=""}

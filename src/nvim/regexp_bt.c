@@ -1857,14 +1857,14 @@ static char_u *regatom(int *flagp)
       char_u *lp;
 
       ret = regnode(EXACTLY);
-      lp = reg_prev_sub;
+      lp = (char_u *)reg_prev_sub;
       while (*lp != NUL) {
         regc(*lp++);
       }
       regc(NUL);
       if (*reg_prev_sub != NUL) {
         *flagp |= HASWIDTH;
-        if ((lp - reg_prev_sub) == 1) {
+        if ((lp - (char_u *)reg_prev_sub) == 1) {
           *flagp |= SIMPLE;
         }
       }
@@ -5028,8 +5028,8 @@ static long bt_regexec_both(char_u *line, colnr_T col, proftime_T *tm, int *time
     rex.reg_endpos = rex.reg_mmatch->endpos;
   } else {
     prog = (bt_regprog_T *)rex.reg_match->regprog;
-    rex.reg_startp = rex.reg_match->startp;
-    rex.reg_endp = rex.reg_match->endp;
+    rex.reg_startp = (char_u **)rex.reg_match->startp;
+    rex.reg_endp = (char_u **)rex.reg_match->endp;
   }
 
   // Be paranoid...
