@@ -636,7 +636,7 @@ static void normal_redraw_mode_message(NormalState *s)
     // Showmode() will clear keep_msg, but we want to use it anyway.
     // First update w_topline.
     setcursor();
-    update_screen(0);
+    update_screen();
     // now reset it, otherwise it's put in the history again
     keep_msg = kmsg;
 
@@ -1284,9 +1284,9 @@ static void normal_redraw(NormalState *s)
 
   if (VIsual_active) {
     redraw_curbuf_later(UPD_INVERTED);  // update inverted part
-    update_screen(0);
+    update_screen();
   } else if (must_redraw) {
-    update_screen(0);
+    update_screen();
   } else if (redraw_cmdline || clear_cmdline || redraw_mode) {
     showmode();
   }
@@ -1740,9 +1740,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
     }
 
     // click in a tab selects that tab page
-    if (is_click
-        && cmdwin_type == 0
-        && mouse_col < Columns) {
+    if (is_click && cmdwin_type == 0 && mouse_col < Columns) {
       in_tab_line = true;
       c1 = tab_page_click_defs[mouse_col].tabnr;
       switch (tab_page_click_defs[mouse_col].type) {
@@ -1841,7 +1839,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
       if (jump_flags) {
         jump_flags = jump_to_mouse(jump_flags, NULL, which_button);
         redraw_curbuf_later(VIsual_active ? UPD_INVERTED : UPD_VALID);
-        update_screen(0);
+        update_screen();
         setcursor();
         ui_flush();  // Update before showing popup menu
       }
@@ -2752,7 +2750,7 @@ bool add_to_showcmd(int c)
     STRCPY(p, "<20>");
   }
   size_t old_len = STRLEN(showcmd_buf);
-  size_t extra_len = STRLEN(p);
+  size_t extra_len = strlen(p);
   size_t limit = ui_has(kUIMessages) ? SHOWCMD_BUFLEN - 1 : SHOWCMD_COLS;
   if (old_len + extra_len > limit) {
     size_t overflow = old_len + extra_len - limit;
@@ -2817,7 +2815,8 @@ void pop_showcmd(void)
 
 static void display_showcmd(void)
 {
-  if (!ui_has_messages()) {
+  if (p_ch == 0 && !ui_has(kUIMessages)) {
+    // TODO(bfredl): would be nice to show in global statusline, perhaps
     return;
   }
 
@@ -4057,7 +4056,7 @@ static void nv_colon(cmdarg_T *cap)
     } else if (cap->oap->op_type != OP_NOP
                && (cap->oap->start.lnum > curbuf->b_ml.ml_line_count
                    || cap->oap->start.col >
-                   (colnr_T)STRLEN(ml_get(cap->oap->start.lnum))
+                   (colnr_T)strlen(ml_get(cap->oap->start.lnum))
                    || did_emsg)) {
       // The start of the operator has become invalid by the Ex command.
       clearopbeep(cap->oap);
@@ -4216,7 +4215,7 @@ static size_t nv_K_getcmd(cmdarg_T *cap, char *kp, bool kp_help, bool kp_ex, cha
   }
   STRCAT(buf, " ");
   if (cap->count0 != 0 && (isman || isman_s)) {
-    snprintf(buf + STRLEN(buf), buf_size - STRLEN(buf), "%" PRId64,
+    snprintf(buf + strlen(buf), buf_size - strlen(buf), "%" PRId64,
              (int64_t)cap->count0);
     STRCAT(buf, " ");
   }
@@ -4282,7 +4281,7 @@ static void nv_ident(cmdarg_T *cap)
     return;
   }
   bool kp_ex = (*kp == ':');  // 'keywordprg' is an ex command
-  size_t buf_size = n * 2 + 30 + STRLEN(kp);
+  size_t buf_size = n * 2 + 30 + strlen(kp);
   char *buf = xmalloc(buf_size);
   buf[0] = NUL;
 
@@ -4342,7 +4341,7 @@ static void nv_ident(cmdarg_T *cap)
       p = (char *)vim_strsave_shellescape((char_u *)ptr, true, true);
     }
     xfree(ptr);
-    char *newbuf = xrealloc(buf, STRLEN(buf) + STRLEN(p) + 1);
+    char *newbuf = xrealloc(buf, strlen(buf) + strlen(p) + 1);
     buf = newbuf;
     STRCAT(buf, p);
     xfree(p);
@@ -4426,7 +4425,7 @@ bool get_visual_text(cmdarg_T *cap, char **pp, size_t *lenp)
   }
   if (VIsual_mode == 'V') {
     *pp = get_cursor_line_ptr();
-    *lenp = STRLEN(*pp);
+    *lenp = strlen(*pp);
   } else {
     if (lt(curwin->w_cursor, VIsual)) {
       *pp = (char *)ml_get_pos(&curwin->w_cursor);
@@ -6151,7 +6150,7 @@ static void nv_gi_cmd(cmdarg_T *cap)
   if (curbuf->b_last_insert.mark.lnum != 0) {
     curwin->w_cursor = curbuf->b_last_insert.mark;
     check_cursor_lnum();
-    int i = (int)STRLEN(get_cursor_line_ptr());
+    int i = (int)strlen(get_cursor_line_ptr());
     if (curwin->w_cursor.col > (colnr_T)i) {
       if (virtual_active()) {
         curwin->w_cursor.coladd += curwin->w_cursor.col - i;
@@ -6834,7 +6833,7 @@ bool unadjust_for_sel(void)
       mark_mb_adjustpos(curbuf, pp);
     } else if (pp->lnum > 1) {
       pp->lnum--;
-      pp->col = (colnr_T)STRLEN(ml_get(pp->lnum));
+      pp->col = (colnr_T)strlen(ml_get(pp->lnum));
       return true;
     }
   }
@@ -6917,10 +6916,7 @@ static void nv_esc(cmdarg_T *cap)
                && cap->oap->regname == 0);
 
   if (cap->arg) {               // true for CTRL-C
-    if (restart_edit == 0
-        && cmdwin_type == 0
-        && !VIsual_active
-        && no_reason) {
+    if (restart_edit == 0 && cmdwin_type == 0 && !VIsual_active && no_reason) {
       if (anyBufIsChanged()) {
         msg(_("Type  :qa!  and press <Enter> to abandon all changes"
               " and exit Nvim"));
@@ -6971,7 +6967,7 @@ void set_cursor_for_append_to_line(void)
     coladvance(MAXCOL);
     State = save_State;
   } else {
-    curwin->w_cursor.col += (colnr_T)STRLEN(get_cursor_pos_ptr());
+    curwin->w_cursor.col += (colnr_T)strlen(get_cursor_pos_ptr());
   }
 }
 

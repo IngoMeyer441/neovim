@@ -260,7 +260,7 @@ CONFIG = {
         'helptag_fmt': lambda name: (
             '*lua-treesitter-core*'
             if name.lower() == 'treesitter'
-            else f'*treesitter-{name.lower()}*'),
+            else f'*lua-treesitter-{name.lower()}*'),
         'fn_helptag_fmt': lambda fstem, name: (
             f'*{name}()*'
             if name != 'new'
@@ -295,14 +295,16 @@ annotation_map = {
 # or if `cond()` is callable and returns True.
 def debug_this(o, cond=True):
     name = ''
+    if cond is False:
+        return
     if not isinstance(o, str):
         try:
             name = o.nodeName
             o = o.toprettyxml(indent='  ', newl='\n')
         except Exception:
             pass
-    if ((callable(cond) and cond())
-            or (not callable(cond) and cond)
+    if (cond is True
+            or (callable(cond) and cond())
             or (not callable(cond) and cond in o)):
         raise RuntimeError('xxx: {}\n{}'.format(name, o))
 
@@ -671,7 +673,7 @@ def fmt_node_as_vimhelp(parent, width=text_width - indentation, indent='',
         max_name_len = max_name(m.keys()) + 4
         out = ''
         for name, desc in m.items():
-            name = '    {}'.format('{{{}}}'.format(name).ljust(max_name_len))
+            name = '  • {}'.format('{{{}}}'.format(name).ljust(max_name_len))
             out += '{}{}\n'.format(name, desc)
         return out.rstrip()
 
@@ -887,7 +889,7 @@ def extract_from_xml(filename, target, width, fmt_vimhelp):
 def fmt_doxygen_xml_as_vimhelp(filename, target):
     """Entrypoint for generating Vim :help from from Doxygen XML.
 
-    Returns 3 items:
+    Returns 2 items:
       1. Vim help text for functions found in `filename`.
       2. Vim help text for deprecated functions.
     """
@@ -1094,7 +1096,11 @@ def main(config, args):
                         fn_map_full.update(fn_map)
 
         if len(sections) == 0:
-            fail(f'no sections for target: {target}')
+            if target == 'lua':
+                fail(f'no sections for target: {target} (this usually means'
+                     + ' "luajit" was not found by scripts/lua2dox_filter)')
+            else:
+                fail(f'no sections for target: {target}')
         if len(sections) > len(CONFIG[target]['section_order']):
             raise RuntimeError(
                 'found new modules "{}"; update the "section_order" map'.format(

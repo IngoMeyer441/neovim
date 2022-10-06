@@ -113,6 +113,11 @@ jobs:
                DEPS_CMAKE_FLAGS="$OSX_FLAGS"
           make DESTDIR="$GITHUB_WORKSPACE/build/release/nvim-macos" install
           cd "$GITHUB_WORKSPACE/build/"
+          # Make sure we build everything for M1 as well
+          for macho in bin/* lib/nvim/parser/*.so
+          do
+          lipo -info "$macho" | grep -q arm64 || exit 1
+          done
           cpack -C "$NVIM_BUILD_TYPE"
       - uses: actions/upload-artifact@v3
         with:
@@ -126,12 +131,7 @@ jobs:
       DEPS_BUILD_DIR: ${{ format('{0}/nvim-deps', github.workspace) }}
       DEPS_PREFIX: ${{ format('{0}/nvim-deps/usr', github.workspace) }}
       CMAKE_BUILD_TYPE: "RelWithDebInfo"
-    strategy:
-      matrix:
-        include:
-          - config: MSVC_64
-            archive: nvim-win64
-    name: windows (${{ matrix.config }})
+    name: windows (MSVC_64)
     steps:
       - uses: actions/checkout@v3
         with:
@@ -142,10 +142,10 @@ jobs:
         run: .\ci\build.ps1 -Package
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.archive }}
+          name: nvim-win64
           path: |
-            build/${{ matrix.archive }}.msi
-            build/${{ matrix.archive }}.zip
+            build/nvim-win64.msi
+            build/nvim-win64.zip
           retention-days: 1
 
   publish:
@@ -228,15 +228,29 @@ jobs:
             gh release create stable $PRERELEASE --notes-file "$RUNNER_TEMP/notes.md" --title "$SUBJECT" --target $GITHUB_SHA nvim-macos/* nvim-linux64/* appimage/* nvim-win64/*
           fi
   publish-winget:
-    needs: publish # run after publish job is finished
-    # publish to winget only on stable releases
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name != 'nightly')
-    runs-on: windows-latest # action can only be run on windows
+    needs: publish
+    runs-on: windows-latest
     steps:
-      - uses: vedantmgoyal2009/winget-releaser@latest
+      - if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name != 'nightly')
+        name: Publish stable
+        uses: vedantmgoyal2009/winget-releaser@v1
         with:
           identifier: Neovim.Neovim
-          # the latter one is a fallback value, reference:
-          # https://docs.github.com/en/actions/using-jobs/using-concurrency#example-using-a-fallback-value
-          release-tag: ${{ github.event.inputs.tag_name || github.ref }}
+          release-tag: ${{ github.event.inputs.tag_name || github.ref_name }}
+          token: ${{ secrets.WINGET_TOKEN }}
+      - if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name == 'nightly')
+        name: Get nightly version
+        id: get-version
+        run: |
+          Invoke-WebRequest https://github.com/neovim/neovim/releases/download/nightly/nvim-win64.msi -OutFile setup.msi
+          Install-Module -Name 'Carbon.Windows.Installer' -Force
+          $VERSION = (Get-CMsi (Resolve-Path .\setup.msi).Path).ProductVersion
+          echo "::set-output name=version::$VERSION"
+      - if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name == 'nightly')
+        name: Publish nightly
+        uses: vedantmgoyal2009/winget-releaser@v1
+        with:
+          identifier: Neovim.Neovim.Nightly
+          version: ${{ steps.get-version.outputs.version }}
+          release-tag: nightly
           token: ${{ secrets.WINGET_TOKEN }}

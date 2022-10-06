@@ -131,19 +131,17 @@ endif()
 # If not in a git repo (e.g., a tarball) these tokens define the complete
 # version string, else they are combined with the result of `git describe`.
 set(NVIM_VERSION_MAJOR 0)
-set(NVIM_VERSION_MINOR 8)
+set(NVIM_VERSION_MINOR 9)
 set(NVIM_VERSION_PATCH 0)
 set(NVIM_VERSION_PRERELEASE "-dev") # for package maintainers
 
 # API level
 set(NVIM_API_LEVEL 10)         # Bump this after any API change.
 set(NVIM_API_LEVEL_COMPAT 0)  # Adjust this after a _breaking_ API change.
-set(NVIM_API_PRERELEASE true)
+set(NVIM_API_PRERELEASE false)
 
 set(NVIM_VERSION_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
 # NVIM_VERSION_CFLAGS set further below.
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Log level (MIN_LOG_LEVEL in log.h)
 if("${MIN_LOG_LEVEL}" MATCHES "^$")
@@ -273,7 +271,7 @@ if(MSVC)
   # XXX: /W4 gives too many warnings. #3241
   add_compile_options(/W3)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE)
-  add_definitions(-DWIN32)
+  add_definitions(-DMSWIN)
 else()
   add_compile_options(-Wall -Wextra -pedantic -Wno-unused-parameter
     -Wstrict-prototypes -std=gnu99 -Wshadow -Wconversion
@@ -320,6 +318,7 @@ endif()
 if(MINGW)
   # Use POSIX compatible stdio in Mingw
   add_definitions(-D__USE_MINGW_ANSI_STDIO)
+  add_definitions(-DMSWIN)
 endif()
 if(WIN32)
   # Windows Vista is the minimum supported version
@@ -497,11 +496,11 @@ if(FEAT_TUI)
     add_definitions(-DNVIM_UNIBI_HAS_VAR_FROM)
   endif()
 
-  find_package(LibTermkey 0.18 REQUIRED)
+  find_package(LibTermkey 0.22 REQUIRED)
   include_directories(SYSTEM ${LIBTERMKEY_INCLUDE_DIRS})
 endif()
 
-find_package(LIBVTERM 0.1 REQUIRED)
+find_package(LIBVTERM 0.3 REQUIRED)
 include_directories(SYSTEM ${LIBVTERM_INCLUDE_DIRS})
 
 option(CLANG_ASAN_UBSAN "Enable Clang address & undefined behavior sanitizer for nvim binary." OFF)
@@ -638,6 +637,7 @@ include(InstallHelpers)
 add_glob_targets(
   TARGET lintpy
   COMMAND ${FLAKE8_PRG}
+  FLAGS --max-line-length 88
   GLOB_DIRS contrib scripts src test
   GLOB_PAT *.py
   TOUCH_STRATEGY SINGLE

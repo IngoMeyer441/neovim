@@ -148,6 +148,12 @@ func Test_autocmd_bufunload_with_tabnext()
   quit
 endfunc
 
+func Test_argdelete_in_next()
+  au BufNew,BufEnter,BufLeave,BufWinEnter * argdel
+  call assert_fails('next a b', 'E1156:')
+  au! BufNew,BufEnter,BufLeave,BufWinEnter *
+endfunc
+
 func Test_autocmd_bufwinleave_with_tabfirst()
   tabedit
   augroup sample
@@ -447,6 +453,26 @@ func Test_WinClosed_throws_with_tabs()
   augroup! test-WinClosed
 endfunc
 
+" This used to trigger WinClosed twice for the same window, and the window's
+" buffer was NULL in the second autocommand.
+func Test_WinClosed_switch_tab()
+  edit Xa
+  split Xb
+  split Xc
+  tab split
+  new
+  augroup test-WinClosed
+    autocmd WinClosed * tabprev | bwipe!
+  augroup END
+  close
+  " Check that the tabline has been fully removed
+  call assert_equal([1, 1], win_screenpos(0))
+
+  autocmd! test-WinClosed
+  augroup! test-WinClosed
+  %bwipe!
+endfunc
+
 func s:AddAnAutocmd()
   augroup vimBarTest
     au BufReadCmd * echo 'hello'
@@ -533,7 +559,9 @@ func Test_BufReadCmdNofile()
             \ 'acwrite',
             \ 'quickfix',
             \ 'help',
+            "\ 'terminal',
             \ 'prompt',
+            "\ 'popup',
             \ ]
     new somefile
     exe 'set buftype=' .. val
@@ -650,7 +678,9 @@ func Test_BufEnter()
             \ 'acwrite',
             \ 'quickfix',
             \ 'help',
+            "\ 'terminal',
             \ 'prompt',
+            "\ 'popup',
             \ ]
     new somefile
     exe 'set buftype=' .. val
@@ -2024,6 +2054,7 @@ endfunc
 func Test_autocommand_all_events()
   call assert_fails('au * * bwipe', 'E1155:')
   call assert_fails('au * x bwipe', 'E1155:')
+  call assert_fails('au! * x bwipe', 'E1155:')
 endfunc
 
 func Test_autocmd_user()
@@ -2978,6 +3009,15 @@ func Test_Visual_doautoall_redraw()
   autocmd User Explode ++once redraw
   doautoall User Explode
   %bwipe!
+endfunc
+
+" This was using freed memory.
+func Test_BufNew_arglocal()
+  arglocal
+  au BufNew * arglocal
+  call assert_fails('drop xx', 'E1156:')
+
+  au! BufNew
 endfunc
 
 func Test_autocmd_closes_window()

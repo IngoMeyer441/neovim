@@ -148,7 +148,7 @@ static char_u *get_buffcont(buffheader_T *buffer, int dozero)
   // compute the total length of the string
   for (const buffblock_T *bp = buffer->bh_first.b_next;
        bp != NULL; bp = bp->b_next) {
-    count += STRLEN(bp->b_str);
+    count += strlen(bp->b_str);
   }
 
   if (count || dozero) {
@@ -225,13 +225,13 @@ static void add_buff(buffheader_T *const buf, const char *const s, ptrdiff_t sle
   } else if (buf->bh_index != 0) {
     memmove(buf->bh_first.b_next->b_str,
             buf->bh_first.b_next->b_str + buf->bh_index,
-            STRLEN(buf->bh_first.b_next->b_str + buf->bh_index) + 1);
+            strlen(buf->bh_first.b_next->b_str + buf->bh_index) + 1);
   }
   buf->bh_index = 0;
 
   size_t len;
   if (buf->bh_space >= (size_t)slen) {
-    len = STRLEN(buf->bh_curr->b_str);
+    len = strlen(buf->bh_curr->b_str);
     STRLCPY(buf->bh_curr->b_str + len, s, slen + 1);
     buf->bh_space -= (size_t)slen;
   } else {
@@ -259,7 +259,7 @@ static void delete_buff_tail(buffheader_T *buf, int slen)
   if (buf->bh_curr == NULL) {
     return;  // nothing to delete
   }
-  len = (int)STRLEN(buf->bh_curr->b_str);
+  len = (int)strlen(buf->bh_curr->b_str);
   if (len >= slen) {
     buf->bh_curr->b_str[len - slen] = NUL;
     buf->bh_space += (size_t)slen;
@@ -845,7 +845,7 @@ int ins_typebuf(char *str, int noremap, int offset, bool nottyped, bool silent)
     typebuf.tb_change_cnt = 1;
   }
 
-  addlen = (int)STRLEN(str);
+  addlen = (int)strlen(str);
 
   if (offset == 0 && addlen <= typebuf.tb_off) {
     // Easy case: there is room in front of typebuf.tb_buf[typebuf.tb_off]
@@ -1655,9 +1655,10 @@ static void getchar_common(typval_T *argvars, typval_T *rettv)
   no_mapping++;
   allow_keys++;
   for (;;) {
-    // Position the cursor.  Needed after a message that ends in a space,
-    // or if event processing caused a redraw.
-    ui_cursor_goto(msg_row, msg_col);
+    if (msg_col > 0) {
+      // Position the cursor. Needed after a message that ends in a space.
+      ui_cursor_goto(msg_row, msg_col);
+    }
 
     if (argvars[0].v_type == VAR_UNKNOWN) {
       // getchar(): blocking wait.
@@ -1665,7 +1666,7 @@ static void getchar_common(typval_T *argvars, typval_T *rettv)
       if (!char_avail()) {
         // flush output before waiting
         ui_flush();
-        (void)os_inchar(NULL, 0, -1, 0, main_loop.events);
+        (void)os_inchar(NULL, 0, -1, typebuf.tb_change_cnt, main_loop.events);
         if (!multiqueue_empty(main_loop.events)) {
           state_handle_k_event();
           continue;
@@ -1694,12 +1695,6 @@ static void getchar_common(typval_T *argvars, typval_T *rettv)
   }
   no_mapping--;
   allow_keys--;
-
-  if (!ui_has_messages()) {
-    // redraw the screen after getchar()
-    update_screen(UPD_NOT_VALID);
-    clear_cmdline = true;
-  }
 
   set_vim_var_nr(VV_MOUSE_WIN, 0);
   set_vim_var_nr(VV_MOUSE_WINID, 0);
@@ -2109,7 +2104,7 @@ static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
     } else {
       keylen = 0;
     }
-    if (keylen == 0) {  // no simplication has been done
+    if (keylen == 0) {  // no simplification has been done
       // If there was no mapping at all use the character from the
       // typeahead buffer right here.
       if (mp == NULL) {
@@ -2606,7 +2601,7 @@ static int vgetorpeek(bool advance)
         // input buffer (e.g., termresponse).
         if (((State & MODE_INSERT) != 0 || p_lz) && (State & MODE_CMDLINE) == 0
             && advance && must_redraw != 0 && !need_wait_return) {
-          update_screen(0);
+          update_screen();
           setcursor();  // put cursor back where it belongs
         }
 

@@ -155,8 +155,6 @@ void win_draw_end(win_T *wp, int c1, int c2, bool draw_margin, int row, int endr
   } else {
     grid_fill(&wp->w_grid, row, endrow, n, wp->w_grid.cols, c1, c2, attr);
   }
-
-  set_empty_rows(wp, row);
 }
 
 /// Compute the width of the foldcolumn.  Based on 'foldcolumn' and how much
@@ -442,7 +440,7 @@ void redraw_wildmenu(expand_T *xp, int num_matches, char **matches, int match, i
         // Put the wildmenu just above the command line.  If there is
         // no room, scroll the screen one line up.
         if (cmdline_row == Rows - 1) {
-          msg_scroll_up(false);
+          msg_scroll_up(false, false);
           msg_scrolled++;
         } else {
           cmdline_row++;
@@ -1022,7 +1020,7 @@ void draw_tabline(void)
       if (modified || wincount > 1) {
         if (wincount > 1) {
           vim_snprintf((char *)NameBuff, MAXPATHL, "%d", wincount);
-          len = (int)STRLEN(NameBuff);
+          len = (int)strlen(NameBuff);
           if (col + len >= Columns - 3) {
             break;
           }
@@ -1173,7 +1171,9 @@ bool redrawing(void)
 /// Return true if printing messages should currently be done.
 bool messaging(void)
 {
-  return !(p_lz && char_avail() && !KeyTyped) && ui_has_messages();
+  // TODO(bfredl): with general support for "async" messages with p_ch,
+  // this should be re-enabled.
+  return !(p_lz && char_avail() && !KeyTyped) && (p_ch > 0 || ui_has(kUIMessages));
 }
 
 #define COL_RULER 17        // columns needed by standard ruler
@@ -1328,6 +1328,7 @@ char *set_chars_option(win_T *wp, char **varp, bool apply)
     { &wp->w_p_fcs_chars.diff,       "diff",      '-' },
     { &wp->w_p_fcs_chars.msgsep,     "msgsep",    ' ' },
     { &wp->w_p_fcs_chars.eob,        "eob",       '~' },
+    { &wp->w_p_fcs_chars.lastline,   "lastline",  '@' },
   };
 
   struct chars_tab lcs_tab[] = {
@@ -1394,7 +1395,7 @@ char *set_chars_option(win_T *wp, char **varp, bool apply)
     while (*p) {
       int i;
       for (i = 0; i < entries; i++) {
-        const size_t len = STRLEN(tab[i].name);
+        const size_t len = strlen(tab[i].name);
         if (STRNCMP(p, tab[i].name, len) == 0
             && p[len] == ':'
             && p[len + 1] != NUL) {
@@ -1436,8 +1437,8 @@ char *set_chars_option(win_T *wp, char **varp, bool apply)
       }
 
       if (i == entries) {
-        const size_t len = STRLEN("multispace");
-        const size_t len2 = STRLEN("leadmultispace");
+        const size_t len = strlen("multispace");
+        const size_t len2 = strlen("leadmultispace");
         if (is_listchars
             && STRNCMP(p, "multispace", len) == 0
             && p[len] == ':'

@@ -40,6 +40,13 @@
 # include "eval/typval.c.generated.h"
 #endif
 
+static char e_string_required_for_argument_nr[]
+  = N_("E1174: String required for argument %d");
+static char e_non_empty_string_required_for_argument_nr[]
+  = N_("E1142: Non-empty string required for argument %d");
+static char e_number_required_for_argument_nr[]
+  = N_("E1210: Number required for argument %d");
+
 bool tv_in_free_unref_items = false;
 
 // TODO(ZyX-I): Remove DICT_MAXNEST, make users be non-recursive instead
@@ -1079,9 +1086,9 @@ static int item_compare2(const void *s1, const void *s2, bool keep_zero)
 
   rettv.v_type = VAR_UNKNOWN;  // tv_clear() uses this
   funcexe_T funcexe = FUNCEXE_INIT;
-  funcexe.evaluate = true;
-  funcexe.partial = partial;
-  funcexe.selfdict = sortinfo->item_compare_selfdict;
+  funcexe.fe_evaluate = true;
+  funcexe.fe_partial = partial;
+  funcexe.fe_selfdict = sortinfo->item_compare_selfdict;
   res = call_func(func_name, -1, &rettv, 2, argv, &funcexe);
   tv_clear(&argv[0]);
   tv_clear(&argv[1]);
@@ -1242,14 +1249,12 @@ static void do_sort_uniq(typval_T *argvars, typval_T *rettv, bool sort)
         item_compare_func_ptr = item_compare_keeping_zero;
       }
 
-      int idx = 0;
       for (listitem_T *li = TV_LIST_ITEM_NEXT(l, tv_list_first(l))
            ; li != NULL;) {
         listitem_T *const prev_li = TV_LIST_ITEM_PREV(l, li);
         if (item_compare_func_ptr(&prev_li, &li) == 0) {
           li = tv_list_item_remove(l, li);
         } else {
-          idx++;
           li = TV_LIST_ITEM_NEXT(l, li);
         }
         if (info.item_compare_func_err) {  // -V547
@@ -1774,7 +1779,7 @@ void tv_dict_watcher_notify(dict_T *const dict, const char *const key, typval_T 
     tv_dict_add(argv[2].vval.v_dict, v);
   }
 
-  if (oldtv) {
+  if (oldtv && oldtv->v_type != VAR_UNKNOWN) {
     dictitem_T *const v = tv_dict_item_alloc_len(S_LEN("old"));
     tv_copy(oldtv, &v->di_tv);
     tv_dict_add(argv[2].vval.v_dict, v);
@@ -3800,29 +3805,48 @@ float_T tv_get_float(const typval_T *const tv)
   return 0;
 }
 
-// Give an error and return FAIL unless "tv" is a string.
-int tv_check_for_string(const typval_T *const tv)
+/// Give an error and return FAIL unless "args[idx]" is a string.
+int tv_check_for_string_arg(const typval_T *const args, const int idx)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
 {
-  if (tv->v_type != VAR_STRING) {
-    emsg(_(e_stringreq));
+  if (args[idx].v_type != VAR_STRING) {
+    semsg(_(e_string_required_for_argument_nr), idx + 1);
     return FAIL;
   }
   return OK;
 }
 
-// Give an error and return FAIL unless "tv" is a non-empty string.
-int tv_check_for_nonempty_string(const typval_T *const tv)
+/// Give an error and return FAIL unless "args[idx]" is a non-empty string.
+int tv_check_for_nonempty_string_arg(const typval_T *const args, const int idx)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
 {
-  if (tv_check_for_string(tv) == FAIL) {
+  if (tv_check_for_string_arg(args, idx) == FAIL) {
     return FAIL;
   }
-  if (tv->vval.v_string == NULL || *tv->vval.v_string == NUL) {
-    emsg(_(e_non_empty_string_required));
+  if (args[idx].vval.v_string == NULL || *args[idx].vval.v_string == NUL) {
+    semsg(_(e_non_empty_string_required_for_argument_nr), idx + 1);
     return FAIL;
   }
   return OK;
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a number.
+int tv_check_for_number_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_NUMBER) {
+    semsg(_(e_number_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Check for an optional number argument at "idx"
+int tv_check_for_opt_number_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  return (args[idx].v_type == VAR_UNKNOWN
+          || tv_check_for_number_arg(args, idx) != FAIL) ? OK : FAIL;
 }
 
 /// Get the string value of a "stringish" VimL object.

@@ -23,7 +23,7 @@
 #define MSG_BUF_CLEN  (MSG_BUF_LEN / 6)  // cell length (worst case: utf-8
                                          // takes 6 bytes for one cell)
 
-#ifdef WIN32
+#ifdef MSWIN
 # define _PATHSEPSTR "\\"
 #else
 # define _PATHSEPSTR "/"
@@ -1071,7 +1071,11 @@ EXTERN char windowsVersion[20] INIT(= { 0 });
 
 EXTERN int exit_need_delay INIT(= 0);
 
-// Set when 'cmdheight' is changed from zero to one temporarily.
-EXTERN bool made_cmdheight_nonzero INIT(= false);
+///< Skip win_fix_cursor() call for 'splitkeep' when cmdwin is closed.
+EXTERN bool skip_win_fix_cursor INIT(= false);
+///< Skip win_fix_scroll() call for 'splitkeep' when closing tab page.
+EXTERN bool skip_win_fix_scroll INIT(= false);
+///< Skip update_topline() call while executing win_fix_scroll().
+EXTERN bool skip_update_topline INIT(= false);
 
 #endif  // NVIM_GLOBALS_H

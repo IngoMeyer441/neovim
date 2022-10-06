@@ -29,6 +29,7 @@ local module = {
 }
 
 local start_dir = lfs.currentdir()
+local runtime_set = 'set runtimepath^=./build/lib/nvim/'
 module.nvim_prog = (
   os.getenv('NVIM_PRG')
   or global_helpers.test_build_dir .. '/bin/nvim'
@@ -40,6 +41,8 @@ module.nvim_set = (
   ..' belloff= wildoptions-=pum joinspaces noshowcmd noruler nomore redrawdebug=invalid')
 module.nvim_argv = {
   module.nvim_prog, '-u', 'NONE', '-i', 'NONE',
+  -- XXX: find treesitter parsers.
+  '--cmd', runtime_set,
   '--cmd', module.nvim_set,
   '--cmd', 'mapclear',
   '--cmd', 'mapclear!',
@@ -345,14 +348,17 @@ end
 
 --  Removes Nvim startup args from `args` matching items in `args_rm`.
 --
---  "-u", "-i", "--cmd" are treated specially: their "values" are also removed.
+--  - Special case: "-u", "-i", "--cmd" are treated specially: their "values" are also removed.
+--  - Special case: "runtimepath" will remove only { '--cmd', 'set runtimepath^=…', }
+--
 --  Example:
 --      args={'--headless', '-u', 'NONE'}
 --      args_rm={'--cmd', '-u'}
 --  Result:
 --      {'--headless'}
 --
---  All cases are removed.
+--  All matching cases are removed.
+--
 --  Example:
 --      args={'--cmd', 'foo', '-N', '--cmd', 'bar'}
 --      args_rm={'--cmd', '-u'}
@@ -373,6 +379,9 @@ local function remove_args(args, args_rm)
       last = ''
     elseif tbl_contains(args_rm, arg) then
       last = arg
+    elseif arg == runtime_set and tbl_contains(args_rm, 'runtimepath') then
+      table.remove(new_args)  -- Remove the preceding "--cmd".
+      last = ''
     else
       table.insert(new_args, arg)
     end
@@ -380,10 +389,23 @@ local function remove_args(args, args_rm)
   return new_args
 end
 
+function module.check_close(old_session)
+  local start_time = luv.now()
+  old_session:close()
+  luv.update_time()  -- Update cached value of luv.now() (libuv: uv_now()).
+  local end_time = luv.now()
+  local delta = end_time - start_time
+  if delta > 500 then
+    print("nvim took " .. delta .. " milliseconds to exit after last test\n"..
+          "This indicates a likely problem with the test even if it passed!\n")
+    io.stdout:flush()
+  end
+end
+
 --- @param io_extra used for stdin_fd, see :help ui-option
 function module.spawn(argv, merge, env, keep, io_extra)
   if session and not keep then
-    session:close()
+    module.check_close(session)
   end
 
   local child_stream = ChildProcessStream.spawn(
@@ -540,16 +562,16 @@ function module.set_shell_powershell(fake)
     assert(found)
   end
   local shell = found and (iswin() and 'powershell' or 'pwsh') or module.testprg('pwsh-test')
-  local set_encoding = '[Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;'
+  local set_encoding = '[Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();'
   local cmd = set_encoding..'Remove-Item -Force '..table.concat(iswin()
-    and {'alias:cat', 'alias:echo', 'alias:sleep'}
+    and {'alias:cat', 'alias:echo', 'alias:sleep', 'alias:sort'}
     or  {'alias:echo'}, ',')..';'
   module.exec([[
     let &shell = ']]..shell..[['
     set shellquote= shellxquote=
     let &shellcmdflag = '-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command ]]..cmd..[['
     let &shellpipe = '2>&1 | Out-File -Encoding UTF8 %s; exit $LastExitCode'
-    let &shellredir = '-RedirectStandardOutput %s -NoNewWindow -Wait'
+    let &shellredir = '2>&1 | Out-File -Encoding UTF8 %s; exit $LastExitCode'
   ]])
   return found
 end

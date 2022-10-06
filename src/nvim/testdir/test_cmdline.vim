@@ -127,13 +127,74 @@ func Test_wildmenu_screendump()
   call delete('XTest_wildmenu')
 endfunc
 
+func Test_redraw_in_autocmd()
+  CheckScreendump
+
+  let lines =<< trim END
+      set cmdheight=2
+      autocmd CmdlineChanged * redraw
+  END
+  call writefile(lines, 'XTest_redraw', 'D')
+
+  let buf = RunVimInTerminal('-S XTest_redraw', {'rows': 8})
+  call term_sendkeys(buf, ":for i in range(3)\<CR>")
+  call VerifyScreenDump(buf, 'Test_redraw_in_autocmd_1', {})
+
+  call term_sendkeys(buf, "let i =")
+  call VerifyScreenDump(buf, 'Test_redraw_in_autocmd_2', {})
+
+  " clean up
+  call term_sendkeys(buf, "\<CR>")
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_redrawstatus_in_autocmd()
+  CheckScreendump
+
+  let lines =<< trim END
+      set laststatus=2
+      set statusline=%=:%{getcmdline()}
+      autocmd CmdlineChanged * redrawstatus
+  END
+  call writefile(lines, 'XTest_redrawstatus', 'D')
+
+  let buf = RunVimInTerminal('-S XTest_redrawstatus', {'rows': 8})
+  " :redrawstatus is postponed if messages have scrolled
+  call term_sendkeys(buf, ":echo \"one\\ntwo\\nthree\\nfour\"\<CR>")
+  call term_sendkeys(buf, ":foobar")
+  call VerifyScreenDump(buf, 'Test_redrawstatus_in_autocmd_1', {})
+  " it is not postponed if messages have not scrolled
+  call term_sendkeys(buf, "\<Esc>:for in in range(3)")
+  call VerifyScreenDump(buf, 'Test_redrawstatus_in_autocmd_2', {})
+  " with cmdheight=1 messages have scrolled when typing :endfor
+  call term_sendkeys(buf, "\<CR>:endfor")
+  call VerifyScreenDump(buf, 'Test_redrawstatus_in_autocmd_3', {})
+  call term_sendkeys(buf, "\<CR>:set cmdheight=2\<CR>")
+  " with cmdheight=2 messages haven't scrolled when typing :for or :endfor
+  call term_sendkeys(buf, ":for in in range(3)")
+  call VerifyScreenDump(buf, 'Test_redrawstatus_in_autocmd_4', {})
+  call term_sendkeys(buf, "\<CR>:endfor")
+  call VerifyScreenDump(buf, 'Test_redrawstatus_in_autocmd_5', {})
+
+  " clean up
+  call term_sendkeys(buf, "\<CR>")
+  call StopVimInTerminal(buf)
+endfunc
+
 func Test_changing_cmdheight()
   CheckScreendump
 
   let lines =<< trim END
       set cmdheight=1 laststatus=2
+      func EchoTwo()
+        set laststatus=2
+        set cmdheight=5
+        echo 'foo'
+        echo 'bar'
+        set cmdheight=1
+      endfunc
   END
-  call writefile(lines, 'XTest_cmdheight')
+  call writefile(lines, 'XTest_cmdheight', 'D')
 
   let buf = RunVimInTerminal('-S XTest_cmdheight', {'rows': 8})
   call term_sendkeys(buf, ":resize -3\<CR>")
@@ -151,14 +212,27 @@ func Test_changing_cmdheight()
   call term_sendkeys(buf, ":set cmdheight-=2\<CR>")
   call VerifyScreenDump(buf, 'Test_changing_cmdheight_4', {})
 
-  " reducing window size and then setting cmdheight
+  " reducing window size and then setting cmdheight 
   call term_sendkeys(buf, ":resize -1\<CR>")
   call term_sendkeys(buf, ":set cmdheight=1\<CR>")
   call VerifyScreenDump(buf, 'Test_changing_cmdheight_5', {})
 
+  " setting 'cmdheight' works after outputting two messages
+  call term_sendkeys(buf, ":call EchoTwo()\<CR>")
+  call VerifyScreenDump(buf, 'Test_changing_cmdheight_6', {})
+
   " clean up
   call StopVimInTerminal(buf)
-  call delete('XTest_cmdheight')
+endfunc
+
+func Test_cmdheight_tabline()
+  CheckScreendump
+
+  let buf = RunVimInTerminal('-c "set ls=2" -c "set stal=2" -c "set cmdheight=1"', {'rows': 6})
+  call VerifyScreenDump(buf, 'Test_cmdheight_tabline_1', {})
+
+  " clean up
+  call StopVimInTerminal(buf)
 endfunc
 
 func Test_map_completion()
@@ -2226,8 +2300,8 @@ func Test_setcmdline()
     call assert_equal(a:pos, getcmdpos())
 
     call assert_fails('call setcmdline("' .. a:text .. '", -1)', 'E487:')
-    call assert_fails('call setcmdline({}, 0)', 'E928:')
-    call assert_fails('call setcmdline("' .. a:text .. '", {})', 'E728:')
+    call assert_fails('call setcmdline({}, 0)', 'E1174:')
+    call assert_fails('call setcmdline("' .. a:text .. '", {})', 'E1210:')
 
     return ''
   endfunc

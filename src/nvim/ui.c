@@ -510,7 +510,7 @@ void ui_flush(void)
     return;
   }
   cmdline_ui_flush();
-  win_ui_flush();
+  win_ui_flush(false);
   msg_ext_ui_flush();
   msg_scroll_flush();
 
@@ -612,12 +612,6 @@ void ui_cursor_shape(void)
 bool ui_has(UIExtension ext)
 {
   return ui_ext[ext];
-}
-
-/// Returns true if the UI has messages area.
-bool ui_has_messages(void)
-{
-  return p_ch > 0 || ui_has(kUIMessages);
 }
 
 Array ui_array(void)

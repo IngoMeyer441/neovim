@@ -82,12 +82,10 @@ argument.
 --help							*-h* *--help* *-?*
 -?
 -h		Give usage (help) message and exit.
-		See |info-message| about capturing the text.
 
 --version						*-v* *--version*
 -v		Print version information and exit.  Same output as for
 		|:version| command.
-		See |info-message| about capturing the text.
 
 							*--clean*
 --clean		Mimics a fresh install of Nvim:
@@ -1359,7 +1357,7 @@ LOG FILE					*$NVIM_LOG_FILE* *E5430*
 Besides 'debug' and 'verbose', Nvim keeps a general log file for internal
 debugging, plugins and RPC clients. >
 	:echo $NVIM_LOG_FILE
-By default, the file is located at stdpath('log')/log unless that path
+By default, the file is located at stdpath("log")/log unless that path
 is inaccessible or if $NVIM_LOG_FILE was set before |startup|.
 
 

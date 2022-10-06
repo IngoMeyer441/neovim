@@ -869,7 +869,7 @@ stack traceback:
       {1:~                        }|
       {1:~                        }|
     ]], messages={
-      { content = { { "wow, ", 7 }, { "such\n\nvery ", 2 }, { "color", 10 } }, kind = "" }
+      { content = { { "wow, ", 7 }, { "such\n\nvery ", 2 }, { "color", 10 } }, kind = "echomsg" }
     }}
 
     feed ':ls<cr>'
@@ -880,7 +880,7 @@ stack traceback:
       {1:~                        }|
       {1:~                        }|
     ]], messages={
-      { content = { { '\n  1 %a   "[No Name]"                    line 1' } }, kind = "echomsg" }
+      { content = { { '\n  1 %a   "[No Name]"                    line 1' } }, kind = "" }
     }}
 
     feed ':messages<cr>'
@@ -1200,28 +1200,6 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
   it('prints lines in Ex mode correctly with a burst of carriage returns #19341', function()
     command('set number')
     meths.buf_set_lines(0, 0, 0, true, {'aaa', 'bbb', 'ccc'})
-    command('set display-=msgsep')
-    feed('gggQ<CR><CR>1<CR><CR>vi')
-    screen:expect([[
-      Entering Ex mode.  Type "visual" to go to Normal mode.      |
-      {11:  2 }bbb                                                     |
-      {11:  3 }ccc                                                     |
-      :1                                                          |
-      {11:  1 }aaa                                                     |
-      {11:  2 }bbb                                                     |
-      :vi^                                                         |
-    ]])
-    feed('<CR>')
-    screen:expect([[
-      {11:  1 }aaa                                                     |
-      {11:  2 }^bbb                                                     |
-      {11:  3 }ccc                                                     |
-      {11:  4 }                                                        |
-      {1:~                                                           }|
-      {1:~                                                           }|
-                                                                  |
-    ]])
-    command('set display+=msgsep')
     feed('gggQ<CR><CR>1<CR><CR>vi')
     screen:expect([[
       Entering Ex mode.  Type "visual" to go to Normal mode.      |
@@ -2018,6 +1996,57 @@ aliquip ex ea commodo consequat.]])
       {1:~                             }|
       {1:~                             }|
                                     |
+    ]]}
+  end)
+
+  it('with cmdheight=0 does not crash with g<', function()
+    command('set cmdheight=0')
+    feed(':ls<cr>')
+    screen:expect{grid=[[
+                                         |
+      {1:~                                  }|
+      {12:                                   }|
+      :ls                                |
+        1 %a   "[No Name]"               |
+           line 1                        |
+      {4:Press ENTER or type command to cont}|
+      {4:inue}^                               |
+    ]]}
+
+    feed('<cr>')
+    screen:expect{grid=[[
+      ^                                   |
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+    ]]}
+
+    feed('g<lt>')
+    screen:expect{grid=[[
+                                         |
+      {1:~                                  }|
+      {12:                                   }|
+      :ls                                |
+        1 %a   "[No Name]"               |
+           line 1                        |
+      {4:Press ENTER or type command to cont}|
+      {4:inue}^                               |
+    ]]}
+
+    feed('<cr>')
+    screen:expect{grid=[[
+      ^                                   |
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
+      {1:~                                  }|
     ]]}
   end)
 end)

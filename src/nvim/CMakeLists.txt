@@ -96,8 +96,8 @@ file(MAKE_DIRECTORY ${LINT_SUPPRESSES_ROOT}/src)
 
 glob_wrapper(NVIM_SOURCES *.c)
 glob_wrapper(NVIM_HEADERS *.h)
-glob_wrapper(EXTERNAL_SOURCES ../xdiff/*.c ../mpack/*.c ../cjson/*.c)
-glob_wrapper(EXTERNAL_HEADERS ../xdiff/*.h ../mpack/*.h ../cjson/*.h)
+glob_wrapper(EXTERNAL_SOURCES ../xdiff/*.c ../mpack/*.c ../cjson/*.c ../klib/*.c)
+glob_wrapper(EXTERNAL_HEADERS ../xdiff/*.h ../mpack/*.h ../cjson/*.h ../klib/*.h)
 
 foreach(subdir
         os
@@ -159,7 +159,7 @@ list(REMOVE_ITEM NVIM_SOURCES ${to_remove})
 if(NOT MSVC)
   # xdiff, mpack, lua-cjson: inlined external project, we don't maintain it. #9306
   set_source_files_properties(
-    ${EXTERNAL_SOURCES} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion -Wno-missing-noreturn -Wno-missing-format-attribute -Wno-double-promotion")
+    ${EXTERNAL_SOURCES} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion -Wno-missing-noreturn -Wno-missing-format-attribute -Wno-double-promotion -Wno-strict-prototypes")
 endif()
 
 if(NOT "${MIN_LOG_LEVEL}" MATCHES "^$")
@@ -446,6 +446,11 @@ set(NVIM_EXEC_LINK_LIBRARIES ${NVIM_LINK_LIBRARIES} ${LUA_PREFERRED_LIBRARIES})
 add_executable(nvim ${NVIM_GENERATED_FOR_SOURCES} ${NVIM_GENERATED_FOR_HEADERS}
   ${NVIM_GENERATED_SOURCES} ${NVIM_SOURCES} ${NVIM_HEADERS}
   ${EXTERNAL_SOURCES} ${EXTERNAL_HEADERS})
+
+set_target_properties(nvim
+  PROPERTIES
+  EXPORT_COMPILE_COMMANDS ON)
+
 target_link_libraries(nvim ${NVIM_EXEC_LINK_LIBRARIES})
 install_helper(TARGETS nvim)
 if(MSVC)
@@ -532,8 +537,8 @@ if(WIN32)
                       translations/qt_uk.qm
                       D3Dcompiler_47.dll
                       libEGL.dll
-                      libgcc_s_dw2-1.dll
-                      libGLESV2.dll
+                      libgcc_s_seh-1.dll
+                      libGLESv2.dll
                       libstdc++-6.dll
                       libwinpthread-1.dll
                       nvim-qt.exe

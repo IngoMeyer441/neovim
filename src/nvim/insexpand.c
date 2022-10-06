@@ -199,6 +199,8 @@ static bool compl_no_insert = false;    ///< false: select & insert
                                         ///< true: noinsert
 static bool compl_no_select = false;    ///< false: select & insert
                                         ///< true: noselect
+static bool compl_longest = false;      ///< false: insert full match
+                                        ///< true: insert longest prefix
 
 /// Selected one of the matches. When false the match was edited or using the
 /// longest common string.
@@ -652,7 +654,7 @@ static char_u *ins_compl_infercase_gettext(char_u *str, int char_len, int compl_
       ga_grow(&gap, IOSIZE);
       *p = NUL;
       STRCPY(gap.ga_data, IObuff);
-      gap.ga_len = (int)STRLEN(IObuff);
+      gap.ga_len = (int)strlen(IObuff);
     } else {
       p += utf_char2bytes(wca[i++], p);
     }
@@ -775,7 +777,7 @@ static int ins_compl_add(char *const str, int len, char *const fname, char *cons
     return FAIL;
   }
   if (len < 0) {
-    len = (int)STRLEN(str);
+    len = (int)strlen(str);
   }
 
   // If the same match is already present, don't add it.
@@ -784,7 +786,7 @@ static int ins_compl_add(char *const str, int len, char *const fname, char *cons
     do {
       if (!match_at_original_text(match)
           && STRNCMP(match->cp_str, str, len) == 0
-          && ((int)STRLEN(match->cp_str) <= len || match->cp_str[len] == NUL)) {
+          && ((int)strlen(match->cp_str) <= len || match->cp_str[len] == NUL)) {
         FREE_CPTEXT(cptext, cptext_allocated);
         return NOTDONE;
       }
@@ -997,7 +999,7 @@ bool ins_compl_has_shown_match(void)
 bool ins_compl_long_shown_match(void)
 {
   return compl_shown_match != NULL && compl_shown_match->cp_str != NULL
-         && (colnr_T)STRLEN(compl_shown_match->cp_str) > curwin->w_cursor.col - compl_col;
+         && (colnr_T)strlen(compl_shown_match->cp_str) > curwin->w_cursor.col - compl_col;
 }
 
 /// Set variables that store noselect and noinsert behavior from the
@@ -1006,11 +1008,15 @@ void completeopt_was_set(void)
 {
   compl_no_insert = false;
   compl_no_select = false;
+  compl_longest = false;
   if (strstr(p_cot, "noselect") != NULL) {
     compl_no_select = true;
   }
   if (strstr(p_cot, "noinsert") != NULL) {
     compl_no_insert = true;
+  }
+  if (strstr(p_cot, "longest") != NULL) {
+    compl_longest = true;
   }
 }
 
@@ -1124,7 +1130,7 @@ static int ins_compl_build_pum(void)
     XFREE_CLEAR(compl_leader);
   }
 
-  const int lead_len = compl_leader != NULL ? (int)STRLEN(compl_leader) : 0;
+  const int lead_len = compl_leader != NULL ? (int)strlen(compl_leader) : 0;
 
   do {
     if (!match_at_original_text(compl)
@@ -1222,7 +1228,7 @@ void ins_compl_show_pum(void)
   do_cmdline_cmd("if exists('g:loaded_matchparen')|3match none|endif");
 
   // Update the screen before drawing the popup menu over it.
-  update_screen(0);
+  update_screen();
 
   int cur = -1;
   bool array_changed = false;
@@ -1642,7 +1648,7 @@ int ins_compl_bs(void)
     ins_compl_restart();
   }
 
-  // ins_compl_restart() calls update_screen(0) which may invalidate the pointer
+  // ins_compl_restart() calls update_screen() which may invalidate the pointer
   // TODO(bfredl): get rid of random update_screen() calls deep inside completion logic
   line = get_cursor_line_ptr();
 
@@ -1753,7 +1759,7 @@ static void ins_compl_restart(void)
   // update screen before restart.
   // so if complete is blocked,
   // will stay to the last popup menu and reduce flicker
-  update_screen(0);
+  update_screen();  // TODO(bfredl): no.
   ins_compl_free();
   compl_started = false;
   compl_matches = 0;
@@ -2042,7 +2048,7 @@ static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
   if (c == Ctrl_C && cmdwin_type != 0) {
     // Avoid the popup menu remains displayed when leaving the
     // command line window.
-    update_screen(0);
+    update_screen();
   }
 
   // Indent now if a key was typed that is in 'cinkeys'.
@@ -2103,7 +2109,7 @@ bool ins_compl_prep(int c)
   // Set "compl_get_longest" when finding the first matches.
   if (ctrl_x_mode_not_defined_yet()
       || (ctrl_x_mode_normal() && !compl_started)) {
-    compl_get_longest = (strstr(p_cot, "longest") != NULL);
+    compl_get_longest = compl_longest;
     compl_used_match = true;
   }
 
@@ -2420,6 +2426,7 @@ static void set_completion(colnr_T startcol, list_T *list)
   }
   ins_compl_clear();
   ins_compl_free();
+  compl_get_longest = compl_longest;
 
   compl_direction = FORWARD;
   if (startcol > curwin->w_cursor.col) {
@@ -2449,9 +2456,10 @@ static void set_completion(colnr_T startcol, list_T *list)
   int save_w_leftcol = curwin->w_leftcol;
 
   compl_curr_match = compl_first_match;
-  if (compl_no_insert || compl_no_select) {
+  bool no_select = compl_no_select || compl_longest;
+  if (compl_no_insert || no_select) {
     ins_complete(K_DOWN, false);
-    if (compl_no_select) {
+    if (no_select) {
       ins_complete(K_UP, false);
     }
   } else {
@@ -2724,7 +2732,7 @@ static int process_next_cpt_value(ins_compl_next_state_T *st, int *compl_type_ar
       // buffer, so that word at start of buffer is found
       // correctly.
       st->first_match_pos.lnum = st->ins_buf->b_ml.ml_line_count;
-      st->first_match_pos.col = (colnr_T)STRLEN(ml_get(st->first_match_pos.lnum));
+      st->first_match_pos.col = (colnr_T)strlen(ml_get(st->first_match_pos.lnum));
     }
     st->last_match_pos = st->first_match_pos;
     compl_type = 0;
@@ -2806,7 +2814,7 @@ done:
 static void get_next_include_file_completion(int compl_type)
 {
   find_pattern_in_path((char_u *)compl_pattern, compl_direction,
-                       STRLEN(compl_pattern), false, false,
+                       strlen(compl_pattern), false, false,
                        ((compl_type == CTRL_X_PATH_DEFINES
                          && !(compl_cont_status & CONT_SOL))
                         ? FIND_DEFINE : FIND_ANY),
@@ -2889,7 +2897,7 @@ static void get_next_cmdline_completion(void)
   char **matches;
   int num_matches;
   if (expand_cmdline(&compl_xp, (char_u *)compl_pattern,
-                     (int)STRLEN(compl_pattern),
+                     (int)strlen(compl_pattern),
                      &num_matches, &matches) == EXPAND_OK) {
     ins_compl_add_matches(num_matches, matches, false);
   }
@@ -3525,7 +3533,7 @@ static int ins_compl_next(bool allow_get_expansion, int count, bool insert_match
 
   if (!allow_get_expansion) {
     // redraw to show the user what was inserted
-    update_screen(0);
+    update_screen();  // TODO(bfredl): no!
 
     // display the updated popup menu
     ins_compl_show_pum();
@@ -3810,7 +3818,7 @@ static int get_filename_compl_info(char_u *line, int startcol, colnr_T curs_col)
 static int get_cmdline_compl_info(char *line, colnr_T curs_col)
 {
   compl_pattern = xstrnsave(line, (size_t)curs_col);
-  set_cmd_context(&compl_xp, (char_u *)compl_pattern, (int)STRLEN(compl_pattern), curs_col, false);
+  set_cmd_context(&compl_xp, (char_u *)compl_pattern, (int)strlen(compl_pattern), curs_col, false);
   if (compl_xp.xp_context == EXPAND_UNSUCCESSFUL
       || compl_xp.xp_context == EXPAND_NOTHING) {
     // No completion possible, use an empty pattern to get a

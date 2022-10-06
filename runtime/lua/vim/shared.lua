@@ -107,9 +107,11 @@ end
 ---
 ---@see |vim.gsplit()|
 ---
+---@alias split_kwargs {plain: boolean, trimempty: boolean} | boolean | nil
+---
 ---@param s string String to split
 ---@param sep string Separator or pattern
----@param kwargs table Keyword arguments:
+---@param kwargs split_kwargs Keyword arguments:
 ---       - plain: (boolean) If `true` use `sep` literally (passed to string.find)
 ---       - trimempty: (boolean) If `true` remove empty items from the front
 ---         and back of the list
@@ -302,7 +304,7 @@ end
 
 --- Merges recursively two or more map-like tables.
 ---
----@see |tbl_extend()|
+---@see |vim.tbl_extend()|
 ---
 ---@param behavior string Decides what to do if a key is found in more than one map:
 ---      - "error": raise an error
@@ -720,7 +722,7 @@ end
 ---
 --- They mimic defaultdict in python.
 ---
---- If @p create is @c nil, this will create a defaulttable whose constructor function is
+--- If {create} is `nil`, this will create a defaulttable whose constructor function is
 --- this function, effectively allowing to create nested tables on the fly:
 ---
 --- <pre>

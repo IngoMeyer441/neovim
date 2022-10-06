@@ -340,7 +340,7 @@ Boolean nvim_win_is_valid(Window window)
 ///
 /// Like |:hide| the buffer becomes hidden unless another window is editing it,
 /// or 'bufhidden' is `unload`, `delete` or `wipe` as opposed to |:close| or
-/// |nvim_win_close|, which will close the buffer.
+/// |nvim_win_close()|, which will close the buffer.
 ///
 /// @param window   Window handle, or 0 for current window
 /// @param[out] err Error details, if any
@@ -430,7 +430,7 @@ Object nvim_win_call(Window window, LuaRef fun, Error *err)
 /// Set highlight namespace for a window. This will use highlights defined in
 /// this namespace, but fall back to global highlights (ns=0) when missing.
 ///
-/// This takes predecence over the 'winhighlight' option.
+/// This takes precedence over the 'winhighlight' option.
 ///
 /// @param ns_id the namespace to use
 /// @param[out] err Error details, if any

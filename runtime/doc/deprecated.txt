@@ -47,6 +47,11 @@ Functions ~
 *buffer_name()*		Obsolete name for |bufname()|.
 *buffer_number()*	Obsolete name for |bufnr()|.
 *file_readable()*	Obsolete name for |filereadable()|.
+*health#report_error*	Use Lua |vim.health.report_error()| instead.
+*health#report_info*	Use Lua |vim.health.report_info()| instead.
+*health#report_ok*	Use Lua |vim.health.report_ok()| instead.
+*health#report_start*	Use Lua |vim.health.report_start()| instead.
+*health#report_warn*	Use Lua |vim.health.report_warn()| instead.
 *highlight_exists()*	Obsolete name for |hlexists()|.
 *highlightID()*		Obsolete name for |hlID()|.
 *inputdialog()*		Use |input()| instead.
@@ -113,6 +118,10 @@ LSP Functions ~
 *vim.lsp.util.set_loclist()*		Use |setloclist()| instead.
 *vim.lsp.buf_get_clients()*		Use |vim.lsp.get_active_clients()| with
                                         {buffer = bufnr} instead.
+*vim.lsp.buf.formatting()*		Use |vim.lsp.buf.format()| with
+					{async = true} instead.
+*vim.lsp.buf.range_formatting()*	Use |vim.lsp.formatexpr()|
+					or |vim.lsp.buf.format()| instead.
 
 Lua ~
 *vim.register_keystroke_callback()* Use |vim.on_key()| instead.

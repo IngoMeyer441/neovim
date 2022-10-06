@@ -13,6 +13,7 @@
 #include <msgpack.h>
 #include <stddef.h>
 
+#include "klib/kvec.h"
 #include "nvim/ascii.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"  // vim_isprintc()
@@ -21,7 +22,6 @@
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_encode.h"
 #include "nvim/garray.h"
-#include "nvim/lib/kvec.h"
 #include "nvim/macros.h"
 #include "nvim/math.h"
 #include "nvim/mbyte.h"
@@ -219,7 +219,7 @@ bool encode_vim_list_to_buf(const list_T *const list, size_t *const ret_len, cha
     }
     len++;
     if (TV_LIST_ITEM_TV(li)->vval.v_string != NULL) {
-      len += STRLEN(TV_LIST_ITEM_TV(li)->vval.v_string);
+      len += strlen(TV_LIST_ITEM_TV(li)->vval.v_string);
     }
   });
   if (len) {
@@ -281,7 +281,7 @@ int encode_read_from_list(ListReaderState *const state, char *const buf, const s
       state->offset = 0;
       state->li_length = (TV_LIST_ITEM_TV(state->li)->vval.v_string == NULL
                           ? 0
-                          : STRLEN(TV_LIST_ITEM_TV(state->li)->vval.v_string));
+                          : strlen(TV_LIST_ITEM_TV(state->li)->vval.v_string));
     }
   }
   *read_bytes = nbuf;

@@ -190,7 +190,7 @@ const char *path_next_component(const char *fname)
 ///   - 1 otherwise
 int path_head_length(void)
 {
-#ifdef WIN32
+#ifdef MSWIN
   return 3;
 #else
   return 1;
@@ -205,7 +205,7 @@ int path_head_length(void)
 ///   - False otherwise
 bool is_path_head(const char_u *path)
 {
-#ifdef WIN32
+#ifdef MSWIN
   return isalpha(path[0]) && path[1] == ':';
 #else
   return vim_ispathsep(*path);
@@ -219,7 +219,7 @@ char *get_past_head(const char *path)
 {
   const char *retval = path;
 
-#ifdef WIN32
+#ifdef MSWIN
   // May skip "c:"
   if (is_path_head((char_u *)path)) {
     retval = path + 2;
@@ -575,7 +575,7 @@ bool path_has_exp_wildcard(const char_u *p)
 /// @param path     The path to search.
 /// @param flags    Flags for regexp expansion.
 ///   - EW_ICASE: Ignore case.
-///   - EW_NOERROR: Silence error messeges.
+///   - EW_NOERROR: Silence error messages.
 ///   - EW_NOTWILD: Add matches literally.
 /// @returns the number of matches found.
 static size_t path_expand(garray_T *gap, const char_u *path, int flags)
@@ -642,7 +642,7 @@ static size_t do_path_expand(garray_T *gap, const char *path, size_t wildoff, in
       s = p + 1;
     } else if (path_end >= (char_u *)path + wildoff
                && (vim_strchr("*?[{~$", *path_end) != NULL
-#ifndef WIN32
+#ifndef MSWIN
                    || (!p_fic && (flags & EW_ICASE) && mb_isalpha(utf_ptr2char((char *)path_end)))
 #endif
                    )) {
@@ -811,8 +811,8 @@ static bool is_unique(char *maybe_unique, garray_T *gap, int i)
     if (j == i) {
       continue;  // don't compare it with itself
     }
-    size_t candidate_len = STRLEN(maybe_unique);
-    size_t other_path_len = STRLEN(other_paths[j]);
+    size_t candidate_len = strlen(maybe_unique);
+    size_t other_path_len = strlen(other_paths[j]);
     if (other_path_len < candidate_len) {
       continue;  // it's different when it's shorter
     }
@@ -849,7 +849,7 @@ static void expand_path_option(char_u *curdir, garray_T *gap)
       }
       char_u *p = (char_u *)path_tail(curbuf->b_ffname);
       size_t len = (size_t)(p - (char_u *)curbuf->b_ffname);
-      if (len + STRLEN(buf) >= MAXPATHL) {
+      if (len + strlen(buf) >= MAXPATHL) {
         continue;
       }
       if (buf[1] == NUL) {
@@ -866,7 +866,7 @@ static void expand_path_option(char_u *curdir, garray_T *gap)
     } else if (!path_is_absolute((char_u *)buf)) {
       // Expand relative path to their full path equivalent
       size_t len = STRLEN(curdir);
-      if (len + STRLEN(buf) + 3 > MAXPATHL) {
+      if (len + strlen(buf) + 3 > MAXPATHL) {
         continue;
       }
       STRMOVE(buf + len + 1, buf);
@@ -897,7 +897,7 @@ static char_u *get_path_cutoff(char_u *fname, garray_T *gap)
     int j = 0;
 
     while ((fname[j] == path_part[i][j]
-#ifdef WIN32
+#ifdef MSWIN
             || (vim_ispathsep(fname[j]) && vim_ispathsep(path_part[i][j]))
 #endif
             )  // NOLINT(whitespace/parens)
@@ -988,7 +988,7 @@ static void uniquefy_paths(garray_T *gap, char_u *pattern)
         && vim_regexec(&regmatch, path_cutoff, (colnr_T)0)
         && is_unique(path_cutoff, gap, i)) {
       sort_again = true;
-      memmove(path, path_cutoff, STRLEN(path_cutoff) + 1);
+      memmove(path, path_cutoff, strlen(path_cutoff) + 1);
     } else {
       // Here all files can be reached without path, so get shortest
       // unique path.  We start at the end of the path. */
@@ -998,7 +998,7 @@ static void uniquefy_paths(garray_T *gap, char_u *pattern)
             && is_unique(pathsep_p + 1, gap, i)
             && path_cutoff != NULL && pathsep_p + 1 >= path_cutoff) {
           sort_again = true;
-          memmove(path, pathsep_p + 1, STRLEN(pathsep_p));
+          memmove(path, pathsep_p + 1, strlen(pathsep_p));
           break;
         }
       }
@@ -1045,7 +1045,7 @@ static void uniquefy_paths(garray_T *gap, char_u *pattern)
       continue;
     }
 
-    rel_path = xmalloc(STRLEN(short_name) + STRLEN(PATHSEPSTR) + 2);
+    rel_path = xmalloc(strlen(short_name) + strlen(PATHSEPSTR) + 2);
     STRCPY(rel_path, ".");
     add_pathsep(rel_path);
     STRCAT(rel_path, short_name);
@@ -1272,12 +1272,12 @@ int gen_expand_wildcards(int num_pat, char **pat, int *num_file, char ***file, i
         }
       }
 
-      // If there are wildcards: Expand file names and add each match to
-      // the list.  If there is no match, and EW_NOTFOUND is given, add
-      // the pattern.
-      // If there are no wildcards: Add the file name if it exists or
-      // when EW_NOTFOUND is given.
-      if (path_has_exp_wildcard(p)) {
+      // If there are wildcards or case-insensitive expansion is
+      // required: Expand file names and add each match to the list.  If
+      // there is no match, and EW_NOTFOUND is given, add the pattern.
+      // Otherwise: Add the file name if it exists or when EW_NOTFOUND is
+      // given.
+      if (path_has_exp_wildcard(p) || (flags & EW_ICASE)) {
         if ((flags & EW_PATH)
             && !path_is_absolute(p)
             && !(p[0] == '.'
@@ -1360,7 +1360,7 @@ static int expand_backtick(garray_T *gap, char *pat, int flags)
   int cnt = 0;
 
   // Create the command: lop off the backticks.
-  char *cmd = xstrnsave(pat + 1, STRLEN(pat) - 2);
+  char *cmd = xstrnsave(pat + 1, strlen(pat) - 2);
 
   if (*cmd == '=') {          // `={expr}`: Expand expression
     buffer = eval_to_string(cmd + 1, &p, true);
@@ -1415,7 +1415,7 @@ void slash_adjust(char_u *p)
 
   if (*p == '`') {
     // don't replace backslash in backtick quoted strings
-    const size_t len = STRLEN(p);
+    const size_t len = strlen(p);
     if (len > 2 && *(p + len - 1) == '`') {
       return;
     }
@@ -1678,7 +1678,7 @@ char *find_file_name_in_path(char *ptr, size_t len, int options, long count, cha
     tofree = eval_includeexpr(ptr, len);
     if (tofree != NULL) {
       ptr = tofree;
-      len = STRLEN(ptr);
+      len = strlen(ptr);
     }
   }
 
@@ -1693,7 +1693,7 @@ char *find_file_name_in_path(char *ptr, size_t len, int options, long count, cha
       tofree = eval_includeexpr(ptr, len);
       if (tofree != NULL) {
         ptr = tofree;
-        len = STRLEN(ptr);
+        len = strlen(ptr);
         file_name = (char *)find_file_in_path((char_u *)ptr, len, options & ~FNAME_MESS,
                                               true, (char_u *)rel_fname);
       }
@@ -1816,7 +1816,7 @@ int vim_FullName(const char *fname, char *buf, size_t len, bool force)
 
   if (strlen(fname) > (len - 1)) {
     xstrlcpy(buf, fname, len);  // truncate
-#ifdef WIN32
+#ifdef MSWIN
     slash_adjust((char_u *)buf);
 #endif
     return FAIL;
@@ -1831,7 +1831,7 @@ int vim_FullName(const char *fname, char *buf, size_t len, bool force)
   if (rv == FAIL) {
     xstrlcpy(buf, fname, len);  // something failed; use the filename
   }
-#ifdef WIN32
+#ifdef MSWIN
   slash_adjust((char_u *)buf);
 #endif
   return rv;
@@ -2066,7 +2066,7 @@ char *path_shorten_fname(char *full_path, char *dir_name)
   }
 
   assert(dir_name != NULL);
-  size_t len = STRLEN(dir_name);
+  size_t len = strlen(dir_name);
 
   // If dir_name is a path head, full_path can always be made relative.
   if (len == (size_t)path_head_length() && is_path_head((char_u *)dir_name)) {
@@ -2232,7 +2232,7 @@ int match_suffix(char *fname)
 #define MAXSUFLEN 30  // maximum length of a file suffix
   char suf_buf[MAXSUFLEN];
 
-  size_t fnamelen = STRLEN(fname);
+  size_t fnamelen = strlen(fname);
   size_t setsuflen = 0;
   for (char_u *setsuf = p_su; *setsuf;) {
     setsuflen = copy_option_part((char **)&setsuf, (char *)suf_buf, MAXSUFLEN, ".,");
@@ -2356,7 +2356,7 @@ static int path_to_absolute(const char *fname, char *buf, size_t len, int force)
   // expand it if forced or not an absolute path
   if (force || !path_is_absolute((char_u *)fname)) {
     p = strrchr(fname, '/');
-#ifdef WIN32
+#ifdef MSWIN
     if (p == NULL) {
       p = strrchr(fname, '\\');
     }
@@ -2392,7 +2392,7 @@ static int path_to_absolute(const char *fname, char *buf, size_t len, int force)
 /// @return `true` if "fname" is absolute.
 int path_is_absolute(const char_u *fname)
 {
-#ifdef WIN32
+#ifdef MSWIN
   if (*fname == NUL) {
     return false;
   }

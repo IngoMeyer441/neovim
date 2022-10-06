@@ -419,6 +419,7 @@ describe('LSP', function()
     end)
 
     it('should detach buffer on bufwipe', function()
+      clear()
       local result = exec_lua([[
         local server = function(dispatchers)
           local closing = false
@@ -1718,6 +1719,46 @@ describe('LSP', function()
     end)
   end)
 
+  describe('apply_text_edits regression tests for #20116', function()
+    before_each(function()
+      insert(dedent([[
+      Test line one
+      Test line two 21 char]]))
+    end)
+    describe('with LSP end column out of bounds and start column at 0', function()
+      it('applies edits at the end of the buffer', function()
+        local edits = {
+          make_edit(0, 0, 1, 22, {'#include "whatever.h"\r\n#include <algorithm>\r'});
+        }
+        exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1, "utf-8")
+        eq({'#include "whatever.h"', '#include <algorithm>'}, buf_lines(1))
+      end)
+      it('applies edits in the middle of the buffer', function()
+        local edits = {
+          make_edit(0, 0, 0, 22, {'#include "whatever.h"\r\n#include <algorithm>\r'});
+        }
+        exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1, "utf-8")
+        eq({'#include "whatever.h"', '#include <algorithm>', 'Test line two 21 char'}, buf_lines(1))
+      end)
+    end)
+    describe('with LSP end column out of bounds and start column NOT at 0', function()
+      it('applies edits at the end of the buffer', function()
+        local edits = {
+          make_edit(0, 2, 1, 22, {'#include "whatever.h"\r\n#include <algorithm>\r'});
+        }
+        exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1, "utf-8")
+        eq({'Te#include "whatever.h"', '#include <algorithm>'}, buf_lines(1))
+      end)
+      it('applies edits in the middle of the buffer', function()
+        local edits = {
+          make_edit(0, 2, 0, 22, {'#include "whatever.h"\r\n#include <algorithm>\r'});
+        }
+        exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1, "utf-8")
+        eq({'Te#include "whatever.h"', '#include <algorithm>', 'Test line two 21 char'}, buf_lines(1))
+      end)
+    end)
+  end)
+
   describe('apply_text_document_edit', function()
     local target_bufnr
     local text_document_edit = function(editVersion)
@@ -1924,6 +1965,22 @@ describe('LSP', function()
     it('Supports file creation with CreateFile payload', function()
       local tmpfile = helpers.tmpname()
       os.remove(tmpfile) -- Should not exist, only interested in a tmpname
+      local uri = exec_lua('return vim.uri_from_fname(...)', tmpfile)
+      local edit = {
+        documentChanges = {
+          {
+            kind = 'create',
+            uri = uri,
+          },
+        }
+      }
+      exec_lua('vim.lsp.util.apply_workspace_edit(...)', edit, 'utf-16')
+      eq(true, exec_lua('return vim.loop.fs_stat(...) ~= nil', tmpfile))
+    end)
+    it('Supports file creation in folder that needs to be created with CreateFile payload', function()
+      local tmpfile = helpers.tmpname()
+      os.remove(tmpfile) -- Should not exist, only interested in a tmpname
+      tmpfile = tmpfile .. '/dummy/x/'
       local uri = exec_lua('return vim.uri_from_fname(...)', tmpfile)
       local edit = {
         documentChanges = {
@@ -3289,6 +3346,77 @@ describe('LSP', function()
         return vim.json.decode(init)
       ]]
       eq(result.method, "initialize")
+    end)
+  end)
+
+  describe('handlers', function()
+    it('handler can return false as response', function()
+      local result = exec_lua [[
+        local uv = vim.loop
+        local server = uv.new_tcp()
+        local messages = {}
+        local responses = {}
+        server:bind('127.0.0.1', 0)
+        server:listen(127, function(err)
+          assert(not err, err)
+          local socket = uv.new_tcp()
+          server:accept(socket)
+          socket:read_start(require('vim.lsp.rpc').create_read_loop(function(body)
+            local payload = vim.json.decode(body)
+            if payload.method then
+              table.insert(messages, payload.method)
+              if payload.method == 'initialize' then
+                local msg = vim.json.encode({
+                  id = payload.id,
+                  jsonrpc = '2.0',
+                  result = {
+                    capabilities = {}
+                  },
+                })
+                socket:write(table.concat({'Content-Length: ', tostring(#msg), '\r\n\r\n', msg}))
+              elseif payload.method == 'initialized' then
+                local msg = vim.json.encode({
+                  id = 10,
+                  jsonrpc = '2.0',
+                  method = 'dummy',
+                  params = {},
+                })
+                socket:write(table.concat({'Content-Length: ', tostring(#msg), '\r\n\r\n', msg}))
+              end
+            else
+              table.insert(responses, payload)
+              socket:close()
+            end
+          end))
+        end)
+        local port = server:getsockname().port
+        local handler_called = false
+        vim.lsp.handlers['dummy'] = function(err, result)
+          handler_called = true
+          return false
+        end
+        local client_id = vim.lsp.start({ name = 'dummy', cmd = vim.lsp.rpc.connect('127.0.0.1', port) })
+        local client = vim.lsp.get_client_by_id(client_id)
+        vim.wait(1000, function() return #messages == 2 and handler_called and #responses == 1 end)
+        server:close()
+        server:shutdown()
+        return {
+          messages = messages,
+          handler_called = handler_called,
+          responses = responses }
+      ]]
+      local expected = {
+        messages = { 'initialize', 'initialized' },
+        handler_called = true,
+        responses = {
+          {
+            id = 10,
+            jsonrpc = '2.0',
+            result = false
+          }
+        }
+      }
+      eq(expected, result)
     end)
   end)
 end)

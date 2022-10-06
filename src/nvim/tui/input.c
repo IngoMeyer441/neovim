@@ -15,7 +15,7 @@
 #include "nvim/tui/input.h"
 #include "nvim/tui/tui.h"
 #include "nvim/vim.h"
-#ifdef WIN32
+#ifdef MSWIN
 # include "nvim/os/os_win_console.h"
 #endif
 #include "nvim/event/rstream.h"
@@ -143,7 +143,7 @@ void tinput_init(TermInput *input, Loop *loop)
   // If stdin is not a pty, switch to stderr. For cases like:
   //    echo q | nvim -es
   //    ls *.md | xargs nvim
-#ifdef WIN32
+#ifdef MSWIN
   if (!os_isatty(input->in_fd)) {
     input->in_fd = os_get_conin_fd();
   }
@@ -159,14 +159,10 @@ void tinput_init(TermInput *input, Loop *loop)
     term = "";  // termkey_new_abstract assumes non-null (#2745)
   }
 
-#if TERMKEY_VERSION_MAJOR > 0 || TERMKEY_VERSION_MINOR > 18
   input->tk = termkey_new_abstract(term,
                                    TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_NOSTART);
   termkey_hook_terminfo_getstr(input->tk, input->tk_ti_hook_fn, NULL);
   termkey_start(input->tk);
-#else
-  input->tk = termkey_new_abstract(term, TERMKEY_FLAG_UTF8);
-#endif
 
   int curflags = termkey_get_canonflags(input->tk);
   termkey_set_canonflags(input->tk, curflags | TERMKEY_CANON_DELBS);

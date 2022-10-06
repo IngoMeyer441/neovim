@@ -1578,7 +1578,7 @@ static int getexactdigraph(int char1, int char2, bool meta_char)
   if (retval == 0) {
     dp = digraphdefault;
 
-    for (int i = 0; dp->char1 != 0; i++) {
+    while (dp->char1 != 0) {
       if (((int)dp->char1 == char1) && ((int)dp->char2 == char2)) {
         retval = dp->result;
         break;
@@ -1707,7 +1707,7 @@ void listdigraphs(bool use_headers)
 
   const digr_T *dp = digraphdefault;
 
-  for (int i = 0; dp->char1 != NUL && !got_int; i++) {
+  while (dp->char1 != NUL && !got_int) {
     digr_T tmp;
 
     // May need to convert the result to 'encoding'.
@@ -1759,7 +1759,7 @@ void digraph_getlist_common(bool list_all, typval_T *rettv)
 
   if (list_all) {
     dp = digraphdefault;
-    for (int i = 0; dp->char1 != NUL && !got_int; i++) {
+    while (dp->char1 != NUL && !got_int) {
       digr_T tmp;
       tmp.char1 = dp->char1;
       tmp.char2 = dp->char2;
@@ -1926,7 +1926,7 @@ void f_digraph_get(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   if (digraphs == NULL) {
     return;
   }
-  if (STRLEN(digraphs) != 2) {
+  if (strlen(digraphs) != 2) {
     semsg(_(e_digraph_must_be_just_two_characters_str), digraphs);
     return;
   }
@@ -2036,7 +2036,7 @@ char *keymap_init(void)
 
     // Source the keymap file.  It will contain a ":loadkeymap" command
     // which will call ex_loadkeymap() below.
-    buflen = STRLEN(curbuf->b_p_keymap) + STRLEN(p_enc) + 14;
+    buflen = strlen(curbuf->b_p_keymap) + strlen(p_enc) + 14;
     buf = xmalloc(buflen);
 
     // try finding "keymap/'keymap'_'encoding'.vim"  in 'runtimepath'
@@ -2102,7 +2102,7 @@ void ex_loadkeymap(exarg_T *eap)
       s = skiptowhite(p);
       kp->to = xstrnsave(p, (size_t)(s - p));
 
-      if ((STRLEN(kp->from) + STRLEN(kp->to) >= KMAP_LLEN)
+      if ((strlen(kp->from) + strlen(kp->to) >= KMAP_LLEN)
           || (*kp->from == NUL)
           || (*kp->to == NUL)) {
         if (*kp->to == NUL) {

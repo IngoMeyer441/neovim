@@ -248,7 +248,7 @@ static int nlua_luv_thread_common_cfpcall(lua_State *lstate, int nargs, int nres
       mch_errmsg(e_outofmem);
       mch_errmsg("\n");
       lua_close(lstate);
-#ifdef WIN32
+#ifdef MSWIN
       ExitThread(0);
 #else
       pthread_exit(0);
@@ -673,7 +673,7 @@ static bool nlua_state_init(lua_State *const lstate) FUNC_ATTR_NONNULL_ALL
   lua_setfield(lstate, -2, "debug");
   lua_pop(lstate, 1);
 
-#ifdef WIN32
+#ifdef MSWIN
   // os.getenv
   lua_getglobal(lstate, "os");
   lua_pushcfunction(lstate, &nlua_getenv);
@@ -1049,7 +1049,7 @@ static int nlua_debug(lua_State *lstate)
       return 0;
     }
     if (luaL_loadbuffer(lstate, (const char *)input.vval.v_string,
-                        STRLEN(input.vval.v_string), "=(debug command)")) {
+                        strlen(input.vval.v_string), "=(debug command)")) {
       nlua_error(lstate, _("E5115: Error while loading debug string: %.*s"));
     } else if (nlua_pcall(lstate, 0, 0)) {
       nlua_error(lstate, _("E5116: Error while calling debug string: %.*s"));
@@ -1110,9 +1110,9 @@ int nlua_call(lua_State *lstate)
     try_start();
     typval_T rettv;
     funcexe_T funcexe = FUNCEXE_INIT;
-    funcexe.firstline = curwin->w_cursor.lnum;
-    funcexe.lastline = curwin->w_cursor.lnum;
-    funcexe.evaluate = true;
+    funcexe.fe_firstline = curwin->w_cursor.lnum;
+    funcexe.fe_lastline = curwin->w_cursor.lnum;
+    funcexe.fe_evaluate = true;
     // call_func() retval is deceptive, ignore it.  Instead we set `msg_list`
     // (TRY_WRAP) to capture abort-causing non-exception errors.
     (void)call_func((char *)name, (int)name_len, &rettv, nargs, vim_args, &funcexe);
@@ -1201,7 +1201,7 @@ static int nlua_empty_dict_tostring(lua_State *lstate)
   return 1;
 }
 
-#ifdef WIN32
+#ifdef MSWIN
 /// os.getenv: override os.getenv to maintain coherency. #9681
 ///
 /// uv_os_setenv uses SetEnvironmentVariableW which does not update _environ.
@@ -1435,12 +1435,12 @@ int typval_exec_lua_callable(LuaRef lua_cb, int argcount, typval_T *argvars, typ
 
   if (nlua_pcall(lstate, argcount, 1)) {
     nlua_print(lstate);
-    return ERROR_OTHER;
+    return FCERR_OTHER;
   }
 
   nlua_pop_typval(lstate, rettv);
 
-  return ERROR_NONE;
+  return FCERR_NONE;
 }
 
 /// Execute Lua string
@@ -1641,7 +1641,7 @@ void ex_luado(exarg_T *const eap)
       break;
     }
     if (lua_isstring(lstate, -1)) {
-      size_t old_line_len = STRLEN(old_line);
+      size_t old_line_len = strlen(old_line);
 
       size_t new_line_len;
       const char *const new_line = lua_tolstring(lstate, -1, &new_line_len);
@@ -1658,7 +1658,7 @@ void ex_luado(exarg_T *const eap)
   }
   lua_pop(lstate, 1);
   check_cursor();
-  update_screen(UPD_NOT_VALID);
+  redraw_curbuf_later(UPD_NOT_VALID);
 }
 
 /// Run lua file
@@ -2001,7 +2001,7 @@ int nlua_do_ucmd(ucmd_T *cmd, exarg_T *eap, bool preview)
 
   // Split args by unescaped whitespace |<f-args>| (nargs dependent)
   if (cmd->uc_argt & EX_NOSPC) {
-    if ((cmd->uc_argt & EX_NEEDARG) || STRLEN(eap->arg)) {
+    if ((cmd->uc_argt & EX_NEEDARG) || strlen(eap->arg)) {
       // For commands where nargs is 1 or "?" and argument is passed, fargs = { args }
       lua_rawseti(lstate, -2, 1);
     } else {
@@ -2011,7 +2011,7 @@ int nlua_do_ucmd(ucmd_T *cmd, exarg_T *eap, bool preview)
   } else if (eap->args == NULL) {
     // For commands with more than one possible argument, split if argument list isn't available.
     lua_pop(lstate, 1);  // Pop the reference of opts.args
-    size_t length = STRLEN(eap->arg);
+    size_t length = strlen(eap->arg);
     size_t end = 0;
     size_t len = 0;
     int i = 1;
@@ -2036,7 +2036,8 @@ int nlua_do_ucmd(ucmd_T *cmd, exarg_T *eap, bool preview)
   }
   lua_setfield(lstate, -2, "fargs");
 
-  lua_pushstring(lstate, (const char *)&eap->regname);
+  char reg[2] = { (char)eap->regname, NUL };
+  lua_pushstring(lstate, reg);
   lua_setfield(lstate, -2, "reg");
 
   lua_pushinteger(lstate, eap->addr_count);

@@ -14,7 +14,7 @@
 #ifdef HAVE_PWD_H
 # include <pwd.h>
 #endif
-#ifdef WIN32
+#ifdef MSWIN
 # include <lm.h>
 #endif
 
@@ -56,7 +56,7 @@ int os_get_usernames(garray_T *users)
     }
     endpwent();
   }
-#elif defined(WIN32)
+#elif defined(MSWIN)
   {
     DWORD nusers = 0, ntotal = 0, i;
     PUSER_INFO_0 uinfo;
@@ -210,7 +210,7 @@ char *get_users(expand_T *xp, int idx)
 ///         2 is name fully matches a user name.
 int match_user(char *name)
 {
-  int n = (int)STRLEN(name);
+  int n = (int)strlen(name);
   int result = 0;
 
   init_users();

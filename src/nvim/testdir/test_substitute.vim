@@ -1,6 +1,8 @@
 " Tests for the substitute (:s) command
 
 source shared.vim
+source check.vim
+source screendump.vim
 
 func Test_multiline_subst()
   enew!
@@ -637,12 +639,16 @@ endfunc
 func SubReplacer(text, submatches)
   return a:text .. a:submatches[0] .. a:text
 endfunc
+func SubReplacerVar(text, ...)
+  return a:text .. a:1[0] .. a:text
+endfunc
 func SubReplacer20(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, submatches)
   return a:t3 .. a:submatches[0] .. a:t11
 endfunc
 
 func Test_substitute_partial()
   call assert_equal('1foo2foo3', substitute('123', '2', function('SubReplacer', ['foo']), 'g'))
+  call assert_equal('1foo2foo3', substitute('123', '2', function('SubReplacerVar', ['foo']), 'g'))
 
   " 19 arguments plus one is just OK
   let Replacer = function('SubReplacer20', repeat(['foo'], 19))
@@ -666,6 +672,21 @@ func Test_sub_cmd_9()
 
   delfunc Foo
   bw!
+endfunc
+
+func Test_sub_highlight_zero_match()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    call setline(1, ['one', 'two', 'three'])
+  END
+  call writefile(lines, 'XscriptSubHighlight', 'D')
+  let buf = RunVimInTerminal('-S XscriptSubHighlight', #{rows: 8, cols: 60})
+  call term_sendkeys(buf, ":%s/^/   /c\<CR>")
+  call VerifyScreenDump(buf, 'Test_sub_highlight_zer_match_1', {})
+
+  call term_sendkeys(buf, "\<Esc>")
+  call StopVimInTerminal(buf)
 endfunc
 
 func Test_nocatch_sub_failure_handling()

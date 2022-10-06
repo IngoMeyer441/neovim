@@ -389,11 +389,11 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
 ///               - virt_text : virtual text to link to this mark.
 ///                   A list of [text, highlight] tuples, each representing a
 ///                   text chunk with specified highlight. `highlight` element
-///                   can either be a a single highlight group, or an array of
+///                   can either be a single highlight group, or an array of
 ///                   multiple highlight groups that will be stacked
 ///                   (highest priority last). A highlight group can be supplied
 ///                   either as a string or as an integer, the latter which
-///                   can be obtained using |nvim_get_hl_id_by_name|.
+///                   can be obtained using |nvim_get_hl_id_by_name()|.
 ///               - virt_text_pos : position of virtual text. Possible values:
 ///                 - "eol": right after eol character (default)
 ///                 - "overlay": display over the specified column, without
@@ -430,7 +430,7 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
 ///                                     column of the window, bypassing
 ///                                     sign and number columns.
 ///
-///               - ephemeral : for use with |nvim_set_decoration_provider|
+///               - ephemeral : for use with |nvim_set_decoration_provider()|
 ///                   callbacks. The mark will only be used for the current
 ///                   redraw cycle, and not be permantently stored in the
 ///                   buffer.
@@ -742,7 +742,7 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
       line = buf->b_ml.ml_line_count;
     }
   } else if (line < buf->b_ml.ml_line_count) {
-    len = ephemeral ? MAXCOL : STRLEN(ml_get_buf(buf, (linenr_T)line + 1, false));
+    len = ephemeral ? MAXCOL : strlen(ml_get_buf(buf, (linenr_T)line + 1, false));
   }
 
   if (col == -1) {
@@ -761,7 +761,7 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
 
   if (col2 >= 0) {
     if (line2 >= 0 && line2 < buf->b_ml.ml_line_count) {
-      len = ephemeral ? MAXCOL : STRLEN(ml_get_buf(buf, (linenr_T)line2 + 1, false));
+      len = ephemeral ? MAXCOL : strlen(ml_get_buf(buf, (linenr_T)line2 + 1, false));
     } else if (line2 == buf->b_ml.ml_line_count) {
       // We are trying to add an extmark past final newline
       len = 0;
@@ -958,7 +958,7 @@ void nvim_buf_clear_namespace(Buffer buffer, Integer ns_id, Integer line_start, 
 /// being triggered during the redraw code.
 ///
 /// The expected usage is to set extmarks for the currently
-/// redrawn buffer. |nvim_buf_set_extmark| can be called to add marks
+/// redrawn buffer. |nvim_buf_set_extmark()| can be called to add marks
 /// on a per-window or per-lines basis. Use the `ephemeral` key to only
 /// use the mark for the current screen redraw (the callback will be called
 /// again for the next redraw ).
@@ -1106,7 +1106,7 @@ static int init_sign_text(char **sign_text, char *text)
 {
   char *s;
 
-  char *endp = text + (int)STRLEN(text);
+  char *endp = text + (int)strlen(text);
 
   // Count cells and check for non-printable chars
   int cells = 0;

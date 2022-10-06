@@ -894,7 +894,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
       } else {
         // Long line, use only the last SPWORDLEN bytes.
         nextlinecol = (int)v - SPWORDLEN;
-        memmove(nextline, line + nextlinecol, SPWORDLEN);  // -V512
+        memmove(nextline, line + nextlinecol, SPWORDLEN);  // -V1086
         nextline_idx = SPWORDLEN + 1;
       }
     }
@@ -2607,7 +2607,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
           assert(i >= 0);
           int offset = kv_A(virt_lines, i).left_col ? 0 : win_col_offset;
           draw_virt_text_item(buf, offset, kv_A(virt_lines, i).line,
-                              kHlModeReplace, grid->cols, offset);
+                              kHlModeReplace, grid->cols, 0);
         }
       } else {
         draw_virt_text(wp, buf, win_col_offset, &draw_col, grid->cols, row);
@@ -2638,6 +2638,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
       // When the window is too narrow draw all "@" lines.
       if (draw_state != WL_LINE && filler_todo <= 0) {
         win_draw_end(wp, '@', ' ', true, row, wp->w_grid.rows, HLF_AT);
+        set_empty_rows(wp, row);
         row = endrow;
       }
 

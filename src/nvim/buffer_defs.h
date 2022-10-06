@@ -41,7 +41,7 @@ typedef struct {
 // for Map(K, V)
 #include "nvim/map.h"
 // for kvec
-#include "nvim/lib/kvec.h"
+#include "klib/kvec.h"
 // for marktree
 #include "nvim/marktree.h"
 
@@ -618,7 +618,7 @@ struct file_buffer {
   bool b_u_synced;              // entry lists are synced
   long b_u_seq_last;            // last used undo sequence number
   long b_u_save_nr_last;        // counter for last file write
-  long b_u_seq_cur;             // hu_seq of header below which we are now
+  long b_u_seq_cur;             // uh_seq of header below which we are now
   time_t b_u_time_cur;          // uh_time of header below which we are now
   long b_u_save_nr_cur;         // file write nr after which we are now
 
@@ -984,9 +984,6 @@ typedef struct {
   proftime_T tm;        // for a time limit
 } match_T;
 
-/// number of positions supported by matchaddpos()
-#define MAXPOSMATCH 8
-
 /// Same as lpos_T, but with additional field len.
 typedef struct {
   linenr_T lnum;   ///< line number
@@ -994,29 +991,28 @@ typedef struct {
   int len;    ///< length: 0 - to the end of line
 } llpos_T;
 
-/// posmatch_T provides an array for storing match items for matchaddpos()
-/// function.
-typedef struct posmatch posmatch_T;
-struct posmatch {
-  llpos_T pos[MAXPOSMATCH];   ///< array of positions
-  int cur;                ///< internal position counter
-  linenr_T toplnum;            ///< top buffer line
-  linenr_T botlnum;            ///< bottom buffer line
-};
-
-// matchitem_T provides a linked list for storing match items for ":match" and
-// the match functions.
+/// matchitem_T provides a linked list for storing match items for ":match",
+/// matchadd() and matchaddpos().
 typedef struct matchitem matchitem_T;
 struct matchitem {
-  matchitem_T *next;
-  int id;                   ///< match ID
-  int priority;             ///< match priority
-  char *pattern;            ///< pattern to highlight
-  regmmatch_T match;        ///< regexp program for pattern
-  posmatch_T pos;           ///< position matches
-  match_T hl;               ///< struct for doing the actual highlighting
-  int hlg_id;               ///< highlight group ID
-  int conceal_char;         ///< cchar for Conceal highlighting
+  matchitem_T *mit_next;
+  int mit_id;              ///< match ID
+  int mit_priority;        ///< match priority
+
+  // Either a pattern is defined (mit_pattern is not NUL) or a list of
+  // positions is given (mit_pos is not NULL and mit_pos_count > 0).
+  char *mit_pattern;       ///< pattern to highlight
+  regmmatch_T mit_match;   ///< regexp program for pattern
+
+  llpos_T *mit_pos_array;  ///< array of positions
+  int mit_pos_count;       ///< nr of entries in mit_pos
+  int mit_pos_cur;         ///< internal position counter
+  linenr_T mit_toplnum;    ///< top buffer line
+  linenr_T mit_botlnum;    ///< bottom buffer line
+
+  match_T mit_hl;          ///< struct for doing the actual highlighting
+  int mit_hlg_id;          ///< highlight group ID
+  int mit_conceal_char;    ///< cchar for Conceal highlighting
 };
 
 typedef int FloatAnchor;
@@ -1172,6 +1168,7 @@ struct window_S {
     int diff;
     int msgsep;
     int eob;
+    int lastline;
   } w_p_fcs_chars;
 
   // "w_topline", "w_leftcol" and "w_skipcol" specify the offsets for
@@ -1205,6 +1202,8 @@ struct window_S {
   int w_winrow;                     // first row of window in screen
   int w_height;                     // number of rows in window, excluding
                                     // status/command line(s)
+  int w_prev_winrow;                // previous winrow used for 'splitkeep'
+  int w_prev_height;                // previous height used for 'splitkeep'
   int w_status_height;              // number of status lines (0 or 1)
   int w_winbar_height;              // number of window bars (0 or 1)
   int w_wincol;                     // Leftmost column of window in screen.

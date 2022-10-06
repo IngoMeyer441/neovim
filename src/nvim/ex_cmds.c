@@ -330,7 +330,7 @@ static int linelen(int *has_tab)
   first = skipwhite(line);
 
   // find the character after the last non-blank character
-  for (last = first + STRLEN(first);
+  for (last = first + strlen(first);
        last > first && ascii_iswhite(last[-1]); last--) {}
   char save = *last;
   *last = NUL;
@@ -550,7 +550,7 @@ void ex_sort(exarg_T *eap)
   // Also get the longest line length for allocating "sortbuf".
   for (lnum = eap->line1; lnum <= eap->line2; lnum++) {
     s = ml_get(lnum);
-    len = (int)STRLEN(s);
+    len = (int)strlen(s);
     if (maxlen < len) {
       maxlen = len;
     }
@@ -651,7 +651,7 @@ void ex_sort(exarg_T *eap)
     }
 
     s = ml_get(get_lnum);
-    size_t bytelen = STRLEN(s) + 1;  // include EOL in bytelen
+    size_t bytelen = strlen(s) + 1;  // include EOL in bytelen
     old_count += (bcount_t)bytelen;
     if (!unique || i == 0 || string_compare(s, sortbuf1) != 0) {
       // Copy the line into a buffer, it may become invalid in
@@ -796,7 +796,7 @@ void ex_retab(exarg_T *eap)
 
             // len is actual number of white characters used
             len = num_spaces + num_tabs;
-            old_len = (long)STRLEN(ptr);
+            old_len = (long)strlen(ptr);
             const long new_len = old_len - col + start_col + len + 1;
             if (new_len <= 0 || new_len >= MAXCOL) {
               emsg(_(e_resulting_text_too_long));
@@ -1142,9 +1142,9 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
   bool ins_prevcmd = forceit;
   trailarg = arg;
   do {
-    len = STRLEN(trailarg) + 1;
+    len = strlen(trailarg) + 1;
     if (newcmd != NULL) {
-      len += STRLEN(newcmd);
+      len += strlen(newcmd);
     }
     if (ins_prevcmd) {
       if (prevcmd == NULL) {
@@ -1152,7 +1152,7 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
         xfree(newcmd);
         return;
       }
-      len += STRLEN(prevcmd);
+      len += strlen(prevcmd);
     }
     t = xmalloc(len);
     *t = NUL;
@@ -1162,7 +1162,7 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
     if (ins_prevcmd) {
       STRCAT(t, prevcmd);
     }
-    p = t + STRLEN(t);
+    p = t + strlen(t);
     STRCAT(t, trailarg);
     xfree(newcmd);
     newcmd = t;
@@ -1201,7 +1201,7 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
   }
   // Add quotes around the command, for shells that need them.
   if (*p_shq != NUL) {
-    newcmd = xmalloc(STRLEN(prevcmd) + 2 * STRLEN(p_shq) + 1);
+    newcmd = xmalloc(strlen(prevcmd) + 2 * STRLEN(p_shq) + 1);
     STRCPY(newcmd, p_shq);
     STRCAT(newcmd, prevcmd);
     STRCAT(newcmd, p_shq);
@@ -1542,86 +1542,74 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
   bool is_pwsh = STRNCMP(invocation_path_tail((char_u *)p_sh, NULL), "pwsh", 4) == 0
                  || STRNCMP(invocation_path_tail((char_u *)p_sh, NULL), "powershell", 10) == 0;
 
-  size_t len = STRLEN(cmd) + 1;  // At least enough space for cmd + NULL.
+  size_t len = strlen(cmd) + 1;  // At least enough space for cmd + NULL.
 
-  len += is_fish_shell ?  sizeof("begin; " "; end") - 1
-                       :  is_pwsh ? sizeof("Start-Process ")
-                                  : sizeof("(" ")") - 1;
+  len += is_fish_shell ? sizeof("begin; " "; end") - 1
+                       : !is_pwsh ? sizeof("(" ")") - 1
+                                  : 0;
 
   if (itmp != NULL) {
-    len += is_pwsh  ? STRLEN(itmp) + sizeof(" -RedirectStandardInput ")
-                    : STRLEN(itmp) + sizeof(" { " " < " " } ") - 1;
+    len += is_pwsh  ? strlen(itmp) + sizeof("& { Get-Content " " | & " " }") - 1
+                    : strlen(itmp) + sizeof(" { " " < " " } ") - 1;
   }
   if (otmp != NULL) {
-    len += STRLEN(otmp) + STRLEN(p_srr) + 2;  // two extra spaces ("  "),
+    len += strlen(otmp) + strlen(p_srr) + 2;  // two extra spaces ("  "),
   }
-
-  const char *const cmd_args = strchr(cmd, ' ');
-  len += (is_pwsh && cmd_args)
-      ? STRLEN(" -ArgumentList ") + 2  // two extra quotes
-      : 0;
 
   char *const buf = xmalloc(len);
 
   if (is_pwsh) {
-    xstrlcpy(buf, "Start-Process ", len);
-    if (cmd_args == NULL) {
-      xstrlcat(buf, cmd, len);
+    if (itmp != NULL) {
+      xstrlcpy(buf, "& { Get-Content ", len - 1);  // FIXME: should we add "-Encoding utf8"?
+      xstrlcat(buf, (const char *)itmp, len - 1);
+      xstrlcat(buf, " | & ", len - 1);  // FIXME: add `&` ourself or leave to user?
+      xstrlcat(buf, cmd, len - 1);
+      xstrlcat(buf, " }", len - 1);
     } else {
-      xstrlcpy(buf + STRLEN(buf), cmd, (size_t)(cmd_args - cmd + 1));
-      xstrlcat(buf, " -ArgumentList \"", len);
-      xstrlcat(buf, cmd_args + 1, len);  // +1 to skip the leading space.
-      xstrlcat(buf, "\"", len);
+      xstrlcpy(buf, cmd, len - 1);
     }
+  } else {
 #if defined(UNIX)
     // Put delimiters around the command (for concatenated commands) when
     // redirecting input and/or output.
-  } else if (itmp != NULL || otmp != NULL) {
-    char *fmt = is_fish_shell ? "begin; %s; end"
-                              :       "(%s)";
-    vim_snprintf(buf, len, fmt, cmd);
-#endif
+    if (itmp != NULL || otmp != NULL) {
+      char *fmt = is_fish_shell ? "begin; %s; end"
+        :       "(%s)";
+      vim_snprintf(buf, len, fmt, cmd);
+    } else {
+      xstrlcpy(buf, cmd, len);
+    }
+
+    if (itmp != NULL) {
+      xstrlcat(buf, " < ", len - 1);
+      xstrlcat(buf, (const char *)itmp, len - 1);
+    }
+#else
     // For shells that don't understand braces around commands, at least allow
     // the use of commands in a pipe.
-  } else {
-    xstrlcpy(buf, cmd, len);
-  }
-
-#if defined(UNIX)
-  if (itmp != NULL) {
-    if (is_pwsh) {
-      xstrlcat(buf, " -RedirectStandardInput ", len - 1);
-    } else {
-      xstrlcat(buf, " < ", len - 1);
-    }
-    xstrlcat(buf, itmp, len - 1);
-  }
-#else
-  if (itmp != NULL) {
-    // If there is a pipe, we have to put the '<' in front of it.
-    // Don't do this when 'shellquote' is not empty, otherwise the
-    // redirection would be inside the quotes.
-    if (*p_shq == NUL) {
-      char *const p = find_pipe(buf);
-      if (p != NULL) {
-        *p = NUL;
+    xstrlcpy(buf, (char *)cmd, len);
+    if (itmp != NULL) {
+      // If there is a pipe, we have to put the '<' in front of it.
+      // Don't do this when 'shellquote' is not empty, otherwise the
+      // redirection would be inside the quotes.
+      if (*p_shq == NUL) {
+        char *const p = find_pipe(buf);
+        if (p != NULL) {
+          *p = NUL;
+        }
       }
-    }
-    if (is_pwsh) {
-      xstrlcat(buf, " -RedirectStandardInput ", len);
-    } else {
       xstrlcat(buf, " < ", len);
-    }
-    xstrlcat(buf, itmp, len);
-    if (*p_shq == NUL) {
-      const char *const p = find_pipe(cmd);
-      if (p != NULL) {
-        xstrlcat(buf, " ", len - 1);  // Insert a space before the '|' for DOS
-        xstrlcat(buf, p, len - 1);
+      xstrlcat(buf, (const char *)itmp, len);
+      if (*p_shq == NUL) {
+        const char *const p = find_pipe((const char *)cmd);
+        if (p != NULL) {
+          xstrlcat(buf, " ", len - 1);  // Insert a space before the '|' for DOS
+          xstrlcat(buf, p, len - 1);
+        }
       }
     }
-  }
 #endif
+  }
   if (otmp != NULL) {
     append_redir(buf, len, p_srr, otmp);
   }
@@ -2372,7 +2360,7 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
   if ((command != NULL || newlnum > (linenr_T)0)
       && *get_vim_var_str(VV_SWAPCOMMAND) == NUL) {
     // Set v:swapcommand for the SwapExists autocommands.
-    const size_t len = (command != NULL) ? STRLEN(command) + 3 : 30;
+    const size_t len = (command != NULL) ? strlen(command) + 3 : 30;
     char *const p = xmalloc(len);
     if (command != NULL) {
       vim_snprintf(p, len, ":%s\r", command);
@@ -2941,7 +2929,7 @@ void ex_append(exarg_T *eap)
       }
       p = vim_strchr(eap->nextcmd, NL);
       if (p == NULL) {
-        p = eap->nextcmd + STRLEN(eap->nextcmd);
+        p = eap->nextcmd + strlen(eap->nextcmd);
       }
       theline = xstrnsave(eap->nextcmd, (size_t)(p - eap->nextcmd));
       if (*p != NUL) {
@@ -3329,7 +3317,7 @@ static char *sub_grow_buf(char **new_start, int needed_len)
     // Check if the temporary buffer is long enough to do the
     // substitution into.  If not, make it larger (with a bit
     // extra to avoid too many calls to xmalloc()/free()).
-    size_t len = STRLEN(*new_start);
+    size_t len = strlen(*new_start);
     needed_len += (int)len;
     if (needed_len > new_start_len) {
       new_start_len = needed_len + 50;
@@ -3616,13 +3604,6 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
     }
   }
 
-  const bool cmdheight0 = !ui_has_messages();
-  if (cmdheight0) {
-    // If cmdheight is 0, cmdheight must be set to 1 when we enter command line.
-    set_option_value("ch", 1L, NULL, 0);
-    redraw_statuslines();
-  }
-
   // Check for a match on each line.
   // If preview: limit to max('cmdwinheight', viewport).
   linenr_T line2 = eap->line2;
@@ -3777,7 +3758,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           // we continue looking for a match on the next line.
           // Avoids that ":s/\nB\@=//gc" get stuck.
           if (nmatch > 1) {
-            matchcol = (colnr_T)STRLEN(sub_firstline);
+            matchcol = (colnr_T)strlen(sub_firstline);
             nmatch = 1;
             skip_match = true;
           }
@@ -3878,7 +3859,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
                 // Position the cursor relative to the end of the line, the
                 // previous substitute may have inserted or deleted characters
                 // before the cursor.
-                len_change = (int)STRLEN(new_line) - (int)STRLEN(orig_line);
+                len_change = (int)strlen(new_line) - (int)strlen(orig_line);
                 curwin->w_cursor.col += len_change;
                 ml_replace(lnum, new_line, false);
               }
@@ -3887,11 +3868,16 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
                                    - regmatch.startpos[0].lnum;
               search_match_endcol = regmatch.endpos[0].col
                                     + len_change;
+              if (search_match_lines == 0 && search_match_endcol == 0) {
+                // highlight at least one character for /^/
+                search_match_endcol = 1;
+              }
               highlight_match = true;
 
               update_topline(curwin);
               validate_cursor();
-              update_screen(UPD_SOME_VALID);
+              redraw_later(curwin, UPD_SOME_VALID);
+              update_screen();
               highlight_match = false;
               redraw_later(curwin, UPD_SOME_VALID);
 
@@ -3910,7 +3896,9 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
               msg_no_more = false;
               msg_scroll = (int)i;
               show_cursor_info(true);
-              ui_cursor_goto(msg_row, msg_col);
+              if (!ui_has(kUIMessages)) {
+                ui_cursor_goto(msg_row, msg_col);
+              }
               RedrawingDisabled = temp;
 
               no_mapping++;                     // don't map this key
@@ -3971,7 +3959,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
             // Avoids that ":%s/\nB\@=//gc" and ":%s/\n/,\r/gc"
             // get stuck when pressing 'n'.
             if (nmatch > 1) {
-              matchcol = (colnr_T)STRLEN(sub_firstline);
+              matchcol = (colnr_T)strlen(sub_firstline);
               skip_match = true;
             }
             goto skip;
@@ -4081,7 +4069,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           }
           size_t copy_len = (size_t)(regmatch.startpos[0].col - copycol);
           new_end = sub_grow_buf(&new_start,
-                                 (colnr_T)STRLEN(p1) - regmatch.endpos[0].col
+                                 (colnr_T)strlen(p1) - regmatch.endpos[0].col
                                  + (colnr_T)copy_len + sublen + 1);
 
           // copy the text up to the part that matched
@@ -4115,7 +4103,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           bcount_t replaced_bytes = 0;
           lpos_T start = regmatch.startpos[0], end = regmatch.endpos[0];
           for (i = 0; i < nmatch - 1; i++) {
-            replaced_bytes += (bcount_t)STRLEN(ml_get((linenr_T)(lnum_start + i))) + 1;
+            replaced_bytes += (bcount_t)strlen(ml_get((linenr_T)(lnum_start + i))) + 1;
           }
           replaced_bytes += end.col - start.col;
 
@@ -4158,7 +4146,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
               p1 += utfc_ptr2len(p1) - 1;
             }
           }
-          colnr_T new_endcol = (colnr_T)STRLEN(new_start);
+          colnr_T new_endcol = (colnr_T)strlen(new_start);
           current_match.end.col = new_endcol;
           current_match.end.lnum = lnum;
 
@@ -4214,8 +4202,8 @@ skip:
             // have changed the number of characters.  Same for
             // "prev_matchcol".
             STRCAT(new_start, sub_firstline + copycol);
-            matchcol = (colnr_T)STRLEN(sub_firstline) - matchcol;
-            prev_matchcol = (colnr_T)STRLEN(sub_firstline)
+            matchcol = (colnr_T)strlen(sub_firstline) - matchcol;
+            prev_matchcol = (colnr_T)strlen(sub_firstline)
                             - prev_matchcol;
 
             if (u_savesub(lnum) != OK) {
@@ -4260,8 +4248,8 @@ skip:
             xfree(sub_firstline);                // free the temp buffer
             sub_firstline = new_start;
             new_start = NULL;
-            matchcol = (colnr_T)STRLEN(sub_firstline) - matchcol;
-            prev_matchcol = (colnr_T)STRLEN(sub_firstline)
+            matchcol = (colnr_T)strlen(sub_firstline) - matchcol;
+            prev_matchcol = (colnr_T)strlen(sub_firstline)
                             - prev_matchcol;
             copycol = 0;
           }
@@ -4366,7 +4354,7 @@ skip:
           beginline(BL_WHITE | BL_FIX);
         }
       }
-      if (!cmdpreview && !do_sub_msg(subflags.do_count) && subflags.do_ask) {
+      if (!cmdpreview && !do_sub_msg(subflags.do_count) && subflags.do_ask && p_ch > 0) {
         msg("");
       }
     } else {
@@ -4381,7 +4369,9 @@ skip:
       emsg(_(e_interr));
     } else if (got_match) {
       // did find something but nothing substituted
-      msg("");
+      if (p_ch > 0) {
+        msg("");
+      }
     } else if (subflags.do_error) {
       // nothing found
       semsg(_(e_patnotf2), get_search_pat());
@@ -4412,11 +4402,6 @@ skip:
       }
       retv = show_sub(eap, old_cursor, &preview_lines, pre_hl_id, cmdpreview_ns, cmdpreview_bufnr);
     }
-  }
-
-  if (cmdheight0) {
-    // Restore cmdheight
-    set_option_value("ch", 0L, NULL, 0);
   }
 
   kv_destroy(preview_lines.subresults);

@@ -1350,7 +1350,7 @@ static int utf_strnicmp(const char_u *s1, const char_u *s2, size_t n1, size_t n2
   return n1 == 0 ? -1 : 1;
 }
 
-#ifdef WIN32
+#ifdef MSWIN
 # ifndef CP_UTF8
 #  define CP_UTF8 65001  // magic number from winnls.h
 # endif
@@ -1457,7 +1457,7 @@ void mb_utflen(const char_u *s, size_t len, size_t *codepoints, size_t *codeunit
 {
   size_t count = 0, extra = 0;
   size_t clen;
-  for (size_t i = 0; i < len && s[i] != NUL; i += clen) {
+  for (size_t i = 0; i < len; i += clen) {
     clen = (size_t)utf_ptr2len_len(s + i, (int)(len - i));
     // NB: gets the byte value of invalid sequence bytes.
     // we only care whether the char fits in the BMP or not
@@ -1479,7 +1479,7 @@ ssize_t mb_utf_index_to_bytes(const char_u *s, size_t len, size_t index, bool us
   if (index == 0) {
     return 0;
   }
-  for (i = 0; i < len && s[i] != NUL; i += clen) {
+  for (i = 0; i < len; i += clen) {
     clen = (size_t)utf_ptr2len_len(s + i, (int)(len - i));
     // NB: gets the byte value of invalid sequence bytes.
     // we only care whether the char fits in the BMP or not
@@ -1556,7 +1556,7 @@ void show_utf8(void)
     sprintf((char *)IObuff + rlen, "%02x ",
             (line[i] == NL) ? NUL : line[i]);          // NUL is stored as NL
     clen--;
-    rlen += (int)STRLEN(IObuff + rlen);
+    rlen += (int)strlen(IObuff + rlen);
     if (rlen > IOSIZE - 20) {
       break;
     }
@@ -2793,7 +2793,7 @@ void f_setcellwidths(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
 void f_charclass(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  if (tv_check_for_string(&argvars[0]) == FAIL
+  if (tv_check_for_string_arg(argvars, 0) == FAIL
       || argvars[0].vval.v_string == NULL) {
     return;
   }

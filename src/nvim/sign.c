@@ -78,10 +78,10 @@ static signgroup_T *sign_group_ref(const char *groupname)
   signgroup_T *group;
 
   hash = hash_hash((char_u *)groupname);
-  hi = hash_lookup(&sg_table, (char *)groupname, STRLEN(groupname), hash);
+  hi = hash_lookup(&sg_table, (char *)groupname, strlen(groupname), hash);
   if (HASHITEM_EMPTY(hi)) {
     // new group
-    group = xmalloc(sizeof(signgroup_T) + STRLEN(groupname));
+    group = xmalloc(sizeof(signgroup_T) + strlen(groupname));
 
     STRCPY(group->sg_name, groupname);
     group->sg_refcount = 1;
@@ -557,7 +557,7 @@ static linenr_T buf_delsign(buf_T *buf, linenr_T atlnum, int id, char *group)
         sign_group_unref((char *)sign->se_group->sg_name);
       }
       xfree(sign);
-      redraw_buf_line_later(buf, lnum);
+      redraw_buf_line_later(buf, lnum, false);
       // Check whether only one sign needs to be deleted
       // If deleting a sign with a specific identifier in a particular
       // group or deleting any sign at a particular line number, delete
@@ -724,7 +724,27 @@ static void sign_list_placed(buf_T *rbuf, char *sign_group)
   }
 }
 
-/// Adjust a placed sign for inserted/deleted lines.
+/// Adjust or delete a placed sign for inserted/deleted lines.
+///
+/// @return  the new line number of the sign, or 0 if the sign is in deleted lines.
+static linenr_T sign_adjust_one(const linenr_T se_lnum, linenr_T line1, linenr_T line2,
+                                linenr_T amount, linenr_T amount_after)
+{
+  if (se_lnum < line1) {
+    // Ignore changes to lines after the sign
+    return se_lnum;
+  }
+  if (se_lnum > line2) {
+    // Lines inserted or deleted before the sign
+    return se_lnum + amount_after;
+  }
+  if (amount == MAXLNUM) {  // sign in deleted lines
+    return 0;
+  }
+  return se_lnum + amount;
+}
+
+/// Adjust placed signs for inserted/deleted lines.
 void sign_mark_adjust(linenr_T line1, linenr_T line2, linenr_T amount, linenr_T amount_after)
 {
   sign_entry_T *sign;           // a sign in a b_signlist
@@ -735,9 +755,7 @@ void sign_mark_adjust(linenr_T line1, linenr_T line2, linenr_T amount, linenr_T 
   int is_fixed = 0;
   int signcol = win_signcol_configured(curwin, &is_fixed);
 
-  bool delete = amount == MAXLNUM;
-
-  if (delete) {
+  if (amount == MAXLNUM) {  // deleting
     buf_signcols_del_check(curbuf, line1, line2);
   }
 
@@ -745,11 +763,10 @@ void sign_mark_adjust(linenr_T line1, linenr_T line2, linenr_T amount, linenr_T 
 
   for (sign = curbuf->b_signlist; sign != NULL; sign = next) {
     next = sign->se_next;
-    new_lnum = sign->se_lnum;
-    if (sign->se_lnum >= line1 && sign->se_lnum <= line2) {
-      if (!delete) {
-        new_lnum += amount;
-      } else if (!is_fixed || signcol >= 2) {
+
+    new_lnum = sign_adjust_one(sign->se_lnum, line1, line2, amount, amount_after);
+    if (new_lnum == 0) {  // sign in deleted lines
+      if (!is_fixed || signcol >= 2) {
         *lastp = next;
         if (next) {
           next->se_prev = last;
@@ -757,18 +774,22 @@ void sign_mark_adjust(linenr_T line1, linenr_T line2, linenr_T amount, linenr_T 
         xfree(sign);
         continue;
       }
-    } else if (sign->se_lnum > line2) {
-      new_lnum += amount_after;
-    }
-    // If the new sign line number is past the last line in the buffer,
-    // then don't adjust the line number. Otherwise, it will always be past
-    // the last line and will not be visible.
-    if (sign->se_lnum >= line1 && new_lnum <= curbuf->b_ml.ml_line_count) {
-      sign->se_lnum = new_lnum;
+    } else {
+      // If the new sign line number is past the last line in the buffer,
+      // then don't adjust the line number. Otherwise, it will always be past
+      // the last line and will not be visible.
+      if (new_lnum <= curbuf->b_ml.ml_line_count) {
+        sign->se_lnum = new_lnum;
+      }
     }
 
     last = sign;
     lastp = &sign->se_next;
+  }
+
+  new_lnum = sign_adjust_one(curbuf->b_signcols.sentinel, line1, line2, amount, amount_after);
+  if (new_lnum != 0) {
+    curbuf->b_signcols.sentinel = new_lnum;
   }
 }
 
@@ -868,7 +889,7 @@ static int sign_define_init_text(sign_T *sp, char *text)
   int cells;
   size_t len;
 
-  endp = text + (int)STRLEN(text);
+  endp = text + (int)strlen(text);
   for (s = text; s + 1 < endp; s++) {
     if (*s == '\\') {
       // Remove a backslash, so that it is possible
@@ -951,7 +972,7 @@ static int sign_define_by_name(char *name, char *icon, char *linehl, char *text,
     if (*linehl == NUL) {
       sp->sn_line_hl = 0;
     } else {
-      sp->sn_line_hl = syn_check_group(linehl, STRLEN(linehl));
+      sp->sn_line_hl = syn_check_group(linehl, strlen(linehl));
     }
   }
 
@@ -959,7 +980,7 @@ static int sign_define_by_name(char *name, char *icon, char *linehl, char *text,
     if (*texthl == NUL) {
       sp->sn_text_hl = 0;
     } else {
-      sp->sn_text_hl = syn_check_group(texthl, STRLEN(texthl));
+      sp->sn_text_hl = syn_check_group(texthl, strlen(texthl));
     }
   }
 
@@ -967,7 +988,7 @@ static int sign_define_by_name(char *name, char *icon, char *linehl, char *text,
     if (*culhl == NUL) {
       sp->sn_cul_hl = 0;
     } else {
-      sp->sn_cul_hl = syn_check_group(culhl, STRLEN(culhl));
+      sp->sn_cul_hl = syn_check_group(culhl, strlen(culhl));
     }
   }
 
@@ -975,7 +996,7 @@ static int sign_define_by_name(char *name, char *icon, char *linehl, char *text,
     if (*numhl == NUL) {
       sp->sn_num_hl = 0;
     } else {
-      sp->sn_num_hl = syn_check_group(numhl, STRLEN(numhl));
+      sp->sn_num_hl = syn_check_group(numhl, strlen(numhl));
     }
   }
 
@@ -1062,7 +1083,7 @@ static int sign_place(int *sign_id, const char *sign_group, const char *sign_nam
     lnum = buf_change_sign_type(buf, *sign_id, (char *)sign_group, sp->sn_typenr, prio);
   }
   if (lnum > 0) {
-    redraw_buf_line_later(buf, lnum);
+    redraw_buf_line_later(buf, lnum, false);
 
     // When displaying signs in the 'number' column, if the width of the
     // number column is less than 2, then force recomputing the width.
@@ -1093,7 +1114,7 @@ static int sign_unplace(int sign_id, char *sign_group, buf_T *buf, linenr_T atln
     if (lnum == 0) {
       return FAIL;
     }
-    redraw_buf_line_later(buf, lnum);
+    redraw_buf_line_later(buf, lnum, false);
   }
 
   // When all the signs in a buffer are removed, force recomputing the
@@ -1139,7 +1160,7 @@ static linenr_T sign_jump(int sign_id, char *sign_group, buf_T *buf)
       emsg(_("E934: Cannot jump to a buffer that does not have a name"));
       return -1;
     }
-    size_t cmdlen = STRLEN(buf->b_fname) + 24;
+    size_t cmdlen = strlen(buf->b_fname) + 24;
     char *cmd = xmallocz(cmdlen);
     snprintf(cmd, cmdlen, "e +%" PRId64 " %s",
              (int64_t)lnum, buf->b_fname);

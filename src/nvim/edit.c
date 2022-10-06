@@ -1286,7 +1286,7 @@ void ins_redraw(bool ready)
     // a "(".  The autocommand may also require a redraw, so it's done
     // again below, unfortunately.
     if (syntax_present(curwin) && must_redraw) {
-      update_screen(0);
+      update_screen();
     }
     // Make sure curswant is correct, an autocommand may call
     // getcurpos()
@@ -1348,7 +1348,7 @@ void ins_redraw(bool ready)
 
   pum_check_clear();
   if (must_redraw) {
-    update_screen(0);
+    update_screen();
   } else if (clear_cmdline || redraw_cmdline) {
     showmode();  // clear cmdline and show mode
   }
@@ -1773,7 +1773,7 @@ void truncate_spaces(char *line)
   int i;
 
   // find start of trailing white space
-  for (i = (int)STRLEN(line) - 1; i >= 0 && ascii_iswhite(line[i]); i--) {
+  for (i = (int)strlen(line) - 1; i >= 0 && ascii_iswhite(line[i]); i--) {
     if (State & REPLACE_FLAG) {
       replace_join(0);              // remove a NUL from the replace stack
     }
@@ -2541,97 +2541,112 @@ int oneleft(void)
   return OK;
 }
 
-/// @oaram upd_topline  When true: update topline
+/// Move the cursor up "n" lines in window "wp".
+/// Takes care of closed folds.
+/// Returns the new cursor line or zero for failure.
+linenr_T cursor_up_inner(win_T *wp, long n)
+{
+  linenr_T lnum = wp->w_cursor.lnum;
+
+  // This fails if the cursor is already in the first line.
+  if (lnum <= 1) {
+    return 0;
+  }
+  if (n >= lnum) {
+    lnum = 1;
+  } else if (hasAnyFolding(wp)) {
+    // Count each sequence of folded lines as one logical line.
+
+    // go to the start of the current fold
+    (void)hasFoldingWin(wp, lnum, &lnum, NULL, true, NULL);
+
+    while (n--) {
+      // move up one line
+      lnum--;
+      if (lnum <= 1) {
+        break;
+      }
+      // If we entered a fold, move to the beginning, unless in
+      // Insert mode or when 'foldopen' contains "all": it will open
+      // in a moment.
+      if (n > 0 || !((State & MODE_INSERT) || (fdo_flags & FDO_ALL))) {
+        (void)hasFoldingWin(wp, lnum, &lnum, NULL, true, NULL);
+      }
+    }
+    if (lnum < 1) {
+      lnum = 1;
+    }
+  } else {
+    lnum -= (linenr_T)n;
+  }
+
+  wp->w_cursor.lnum = lnum;
+  return lnum;
+}
+
+/// @param upd_topline  When true: update topline
 int cursor_up(long n, int upd_topline)
 {
-  linenr_T lnum;
-
-  if (n > 0) {
-    lnum = curwin->w_cursor.lnum;
-
-    // This fails if the cursor is already in the first line.
-    if (lnum <= 1) {
-      return FAIL;
-    }
-    if (n >= lnum) {
-      lnum = 1;
-    } else if (hasAnyFolding(curwin)) {
-      // Count each sequence of folded lines as one logical line.
-
-      // go to the start of the current fold
-      (void)hasFolding(lnum, &lnum, NULL);
-
-      while (n--) {
-        // move up one line
-        lnum--;
-        if (lnum <= 1) {
-          break;
-        }
-        // If we entered a fold, move to the beginning, unless in
-        // Insert mode or when 'foldopen' contains "all": it will open
-        // in a moment.
-        if (n > 0 || !((State & MODE_INSERT) || (fdo_flags & FDO_ALL))) {
-          (void)hasFolding(lnum, &lnum, NULL);
-        }
-      }
-      if (lnum < 1) {
-        lnum = 1;
-      }
-    } else {
-      lnum -= (linenr_T)n;
-    }
-    curwin->w_cursor.lnum = lnum;
+  if (n > 0 && cursor_up_inner(curwin, n) == 0) {
+    return FAIL;
   }
 
   // try to advance to the column we want to be at
   coladvance(curwin->w_curswant);
 
   if (upd_topline) {
-    update_topline(curwin);           // make sure curwin->w_topline is valid
+    update_topline(curwin);  // make sure curwin->w_topline is valid
   }
 
   return OK;
 }
 
-/// Cursor down a number of logical lines.
-///
+/// Move the cursor down "n" lines in window "wp".
+/// Takes care of closed folds.
+/// Returns the new cursor line or zero for failure.
+linenr_T cursor_down_inner(win_T *wp, long n)
+{
+  linenr_T lnum = wp->w_cursor.lnum;
+  linenr_T line_count = wp->w_buffer->b_ml.ml_line_count;
+
+  // Move to last line of fold, will fail if it's the end-of-file.
+  (void)hasFoldingWin(wp, lnum, NULL, &lnum, true, NULL);
+  // This fails if the cursor is already in the last line.
+  if (lnum >= line_count) {
+    return FAIL;
+  }
+  if (lnum + n >= line_count) {
+    lnum = line_count;
+  } else if (hasAnyFolding(wp)) {
+    linenr_T last;
+
+    // count each sequence of folded lines as one logical line
+    while (n--) {
+      if (hasFoldingWin(wp, lnum, NULL, &last, true, NULL)) {
+        lnum = last + 1;
+      } else {
+        lnum++;
+      }
+      if (lnum >= line_count) {
+        break;
+      }
+    }
+    if (lnum > line_count) {
+      lnum = line_count;
+    }
+  } else {
+    lnum += (linenr_T)n;
+  }
+
+  wp->w_cursor.lnum = lnum;
+  return lnum;
+}
+
 /// @param upd_topline  When true: update topline
 int cursor_down(long n, int upd_topline)
 {
-  linenr_T lnum;
-
-  if (n > 0) {
-    lnum = curwin->w_cursor.lnum;
-    // Move to last line of fold, will fail if it's the end-of-file.
-    (void)hasFolding(lnum, NULL, &lnum);
-
-    // This fails if the cursor is already in the last line.
-    if (lnum >= curbuf->b_ml.ml_line_count) {
-      return FAIL;
-    }
-    if (lnum + n >= curbuf->b_ml.ml_line_count) {
-      lnum = curbuf->b_ml.ml_line_count;
-    } else if (hasAnyFolding(curwin)) {
-      linenr_T last;
-
-      // count each sequence of folded lines as one logical line
-      while (n--) {
-        if (hasFolding(lnum, NULL, &last)) {
-          lnum = last + 1;
-        } else {
-          lnum++;
-        }
-        if (lnum >= curbuf->b_ml.ml_line_count) {
-          break;
-        }
-      }
-      if (lnum > curbuf->b_ml.ml_line_count) {
-        lnum = curbuf->b_ml.ml_line_count;
-      }
-    } else {
-      lnum += (linenr_T)n;
-    }
-    curwin->w_cursor.lnum = lnum;
+  if (n > 0 && cursor_down_inner(curwin, n) == 0) {
+    return FAIL;
   }
 
   // try to advance to the column we want to be at
@@ -2676,7 +2691,7 @@ int stuff_inserted(int c, long count, int no_esc)
   // when the last char is either "0" or "^" it will be quoted if no ESC
   // comes after it OR if it will inserted more than once and "ptr"
   // starts with ^D.  -- Acevedo
-  last_ptr = (esc_ptr ? esc_ptr : ptr + STRLEN(ptr)) - 1;
+  last_ptr = (esc_ptr ? esc_ptr : ptr + strlen(ptr)) - 1;
   if (last_ptr >= ptr && (*last_ptr == '0' || *last_ptr == '^')
       && (no_esc || (*ptr == Ctrl_D && count > 1))) {
     last = *last_ptr;
@@ -2938,7 +2953,7 @@ static void replace_do_bs(int limit_col)
     }
     (void)del_char_after_col(limit_col);
     if (l_State & VREPLACE_FLAG) {
-      orig_len = (int)STRLEN(get_cursor_pos_ptr());
+      orig_len = (int)strlen(get_cursor_pos_ptr());
     }
     replace_push(cc);
     replace_pop_ins();
@@ -3856,7 +3871,7 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
         return false;
       }
       Insstart.lnum--;
-      Insstart.col = (colnr_T)STRLEN(ml_get(Insstart.lnum));
+      Insstart.col = (colnr_T)strlen(ml_get(Insstart.lnum));
     }
     // In replace mode:
     // cc < 0: NL was inserted, delete it
@@ -4674,7 +4689,7 @@ bool ins_eol(int c)
 
   // NL in reverse insert will always start in the end of current line.
   if (revins_on) {
-    curwin->w_cursor.col += (colnr_T)STRLEN(get_cursor_pos_ptr());
+    curwin->w_cursor.col += (colnr_T)strlen(get_cursor_pos_ptr());
   }
 
   AppendToRedobuff(NL_STR);

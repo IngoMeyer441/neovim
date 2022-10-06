@@ -202,7 +202,7 @@ _ERROR_CATEGORIES = [
     'whitespace/cast',
 ]
 
-# The default state of the category filter. This is overrided by the --filter=
+# The default state of the category filter. This is overridden by the --filter=
 # flag. By default all errors are on, so only add here categories that should be
 # off by default (i.e., categories that must be enabled by the --filter= flags).
 # All entries here should start with a '-' or '+', as in the --filter= flag.
@@ -2700,7 +2700,7 @@ def CheckLanguage(filename, clean_lines, linenum, error):
     if match:
         error(filename, linenum, 'runtime/printf', 4,
               'Use xstrlcat or snprintf instead of %s' % match.group(1))
-    if not Search(r'eval/typval\.[ch]$', filename):
+    if not Search(r'eval/typval\.[ch]$|eval/typval_defs\.h$', filename):
         match = Search(r'(?:\.|->)'
                        r'(?:lv_(?:first|last|refcount|len|watch|idx(?:_item)?'
                        r'|copylist|lock)'

@@ -3,6 +3,7 @@
 
 #include <assert.h>
 
+#include "klib/kvec.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
 #include "nvim/drawscreen.h"
@@ -10,7 +11,6 @@
 #include "nvim/ex_docmd.h"
 #include "nvim/getchar.h"
 #include "nvim/insexpand.h"
-#include "nvim/lib/kvec.h"
 #include "nvim/log.h"
 #include "nvim/main.h"
 #include "nvim/option.h"
@@ -57,7 +57,7 @@ getkey:
       // Duplicate display updating logic in vgetorpeek()
       if (((State & MODE_INSERT) != 0 || p_lz) && (State & MODE_CMDLINE) == 0
           && must_redraw != 0 && !need_wait_return) {
-        update_screen(0);
+        update_screen();
         setcursor();  // put cursor back where it belongs
       }
       // Flush screen updates before blocking
@@ -65,7 +65,7 @@ getkey:
       // Call `os_inchar` directly to block for events or user input without
       // consuming anything from `input_buffer`(os/input.c) or calling the
       // mapping engine.
-      (void)os_inchar(NULL, 0, -1, 0, main_loop.events);
+      (void)os_inchar(NULL, 0, -1, typebuf.tb_change_cnt, main_loop.events);
       // If an event was put into the queue, we send K_EVENT directly.
       if (!multiqueue_empty(main_loop.events)) {
         key = K_EVENT;

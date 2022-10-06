@@ -266,7 +266,7 @@ static void au_show_for_event(int group, event_T event, char *pat)
       // normalize pat into standard "<buffer>#N" form
       aupat_normalize_buflocal_pat(buflocal_pat, pat, patlen, aupat_get_buflocal_nr(pat, patlen));
       pat = (char *)buflocal_pat;
-      patlen = (int)STRLEN(buflocal_pat);
+      patlen = (int)strlen(buflocal_pat);
     }
 
     assert(*pat != NUL);
@@ -478,34 +478,37 @@ void augroup_del(char *name, bool stupid_legacy_mode)
   int i = augroup_find(name);
   if (i == AUGROUP_ERROR) {  // the group doesn't exist
     semsg(_("E367: No such group: \"%s\""), name);
-  } else if (i == current_augroup) {
+    return;
+  }
+  if (i == current_augroup) {
     emsg(_("E936: Cannot delete the current group"));
-  } else {
-    if (stupid_legacy_mode) {
-      FOR_ALL_AUEVENTS(event) {
-        FOR_ALL_AUPATS_IN_EVENT(event, ap) {
-          if (ap->group == i && ap->pat != NULL) {
-            give_warning(_("W19: Deleting augroup that is still in use"), true);
-            map_put(String, int)(&map_augroup_name_to_id, cstr_as_string(name), AUGROUP_DELETED);
-            augroup_map_del(ap->group, NULL);
-            return;
-          }
-        }
-      }
-    } else {
-      FOR_ALL_AUEVENTS(event) {
-        FOR_ALL_AUPATS_IN_EVENT(event, ap) {
-          if (ap->group == i) {
-            aupat_del(ap);
-          }
+    return;
+  }
+
+  if (stupid_legacy_mode) {
+    FOR_ALL_AUEVENTS(event) {
+      FOR_ALL_AUPATS_IN_EVENT(event, ap) {
+        if (ap->group == i && ap->pat != NULL) {
+          give_warning(_("W19: Deleting augroup that is still in use"), true);
+          map_put(String, int)(&map_augroup_name_to_id, cstr_as_string(name), AUGROUP_DELETED);
+          augroup_map_del(ap->group, NULL);
+          return;
         }
       }
     }
-
-    // Remove the group because it's not currently in use.
-    augroup_map_del(i, name);
-    au_cleanup();
+  } else {
+    FOR_ALL_AUEVENTS(event) {
+      FOR_ALL_AUPATS_IN_EVENT(event, ap) {
+        if (ap->group == i) {
+          aupat_del(ap);
+        }
+      }
+    }
   }
+
+  // Remove the group because it's not currently in use.
+  augroup_map_del(i, name);
+  au_cleanup();
 }
 
 /// Find the ID of an autocmd group name.
@@ -725,7 +728,7 @@ int check_ei(void)
 char *au_event_disable(char *what)
 {
   char *save_ei = xstrdup(p_ei);
-  char *new_ei = xstrnsave(p_ei, STRLEN(p_ei) + STRLEN(what));
+  char *new_ei = xstrnsave(p_ei, strlen(p_ei) + strlen(what));
   if (*what == ',' && *p_ei == NUL) {
     STRCPY(new_ei, what + 1);
   } else {
@@ -733,7 +736,6 @@ char *au_event_disable(char *what)
   }
   set_string_option_direct("ei", -1, new_ei, OPT_FREE, SID_NONE);
   xfree(new_ei);
-
   return save_ei;
 }
 
@@ -837,13 +839,15 @@ void do_autocmd(char *arg_in, int forceit)
 
     bool invalid_flags = false;
     for (size_t i = 0; i < 2; i++) {
-      if (*cmd != NUL) {
-        invalid_flags |= arg_autocmd_flag_get(&once, &cmd, "++once", 6);
-        invalid_flags |= arg_autocmd_flag_get(&nested, &cmd, "++nested", 8);
-
-        // Check the deprecated "nested" flag.
-        invalid_flags |= arg_autocmd_flag_get(&nested, &cmd, "nested", 6);
+      if (*cmd == NUL) {
+        continue;
       }
+
+      invalid_flags |= arg_autocmd_flag_get(&once, &cmd, "++once", 6);
+      invalid_flags |= arg_autocmd_flag_get(&nested, &cmd, "++nested", 8);
+
+      // Check the deprecated "nested" flag.
+      invalid_flags |= arg_autocmd_flag_get(&nested, &cmd, "nested", 6);
     }
 
     if (invalid_flags) {
@@ -877,7 +881,7 @@ void do_autocmd(char *arg_in, int forceit)
     }
   } else {
     if (*arg == '*' || *arg == NUL || *arg == '|') {
-      if (!forceit && *cmd != NUL) {
+      if (*cmd != NUL) {
         emsg(_(e_cannot_define_autocommands_for_all_events));
       } else {
         do_all_autocmd_events(pat, once, nested, cmd, forceit, group);
@@ -957,7 +961,7 @@ int do_autocmd_event(event_T event, char *pat, bool once, int nested, char *cmd,
       aupat_normalize_buflocal_pat(buflocal_pat, pat, patlen, buflocal_nr);
 
       pat = buflocal_pat;
-      patlen = (int)STRLEN(buflocal_pat);
+      patlen = (int)strlen(buflocal_pat);
     }
 
     if (delete) {
@@ -1018,7 +1022,7 @@ int autocmd_register(int64_t id, event_T event, char *pat, int patlen, int group
   int findgroup;
   char buflocal_pat[BUFLOCAL_PAT_LEN];  // for "<buffer=X>"
 
-  if (patlen > (int)STRLEN(pat)) {
+  if (patlen > (int)strlen(pat)) {
     return FAIL;
   }
 
@@ -1039,7 +1043,7 @@ int autocmd_register(int64_t id, event_T event, char *pat, int patlen, int group
     aupat_normalize_buflocal_pat(buflocal_pat, pat, patlen, buflocal_nr);
 
     pat = buflocal_pat;
-    patlen = (int)STRLEN(buflocal_pat);
+    patlen = (int)strlen(buflocal_pat);
   }
 
   // always goes at or after the last one, so start at the end.
@@ -1193,7 +1197,7 @@ size_t aucmd_pattern_length(char *pat)
     return (size_t)(endpat - pat);
   }
 
-  return STRLEN(pat);
+  return strlen(pat);
 }
 
 char *aucmd_next_pattern(char *pat, size_t patlen)
@@ -1275,6 +1279,7 @@ void ex_doautoall(exarg_T *eap)
     if (buf->b_ml.ml_mfp == NULL || buf == curbuf) {
       continue;
     }
+
     // Find a window for this buffer and save some values.
     aucmd_prepbuf(&aco, buf);
     set_bufref(&bufref, buf);
@@ -1445,7 +1450,6 @@ win_found:
     }
 
     aucmd_win_used = false;
-    last_status(false);  // may need to remove last status line
 
     if (!valid_tabpage_win(curtab)) {
       // no valid window in current tabpage
@@ -2012,7 +2016,7 @@ void auto_next_pat(AutoPatCmd *apc, int stop_at_last)
         s = _("%s Autocommands for \"%s\"");
 
         const size_t sourcing_name_len
-          = (STRLEN(s) + strlen(name) + (size_t)ap->patlen + 1);
+          = (strlen(s) + strlen(name) + (size_t)ap->patlen + 1);
 
         char *const namep = xmalloc(sourcing_name_len);
         snprintf(namep, sourcing_name_len, s, name, ap->pat);
@@ -2716,7 +2720,7 @@ static void do_autocmd_focusgained(bool gained)
       redrawcmdline();
     } else if ((State & MODE_NORMAL) || (State & MODE_INSERT)) {
       if (must_redraw != 0) {
-        update_screen(0);
+        update_screen();
       }
 
       setcursor();

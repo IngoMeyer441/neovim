@@ -227,8 +227,8 @@ static int get_char_class(char **pp)
 
   if ((*pp)[1] == ':') {
     for (i = 0; i < (int)ARRAY_SIZE(class_names); i++) {
-      if (STRNCMP(*pp + 2, class_names[i], STRLEN(class_names[i])) == 0) {
-        *pp += STRLEN(class_names[i]) + 2;
+      if (STRNCMP(*pp + 2, class_names[i], strlen(class_names[i])) == 0) {
+        *pp += strlen(class_names[i]) + 2;
         return i;
       }
     }
@@ -1545,8 +1545,8 @@ char *regtilde(char *source, int magic, bool preview)
     if ((*p == '~' && magic) || (*p == '\\' && *(p + 1) == '~' && !magic)) {
       if (reg_prev_sub != NULL) {
         // length = len(newsub) - 1 + len(prev_sub) + 1
-        prevlen = (int)STRLEN(reg_prev_sub);
-        tmpsub = xmalloc(STRLEN(newsub) + (size_t)prevlen);
+        prevlen = (int)strlen(reg_prev_sub);
+        tmpsub = xmalloc(strlen(newsub) + (size_t)prevlen);
         // copy prefix
         len = (int)(p - newsub);              // not including ~
         memmove(tmpsub, newsub, (size_t)len);
@@ -1605,12 +1605,12 @@ static regsubmatch_T rsm;  // can only be used when can_f_submatch is true
 
 /// Put the submatches in "argv[argskip]" which is a list passed into
 /// call_func() by vim_regsub_both().
-static int fill_submatch_list(int argc FUNC_ATTR_UNUSED, typval_T *argv, int argskip, int argcount)
+static int fill_submatch_list(int argc FUNC_ATTR_UNUSED, typval_T *argv, int argskip, ufunc_T *fp)
   FUNC_ATTR_NONNULL_ALL
 {
   typval_T *listarg = argv + argskip;
 
-  if (argcount == argskip) {
+  if (!fp->uf_varargs && fp->uf_args.ga_len <= argskip) {
     // called function doesn't take a submatches argument
     return argskip;
   }
@@ -1767,7 +1767,7 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest, int des
     if (copy) {
       if (eval_result[nested] != NULL) {
         STRCPY(dest, eval_result[nested]);
-        dst += STRLEN(eval_result[nested]);
+        dst += strlen(eval_result[nested]);
         XFREE_CLEAR(eval_result[nested]);
       }
     } else {
@@ -1803,8 +1803,8 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest, int des
         argv[0].v_type = VAR_LIST;
         argv[0].vval.v_list = &matchList.sl_list;
         funcexe_T funcexe = FUNCEXE_INIT;
-        funcexe.argv_func = fill_submatch_list;
-        funcexe.evaluate = true;
+        funcexe.fe_argv_func = fill_submatch_list;
+        funcexe.fe_evaluate = true;
         if (expr->v_type == VAR_FUNC) {
           s = (char_u *)expr->vval.v_string;
           call_func((char *)s, -1, &rettv, 1, argv, &funcexe);
@@ -1812,7 +1812,7 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest, int des
           partial_T *partial = expr->vval.v_partial;
 
           s = (char_u *)partial_name(partial);
-          funcexe.partial = partial;
+          funcexe.fe_partial = partial;
           call_func((char *)s, -1, &rettv, 1, argv, &funcexe);
         }
         if (tv_list_len(&matchList.sl_list) > 0) {
@@ -1865,7 +1865,7 @@ static int vim_regsub_both(char_u *source, typval_T *expr, char_u *dest, int des
           eval_result[nested] = (char *)s;
         }
 
-        dst += STRLEN(eval_result[nested]);
+        dst += strlen(eval_result[nested]);
       }
 
       can_f_submatch = prev_can_f_submatch;
@@ -2172,7 +2172,7 @@ char *reg_submatch(int no)
       } else {
         // Multiple lines: take start line from start col, middle
         // lines completely and end line up to end col.
-        len = (ssize_t)STRLEN(s);
+        len = (ssize_t)strlen(s);
         if (round == 2) {
           STRCPY(retval, s);
           retval[len] = '\n';
@@ -2184,7 +2184,7 @@ char *reg_submatch(int no)
           if (round == 2) {
             STRCPY(retval + len, s);
           }
-          len += (ssize_t)STRLEN(s);
+          len += (ssize_t)strlen(s);
           if (round == 2) {
             retval[len] = '\n';
           }

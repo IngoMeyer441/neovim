@@ -6,6 +6,8 @@
 
 Builtin functions				*builtin-functions*
 
+For functions grouped by what they are used for see |function-list|.
+
 				      Type |gO| to see the table of contents.
 
 ==============================================================================
@@ -277,6 +279,8 @@ join({list} [, {sep}])		String	join {list} items into one String
 json_decode({expr})		any	Convert {expr} from JSON
 json_encode({expr})		String	Convert {expr} to JSON
 keys({dict})			List	keys in {dict}
+keytrans({string})		String	translate internal keycodes to a form
+					that can be used by |:map|
 len({expr})			Number	the length of {expr}
 libcall({lib}, {func}, {arg})	String	call {func} in library {lib} with {arg}
 libcallnr({lib}, {func}, {arg})	Number	idem, but return a Number
@@ -526,6 +530,8 @@ uniq({list} [, {func} [, {dict}]])
 				List	remove adjacent duplicates from a list
 values({dict})			List	values in {dict}
 virtcol({expr})			Number	screen column of cursor or mark
+virtcol2col({winid}, {lnum}, {col})
+				Number  byte index of a character on screen
 visualmode([expr])		String	last visual mode used
 wait({timeout}, {condition} [, {interval}])
 				Number	Wait until {condition} is satisfied
@@ -1127,13 +1133,14 @@ chdir({dir})						*chdir()*
 			  directory (|:tcd|) then changes the tabpage local
 			  directory.
 			- Otherwise, changes the global directory.
+		{dir} must be a String.
 		If successful, returns the previous working directory.  Pass
 		this to another chdir() to restore the directory.
 		On failure, returns an empty string.
 
 		Example: >
 			let save_dir = chdir(newdir)
-			if save_dir
+			if save_dir != ""
 			   " ... do some work
 			   call chdir(save_dir)
 			endif
@@ -1533,7 +1540,7 @@ cursor({list})
 debugbreak({pid})					*debugbreak()*
 		Specifically used to interrupt a program being debugged.  It
 		will cause process {pid} to get a SIGTRAP.  Behavior for other
-		processes is undefined. See |terminal-debugger|.
+		processes is undefined. See |terminal-debug|.
 		{Sends a SIGINT to a process {pid} other than MS-Windows}
 
 		Returns |TRUE| if successfully interrupted the program.
@@ -2623,7 +2630,7 @@ get({dict}, {key} [, {default}])
 		{default} is omitted.  Useful example: >
 			let val = get(g:, 'var_name', 'default')
 <		This gets the value of g:var_name if it exists, and uses
-		'default' when it does not exist.
+		"default" when it does not exist.
 get({func}, {what})
 		Get item {what} from Funcref {func}.  Possible values for
 		{what} are:
@@ -3030,7 +3037,7 @@ getcurpos([{winid}])
 		cursor vertically.  Also see |getcursorcharpos()| and
 		|getpos()|.
 		The first "bufnum" item is always zero. The byte position of
-		the cursor is returned in 'col'. To get the character
+		the cursor is returned in "col". To get the character
 		position, use |getcursorcharpos()|.
 
 		The optional {winid} argument can specify the window.  It can
@@ -3236,7 +3243,7 @@ getloclist({nr} [, {what}])				*getloclist()*
 		In addition to the items supported by |getqflist()| in {what},
 		the following item is supported by |getloclist()|:
 
-			filewinid 	id of the window used to display files
+			filewinid	id of the window used to display files
 					from the location list. This field is
 					applicable only when called from a
 					location list window. See
@@ -3285,18 +3292,18 @@ getmatches([{win}])					*getmatches()*
 		an empty list is returned.
 		Example: >
 			:echo getmatches()
-<			[{'group': 'MyGroup1', 'pattern': 'TODO',
-			'priority': 10, 'id': 1}, {'group': 'MyGroup2',
-			'pattern': 'FIXME', 'priority': 10, 'id': 2}] >
+<			[{"group": "MyGroup1", "pattern": "TODO",
+			"priority": 10, "id": 1}, {"group": "MyGroup2",
+			"pattern": "FIXME", "priority": 10, "id": 2}] >
 			:let m = getmatches()
 			:call clearmatches()
 			:echo getmatches()
 <			[] >
 			:call setmatches(m)
 			:echo getmatches()
-<			[{'group': 'MyGroup1', 'pattern': 'TODO',
-			'priority': 10, 'id': 1}, {'group': 'MyGroup2',
-			'pattern': 'FIXME', 'priority': 10, 'id': 2}] >
+<			[{"group": "MyGroup1", "pattern": "TODO",
+			"priority": 10, "id": 1}, {"group": "MyGroup2",
+			"pattern": "FIXME", "priority": 10, "id": 2}] >
 			:unlet m
 <
 getmousepos()						*getmousepos()*
@@ -3409,7 +3416,7 @@ getqflist([{what}])					*getqflist()*
 				|quickfix-ID|; zero means the id for the
 				current list or the list specified by "nr"
 			idx	get information for the quickfix entry at this
-				index in the list specified by 'id' or 'nr'.
+				index in the list specified by "id" or "nr".
 				If set to zero, then uses the current entry.
 				See |quickfix-index|
 			items	quickfix list entries
@@ -3495,7 +3502,7 @@ getreginfo([{regname}])					*getreginfo()*
 		Dictionary with the following entries:
 			regcontents	List of lines contained in register
 					{regname}, like
-					|getreg|({regname}, 1, 1).
+					getreg({regname}, 1, 1).
 			regtype		the type of register {regname}, as in
 					|getregtype()|.
 			isunnamed	Boolean flag, v:true if this register
@@ -4411,7 +4418,7 @@ jobstart({cmd} [, {opts}])				*jobstart()*
 			      killed when Nvim exits. If the process exits
 			      before Nvim, `on_exit` will be invoked.
 		  env:	      (dict) Map of environment variable name:value
-			      pairs extending (or replacing with |clear_env|)
+			      pairs extending (or replace with "clear_env")
 			      the current environment. |jobstart-env|
 		  height:     (number) Height of the `pty` terminal.
 		  |on_exit|:    (function) Callback invoked when the job exits.
@@ -4534,6 +4541,16 @@ keys({dict})						*keys()*
 
 		Can also be used as a |method|: >
 			mydict->keys()
+
+keytrans({string})					*keytrans()*
+		Turn the internal byte representation of keys into a form that
+		can be used for |:map|.  E.g. >
+			:let xx = "\<C-Home>"
+			:echo keytrans(xx)
+<			<C-Home>
+
+		Can also be used as a |method|: >
+			"\<C-Home>"->keytrans()
 
 <							*len()* *E701*
 len({expr})	The result is a Number, which is the length of the argument.
@@ -4995,7 +5012,7 @@ matchadd({group}, {pattern} [, {priority} [, {id} [, {dict}]]])
 		respectively.  3 is reserved for use by the |matchparen|
 		plugin.
 		If the {id} argument is not specified or -1, |matchadd()|
-		automatically chooses a free ID.
+		automatically chooses a free ID, which is at least 1000.
 
 		The optional {dict} argument allows for further custom
 		values. Currently this is used to specify a match specific
@@ -5052,8 +5069,6 @@ matchaddpos({group}, {pos} [, {priority} [, {id} [, {dict}]]])
 		Entries with zero and negative line numbers are silently
 		ignored, as well as entries with negative column numbers and
 		lengths.
-
-		The maximum number of positions in {pos} is 8.
 
 		Returns -1 on error.
 
@@ -5195,12 +5210,12 @@ matchfuzzypos({list}, {str} [, {dict}])			*matchfuzzypos()*
 
 		Example: >
 			:echo matchfuzzypos(['testing'], 'tsg')
-<		results in [['testing'], [[0, 2, 6]], [99]] >
+<		results in [["testing"], [[0, 2, 6]], [99]] >
 			:echo matchfuzzypos(['clay', 'lacy'], 'la')
-<		results in [['lacy', 'clay'], [[0, 1], [1, 2]], [153, 133]] >
+<		results in [["lacy", "clay"], [[0, 1], [1, 2]], [153, 133]] >
 			:echo [{'text': 'hello', 'id' : 10}]
 				\ ->matchfuzzypos('ll', {'key' : 'text'})
-<		results in [[{'id': 10, 'text': 'hello'}], [[2, 3]], [127]]
+<		results in [[{"id": 10, "text": "hello"}], [[2, 3]], [127]]
 
 matchlist({expr}, {pat} [, {start} [, {count}]])		*matchlist()*
 		Same as |match()|, but return a |List|.  The first item in the
@@ -5620,12 +5635,19 @@ nvim_...({...})					*E5555* *nvim_...()* *eval-api*
 or({expr}, {expr})					*or()*
 		Bitwise OR on the two arguments.  The arguments are converted
 		to a number.  A List, Dict or Float argument causes an error.
+		Also see `and()` and `xor()`.
 		Example: >
 			:let bits = or(bits, 0x80)
 <		Can also be used as a |method|: >
 			:let bits = bits->or(0x80)
 
-pathshorten({expr} [, {len}])				*pathshorten()*
+<		Rationale: The reason this is a function and not using the "|"
+		character like many languages, is that Vi has always used "|"
+		to separate commands.  In many places it would not be clear if
+		"|" is an operator or a command separator.
+
+
+pathshorten({path} [, {len}])				*pathshorten()*
 		Shorten directory names in the path {path} and return the
 		result.  The tail, the file name, is kept as-is.  The other
 		components in the path are reduced to {len} letters in length.
@@ -6048,6 +6070,8 @@ rand([{expr}])						*rand()*
 							*readdir()*
 readdir({directory} [, {expr}])
 		Return a list with file and directory names in {directory}.
+		You can also use |glob()| if you don't need to do complicated
+		things, such as limiting the number of matches.
 
 		When {expr} is omitted all entries are included.
 		When {expr} is given, it is evaluated to check what to do:
@@ -6146,7 +6170,9 @@ reg_recording()						*reg_recording()*
 		Returns the single letter name of the register being recorded.
 		Returns an empty string when not recording.  See |q|.
 
-reltime([{start} [, {end}]])				*reltime()*
+reltime()
+reltime({start})
+reltime({start}, {end})					*reltime()*
 		Return an item that represents a time value.  The item is a
 		list with items that depend on the system.
 		The item can be passed to |reltimestr()| to convert it to a
@@ -6200,7 +6226,8 @@ reltimestr({time})				*reltimestr()*
 		Can also be used as a |method|: >
 			reltime(start)->reltimestr()
 <
-remove({list}, {idx} [, {end}])				*remove()*
+remove({list}, {idx})
+remove({list}, {idx}, {end})				*remove()*
 		Without {end}: Remove the item at {idx} from |List| {list} and
 		return the item.
 		With {end}: Remove items from {idx} to {end} (inclusive) and
@@ -6218,7 +6245,8 @@ remove({list}, {idx} [, {end}])				*remove()*
 		Can also be used as a |method|: >
 			mylist->remove(idx)
 
-remove({blob}, {idx} [, {end}])
+remove({blob}, {idx})
+remove({blob}, {idx}, {end})
 		Without {end}: Remove the byte at {idx} from |Blob| {blob} and
 		return the byte.
 		With {end}: Remove bytes from {idx} to {end} (inclusive) and
@@ -7202,7 +7230,7 @@ setqflist({list} [, {action} [, {what}]])		*setqflist()*
 				See |quickfix-parse|
 		    id		quickfix list identifier |quickfix-ID|
 		    idx		index of the current entry in the quickfix
-				list specified by 'id' or 'nr'. If set to '$',
+				list specified by "id" or "nr". If set to '$',
 				then the last entry in the list is set as the
 				current entry.  See |quickfix-index|
 		    items	list of quickfix entries. Same as the {list}
@@ -7694,7 +7722,7 @@ sqrt({expr})						*sqrt()*
 			:echo sqrt(100)
 <			10.0 >
 			:echo sqrt(-4.01)
-<			str2float('nan')
+<			str2float("nan")
 		NaN may be different, it depends on system libraries.
 
 		Can also be used as a |method|: >
@@ -8226,7 +8254,7 @@ synIDattr({synID}, {what} [, {mode}])			*synIDattr()*
 		"bg"		background color (as with "fg")
 		"font"		font name (only available in the GUI)
 				|highlight-font|
-		"sp"		special color (as with "fg") |highlight-guisp|
+		"sp"		special color (as with "fg") |guisp|
 		"fg#"		like "fg", but for the GUI and the GUI is
 				running the name in "#RRGGBB" form
 		"bg#"		like "fg#" for "bg"
@@ -8282,12 +8310,12 @@ synconcealed({lnum}, {col})				*synconcealed()*
 		   the text is "123456" and both "23" and "45" are concealed
 		   and replaced by the character "X", then:
 			call			returns ~
-		   	synconcealed(lnum, 1)   [0, '', 0]
-		   	synconcealed(lnum, 2)   [1, 'X', 1]
-		   	synconcealed(lnum, 3)   [1, 'X', 1]
-		   	synconcealed(lnum, 4)   [1, 'X', 2]
-		   	synconcealed(lnum, 5)   [1, 'X', 2]
-		   	synconcealed(lnum, 6)   [0, '', 0]
+			synconcealed(lnum, 1)   [0, '', 0]
+			synconcealed(lnum, 2)   [1, 'X', 1]
+			synconcealed(lnum, 3)   [1, 'X', 1]
+			synconcealed(lnum, 4)   [1, 'X', 2]
+			synconcealed(lnum, 5)   [1, 'X', 2]
+			synconcealed(lnum, 6)   [0, '', 0]
 
 
 synstack({lnum}, {col})					*synstack()*
@@ -8831,6 +8859,26 @@ virtcol({expr})						*virtcol()*
 <		Can also be used as a |method|: >
 			GetPos()->virtcol()
 
+virtcol2col({winid}, {lnum}, {col})			*virtcol2col()*
+		The result is a Number, which is the byte index of the
+		character in window {winid} at buffer line {lnum} and virtual
+		column {col}.
+
+		If {col} is greater than the last virtual column in line
+		{lnum}, then the byte index of the character at the last
+		virtual column is returned.
+
+		The {winid} argument can be the window number or the
+		|window-ID|. If this is zero, then the current window is used.
+
+		Returns -1 if the window {winid} doesn't exist or the buffer
+		line {lnum} or virtual column {col} is invalid.
+
+		See also |screenpos()|, |virtcol()| and |col()|.
+
+		Can also be used as a |method|: >
+			GetWinid()->virtcol2col(lnum, col)
+
 visualmode([{expr}])						*visualmode()*
 		The result is a String, which describes the last Visual mode
 		used in the current buffer.  Initially it returns an empty
@@ -9065,12 +9113,12 @@ winlayout([{tabnr}])					*winlayout()*
 		returns an empty list.
 
 		For a leaf window, it returns:
-			['leaf', {winid}]
+			["leaf", {winid}]
 		For horizontally split windows, which form a column, it
 		returns:
-			['col', [{nested list of windows}]]
+			["col", [{nested list of windows}]]
 		For vertically split windows, which form a row, it returns:
-			['row', [{nested list of windows}]]
+			["row", [{nested list of windows}]]
 
 		Example: >
 			" Only one window in the tab page
@@ -9262,6 +9310,7 @@ writefile({object}, {fname} [, {flags}])
 xor({expr}, {expr})					*xor()*
 		Bitwise XOR on the two arguments.  The arguments are converted
 		to a number.  A List, Dict or Float argument causes an error.
+		Also see `and()` and `or()`.
 		Example: >
 			:let bits = xor(bits, 0x80)
 <

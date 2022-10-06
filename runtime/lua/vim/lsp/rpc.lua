@@ -405,8 +405,7 @@ function Client:handle_body(body)
           { status = status, result = result, err = err }
         )
       if status then
-        if not (result or err) then
-          -- TODO this can be a problem if `null` is sent for result. needs vim.NIL
+        if result == nil and err == nil then
           error(
             string.format(
               'method %q: either a result or an error must be sent to the server in response',
@@ -636,7 +635,7 @@ end
 
 --- Starts an LSP server process and create an LSP RPC client object to
 --- interact with it. Communication with the spawned process happens via stdio. For
---- communication via TCP, spawn a process manually and use |vim.lsp.rpc.connect|
+--- communication via TCP, spawn a process manually and use |vim.lsp.rpc.connect()|
 ---
 ---@param cmd (string) Command to start the LSP server.
 ---@param cmd_args (table) List of additional string arguments to pass to {cmd}.

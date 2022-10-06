@@ -539,7 +539,7 @@ char_u *get_special_key_name(int c, int modifiers)
       }
     }
   } else {            // use name of special key
-    size_t len = STRLEN(key_names_table[table_idx].name);
+    size_t len = strlen(key_names_table[table_idx].name);
 
     if ((int)len + idx + 2 <= MAX_KEY_NAME_LEN) {
       STRCPY(string + idx, key_names_table[table_idx].name);
@@ -861,10 +861,9 @@ int get_mouse_button(int code, bool *is_click, bool *is_drag)
 /// @param[in]  from  What characters to replace.
 /// @param[in]  from_len  Length of the "from" argument.
 /// @param[out]  bufp  Location where results were saved in case of success (allocated).
-///                    if *bufp is non-NULL, it will be used directly. it is
-///                    assumed to be 128 bytes long (enough for transcoding LHS
-///                    of mapping)
-///                    Will be set to NULL in case of failure.
+///                    If `*bufp` is non-NULL, it will be used directly,
+///                    and is assumed to be 128 bytes long (enough for transcoding LHS of mapping),
+///                    and will be set to NULL in case of failure.
 /// @param[in]  flags  REPTERM_FROM_PART    see above
 ///                    REPTERM_DO_LT        also translate <lt>
 ///                    REPTERM_NO_SPECIAL   do not accept <key> notation
@@ -872,7 +871,7 @@ int get_mouse_button(int code, bool *is_click, bool *is_drag)
 /// @param[out]  did_simplify  set when some <C-H> code was simplied, unless it is NULL.
 /// @param[in]  cpo_flags  Relevant flags derived from p_cpo, see CPO_TO_CPO_FLAGS.
 ///
-/// @return  Pointer to an allocated memory, which is also saved to "bufp".
+/// @return  The same as what `*bufp` is set to.
 char *replace_termcodes(const char *const from, const size_t from_len, char **const bufp,
                         const int flags, bool *const did_simplify, const int cpo_flags)
   FUNC_ATTR_NONNULL_ARG(1, 3)
@@ -1050,7 +1049,7 @@ char *vim_strsave_escape_ks(char *p)
   // Need a buffer to hold up to three times as much.  Four in case of an
   // illegal utf-8 byte:
   // 0xc0 -> 0xc3 - 0x80 -> 0xc3 K_SPECIAL KS_SPECIAL KE_FILLER
-  char_u *res = xmalloc(STRLEN(p) * 4 + 1);
+  char_u *res = xmalloc(strlen(p) * 4 + 1);
   char_u *d = res;
   for (char_u *s = (char_u *)p; *s != NUL;) {
     if (s[0] == K_SPECIAL && s[1] != NUL && s[2] != NUL) {

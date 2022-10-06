@@ -16,9 +16,9 @@
 #include <string.h>
 #include <uv.h>
 
+#include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/buffer.h"
-#include "nvim/lib/kvec.h"
 #include "nvim/log.h"
 #include "nvim/lua/treesitter.h"
 #include "nvim/map.h"
@@ -1369,7 +1369,7 @@ static int query_inspect(lua_State *L)
       lua_rawseti(L, -2, nextitem++);  // [retval, patterns, pat, pred]
     }
     // last predicate should have ended with TypeDone
-    lua_pop(L, 1);  // [retval, patters, pat]
+    lua_pop(L, 1);  // [retval, patterns, pat]
     lua_rawseti(L, -2, (int)i + 1);  // [retval, patterns]
   }
   lua_setfield(L, -2, "patterns");  // [retval]

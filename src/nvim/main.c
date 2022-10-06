@@ -71,7 +71,7 @@
 #include "nvim/version.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
-#ifdef WIN32
+#ifdef MSWIN
 # include "nvim/os/os_win_console.h"
 #endif
 #include "nvim/api/private/defs.h"
@@ -84,7 +84,7 @@
 #include "nvim/msgpack_rpc/helpers.h"
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/os/signal.h"
-#ifndef WIN32
+#ifndef MSWIN
 # include "nvim/os/pty_process_unix.h"
 #endif
 #include "nvim/api/extmark.h"
@@ -168,7 +168,7 @@ void early_init(mparm_T *paramp)
   runtime_init();
   highlight_init();
 
-#ifdef WIN32
+#ifdef MSWIN
   OSVERSIONINFO ovi;
   ovi.dwOSVersionInfoSize = sizeof(ovi);
   GetVersionEx(&ovi);
@@ -185,11 +185,11 @@ void early_init(mparm_T *paramp)
   init_locale();
 #endif
 
-  // Allocate the first window and buffer.
-  // Can't do anything without it, exit when it fails.
-  if (!win_alloc_first()) {
-    os_exit(0);
-  }
+  // tabpage local options (p_ch) must be set before allocating first tabpage.
+  set_init_tablocal();
+
+  // Allocate the first tabpage, window and buffer.
+  win_alloc_first();
   TIME_MSG("init first window");
 
   alist_init(&global_alist);    // Init the argument list to empty.
@@ -210,13 +210,13 @@ void early_init(mparm_T *paramp)
 #ifdef MAKE_LIB
 int nvim_main(int argc, char **argv);  // silence -Wmissing-prototypes
 int nvim_main(int argc, char **argv)
-#elif defined(WIN32)
+#elif defined(MSWIN)
 int wmain(int argc, wchar_t **argv_w)  // multibyte args on Windows. #7060
 #else
 int main(int argc, char **argv)
 #endif
 {
-#if defined(WIN32) && !defined(MAKE_LIB)
+#if defined(MSWIN) && !defined(MAKE_LIB)
   char **argv = xmalloc((size_t)argc * sizeof(char *));
   for (int i = 0; i < argc; i++) {
     char *buf = NULL;
@@ -314,7 +314,7 @@ int main(int argc, char **argv)
   assert(p_ch >= 0 && Rows >= p_ch && Rows - p_ch <= INT_MAX);
   cmdline_row = (int)(Rows - p_ch);
   msg_row = cmdline_row;
-  screenalloc();  // allocate screen buffers
+  default_grid_alloc();  // allocate screen buffers
   set_init_2(headless_mode);
   TIME_MSG("inits 2");
 
@@ -346,12 +346,14 @@ int main(int argc, char **argv)
       ui_builtin_start();
     }
     TIME_MSG("done waiting for UI");
-
-    // prepare screen now, so external UIs can display messages
-    starting = NO_BUFFERS;
-    screenclear();
-    TIME_MSG("init screen for UI");
+    firstwin->w_prev_height = firstwin->w_height;  // may have changed
   }
+
+  // prepare screen now
+  starting = NO_BUFFERS;
+  screenclear();
+  win_new_screensize();
+  TIME_MSG("clear screen");
 
   if (ui_client_channel_id) {
     ui_client_init(ui_client_channel_id);
@@ -361,8 +363,8 @@ int main(int argc, char **argv)
 
   // Default mappings (incl. menus)
   Error err = ERROR_INIT;
-  Object o = nlua_exec(STATIC_CSTR_AS_STRING("return vim._init_default_mappings()"),
-                       (Array)ARRAY_DICT_INIT, &err);
+  Object o = NLUA_EXEC_STATIC("return vim._init_default_mappings()",
+                              (Array)ARRAY_DICT_INIT, &err);
   assert(!ERROR_SET(&err));
   api_clear_error(&err);
   assert(o.type == kObjectTypeNil);
@@ -432,10 +434,8 @@ int main(int argc, char **argv)
     p_ut = 1;
   }
 
-  //
   // Read in registers, history etc, from the ShaDa file.
   // This is where v:oldfiles gets filled.
-  //
   if (*p_shada != NUL) {
     shada_read_everything(NULL, false, true);
     TIME_MSG("reading ShaDa");
@@ -474,14 +474,7 @@ int main(int argc, char **argv)
 
   setmouse();  // may start using the mouse
 
-  if (exmode_active || use_remote_ui || use_builtin_ui) {
-    // Don't clear the screen when starting in Ex mode, or when a UI might have
-    // displayed messages.
-    redraw_later(curwin, UPD_VALID);
-  } else {
-    screenclear();  // clear screen
-    TIME_MSG("clearing screen");
-  }
+  redraw_later(curwin, UPD_VALID);
 
   no_wait_return = true;
 
@@ -582,7 +575,7 @@ int main(int argc, char **argv)
   // Main loop: never returns.
   normal_enter(false, false);
 
-#if defined(WIN32) && !defined(MAKE_LIB)
+#if defined(MSWIN) && !defined(MAKE_LIB)
   xfree(argv);
 #endif
   return 0;
@@ -1156,7 +1149,7 @@ static void command_line_scan(mparm_T *parmp)
         p_verbose = get_number_arg(argv[0], &argv_idx, 10);
         if (argv[0][argv_idx] != NUL) {
           set_option_value_give_err("verbosefile", 0L, argv[0] + argv_idx, 0);
-          argv_idx = (int)STRLEN(argv[0]);
+          argv_idx = (int)strlen(argv[0]);
         }
         break;
       case 'w':    // "-w{number}" set window height
@@ -1226,7 +1219,7 @@ static void command_line_scan(mparm_T *parmp)
               a = argv[0];
             }
 
-            size_t s_size = STRLEN(a) + 9;
+            size_t s_size = strlen(a) + 9;
             char *s = xmalloc(s_size);
             snprintf(s, s_size, "so %s", a);
             parmp->cmds_tofree[parmp->n_commands] = true;
@@ -1273,7 +1266,7 @@ scripterror:
           int error;
           if (strequal(argv[0], "-")) {
             const int stdin_dup_fd = os_dup(STDIN_FILENO);
-#ifdef WIN32
+#ifdef MSWIN
             // Replace the original stdin with the console input handle.
             os_replace_stdin_to_conin();
 #endif
@@ -1375,7 +1368,7 @@ scripterror:
 
   // If there is a "+123" or "-c" command, set v:swapcommand to the first one.
   if (parmp->n_commands > 0) {
-    const size_t swcmd_len = STRLEN(parmp->commands[0]) + 3;
+    const size_t swcmd_len = strlen(parmp->commands[0]) + 3;
     char *const swcmd = xmalloc(swcmd_len);
     snprintf(swcmd, swcmd_len, ":%s\r", parmp->commands[0]);
     set_vim_var_string(VV_SWAPCOMMAND, swcmd, -1);
@@ -1426,7 +1419,7 @@ static void check_and_set_isatty(mparm_T *paramp)
   stdout_isatty
     = paramp->output_isatty = os_isatty(STDOUT_FILENO);
   paramp->err_isatty = os_isatty(STDERR_FILENO);
-#ifndef WIN32
+#ifndef MSWIN
   int tty_fd = paramp->input_isatty
     ? STDIN_FILENO
     : (paramp->output_isatty
@@ -1451,7 +1444,7 @@ static void init_path(const char *exename)
   set_vim_var_string(VV_PROGPATH, exepath, -1);
   set_vim_var_string(VV_PROGNAME, path_tail(exename), -1);
 
-#ifdef WIN32
+#ifdef MSWIN
   // Append the process start directory to $PATH, so that ":!foo" finds tools
   // shipped with Windows package. This also mimics SearchPath().
   os_setenv_append_path(exepath);
@@ -2108,6 +2101,7 @@ static void usage(void)
   mch_msg(_("  -V[N][file]           Verbose [level][file]\n"));
   mch_msg("\n");
   mch_msg(_("  --api-info            Write msgpack-encoded API metadata to stdout\n"));
+  mch_msg(_("  --clean               \"Factory defaults\" (skip user config and plugins, shada)\n"));
   mch_msg(_("  --embed               Use stdin/stdout as a msgpack-rpc channel\n"));
   mch_msg(_("  --headless            Don't start a user interface\n"));
   mch_msg(_("  --listen <address>    Serve RPC API from this address\n"));

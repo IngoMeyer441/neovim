@@ -11,12 +11,12 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
-#include "nvim/lib/kvec.h"
 #include "nvim/log.h"
 #include "nvim/lua/executor.h"
 #include "nvim/main.h"
@@ -138,7 +138,7 @@ bool ui_comp_should_draw(void)
 ///
 /// TODO(bfredl): later on the compositor should just use win_float_pos events,
 /// though that will require slight event order adjustment: emit the win_pos
-/// events in the beginning of  update_screen(0), rather than in ui_flush()
+/// events in the beginning of update_screen(), rather than in ui_flush()
 bool ui_comp_put_grid(ScreenGrid *grid, int row, int col, int height, int width, bool valid,
                       bool on_top)
 {
@@ -485,6 +485,10 @@ static void compose_debug(Integer startrow, Integer endrow, Integer startcol, In
   endcol = MIN(endcol, default_grid.cols);
   int attr = syn_id2attr(syn_id);
 
+  if (delay) {
+    debug_delay(endrow - startrow);
+  }
+
   for (int row = (int)startrow; row < endrow; row++) {
     ui_composed_call_raw_line(1, row, startcol, startcol, endcol, attr, false,
                               (const schar_T *)linebuf,
@@ -586,12 +590,14 @@ static void ui_comp_raw_line(UI *ui, Integer grid, Integer row, Integer startcol
 /// The screen is invalid and will soon be cleared
 ///
 /// Don't redraw floats until screen is cleared
-void ui_comp_set_screen_valid(bool valid)
+bool ui_comp_set_screen_valid(bool valid)
 {
+  bool old_val = valid_screen;
   valid_screen = valid;
   if (!valid) {
     msg_sep_row = -1;
   }
+  return old_val;
 }
 
 static void ui_comp_msg_set_pos(UI *ui, Integer grid, Integer row, Boolean scrolled,
@@ -610,7 +616,7 @@ static void ui_comp_msg_set_pos(UI *ui, Integer grid, Integer row, Boolean scrol
   if (row > msg_current_row && ui_comp_should_draw()) {
     compose_area(MAX(msg_current_row - 1, 0), row, 0, default_grid.cols);
   } else if (row < msg_current_row && ui_comp_should_draw()
-             && msg_current_row < Rows) {
+             && (msg_current_row < Rows || (scrolled && !msg_was_scrolled))) {
     int delta = msg_current_row - (int)row;
     if (msg_grid.blending) {
       int first_row = MAX((int)row - (scrolled?1:0), 0);

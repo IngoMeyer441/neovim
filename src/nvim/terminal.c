@@ -522,7 +522,7 @@ static int terminal_check(VimState *state)
   terminal_check_cursor();
 
   if (must_redraw) {
-    update_screen(0);
+    update_screen();
   }
 
   if (need_maketitle) {  // Update title in terminal-mode. #7248
@@ -693,7 +693,7 @@ void terminal_paste(long count, char **y_array, size_t y_size)
     return;
   }
   vterm_keyboard_start_paste(curbuf->terminal->vt);
-  size_t buff_len = STRLEN(y_array[0]);
+  size_t buff_len = strlen(y_array[0]);
   char_u *buff = xmalloc(buff_len);
   for (int i = 0; i < count; i++) {  // -V756
     // feed the lines to the terminal
@@ -702,7 +702,7 @@ void terminal_paste(long count, char **y_array, size_t y_size)
         // terminate the previous line
         terminal_send(curbuf->terminal, "\n", 1);
       }
-      size_t len = STRLEN(y_array[j]);
+      size_t len = strlen(y_array[j]);
       if (len > buff_len) {
         buff = xrealloc(buff, len);
         buff_len = len;
@@ -759,6 +759,22 @@ static int get_rgb(VTermState *state, VTermColor color)
   return RGB_(color.rgb.red, color.rgb.green, color.rgb.blue);
 }
 
+static int get_underline_hl_flag(VTermScreenCellAttrs attrs)
+{
+  switch (attrs.underline) {
+  case VTERM_UNDERLINE_OFF:
+    return 0;
+  case VTERM_UNDERLINE_SINGLE:
+    return HL_UNDERLINE;
+  case VTERM_UNDERLINE_DOUBLE:
+    return HL_UNDERDOUBLE;
+  case VTERM_UNDERLINE_CURLY:
+    return HL_UNDERCURL;
+  default:
+    return HL_UNDERLINE;
+  }
+}
+
 void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *term_attrs)
 {
   int height, width;
@@ -795,7 +811,7 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
     int hl_attrs = (cell.attrs.bold ? HL_BOLD : 0)
                    | (cell.attrs.italic ? HL_ITALIC : 0)
                    | (cell.attrs.reverse ? HL_INVERSE : 0)
-                   | (cell.attrs.underline ? HL_UNDERLINE : 0)
+                   | get_underline_hl_flag(cell.attrs)
                    | (cell.attrs.strike ? HL_STRIKETHROUGH: 0)
                    | ((fg_indexed && !fg_set) ? HL_FG_INDEXED : 0)
                    | ((bg_indexed && !bg_set) ? HL_BG_INDEXED : 0);
@@ -892,7 +908,6 @@ static int term_settermprop(VTermProp prop, VTermValue *val, void *data)
 
   case VTERM_PROP_TITLE: {
     buf_T *buf = handle_get_buffer(term->buf_handle);
-#if VTERM_VERSION_MAJOR > 0 || (VTERM_VERSION_MAJOR == 0 && VTERM_VERSION_MINOR >= 2)
     VTermStringFragment frag = val->string;
 
     if (frag.initial && frag.final) {
@@ -917,9 +932,6 @@ static int term_settermprop(VTermProp prop, VTermValue *val, void *data)
       xfree(term->title);
       term->title = NULL;
     }
-#else
-    buf_set_term_title(buf, val->string, strlen(val->string));
-#endif
     break;
   }
 

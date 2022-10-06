@@ -1337,9 +1337,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 	page can have a different value.
 
 	When 'cmdheight' is zero, there is no command-line unless it is being
-	used.  Some informative messages will not be displayed, any other
-	messages will cause the |hit-enter| prompt.  Expect some other
-	unexpected behavior too.
+	used.  The command-line will cover the last line of the screen when
+	shown.
+
+	WARNING: `cmdheight=0` is considered experimental. Expect some
+	unwanted behaviour. Some 'shortmess' flags and similar
+	mechanism might fail to take effect, causing unwanted hit-enter
+	prompts.  Some informative messages, both from Nvim itself and
+	plugins, will not be displayed.
 
 						*'cmdwinheight'* *'cwh'*
 'cmdwinheight' 'cwh'	number	(default 7)
@@ -2123,9 +2128,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	security reasons.
 
 					*'display'* *'dy'*
-'display' 'dy'		string	(default "lastline,msgsep")
+'display' 'dy'		string	(default "lastline")
 			global
-	Change the way text is displayed.  This is comma-separated list of
+	Change the way text is displayed.  This is a comma-separated list of
 	flags:
 	lastline	When included, as much as possible of the last line
 			in a window will be displayed.  "@@@" is put in the
@@ -2135,13 +2140,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 			column of the last screen line.  Overrules "lastline".
 	uhex		Show unprintable characters hexadecimal as <xx>
 			instead of using ^C and ~C.
-	msgsep		When showing messages longer than 'cmdheight', only
-			scroll the message lines, not the entire screen. The
-			separator line is decorated by |hl-MsgSeparator| and
-			the "msgsep" flag of 'fillchars'.
+	msgsep		Obsolete flag. Allowed but takes no effect. |msgsep|
 
 	When neither "lastline" nor "truncate" is included, a last line that
 	doesn't fit is replaced with "@" lines.
+
+	The "@" character can be changed by setting the "lastline" item in
+	'fillchars'.  The character is highlighted with |hl-NonText|.
 
 						*'eadirection'* *'ead'*
 'eadirection' 'ead'	string	(default "both")
@@ -2478,6 +2483,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	  diff		'-'		deleted lines of the 'diff' option
 	  msgsep	' '		message separator 'display'
 	  eob		'~'		empty lines at the end of a buffer
+	  lastline	'@'		'display' contains lastline/truncate
 
 	Any one that is omitted will fall back to the default.  For "stl" and
 	"stlnc" the space will be used when there is highlighting, '^' or '='
@@ -2515,6 +2521,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	  fold		Folded			|hl-Folded|
 	  diff		DiffDelete		|hl-DiffDelete|
 	  eob		EndOfBuffer		|hl-EndOfBuffer|
+	  lastline	NonText			|hl-NonText|
 
 		*'fixendofline'* *'fixeol'* *'nofixendofline'* *'nofixeol'*
 'fixendofline' 'fixeol'	boolean	(default on)
@@ -5352,7 +5359,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	To use PowerShell: >
 		let &shell = executable('pwsh') ? 'pwsh' : 'powershell'
 		let &shellcmdflag = '-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command [Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;'
-		let &shellredir = '-RedirectStandardOutput %s -NoNewWindow -Wait'
+		let &shellredir = '2>&1 | Out-File -Encoding UTF8 %s; exit $LastExitCode'
 		let &shellpipe = '2>&1 | Out-File -Encoding UTF8 %s; exit $LastExitCode'
 		set shellquote= shellxquote=
 
@@ -5703,7 +5710,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	   "yes:[1-9]"  always, with fixed space for signs up to the given
 	                number (maximum 9), e.g. "yes:3"
 	   "number"	display signs in the 'number' column. If the number
-			column is not present, then behaves like 'auto'.
+			column is not present, then behaves like "auto".
 
 	Note regarding 'orphaned signs': with signcolumn numbers higher than
 	1, deleting lines will also remove the associated signs automatically,
@@ -5953,6 +5960,22 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 	When on, splitting a window will put the new window below the current
 	one. |:split|
+
+			*'splitkeep'* *'spk'*
+'splitkeep' 'spk'	string	(default "cursor")
+			global
+	The value of this option determines the scroll behavior when opening,
+	closing or resizing horizontal splits.
+
+	Possible values are:
+	  cursor	Keep the same relative cursor position.
+	  screen	Keep the text on the same screen line.
+	  topline	Keep the topline the same.
+
+	For the "screen" and "topline" values, the cursor position will be
+	changed when necessary. In this case, the jumplist will be populated
+	with the previous cursor position. For "screen", the text cannot always
+	be kept on the same screen line	when 'wrap' is enabled.
 
 			*'splitright'* *'spr'* *'nosplitright'* *'nospr'*
 'splitright' 'spr'	boolean	(default off)
@@ -6480,7 +6503,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 'termguicolors' 'tgc'	boolean (default off)
 			global
 	Enables 24-bit RGB color in the |TUI|.  Uses "gui" |:highlight|
-	attributes instead of "cterm" attributes. |highlight-guifg|
+	attributes instead of "cterm" attributes. |guifg|
 	Requires an ISO-8613-3 compatible terminal.
 
 						*'termpastefilter'* *'tpf'*
@@ -6747,11 +6770,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	final value applying to all subsequent tabs.
 
 	For example, when editing assembly language files where statements
-	start in the 8th column and comments in the 40th, it may be useful
+	start in the 9th column and comments in the 41st, it may be useful
 	to use the following: >
 		:set varsofttabstop=8,32,8
-<	This will set soft tabstops at the 8th and 40th columns, and at every
-	8th column thereafter.
+<	This will set soft tabstops with 8 and 8 + 32 spaces, and 8 more
+	for every column thereafter.
 
 	Note that the value of |'softtabstop'| will be ignored while
 	'varsofttabstop' is set.
@@ -7135,7 +7158,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	the window.
 
 	Note: highlight namespaces take precedence over 'winhighlight'.
-	See |nvim_win_set_hl_ns| and |nvim_set_hl|.
+	See |nvim_win_set_hl_ns()| and |nvim_set_hl()|.
 
 	Highlights of vertical separators are determined by the window to the
 	left of the separator.  The 'tabline' highlight of a tabpage is

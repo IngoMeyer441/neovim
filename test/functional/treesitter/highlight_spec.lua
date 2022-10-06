@@ -605,9 +605,9 @@ describe('treesitter highlighting', function()
     }}
 
     eq({
-      {capture='Error', priority='101'};
-      {capture='type'};
-    }, exec_lua [[ return vim.treesitter.get_captures_at_position(0, 0, 2) ]])
+      {capture='Error', metadata = { priority='101' }};
+      {capture='type', metadata = { } };
+    }, exec_lua [[ return vim.treesitter.get_captures_at_pos(0, 0, 2) ]])
     end)
 
   it("allows to use captures with dots (don't use fallback when specialization of foo exists)", function()

@@ -975,6 +975,21 @@ func Test_abbreviate_multi_byte()
   bwipe!
 endfunc
 
+" Test for abbreviations with 'latin1' encoding
+func Test_abbreviate_latin1_encoding()
+  " set encoding=latin1
+  call assert_fails('abbr ab#$c ABC', 'E474:')
+  new
+  iabbr <buffer> #i #include
+  iabbr <buffer> ## #enddef
+  exe "normal i#i\<C-]>"
+  call assert_equal('#include', getline(1))
+  exe "normal 0Di##\<C-]>"
+  call assert_equal('#enddef', getline(1))
+  %bw!
+  set encoding=utf-8
+endfunc
++
 " Test for <Plug> always being mapped, even when used with "noremap".
 func Test_plug_remap()
   let g:foo = 0
@@ -1006,15 +1021,14 @@ func Test_plug_remap()
 endfunc
 
 func Test_mouse_drag_mapped_start_select()
-  CheckFunction test_setmouse
   set mouse=a
   set selectmode=key,mouse
   func ClickExpr()
-    call test_setmouse(1, 1)
+    call Ntest_setmouse(1, 1)
     return "\<LeftMouse>"
   endfunc
   func DragExpr()
-    call test_setmouse(1, 2)
+    call Ntest_setmouse(1, 2)
     return "\<LeftDrag>"
   endfunc
   nnoremap <expr> <F2> ClickExpr()
@@ -1036,14 +1050,13 @@ endfunc
 
 " Test for mapping <LeftDrag> in Insert mode
 func Test_mouse_drag_insert_map()
-  CheckFunction test_setmouse
   set mouse=a
   func ClickExpr()
-    call test_setmouse(1, 1)
+    call Ntest_setmouse(1, 1)
     return "\<LeftMouse>"
   endfunc
   func DragExpr()
-    call test_setmouse(1, 2)
+    call Ntest_setmouse(1, 2)
     return "\<LeftDrag>"
   endfunc
   inoremap <expr> <F2> ClickExpr()
@@ -1128,5 +1141,15 @@ func Test_map_after_timed_out_nop()
   call StopVimInTerminal(buf)
   call delete('Xtest_map_after_timed_out_nop')
 endfunc
+
+func Test_using_past_typeahead()
+  nnoremap :00 0
+  exe "norm :set \x80\xfb0=0\<CR>"
+  exe "sil norm :0\x0f\<C-U>\<CR>"
+
+  exe "norm :set \x80\xfb0=\<CR>"
+  nunmap :00
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

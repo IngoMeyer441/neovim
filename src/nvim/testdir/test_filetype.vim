@@ -108,6 +108,7 @@ let s:filename_checks = {
     \ 'ch': ['file.chf'],
     \ 'chaiscript': ['file.chai'],
     \ 'chaskell': ['file.chs'],
+    \ 'chatito': ['file.chatito'],
     \ 'chill': ['file..ch'],
     \ 'chordpro': ['file.chopro', 'file.crd', 'file.cho', 'file.crdpro', 'file.chordpro'],
     \ 'cl': ['file.eni'],
@@ -239,6 +240,7 @@ let s:filename_checks = {
     \ 'grub': ['/boot/grub/menu.lst', '/boot/grub/grub.conf', '/etc/grub.conf', 'any/boot/grub/grub.conf', 'any/boot/grub/menu.lst', 'any/etc/grub.conf'],
     \ 'gsp': ['file.gsp'],
     \ 'gtkrc': ['.gtkrc', 'gtkrc', '.gtkrc-file', 'gtkrc-file'],
+    \ 'gyp': ['file.gyp', 'file.gypi'],
     \ 'hack': ['file.hack', 'file.hackpartial'],
     \ 'haml': ['file.haml'],
     \ 'hamster': ['file.hsm'],
@@ -254,6 +256,7 @@ let s:filename_checks = {
     \ 'hex': ['file.hex', 'file.h32'],
     \ 'hgcommit': ['hg-editor-file.txt'],
     \ 'hjson': ['file.hjson'],
+    \ 'hlsplaylist': ['file.m3u', 'file.m3u8'],
     \ 'hog': ['file.hog', 'snort.conf', 'vision.conf'],
     \ 'hollywood': ['file.hws'],
     \ 'hoon': ['file.hoon'],
@@ -325,8 +328,9 @@ let s:filename_checks = {
     \ 'lpc': ['file.lpc', 'file.ulpc'],
     \ 'lsl': ['file.lsl'],
     \ 'lss': ['file.lss'],
-    \ 'lua': ['file.lua', 'file.rockspec', 'file.nse'],
+    \ 'lua': ['file.lua', 'file.rockspec', 'file.nse', '.luacheckrc'],
     \ 'lynx': ['lynx.cfg'],
+    \ 'lyrics': ['file.lrc'],
     \ 'm3build': ['m3makefile', 'm3overrides'],
     \ 'm3quake': ['file.quake', 'cm3.cfg'],
     \ 'm4': ['file.at'],
@@ -383,6 +387,7 @@ let s:filename_checks = {
     \ 'neomuttrc': ['Neomuttrc', '.neomuttrc', '.neomuttrc-file', '/.neomutt/neomuttrc', '/.neomutt/neomuttrc-file', 'Neomuttrc', 'Neomuttrc-file', 'any/.neomutt/neomuttrc', 'any/.neomutt/neomuttrc-file', 'neomuttrc', 'neomuttrc-file'],
     \ 'netrc': ['.netrc'],
     \ 'nginx': ['file.nginx', 'nginxfile.conf', 'filenginx.conf', 'any/etc/nginx/file', 'any/usr/local/nginx/conf/file', 'any/nginx/file.conf'],
+    \ 'nim': ['file.nim', 'file.nims', 'file.nimble'],
     \ 'ninja': ['file.ninja'],
     \ 'nix': ['file.nix'],
     \ 'nqc': ['file.nqc'],
@@ -408,7 +413,7 @@ let s:filename_checks = {
     \ 'pccts': ['file.g'],
     \ 'pcmk': ['file.pcmk'],
     \ 'pdf': ['file.pdf'],
-    \ 'perl': ['file.plx', 'file.al', 'file.psgi', 'gitolite.rc', '.gitolite.rc', 'example.gitolite.rc'],
+    \ 'perl': ['file.plx', 'file.al', 'file.psgi', 'gitolite.rc', '.gitolite.rc', 'example.gitolite.rc', '.latexmkrc', 'latexmkrc'],
     \ 'pf': ['pf.conf'],
     \ 'pfmain': ['main.cf'],
     \ 'php': ['file.php', 'file.php9', 'file.phtml', 'file.ctp', 'file.phpt', 'file.theme'],
@@ -530,6 +535,7 @@ let s:filename_checks = {
     \ 'squid': ['squid.conf'],
     \ 'squirrel': ['file.nut'],
     \ 'srec': ['file.s19', 'file.s28', 'file.s37', 'file.mot', 'file.srec'],
+    \ 'srt': ['file.srt'],
     \ 'sshconfig': ['ssh_config', '/.ssh/config', '/etc/ssh/ssh_config.d/file.conf', 'any/etc/ssh/ssh_config.d/file.conf', 'any/.ssh/config', 'any/.ssh/file.conf'],
     \ 'sshdconfig': ['sshd_config', '/etc/ssh/sshd_config.d/file.conf', 'any/etc/ssh/sshd_config.d/file.conf'],
     \ 'st': ['file.st'],
@@ -577,6 +583,7 @@ let s:filename_checks = {
     \ 'tssop': ['file.tssop'],
     \ 'tsv': ['file.tsv'],
     \ 'twig': ['file.twig'],
+    \ 'typescript': ['file.mts', 'file.cts'],
     \ 'typescript.glimmer': ['file.gts'],
     \ 'typescriptreact': ['file.tsx'],
     \ 'uc': ['file.uc'],
@@ -593,6 +600,7 @@ let s:filename_checks = {
     \ 'usw2kagtlog': ['usw2kagt.log', 'USW2KAGT.LOG', 'usw2kagt.file.log', 'USW2KAGT.FILE.LOG', 'file.usw2kagt.log', 'FILE.USW2KAGT.LOG'],
     \ 'vala': ['file.vala'],
     \ 'vb': ['file.sba', 'file.vb', 'file.vbs', 'file.dsm', 'file.ctl'],
+    \ 'vdf': ['file.vdf'],
     \ 'vdmpp': ['file.vpp', 'file.vdmpp'],
     \ 'vdmrt': ['file.vdmrt'],
     \ 'vdmsl': ['file.vdm', 'file.vdmsl'],
@@ -926,7 +934,9 @@ func Test_d_file()
   call assert_equal('d', &filetype)
   bwipe!
 
+  " clean up
   filetype off
+  call delete('Xfile.d')
 endfunc
 
 func Test_dat_file()

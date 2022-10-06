@@ -230,7 +230,6 @@ endfunc
 " Test for the :language command
 func Test_language_cmd()
   CheckNotMSWindows  " FIXME: why does this fail on Windows CI?
-  CheckNotBSD  " FIXME: why does this fail on OpenBSD CI?
   CheckFeature multi_lang
 
   call assert_fails('language ctype non_existing_lang', 'E197:')
@@ -662,6 +661,12 @@ func Sandbox_tests()
   endif
   if has('unix')
     call assert_fails('cd `pwd`', 'E48:')
+  endif
+  " some options cannot be changed in a sandbox
+  call assert_fails('set exrc', 'E48:')
+  call assert_fails('set cdpath', 'E48:')
+  if has('xim') && has('gui_gtk')
+    call assert_fails('set imstyle', 'E48:')
   endif
 endfunc
 

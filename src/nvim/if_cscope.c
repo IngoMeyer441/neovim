@@ -415,7 +415,7 @@ static int cs_add_common(char *arg1, char *arg2, char *flags)
   fname = xmalloc(MAXPATHL + 1);
 
   expand_env(arg1, fname, MAXPATHL);
-  size_t len = STRLEN(fname);
+  size_t len = strlen(fname);
   fbuf = fname;
   (void)modify_fname(":p", false, &usedlen, &fname, &fbuf, &len);
   if (fname == NULL) {
@@ -649,7 +649,7 @@ static char *cs_create_cmd(char *csoption, char *pattern)
     return NULL;
   }
 
-  // Skip white space before the patter, except for text and pattern search,
+  // Skip white space before the pattern, except for text and pattern search,
   // they may want to use the leading white space.
   pat = pattern;
   if (search != 4 && search != 6) {
@@ -768,7 +768,7 @@ err_closing:
 #if defined(UNIX)
     (void)snprintf(cmd, len, "exec %s -dl -f %s", prog, csinfo[i].fname);
 #else
-    // WIN32
+    // MS-Windows
     (void)snprintf(cmd, len, "%s -dl -f %s", prog, csinfo[i].fname);
 #endif
     if (csinfo[i].ppath != NULL) {
@@ -820,7 +820,7 @@ err_closing:
   }
 
 #else
-    // WIN32
+    // MS-Windows
     // Create a new process to run cscope and use pipes to talk with it
     GetStartupInfo(&si);
     si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
@@ -1180,7 +1180,7 @@ static cscmd_T *cs_lookup_cmd(exarg_T *eap)
   }
 
   // Store length of eap->arg before it gets modified by strtok().
-  eap_arg_len = (int)STRLEN(eap->arg);
+  eap_arg_len = (int)strlen(eap->arg);
 
   if ((stok = strtok(eap->arg, (const char *)" ")) == NULL) {  // NOLINT(runtime/threadsafe_fn)
     return NULL;

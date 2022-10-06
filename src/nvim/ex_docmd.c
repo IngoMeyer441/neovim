@@ -254,7 +254,7 @@ void do_exmode(void)
   RedrawingDisabled--;
   no_wait_return--;
   redraw_all_later(UPD_NOT_VALID);
-  update_screen(UPD_NOT_VALID);
+  update_screen();
   need_wait_return = false;
   msg_scroll = save_msg_scroll;
 }
@@ -1302,7 +1302,7 @@ static void parse_register(exarg_T *eap)
         if (!eap->skip) {
           set_expr_line(xstrdup(eap->arg));
         }
-        eap->arg += STRLEN(eap->arg);
+        eap->arg += strlen(eap->arg);
       }
       eap->arg = skipwhite(eap->arg);
     }
@@ -1339,6 +1339,20 @@ static int parse_count(exarg_T *eap, char **errormsg, bool validate)
           || ascii_iswhite(*p))) {
     long n = getdigits_long(&eap->arg, false, -1);
     eap->arg = skipwhite(eap->arg);
+
+    if (eap->args != NULL) {
+      assert(eap->argc > 0 && eap->arg >= eap->args[0]);
+      // If eap->arg is still pointing to the first argument, just make eap->args[0] point to the
+      // same location. This is needed for usecases like vim.cmd.sleep('10m'). If eap->arg is
+      // pointing outside the first argument, shift arguments by 1.
+      if (eap->arg < eap->args[0] + eap->arglens[0]) {
+        eap->arglens[0] -= (size_t)(eap->arg - eap->args[0]);
+        eap->args[0] = eap->arg;
+      } else {
+        shift_cmd_args(eap);
+      }
+    }
+
     if (n <= 0 && (eap->argt & EX_ZEROR) == 0) {
       if (errormsg != NULL) {
         *errormsg = _(e_zerocount);
@@ -1512,6 +1526,30 @@ end:
   return retval;
 }
 
+// Shift Ex-command arguments to the right.
+static void shift_cmd_args(exarg_T *eap)
+{
+  assert(eap->args != NULL && eap->argc > 0);
+
+  char **oldargs = eap->args;
+  size_t *oldarglens = eap->arglens;
+
+  eap->argc--;
+  eap->args = eap->argc > 0 ? xcalloc(eap->argc, sizeof(char *)) : NULL;
+  eap->arglens = eap->argc > 0 ? xcalloc(eap->argc, sizeof(size_t)) : NULL;
+
+  for (size_t i = 0; i < eap->argc; i++) {
+    eap->args[i] = oldargs[i + 1];
+    eap->arglens[i] = oldarglens[i + 1];
+  }
+
+  // If there are no arguments, make eap->arg point to the end of string.
+  eap->arg = (eap->argc > 0 ? eap->args[0] : (oldargs[0] + oldarglens[0]));
+
+  xfree(oldargs);
+  xfree(oldarglens);
+}
+
 static int execute_cmd0(int *retv, exarg_T *eap, char **errormsg, bool preview)
 {
   // If filename expansion is enabled, expand filenames
@@ -1536,7 +1574,7 @@ static int execute_cmd0(int *retv, exarg_T *eap, char **errormsg, bool preview)
           || eap->cmdidx == CMD_bunload) {
         p = skiptowhite_esc(eap->arg);
       } else {
-        p = eap->arg + STRLEN(eap->arg);
+        p = eap->arg + strlen(eap->arg);
         while (p > eap->arg && ascii_iswhite(p[-1])) {
           p--;
         }
@@ -1551,15 +1589,7 @@ static int execute_cmd0(int *retv, exarg_T *eap, char **errormsg, bool preview)
                                    eap->args[0] + eap->arglens[0],
                                    (eap->argt & EX_BUFUNL) != 0, false, false);
       eap->addr_count = 1;
-      // Shift each argument by 1
-      for (size_t i = 0; i < eap->argc - 1; i++) {
-        eap->args[i] = eap->args[i + 1];
-      }
-      // Make the last argument point to the NUL terminator at the end of string
-      eap->args[eap->argc - 1] = eap->args[eap->argc - 1] + eap->arglens[eap->argc - 1];
-      eap->argc -= 1;
-
-      eap->arg = eap->args[0];
+      shift_cmd_args(eap);
     }
     if (eap->line2 < 0) {  // failed
       return FAIL;
@@ -1656,6 +1686,11 @@ int execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo, bool preview)
     // at the end of a closed fold.
     (void)hasFolding(eap->line1, &eap->line1, NULL);
     (void)hasFolding(eap->line2, NULL, &eap->line2);
+  }
+
+  // Use first argument as count when possible
+  if (parse_count(eap, &errormsg, true) == FAIL) {
+    goto end;
   }
 
   // Execute the command
@@ -2824,7 +2859,7 @@ bool checkforcmd(char **pp, char *cmd, int len)
 /// invisible otherwise.
 static void append_command(char *cmd)
 {
-  size_t len = STRLEN(IObuff);
+  size_t len = strlen(IObuff);
   char *s = cmd;
   char *d;
 
@@ -3666,7 +3701,7 @@ char *replace_makeprg(exarg_T *eap, char *arg, char **cmdlinep)
     // Replace $* by given arguments
     if ((new_cmdline = strrep(program, "$*", arg)) == NULL) {
       // No $* in arg, build "<makeprg> <arg>" instead
-      new_cmdline = xmalloc(STRLEN(program) + STRLEN(arg) + 2);
+      new_cmdline = xmalloc(strlen(program) + strlen(arg) + 2);
       STRCPY(new_cmdline, program);
       STRCAT(new_cmdline, " ");
       STRCAT(new_cmdline, arg);
@@ -3805,7 +3840,7 @@ int expand_filename(exarg_T *eap, char **cmdlinep, char **errormsgp)
         p = NULL;
       }
       if (p != NULL) {
-        (void)repl_cmdline(eap, eap->arg, STRLEN(eap->arg), p, cmdlinep);
+        (void)repl_cmdline(eap, eap->arg, strlen(eap->arg), p, cmdlinep);
       }
     }
 
@@ -3833,7 +3868,7 @@ int expand_filename(exarg_T *eap, char **cmdlinep, char **errormsgp)
       if (p == NULL) {
         return FAIL;
       }
-      (void)repl_cmdline(eap, eap->arg, STRLEN(eap->arg), p, cmdlinep);
+      (void)repl_cmdline(eap, eap->arg, strlen(eap->arg), p, cmdlinep);
       xfree(p);
     }
   }
@@ -3851,10 +3886,10 @@ static char *repl_cmdline(exarg_T *eap, char *src, size_t srclen, char *repl, ch
   // The new command line is build in new_cmdline[].
   // First allocate it.
   // Careful: a "+cmd" argument may have been NUL terminated.
-  size_t len = STRLEN(repl);
-  size_t i = (size_t)(src - *cmdlinep) + STRLEN(src + srclen) + len + 3;
+  size_t len = strlen(repl);
+  size_t i = (size_t)(src - *cmdlinep) + strlen(src + srclen) + len + 3;
   if (eap->nextcmd != NULL) {
-    i += STRLEN(eap->nextcmd);    // add space for next command
+    i += strlen(eap->nextcmd);    // add space for next command
   }
   char *new_cmdline = xmalloc(i);
   size_t offset = (size_t)(src - *cmdlinep);
@@ -3872,7 +3907,7 @@ static char *repl_cmdline(exarg_T *eap, char *src, size_t srclen, char *repl, ch
   src = new_cmdline + i;                // remember where to continue
 
   if (eap->nextcmd != NULL) {           // append next command
-    i = STRLEN(new_cmdline) + 1;
+    i = strlen(new_cmdline) + 1;
     STRCPY(new_cmdline + i, eap->nextcmd);
     eap->nextcmd = new_cmdline + i;
   }
@@ -3887,7 +3922,7 @@ static char *repl_cmdline(exarg_T *eap, char *src, size_t srclen, char *repl, ch
     } else {
       // Otherwise, argument gets shifted alongside the replaced text.
       // The amount of the shift is equal to the difference of the old and new string length.
-      eap->args[j] = new_cmdline + (eap->args[j] - *cmdlinep) + (len - srclen);
+      eap->args[j] = new_cmdline + ((eap->args[j] - *cmdlinep) + (ptrdiff_t)(len - srclen));
     }
   }
 
@@ -4696,7 +4731,6 @@ void tabpage_close(int forceit)
 void tabpage_close_other(tabpage_T *tp, int forceit)
 {
   int done = 0;
-  int h = tabline_height();
   char prev_idx[NUMBUFLEN];
 
   // Limit to 1000 windows, autocommands may add a window while we close
@@ -4711,11 +4745,6 @@ void tabpage_close_other(tabpage_T *tp, int forceit)
     if (!valid_tabpage(tp) || tp->tp_lastwin == wp) {
       break;
     }
-  }
-
-  redraw_tabline = true;
-  if (h != tabline_height()) {
-    win_new_screen_rows();
   }
 }
 
@@ -4913,7 +4942,7 @@ void ex_splitview(exarg_T *eap)
   }
 
   if (eap->cmdidx == CMD_sfind || eap->cmdidx == CMD_tabfind) {
-    fname = (char *)find_file_in_path((char_u *)eap->arg, STRLEN(eap->arg),
+    fname = (char *)find_file_in_path((char_u *)eap->arg, strlen(eap->arg),
                                       FNAME_MESS, true, (char_u *)curbuf->b_ffname);
     if (fname == NULL) {
       goto theend;
@@ -5106,7 +5135,7 @@ static void ex_resize(exarg_T *eap)
 /// ":find [+command] <file>" command.
 static void ex_find(exarg_T *eap)
 {
-  char *fname = (char *)find_file_in_path((char_u *)eap->arg, STRLEN(eap->arg),
+  char *fname = (char *)find_file_in_path((char_u *)eap->arg, strlen(eap->arg),
                                           FNAME_MESS, true, (char_u *)curbuf->b_ffname);
   if (eap->addr_count > 0) {
     // Repeat finding the file "count" times.  This matters when it
@@ -5873,7 +5902,7 @@ static void ex_undo(exarg_T *eap)
 {
   if (eap->addr_count != 1) {
     if (eap->forceit) {
-      u_undo_and_forget(1);         // :undo!
+      u_undo_and_forget(1, true);   // :undo!
     } else {
       u_undo(1);                    // :undo
     }
@@ -5900,7 +5929,7 @@ static void ex_undo(exarg_T *eap)
       emsg(_(e_undobang_cannot_redo_or_move_branch));
       return;
     }
-    u_undo_and_forget(count);
+    u_undo_and_forget(count, true);
   } else {                        // :undo 123
     undo_time(step, false, false, true);
   }
@@ -6061,9 +6090,10 @@ static void ex_redraw(exarg_T *eap)
   if (eap->forceit) {
     redraw_all_later(UPD_NOT_VALID);
     redraw_cmdline = true;
+  } else if (VIsual_active) {
+    redraw_curbuf_later(UPD_INVERTED);
   }
-  update_screen(eap->forceit ? UPD_NOT_VALID
-                : VIsual_active ? UPD_INVERTED : 0);
+  update_screen();
   if (need_maketitle) {
     maketitle();
   }
@@ -6089,14 +6119,22 @@ static void ex_redrawstatus(exarg_T *eap)
   int r = RedrawingDisabled;
   int p = p_lz;
 
-  RedrawingDisabled = 0;
-  p_lz = false;
   if (eap->forceit) {
     status_redraw_all();
   } else {
     status_redraw_curbuf();
   }
-  update_screen(VIsual_active ? UPD_INVERTED : 0);
+
+  RedrawingDisabled = 0;
+  p_lz = false;
+  if (State & MODE_CMDLINE) {
+    redraw_statuslines();
+  } else {
+    if (VIsual_active) {
+      redraw_curbuf_later(UPD_INVERTED);
+    }
+    update_screen();
+  }
   RedrawingDisabled = r;
   p_lz = p;
   ui_flush();
@@ -6292,7 +6330,7 @@ static void ex_normal(exarg_T *eap)
       }
     }
     if (len > 0) {
-      arg = xmalloc(STRLEN(eap->arg) + (size_t)len + 1);
+      arg = xmalloc(strlen(eap->arg) + (size_t)len + 1);
       len = 0;
       for (p = eap->arg; *p != NUL; p++) {
         arg[len++] = *p;
@@ -6471,7 +6509,7 @@ static void ex_findpat(exarg_T *eap)
     }
   }
   if (!eap->skip) {
-    find_pattern_in_path((char_u *)eap->arg, 0, STRLEN(eap->arg), whole, !eap->forceit,
+    find_pattern_in_path((char_u *)eap->arg, 0, strlen(eap->arg), whole, !eap->forceit,
                          *eap->cmd == 'd' ?  FIND_DEFINE : FIND_ANY,
                          n, action, eap->line1, eap->line2);
   }
@@ -6612,7 +6650,7 @@ ssize_t find_cmdline_var(const char_u *src, size_t *usedlen)
   };
 
   for (size_t i = 0; i < ARRAY_SIZE(spec_str); i++) {
-    size_t len = STRLEN(spec_str[i]);
+    size_t len = strlen(spec_str[i]);
     if (STRNCMP(src, spec_str[i], len) == 0) {
       *usedlen = len;
       assert(i <= SSIZE_MAX);
@@ -6879,7 +6917,7 @@ char_u *eval_vars(char_u *src, char_u *srcstart, size_t *usedlen, linenr_T *lnum
     }
 
     // Length of new string.
-    resultlen = STRLEN(result);
+    resultlen = strlen(result);
     // Remove the file name extension.
     if (src[*usedlen] == '<') {
       (*usedlen)++;
@@ -6942,11 +6980,11 @@ char *expand_sfile(char *arg)
         p += srclen;
         continue;
       }
-      size_t len = STRLEN(result) - srclen + STRLEN(repl) + 1;
+      size_t len = strlen(result) - srclen + strlen(repl) + 1;
       char *newres = xmalloc(len);
       memmove(newres, result, (size_t)(p - result));
       STRCPY(newres + (p - result), repl);
-      len = STRLEN(newres);
+      len = strlen(newres);
       STRCAT(newres, p + srclen);
       xfree(repl);
       xfree(result);

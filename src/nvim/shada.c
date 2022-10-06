@@ -11,6 +11,8 @@
 #include <string.h>
 #include <uv.h>
 
+#include "klib/khash.h"
+#include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
@@ -25,8 +27,6 @@
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
 #include "nvim/globals.h"
-#include "nvim/lib/khash.h"
-#include "nvim/lib/kvec.h"
 #include "nvim/macros.h"
 #include "nvim/mark.h"
 #include "nvim/memory.h"
@@ -884,7 +884,7 @@ static const void *shada_hist_iter(const void *const iter, const uint8_t history
           .histtype = history_type,
           .string = hist_he.hisstr,
           .sep = (char)(history_type == HIST_SEARCH
-                        ? hist_he.hisstr[STRLEN(hist_he.hisstr) + 1]
+                        ? hist_he.hisstr[strlen(hist_he.hisstr) + 1]
                         : 0),
           .additional_elements = hist_he.additional_elements,
         }
@@ -4000,7 +4000,7 @@ static bool shada_removable(const char *name)
     (void)copy_option_part(&p, part, ARRAY_SIZE(part), ", ");
     if (part[0] == 'r') {
       home_replace(NULL, part + 1, (char *)NameBuff, MAXPATHL, true);
-      size_t n = STRLEN(NameBuff);
+      size_t n = strlen(NameBuff);
       if (mb_strnicmp(NameBuff, new_name, n) == 0) {
         retval = true;
         break;

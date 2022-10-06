@@ -158,17 +158,20 @@ describe('lua stdlib', function()
   end)
 
   it("vim.str_utfindex/str_byteindex", function()
-    exec_lua([[_G.test_text = "xy åäö ɧ 汉语 ↥ 🤦x🦄 å بِيَّ"]])
-    local indicies32 = {[0]=0,1,2,3,5,7,9,10,12,13,16,19,20,23,24,28,29,33,34,35,37,38,40,42,44,46,48}
-    local indicies16 = {[0]=0,1,2,3,5,7,9,10,12,13,16,19,20,23,24,28,28,29,33,33,34,35,37,38,40,42,44,46,48}
+    exec_lua([[_G.test_text = "xy åäö ɧ 汉语 ↥ 🤦x🦄 å بِيَّ\000ъ"]])
+    local indicies32 = {[0]=0,1,2,3,5,7,9,10,12,13,16,19,20,23,24,28,29,33,34,35,37,38,40,42,44,46,48,49,51}
+    local indicies16 = {[0]=0,1,2,3,5,7,9,10,12,13,16,19,20,23,24,28,28,29,33,33,34,35,37,38,40,42,44,46,48,49,51}
     for i,k in pairs(indicies32) do
       eq(k, exec_lua("return vim.str_byteindex(_G.test_text, ...)", i), i)
     end
     for i,k in pairs(indicies16) do
       eq(k, exec_lua("return vim.str_byteindex(_G.test_text, ..., true)", i), i)
     end
+    matches(": index out of range$", pcall_err(exec_lua, "return vim.str_byteindex(_G.test_text, ...)", #indicies32 + 1))
+    matches(": index out of range$", pcall_err(exec_lua, "return vim.str_byteindex(_G.test_text, ..., true)", #indicies16 + 1))
     local i32, i16 = 0, 0
-    for k = 0,48 do
+    local len = 51
+    for k = 0,len do
       if indicies32[i32] < k then
         i32 = i32 + 1
       end
@@ -180,6 +183,7 @@ describe('lua stdlib', function()
       end
       eq({i32, i16}, exec_lua("return {vim.str_utfindex(_G.test_text, ...)}", k), k)
     end
+    matches(": index out of range$", pcall_err(exec_lua, "return vim.str_utfindex(_G.test_text, ...)", len + 1))
   end)
 
   it("vim.str_utf_start", function()
@@ -788,6 +792,11 @@ describe('lua stdlib', function()
       local x = vim.fn.VarArg(function() return 'foo' end, function() return 'bar' end)
       return #x == 2 and x[1]() == 'foo' and x[2]() == 'bar'
     ]]))
+
+    -- Test for #20211
+    eq('a (b) c', exec_lua([[
+      return vim.fn.substitute('a b c', 'b', function(m) return '(' .. m[1] .. ')' end, 'g')
+    ]]))
   end)
 
   it('vim.fn should error when calling API function', function()
@@ -896,7 +905,7 @@ describe('lua stdlib', function()
     ]]))
 
     -- vim.empty_dict() gives new value each time
-    -- equality is not overriden (still by ref)
+    -- equality is not overridden (still by ref)
     -- non-empty table uses the usual heuristics (ignores the tag)
     eq({false, {"foo"}, {namey="bar"}}, exec_lua([[
       local aa = vim.empty_dict()
@@ -1029,6 +1038,7 @@ describe('lua stdlib', function()
       vim.g.AddCounter = add_counter
       vim.g.GetCounter = get_counter
       vim.g.funcs = {add = add_counter, get = get_counter}
+      vim.g.AddParens = function(s) return '(' .. s .. ')' end
     ]]
 
     eq(0, eval('g:GetCounter()'))
@@ -1044,6 +1054,7 @@ describe('lua stdlib', function()
     eq(5, exec_lua([[return vim.g.funcs.get()]]))
     exec_lua([[vim.api.nvim_get_var('funcs').add()]])
     eq(6, exec_lua([[return vim.api.nvim_get_var('funcs').get()]]))
+    eq('((foo))', eval([['foo'->AddParens()->AddParens()]]))
 
     exec_lua [[
       local counter = 0
@@ -1052,6 +1063,7 @@ describe('lua stdlib', function()
       vim.api.nvim_set_var('AddCounter', add_counter)
       vim.api.nvim_set_var('GetCounter', get_counter)
       vim.api.nvim_set_var('funcs', {add = add_counter, get = get_counter})
+      vim.api.nvim_set_var('AddParens', function(s) return '(' .. s .. ')' end)
     ]]
 
     eq(0, eval('g:GetCounter()'))
@@ -1067,6 +1079,7 @@ describe('lua stdlib', function()
     eq(5, exec_lua([[return vim.g.funcs.get()]]))
     exec_lua([[vim.api.nvim_get_var('funcs').add()]])
     eq(6, exec_lua([[return vim.api.nvim_get_var('funcs').get()]]))
+    eq('((foo))', eval([['foo'->AddParens()->AddParens()]]))
 
     exec([[
       function Test()
@@ -1133,6 +1146,7 @@ describe('lua stdlib', function()
       vim.b.AddCounter = add_counter
       vim.b.GetCounter = get_counter
       vim.b.funcs = {add = add_counter, get = get_counter}
+      vim.b.AddParens = function(s) return '(' .. s .. ')' end
     ]]
 
     eq(0, eval('b:GetCounter()'))
@@ -1148,6 +1162,7 @@ describe('lua stdlib', function()
     eq(5, exec_lua([[return vim.b.funcs.get()]]))
     exec_lua([[vim.api.nvim_buf_get_var(0, 'funcs').add()]])
     eq(6, exec_lua([[return vim.api.nvim_buf_get_var(0, 'funcs').get()]]))
+    eq('((foo))', eval([['foo'->b:AddParens()->b:AddParens()]]))
 
     exec_lua [[
       local counter = 0
@@ -1156,6 +1171,7 @@ describe('lua stdlib', function()
       vim.api.nvim_buf_set_var(0, 'AddCounter', add_counter)
       vim.api.nvim_buf_set_var(0, 'GetCounter', get_counter)
       vim.api.nvim_buf_set_var(0, 'funcs', {add = add_counter, get = get_counter})
+      vim.api.nvim_buf_set_var(0, 'AddParens', function(s) return '(' .. s .. ')' end)
     ]]
 
     eq(0, eval('b:GetCounter()'))
@@ -1171,6 +1187,7 @@ describe('lua stdlib', function()
     eq(5, exec_lua([[return vim.b.funcs.get()]]))
     exec_lua([[vim.api.nvim_buf_get_var(0, 'funcs').add()]])
     eq(6, exec_lua([[return vim.api.nvim_buf_get_var(0, 'funcs').get()]]))
+    eq('((foo))', eval([['foo'->b:AddParens()->b:AddParens()]]))
 
     exec([[
       function Test()
@@ -1227,6 +1244,7 @@ describe('lua stdlib', function()
       vim.w.AddCounter = add_counter
       vim.w.GetCounter = get_counter
       vim.w.funcs = {add = add_counter, get = get_counter}
+      vim.w.AddParens = function(s) return '(' .. s .. ')' end
     ]]
 
     eq(0, eval('w:GetCounter()'))
@@ -1242,6 +1260,7 @@ describe('lua stdlib', function()
     eq(5, exec_lua([[return vim.w.funcs.get()]]))
     exec_lua([[vim.api.nvim_win_get_var(0, 'funcs').add()]])
     eq(6, exec_lua([[return vim.api.nvim_win_get_var(0, 'funcs').get()]]))
+    eq('((foo))', eval([['foo'->w:AddParens()->w:AddParens()]]))
 
     exec_lua [[
       local counter = 0
@@ -1250,6 +1269,7 @@ describe('lua stdlib', function()
       vim.api.nvim_win_set_var(0, 'AddCounter', add_counter)
       vim.api.nvim_win_set_var(0, 'GetCounter', get_counter)
       vim.api.nvim_win_set_var(0, 'funcs', {add = add_counter, get = get_counter})
+      vim.api.nvim_win_set_var(0, 'AddParens', function(s) return '(' .. s .. ')' end)
     ]]
 
     eq(0, eval('w:GetCounter()'))
@@ -1265,6 +1285,7 @@ describe('lua stdlib', function()
     eq(5, exec_lua([[return vim.w.funcs.get()]]))
     exec_lua([[vim.api.nvim_win_get_var(0, 'funcs').add()]])
     eq(6, exec_lua([[return vim.api.nvim_win_get_var(0, 'funcs').get()]]))
+    eq('((foo))', eval([['foo'->w:AddParens()->w:AddParens()]]))
 
     exec([[
       function Test()
@@ -1316,6 +1337,7 @@ describe('lua stdlib', function()
       vim.t.AddCounter = add_counter
       vim.t.GetCounter = get_counter
       vim.t.funcs = {add = add_counter, get = get_counter}
+      vim.t.AddParens = function(s) return '(' .. s .. ')' end
     ]]
 
     eq(0, eval('t:GetCounter()'))
@@ -1331,6 +1353,7 @@ describe('lua stdlib', function()
     eq(5, exec_lua([[return vim.t.funcs.get()]]))
     exec_lua([[vim.api.nvim_tabpage_get_var(0, 'funcs').add()]])
     eq(6, exec_lua([[return vim.api.nvim_tabpage_get_var(0, 'funcs').get()]]))
+    eq('((foo))', eval([['foo'->t:AddParens()->t:AddParens()]]))
 
     exec_lua [[
       local counter = 0
@@ -1339,6 +1362,7 @@ describe('lua stdlib', function()
       vim.api.nvim_tabpage_set_var(0, 'AddCounter', add_counter)
       vim.api.nvim_tabpage_set_var(0, 'GetCounter', get_counter)
       vim.api.nvim_tabpage_set_var(0, 'funcs', {add = add_counter, get = get_counter})
+      vim.api.nvim_tabpage_set_var(0, 'AddParens', function(s) return '(' .. s .. ')' end)
     ]]
 
     eq(0, eval('t:GetCounter()'))
@@ -1354,6 +1378,7 @@ describe('lua stdlib', function()
     eq(5, exec_lua([[return vim.t.funcs.get()]]))
     exec_lua([[vim.api.nvim_tabpage_get_var(0, 'funcs').add()]])
     eq(6, exec_lua([[return vim.api.nvim_tabpage_get_var(0, 'funcs').get()]]))
+    eq('((foo))', eval([['foo'->t:AddParens()->t:AddParens()]]))
 
     exec_lua [[
     vim.cmd "tabnew"
@@ -1365,11 +1390,23 @@ describe('lua stdlib', function()
   end)
 
   it('vim.env', function()
-    exec_lua [[
-    vim.fn.setenv("A", 123)
-    ]]
-    eq('123', funcs.luaeval "vim.env.A")
-    eq(true, funcs.luaeval "vim.env.B == nil")
+    exec_lua([[vim.fn.setenv('A', 123)]])
+    eq('123', funcs.luaeval('vim.env.A'))
+    exec_lua([[vim.env.A = 456]])
+    eq('456', funcs.luaeval('vim.env.A'))
+    exec_lua([[vim.env.A = nil]])
+    eq(NIL, funcs.luaeval('vim.env.A'))
+
+    eq(true, funcs.luaeval('vim.env.B == nil'))
+
+    command([[let $HOME = 'foo']])
+    eq('foo', funcs.expand('~'))
+    eq('foo', funcs.luaeval('vim.env.HOME'))
+    exec_lua([[vim.env.HOME = nil]])
+    eq('foo', funcs.expand('~'))
+    exec_lua([[vim.env.HOME = 'bar']])
+    eq('bar', funcs.expand('~'))
+    eq('bar', funcs.luaeval('vim.env.HOME'))
   end)
 
   it('vim.v', function()
@@ -1396,7 +1433,7 @@ describe('lua stdlib', function()
     ]]
     eq('', funcs.luaeval "vim.bo.filetype")
     eq(true, funcs.luaeval "vim.bo[BUF].modifiable")
-    matches("unknown option 'nosuchopt'$",
+    matches("no such option: 'nosuchopt'$",
        pcall_err(exec_lua, 'return vim.bo.nosuchopt'))
     matches("Expected lua string$",
        pcall_err(exec_lua, 'return vim.bo[0][0].autoread'))
@@ -1417,7 +1454,7 @@ describe('lua stdlib', function()
     eq(0, funcs.luaeval "vim.wo.cole")
     eq(0, funcs.luaeval "vim.wo[0].cole")
     eq(0, funcs.luaeval "vim.wo[1001].cole")
-    matches("unknown option 'notanopt'$",
+    matches("no such option: 'notanopt'$",
        pcall_err(exec_lua, 'return vim.wo.notanopt'))
     matches("Expected lua string$",
        pcall_err(exec_lua, 'return vim.wo[0][0].list'))

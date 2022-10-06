@@ -87,7 +87,7 @@ void hash_clear_all(hashtab_T *ht, unsigned int off)
 ///                  is changed in any way.
 hashitem_T *hash_find(const hashtab_T *const ht, const char *const key)
 {
-  return hash_lookup(ht, key, STRLEN(key), hash_hash((char_u *)key));
+  return hash_lookup(ht, key, strlen(key), hash_hash((char_u *)key));
 }
 
 /// Like hash_find, but key is not NUL-terminated
@@ -265,7 +265,7 @@ void hash_unlock(hashtab_T *ht)
   hash_may_resize(ht, 0);
 }
 
-/// Resize hastable (new size can be given or automatically computed).
+/// Resize hashtable (new size can be given or automatically computed).
 ///
 /// @param minitems Minimum number of items the new table should hold.
 ///                 If zero, new size will depend on currently used items:
