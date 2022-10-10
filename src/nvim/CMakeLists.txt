@@ -166,7 +166,7 @@ if(NOT "${MIN_LOG_LEVEL}" MATCHES "^$")
   add_definitions(-DMIN_LOG_LEVEL=${MIN_LOG_LEVEL})
 endif()
 
-if(DEBUG OR CLANG_ASAN_UBSAN OR CLANG_MSAN OR CLANG_TSAN)
+if(CLANG_ASAN_UBSAN OR CLANG_MSAN OR CLANG_TSAN)
   add_definitions(-DEXITFREE)
 endif()
 
@@ -450,6 +450,10 @@ add_executable(nvim ${NVIM_GENERATED_FOR_SOURCES} ${NVIM_GENERATED_FOR_HEADERS}
 set_target_properties(nvim
   PROPERTIES
   EXPORT_COMPILE_COMMANDS ON)
+
+if(${CMAKE_VERSION} VERSION_LESS 3.20)
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
 
 target_link_libraries(nvim ${NVIM_EXEC_LINK_LIBRARIES})
 install_helper(TARGETS nvim)

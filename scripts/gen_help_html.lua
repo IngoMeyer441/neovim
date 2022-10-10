@@ -33,6 +33,7 @@ local spell_dict = {
   NeoVim = 'Nvim',
   neovim = 'Nvim',
   lua = 'Lua',
+  VimL = 'Vimscript',
 }
 
 local M = {}
@@ -42,8 +43,11 @@ local M = {}
 local new_layout = {
   ['api.txt'] = true,
   ['channel.txt'] = true,
+  ['deprecated.txt'] = true,
   ['develop.txt'] = true,
+  ['lua.txt'] = true,
   ['luaref.txt'] = true,
+  ['news.txt'] = true,
   ['nvim.txt'] = true,
   ['pi_health.txt'] = true,
   ['provider.txt'] = true,
@@ -157,8 +161,8 @@ local function is_noise(line, noise_lines)
     or line:find('%s*%*?[a-zA-Z]+%.txt%*?%s+N?[vV]im%s*$')
     -- modeline
     -- Example: "vim:tw=78:ts=8:sw=4:sts=4:et:ft=help:norl:"
-    or line:find('^%s*vi[m]%:.*ft=help')
-    or line:find('^%s*vi[m]%:.*filetype=help')
+    or line:find('^%s*vim?%:.*ft=help')
+    or line:find('^%s*vim?%:.*filetype=help')
     or line:find('[*>]local%-additions[*<]')
   ) then
     -- table.insert(stats.noise_lines, getbuflinestr(root, opt.buf, 0))
@@ -208,7 +212,7 @@ local function get_helppage(f)
     return 'index.html'
   end
 
-  return f:gsub('%.txt$', '.html')
+  return (f:gsub('%.txt$', '.html'))
 end
 
 -- Counts leading spaces (tab=8) to decide the indent size of multiline text.
@@ -245,6 +249,16 @@ local function getbuflinestr(node, bufnr, offset)
   return table.concat(lines, '\n')
 end
 
+-- Gets the whitespace just before `node` from the raw buffer text.
+-- Needed for preformatted `old` lines.
+local function getws(node, bufnr)
+  local line1, c1, line2, _ = node:range()
+  local raw = vim.fn.getbufline(bufnr, line1 + 1, line2 + 1)[1]
+  local text_before = raw:sub(1, c1)
+  local leading_ws = text_before:match('%s+$') or ''
+  return leading_ws
+end
+
 local function get_tagname(node, bufnr)
   local text = vim.treesitter.get_node_text(node, bufnr)
   local tag = (node:type() == 'optionlink' or node:parent():type() == 'optionlink') and ("'%s'"):format(text) or text
@@ -255,9 +269,13 @@ end
 
 -- Returns true if the given invalid tagname is a false positive.
 local function ignore_invalid(s)
-  -- Strings like |~/====| appear in various places and the parser thinks they are links, but they
-  -- are just table borders.
-  return not not (s:find('===') or exclude_invalid[s])
+  return not not (
+    exclude_invalid[s]
+    -- Strings like |~/====| appear in various places and the parser thinks they are links, but they
+    -- are just table borders.
+    or s:find('===')
+    or s:find('---')
+  )
 end
 
 local function ignore_parse_error(s)
@@ -279,12 +297,26 @@ local function has_ancestor(node, ancestor_name)
   return false
 end
 
+-- Gets the first matching child node matching `name`.
+local function first(node, name)
+  for c, _ in node:iter_children() do
+    if c:named() and c:type() == name then
+      return c
+    end
+  end
+  return nil
+end
+
 local function validate_link(node, bufnr, fname)
   local helppage, tagname = get_tagname(node:child(1), bufnr)
-  if not has_ancestor(node, 'column_heading') and not node:has_error() and not tagmap[tagname] and not ignore_invalid(tagname) then
-    invalid_links[tagname] = vim.fs.basename(fname)
+  local ignored = false
+  if not tagmap[tagname] then
+    ignored = has_ancestor(node, 'column_heading') or node:has_error() or ignore_invalid(tagname)
+    if not ignored then
+      invalid_links[tagname] = vim.fs.basename(fname)
+    end
   end
-  return helppage, tagname
+  return helppage, tagname, ignored
 end
 
 -- Traverses the tree at `root` and checks that |tag| links point to valid helptags.
@@ -325,7 +357,7 @@ local function visit_validate(root, level, lang_tree, opt, stats)
       invalid_urls[text] = vim.fs.basename(opt.fname)
     end
   elseif node_name == 'taglink' or node_name == 'optionlink' then
-    local _, _ = validate_link(root, opt.buf, opt.fname)
+    local _, _, _ = validate_link(root, opt.buf, opt.fname)
   end
 end
 
@@ -341,17 +373,28 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
   -- Parent kind (string).
   local parent = root:parent() and root:parent():type() or nil
   local text = ''
-  local toplevel = level < 1
-  local function node_text(node)
-    return vim.treesitter.get_node_text(node or root, opt.buf)
+  local trimmed
+  -- Gets leading whitespace of `node`.
+  local function ws(node)
+    node = node or root
+    local ws_ = getws(node, opt.buf)
+    -- XXX: first node of a (line) includes whitespace, even after
+    -- https://github.com/neovim/tree-sitter-vimdoc/pull/31 ?
+    if ws_ == '' then
+      ws_ = vim.treesitter.get_node_text(node, opt.buf):match('^%s+') or ''
+    end
+    return ws_
   end
-  -- Gets leading whitespace of the current node.
-  local function ws()
-    return node_text():match('^%s+') or ''
+  local function node_text(node, ws_)
+    node = node or root
+    ws_ = (ws_ == nil or ws_ == true) and getws(node, opt.buf) or ''
+    return string.format('%s%s', ws_, vim.treesitter.get_node_text(node, opt.buf))
   end
 
   if root:named_child_count() == 0 or node_name == 'ERROR' then
     text = node_text()
+    trimmed = html_esc(trim(text))
+    text = html_esc(text)
   else
     -- Process children and join them with whitespace.
     for node, _ in root:iter_children() do
@@ -360,8 +403,8 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
         text = string.format('%s%s', text, r)
       end
     end
+    trimmed = trim(text)
   end
-  local trimmed = trim(text)
 
   if node_name == 'help_file' then  -- root node
     return text
@@ -369,25 +412,30 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
     local fixed_url, removed_chars = fix_url(trimmed)
     return ('%s<a href="%s">%s</a>%s'):format(ws(), fixed_url, fixed_url, removed_chars)
   elseif node_name == 'word' or node_name == 'uppercase_name' then
-    return html_esc(text)
+    return text
   elseif node_name == 'h1' or node_name == 'h2' or node_name == 'h3' then
     if is_noise(text, stats.noise_lines) then
       return ''  -- Discard common "noise" lines.
     end
     -- Remove "===" and tags from ToC text.
     local hname = (node_text():gsub('%-%-%-%-+', ''):gsub('%=%=%=%=+', ''):gsub('%*.*%*', ''))
+    -- Use the first *tag* node as the heading anchor, if any.
+    local tagnode = first(root, 'tag')
+    local tagname = tagnode and url_encode(node_text(tagnode:child(1), false)) or to_heading_tag(hname)
     if node_name == 'h1' or #headings == 0 then
-      table.insert(headings, { name = hname, subheadings = {}, })
+      table.insert(headings, { name = hname, subheadings = {}, tag = tagname })
     else
-      table.insert(headings[#headings].subheadings, { name = hname, subheadings = {}, })
+      table.insert(headings[#headings].subheadings, { name = hname, subheadings = {}, tag = tagname })
     end
     local el = node_name == 'h1' and 'h2' or 'h3'
-    return ('<a name="%s"></a><%s class="help-heading">%s</%s>\n'):format(to_heading_tag(hname), el, text, el)
+    -- If we are re-using the *tag*, this heading anchor is redundant.
+    local a = tagnode and '' or ('<a name="%s"></a>'):format(tagname)
+    return ('%s<%s class="help-heading">%s</%s>\n'):format(a, el, text, el)
   elseif node_name == 'column_heading' or node_name == 'column_name' then
     if root:has_error() then
       return text
     end
-    return ('<div class="help-column_heading">%s</div>'):format(trimmed)
+    return ('<div class="help-column_heading">%s</div>'):format(text)
   elseif node_name == 'block' then
     if is_blank(text) then
       return ''
@@ -425,36 +473,37 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
 
     return string.format('<div class="help-li" style="%s">%s</div>', margin, text)
   elseif node_name == 'taglink' or node_name == 'optionlink' then
-    if root:has_error() then
+    local helppage, tagname, ignored = validate_link(root, opt.buf, opt.fname)
+    if ignored then
       return text
     end
-    local helppage, tagname = validate_link(root, opt.buf, opt.fname)
     return ('%s<a href="%s#%s">%s</a>'):format(ws(), helppage, url_encode(tagname), html_esc(tagname))
-  elseif node_name == 'codespan' then
+  elseif vim.tbl_contains({'codespan', 'keycode'}, node_name) then
     if root:has_error() then
       return text
     end
-    return ('%s<code>%s</code>'):format(ws(), text)
+    return ('%s<code>%s</code>'):format(ws(), trimmed)
   elseif node_name == 'argument' then
     return ('%s<code>{%s}</code>'):format(ws(), text)
   elseif node_name == 'codeblock' then
     if is_blank(text) then
       return ''
     end
-    return ('<pre>%s</pre>'):format(html_esc(trim(trim_indent(text), 2)))
+    return ('<pre>%s</pre>'):format(trim(trim_indent(text), 2))
   elseif node_name == 'tag' then  -- anchor
     if root:has_error() then
       return text
     end
-    local in_heading = (parent == 'h1' or parent == 'h2')
+    local in_heading = vim.tbl_contains({'h1', 'h2', 'h3'}, parent)
     local cssclass = (not in_heading and get_indent(node_text()) > 8) and 'help-tag-right' or 'help-tag'
-    local tagname = node_text(root:child(1))
+    local tagname = node_text(root:child(1), false)
     if vim.tbl_count(stats.first_tags) < 2 then
-      -- First 2 tags in the doc will be anchored at the main heading.
+      -- Force the first 2 tags in the doc to be anchored at the main heading.
       table.insert(stats.first_tags, tagname)
       return ''
     end
-    local s = ('%s<a name="%s"></a><span class="%s">%s</span>'):format(ws(), url_encode(tagname), cssclass, trimmed)
+    local el = in_heading and 'span' or 'code'
+    local s = ('%s<a name="%s"></a><%s class="%s">%s</%s>'):format(ws(), url_encode(tagname), el, cssclass, trimmed, el)
     if in_heading and prev ~= 'tag' then
       -- Start the <span> container for tags in a heading.
       -- This makes "justify-content:space-between" right-align the tags.
@@ -471,12 +520,12 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
     end
 
     -- Store the raw text to give context to the bug report.
-    local sample_text = not toplevel and getbuflinestr(root, opt.buf, 3) or '[top level!]'
+    local sample_text = level > 0 and getbuflinestr(root, opt.buf, 3) or '[top level!]'
     table.insert(stats.parse_errors, sample_text)
     return ('<a class="parse-error" target="_blank" title="Report bug... (parse error)" href="%s">%s</a>'):format(
       get_bug_url_vimdoc(opt.fname, opt.to_fname, sample_text), trimmed)
   else  -- Unknown token.
-    local sample_text = not toplevel and getbuflinestr(root, opt.buf, 3) or '[top level!]'
+    local sample_text = level > 0 and getbuflinestr(root, opt.buf, 3) or '[top level!]'
     return ('<a class="unknown-token" target="_blank" title="Report bug... (unhandled token "%s")" href="%s">%s</a>'):format(
       node_name, get_bug_url_nvim(opt.fname, opt.to_fname, sample_text, node_name), trimmed), ('unknown-token:"%s"'):format(node_name)
   end
@@ -686,10 +735,10 @@ local function gen_one(fname, to_fname, old, commit)
   local n = 0  -- Count of all headings + subheadings.
   for _, h1 in ipairs(headings) do n = n + 1 + #h1.subheadings end
   for _, h1 in ipairs(headings) do
-    toc = toc .. ('<div class="help-toc-h1"><a href="#%s">%s</a>\n'):format(to_heading_tag(h1.name), h1.name)
+    toc = toc .. ('<div class="help-toc-h1"><a href="#%s">%s</a>\n'):format(h1.tag, h1.name)
     if n < 30 or #headings < 10 then  -- Show subheadings only if there aren't too many.
       for _, h2 in ipairs(h1.subheadings) do
-        toc = toc .. ('<div class="help-toc-h2"><a href="#%s">%s</a></div>\n'):format(to_heading_tag(h2.name), h2.name)
+        toc = toc .. ('<div class="help-toc-h2"><a href="#%s">%s</a></div>\n'):format(h2.tag, h2.name)
       end
     end
     toc = toc .. '</div>'
@@ -751,6 +800,8 @@ local function gen_css(fname)
     }
     .toc {
       /* max-width: 12rem; */
+      height: 85%;  /* Scroll if there are too many items. https://github.com/neovim/neovim.github.io/issues/297 */
+      overflow: auto;  /* Scroll if there are too many items. https://github.com/neovim/neovim.github.io/issues/297 */
     }
     .toc > div {
       text-overflow: ellipsis;
@@ -809,7 +860,7 @@ local function gen_css(fname)
     .help-tag-right {
       color: var(--tag-color);
     }
-    h1 .help-tag, h2 .help-tag {
+    h1 .help-tag, h2 .help-tag, h3 .help-tag {
       font-size: smaller;
     }
     .help-heading {

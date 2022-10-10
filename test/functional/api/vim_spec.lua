@@ -1905,11 +1905,32 @@ describe('API', function()
     end)
   end)
 
+  describe('nvim_out_write', function()
+    it('prints long messages correctly #20534', function()
+      exec([[
+        set more
+        redir => g:out
+          silent! call nvim_out_write('a')
+          silent! call nvim_out_write('a')
+          silent! call nvim_out_write('a')
+          silent! call nvim_out_write("\n")
+          silent! call nvim_out_write('a')
+          silent! call nvim_out_write('a')
+          silent! call nvim_out_write(repeat('a', 5000) .. "\n")
+          silent! call nvim_out_write('a')
+          silent! call nvim_out_write('a')
+          silent! call nvim_out_write('a')
+          silent! call nvim_out_write("\n")
+        redir END
+      ]])
+      eq('\naaa\n' .. ('a'):rep(5002) .. '\naaa', meths.get_var('out'))
+    end)
+  end)
+
   describe('nvim_err_write', function()
     local screen
 
     before_each(function()
-      clear()
       screen = Screen.new(40, 8)
       screen:attach()
       screen:set_default_attr_ids({
@@ -2256,7 +2277,7 @@ describe('API', function()
       eq({'a', '', 'b'}, meths.list_runtime_paths())
       meths.set_option('runtimepath', ',a,b')
       eq({'', 'a', 'b'}, meths.list_runtime_paths())
-      -- trailing , is ignored, use ,, if you really really want $CWD
+      -- Trailing "," is ignored. Use ",," if you really really want CWD.
       meths.set_option('runtimepath', 'a,b,')
       eq({'a', 'b'}, meths.list_runtime_paths())
       meths.set_option('runtimepath', 'a,b,,')
