@@ -39,7 +39,6 @@
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
 #include "nvim/highlight_group.h"
-#include "nvim/if_cscope.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/input.h"
@@ -578,7 +577,7 @@ buf_T *tv_get_buf(typval_T *tv, int curtab_only)
     return NULL;
   }
 
-  char_u *name = (char_u *)tv->vval.v_string;
+  char *name = tv->vval.v_string;
 
   if (name == NULL || *name == NUL) {
     return curbuf;
@@ -593,7 +592,7 @@ buf_T *tv_get_buf(typval_T *tv, int curtab_only)
   char *save_cpo = p_cpo;
   p_cpo = empty_option;
 
-  buf_T *buf = buflist_findnr(buflist_findpat((char *)name, (char *)name + STRLEN(name),
+  buf_T *buf = buflist_findnr(buflist_findpat(name, name + strlen(name),
                                               true, false, curtab_only));
 
   p_magic = save_magic;
@@ -1057,12 +1056,12 @@ static void f_count(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   if (argvars[0].v_type == VAR_STRING) {
-    const char_u *expr = (char_u *)tv_get_string_chk(&argvars[1]);
+    const char *expr = tv_get_string_chk(&argvars[1]);
     const char_u *p = (char_u *)argvars[0].vval.v_string;
 
     if (!error && expr != NULL && *expr != NUL && p != NULL) {
       if (ic) {
-        const size_t len = STRLEN(expr);
+        const size_t len = strlen(expr);
 
         while (*p != NUL) {
           if (mb_strnicmp((char *)p, (char *)expr, len) == 0) {
@@ -1076,7 +1075,7 @@ static void f_count(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
         char_u *next;
         while ((next = (char_u *)strstr((char *)p, (char *)expr)) != NULL) {
           n++;
-          p = next + STRLEN(expr);
+          p = next + strlen(expr);
         }
       }
     }
@@ -1130,29 +1129,6 @@ static void f_count(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     semsg(_(e_listdictarg), "count()");
   }
   rettv->vval.v_number = n;
-}
-
-/// "cscope_connection([{num} , {dbpath} [, {prepend}]])" function
-///
-/// Checks the existence of a cscope connection.
-static void f_cscope_connection(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-{
-  int num = 0;
-  const char *dbpath = NULL;
-  const char *prepend = NULL;
-  char buf[NUMBUFLEN];
-
-  if (argvars[0].v_type != VAR_UNKNOWN
-      && argvars[1].v_type != VAR_UNKNOWN) {
-    num = (int)tv_get_number(&argvars[0]);
-    dbpath = tv_get_string(&argvars[1]);
-    if (argvars[2].v_type != VAR_UNKNOWN) {
-      prepend = tv_get_string_buf(&argvars[2], buf);
-    }
-  }
-
-  rettv->vval.v_number = cs_connection(num, (char_u *)dbpath,
-                                       (char_u *)prepend);
 }
 
 /// "ctxget([{index}])" function
@@ -1270,7 +1246,7 @@ static void f_ctxsize(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// Otherwise use the column number as a byte offset.
 static void set_cursorpos(typval_T *argvars, typval_T *rettv, bool charcol)
 {
-  long line, col;
+  long lnum, col;
   long coladd = 0;
   bool set_curswant = true;
 
@@ -1284,7 +1260,7 @@ static void set_cursorpos(typval_T *argvars, typval_T *rettv, bool charcol)
       return;
     }
 
-    line = pos.lnum;
+    lnum = pos.lnum;
     col = pos.col;
     coladd = pos.coladd;
     if (curswant >= 0) {
@@ -1293,10 +1269,15 @@ static void set_cursorpos(typval_T *argvars, typval_T *rettv, bool charcol)
     }
   } else if ((argvars[0].v_type == VAR_NUMBER || argvars[0].v_type == VAR_STRING)
              && (argvars[1].v_type == VAR_NUMBER || argvars[1].v_type == VAR_STRING)) {
-    line = tv_get_lnum(argvars);
+    lnum = tv_get_lnum(argvars);
+    if (lnum < 0) {
+      semsg(_(e_invarg2), tv_get_string(&argvars[0]));
+    } else if (lnum == 0) {
+      lnum = curwin->w_cursor.lnum;
+    }
     col = (long)tv_get_number_chk(&argvars[1], NULL);
     if (charcol) {
-      col = buf_charidx_to_byteidx(curbuf, (linenr_T)line, (int)col) + 1;
+      col = buf_charidx_to_byteidx(curbuf, (linenr_T)lnum, (int)col) + 1;
     }
     if (argvars[2].v_type != VAR_UNKNOWN) {
       coladd = (long)tv_get_number_chk(&argvars[2], NULL);
@@ -1305,11 +1286,11 @@ static void set_cursorpos(typval_T *argvars, typval_T *rettv, bool charcol)
     emsg(_(e_invarg));
     return;
   }
-  if (line < 0 || col < 0 || coladd < 0) {
+  if (lnum < 0 || col < 0 || coladd < 0) {
     return;  // type error; errmsg already given
   }
-  if (line > 0) {
-    curwin->w_cursor.lnum = (linenr_T)line;
+  if (lnum > 0) {
+    curwin->w_cursor.lnum = (linenr_T)lnum;
   }
   if (col > 0) {
     curwin->w_cursor.col = (colnr_T)col - 1;
@@ -3560,7 +3541,6 @@ static void f_has(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     "cmdwin",
     "comments",
     "conceal",
-    "cscope",
     "cursorbind",
     "cursorshape",
 #ifdef DEBUG
@@ -4875,9 +4855,9 @@ static void f_map(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 static void find_some_match(typval_T *const argvars, typval_T *const rettv,
                             const SomeMatchType type)
 {
-  char_u *str = NULL;
+  char *str = NULL;
   long len = 0;
-  char_u *expr = NULL;
+  char *expr = NULL;
   regmatch_T regmatch;
   long start = 0;
   long nth = 1;
@@ -4885,7 +4865,7 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
   bool match = false;
   list_T *l = NULL;
   long idx = 0;
-  char_u *tofree = NULL;
+  char *tofree = NULL;
 
   // Make 'cpoptions' empty, the 'l' flag should not be used here.
   char *save_cpo = p_cpo;
@@ -4922,8 +4902,8 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
     }
     li = tv_list_first(l);
   } else {
-    expr = str = (char_u *)tv_get_string(&argvars[0]);
-    len = (long)STRLEN(str);
+    expr = str = (char *)tv_get_string(&argvars[0]);
+    len = (long)strlen(str);
   }
 
   char patbuf[NUMBUFLEN];
@@ -4982,14 +4962,13 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
           break;
         }
         xfree(tofree);
-        tofree = expr = str = (char_u *)encode_tv2echo(TV_LIST_ITEM_TV(li),
-                                                       NULL);
+        tofree = expr = str = encode_tv2echo(TV_LIST_ITEM_TV(li), NULL);
         if (str == NULL) {
           break;
         }
       }
 
-      match = vim_regexec_nl(&regmatch, str, startcol);
+      match = vim_regexec_nl(&regmatch, (char_u *)str, startcol);
 
       if (match && --nth <= 0) {
         break;
@@ -5003,9 +4982,9 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
         li = TV_LIST_ITEM_NEXT(l, li);
         idx++;
       } else {
-        startcol = (colnr_T)((char_u *)regmatch.startp[0]
+        startcol = (colnr_T)(regmatch.startp[0]
                              + utfc_ptr2len(regmatch.startp[0]) - str);
-        if (startcol > (colnr_T)len || str + startcol <= (char_u *)regmatch.startp[0]) {
+        if (startcol > (colnr_T)len || str + startcol <= regmatch.startp[0]) {
           match = false;
           break;
         }
@@ -5023,9 +5002,9 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
         xfree(TV_LIST_ITEM_TV(li1)->vval.v_string);
 
         const size_t rd = (size_t)(regmatch.endp[0] - regmatch.startp[0]);
-        TV_LIST_ITEM_TV(li1)->vval.v_string = xmemdupz((const char *)regmatch.startp[0], rd);
-        TV_LIST_ITEM_TV(li3)->vval.v_number = (varnumber_T)((char_u *)regmatch.startp[0] - expr);
-        TV_LIST_ITEM_TV(li4)->vval.v_number = (varnumber_T)(regmatch.endp[0] - (char *)expr);
+        TV_LIST_ITEM_TV(li1)->vval.v_string = xmemdupz(regmatch.startp[0], rd);
+        TV_LIST_ITEM_TV(li3)->vval.v_number = (varnumber_T)(regmatch.startp[0] - expr);
+        TV_LIST_ITEM_TV(li4)->vval.v_number = (varnumber_T)(regmatch.endp[0] - expr);
         if (l != NULL) {
           TV_LIST_ITEM_TV(li2)->vval.v_number = (varnumber_T)idx;
         }
@@ -5059,11 +5038,9 @@ static void find_some_match(typval_T *const argvars, typval_T *const rettv,
           rettv->vval.v_number = idx;
         } else {
           if (type == kSomeMatch) {
-            rettv->vval.v_number =
-              (varnumber_T)((char_u *)regmatch.startp[0] - str);
+            rettv->vval.v_number = (varnumber_T)(regmatch.startp[0] - str);
           } else {
-            rettv->vval.v_number =
-              (varnumber_T)(regmatch.endp[0] - (char *)str);
+            rettv->vval.v_number = (varnumber_T)(regmatch.endp[0] - str);
           }
           rettv->vval.v_number += (varnumber_T)(str - expr);
         }

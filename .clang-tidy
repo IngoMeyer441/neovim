@@ -1,0 +1,57 @@
+---
+
+Checks: >
+  -*,
+  bugprone-*,
+  cert-env33-c,
+  cert-err34-c,
+  cert-flp30-c,
+  cert-msc30-c,
+  clang-analyzer-*,
+  clang-diagnostics-*,
+  google-*,
+  misc-*,
+  misc-non-copyable-objects,
+  misc-static-assert,
+  performance-*,
+  portability-*,
+  readability-*,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-branch-clone,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-sizeof-expression,
+  -bugprone-unused-return-value,
+  -clang-analyzer-security.insecureAPI.strcpy,
+  -google-readability-function-size,
+  -misc-no-recursion,
+  -misc-unused-parameters,
+  -performance-no-int-to-ptr,
+  -readability-else-after-return,
+  -readability-function-*,
+  -readability-identifier-length,
+  -readability-isolate-declaration,
+  -readability-magic-numbers,
+  -readability-redundant-function-ptr-dereference,
+  -readability-suspicious-call-argument,
+
+CheckOptions:
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalConstantPrefix
+    value: k
+  - key: readability-identifier-naming.StaticConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.StaticConstantPrefix
+    value: k
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: "(src/[cjson|klib|mpack|unicode|xdiff]/).*\\.h$"
+...

@@ -168,7 +168,6 @@ GUI ~
 |gui.txt|	Graphical User Interface (GUI)
 
 Interfaces ~
-|if_cscop.txt|	using Cscope with Vim
 |if_perl.txt|	Perl interface
 |if_pyth.txt|	Python interface
 |if_ruby.txt|	Ruby interface
@@ -180,6 +179,7 @@ Versions ~
 |deprecated.txt|  Deprecated items that have been or will be removed
 
 Other ~
+|news.txt|		News and notable changes in the latest release
 |terminal_emulator.txt|	Terminal buffers
 |term.txt|		Terminal UI
 |ui.txt|		Nvim UI protocol
@@ -188,6 +188,7 @@ Other ~
 |job_control.txt|	Spawn and control multiple processes
 |luaref.txt|		Lua reference manual
 |luvref.txt|		Luv (|vim.loop|) reference manual
+|support.txt|		Supported platforms
 
 						*standard-plugin-list*
 Standard plugins ~

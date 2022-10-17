@@ -31,7 +31,6 @@
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/iconv.h"
-#include "nvim/if_cscope.h"
 #include "nvim/insexpand.h"
 #include "nvim/locale.h"
 #include "nvim/log.h"
@@ -544,6 +543,12 @@ int main(int argc, char **argv)
     TIME_MSG("UIEnter autocommands");
   }
 
+#ifdef MSWIN
+  if (use_builtin_ui) {
+    os_icon_init();
+  }
+#endif
+
   // Adjust default register name for "unnamed" in 'clipboard'. Can only be
   // done after the clipboard is available and all initial commands that may
   // modify the 'clipboard' setting have run; i.e. just before entering the
@@ -716,10 +721,14 @@ void getout(int exitval)
     ui_call_set_title(cstr_as_string((char *)p_titleold));
   }
 
-  cs_end();
   if (garbage_collect_at_exit) {
     garbage_collect(false);
   }
+
+#ifdef MSWIN
+  // Restore Windows console icon before exiting.
+  os_icon_set(NULL, NULL);
+#endif
 
   os_exit(exitval);
 }
@@ -1274,9 +1283,8 @@ scripterror:
                                                                kFileReadOnly|kFileNonBlocking);
             assert(stdin_dup != NULL);
             scriptin[0] = stdin_dup;
-          } else if ((scriptin[0] =
-                        file_open_new(&error, argv[0], kFileReadOnly|kFileNonBlocking,
-                                      0)) == NULL) {
+          } else if ((scriptin[0] = file_open_new(&error, argv[0],
+                                                  kFileReadOnly|kFileNonBlocking, 0)) == NULL) {
             vim_snprintf((char *)IObuff, IOSIZE,
                          _("Cannot open for reading: \"%s\": %s\n"),
                          argv[0], os_strerror(error));

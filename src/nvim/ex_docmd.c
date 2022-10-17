@@ -44,7 +44,6 @@
 #include "nvim/hardcopy.h"
 #include "nvim/help.h"
 #include "nvim/highlight_group.h"
-#include "nvim/if_cscope.h"
 #include "nvim/input.h"
 #include "nvim/keycodes.h"
 #include "nvim/locale.h"
@@ -2870,7 +2869,7 @@ static void append_command(char *cmd)
     STRCPY(d, "...");
   }
   STRCAT(IObuff, ": ");
-  d = (char *)IObuff + STRLEN(IObuff);
+  d = IObuff + strlen(IObuff);
   while (*s != NUL && d - IObuff + 5 < IOSIZE) {
     if ((char_u)s[0] == 0xc2 && (char_u)s[1] == 0xa0) {
       s += 2;
@@ -6589,10 +6588,6 @@ static void ex_tag_cmd(exarg_T *eap, char *name)
     cmd = DT_LAST;              // ":tlast"
     break;
   default:                              // ":tag"
-    if (p_cst && *eap->arg != NUL) {
-      ex_cstag(eap);
-      return;
-    }
     cmd = DT_TAG;
     break;
   }

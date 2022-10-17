@@ -107,7 +107,7 @@ internally and are no longer exposed as part of the API. Instead, use
 - *vim.lsp.diagnostic.set_virtual_text()*
 
 LSP FUNCTIONS
-- *vim.lsp.range_code_action*		Use |vim.lsp.buf.code_action()| with
+- *vim.lsp.buf.range_code_action()*	Use |vim.lsp.buf.code_action()| with
 					the `range` parameter.
 - *vim.lsp.util.diagnostics_to_items()*	Use |vim.diagnostic.toqflist()| instead.
 - *vim.lsp.util.set_qflist()*		Use |setqflist()| instead.
@@ -128,7 +128,6 @@ NORMAL COMMANDS
 OPTIONS
 - *cpo-<* *:menu-<special>* *:menu-special* *:map-<special>* *:map-special*
   `<>` notation is always enabled.
-- *'cscopeverbose'*	Enabled by default. Use |:silent| instead.
 - *'exrc'* *'ex'*	Security risk: downloaded files could include
 			a malicious .nvimrc or .exrc file. See 'secure'.
 			Recommended alternative: define an autocommand in your
