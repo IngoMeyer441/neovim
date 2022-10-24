@@ -572,7 +572,7 @@ bool ins_compl_accept_char(int c)
 
 /// Get the completed text by inferring the case of the originally typed text.
 /// If the result is in allocated memory "tofree" is set to it.
-static char_u *ins_compl_infercase_gettext(char_u *str, int char_len, int compl_char_len,
+static char_u *ins_compl_infercase_gettext(const char_u *str, int char_len, int compl_char_len,
                                            int min_len, char **tofree)
 {
   bool has_lower = false;
@@ -1378,7 +1378,8 @@ theend:
 /// skipping the word at 'skip_word'.
 ///
 /// @return  OK on success.
-static int thesaurus_add_words_in_line(char *fname, char_u **buf_arg, int dir, char_u *skip_word)
+static int thesaurus_add_words_in_line(char *fname, char_u **buf_arg, int dir,
+                                       const char_u *skip_word)
 {
   int status = OK;
 
@@ -3561,17 +3562,6 @@ static int ins_compl_next(bool allow_get_expansion, int count, bool insert_match
   }
 
   return num_matches;
-}
-
-void pum_ext_select_item(int item, bool insert, bool finish)
-{
-  if (!pum_visible() || item < -1 || item >= compl_match_arraysize) {
-    return;
-  }
-  pum_want.active = true;
-  pum_want.item = item;
-  pum_want.insert = insert;
-  pum_want.finish = finish;
 }
 
 /// Call this while finding completions, to check whether the user has hit a key

@@ -509,7 +509,7 @@ void AppendToRedobuffLit(const char *str, int len)
       s--;
     }
     if (s > start) {
-      add_buff(&redobuff, start, (long)(s - start));
+      add_buff(&redobuff, start, s - start);
     }
 
     if (*s == NUL || (len >= 0 && s - str >= len)) {
@@ -1886,7 +1886,7 @@ static int check_simplify_modifier(int max_offset)
 /// - When there is no match yet, return map_result_nomatch, need to get more
 ///   typeahead.
 /// - On failure (out of memory) return map_result_fail.
-static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
+static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
 {
   mapblock_T *mp = NULL;
   mapblock_T *mp2;
@@ -1959,16 +1959,28 @@ static int handle_mapping(int *keylenp, bool *timedout, int *mapdepth)
       if (mp->m_keys[0] == tb_c1 && (mp->m_mode & local_State)
           && ((mp->m_mode & MODE_LANGMAP) == 0 || typebuf.tb_maplen == 0)) {
         int nomap = nolmaplen;
-        int c2;
+        int modifiers = 0;
         // find the match length of this mapping
         for (mlen = 1; mlen < typebuf.tb_len; mlen++) {
-          c2 = typebuf.tb_buf[typebuf.tb_off + mlen];
+          int c2 = typebuf.tb_buf[typebuf.tb_off + mlen];
           if (nomap > 0) {
+            if (nomap == 2 && c2 == KS_MODIFIER) {
+              modifiers = 1;
+            } else if (nomap == 1 && modifiers == 1) {
+              modifiers = c2;
+            }
             nomap--;
-          } else if (c2 == K_SPECIAL) {
-            nomap = 2;
           } else {
-            LANGMAP_ADJUST(c2, true);
+            if (c2 == K_SPECIAL) {
+              nomap = 2;
+            } else if (merge_modifiers(c2, &modifiers) == c2) {
+              // Only apply 'langmap' if merging modifiers into
+              // the key will not result in another character,
+              // so that 'langmap' behaves consistently in
+              // different terminals and GUIs.
+              LANGMAP_ADJUST(c2, true);
+            }
+            modifiers = 0;
           }
           if (mp->m_keys[mlen] != c2) {
             break;

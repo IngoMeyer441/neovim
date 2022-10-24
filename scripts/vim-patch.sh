@@ -35,7 +35,7 @@ usage() {
   echo "    -m {vim-revision}  List previous (older) missing Vim patches."
   echo "    -M                 List all merged patch-numbers (at current v:version)."
   echo "    -p {vim-revision}  Download and generate a Vim patch. vim-revision"
-  echo "                       can be a Vim version (8.0.xxx) or a Git hash."
+  echo "                       can be a Vim version (8.1.xxx) or a Git hash."
   echo "    -P {vim-revision}  Download, generate and apply a Vim patch."
   echo "    -g {vim-revision}  Download a Vim patch."
   echo "    -s [pr args]       Create a vim-patch pull request."
@@ -120,9 +120,9 @@ get_vim_sources() {
 
 commit_message() {
   if [[ -n "$vim_tag" ]]; then
-    printf '%s\n%s' "${vim_message}" "${vim_commit_url}"
+    printf '%s\n\n%s\n\n%s' "${vim_message}" "${vim_commit_url}" "${vim_coauthor}"
   else
-    printf 'vim-patch:%s\n\n%s\n%s' "$vim_version" "$vim_message" "$vim_commit_url"
+    printf 'vim-patch:%s\n\n%s\n\n%s\n\n%s' "$vim_version" "$vim_message" "$vim_commit_url" "$vim_coauthor"
   fi
 }
 
@@ -175,6 +175,7 @@ assign_commit_details() {
   vim_commit_url="https://github.com/vim/vim/commit/${vim_commit}"
   vim_message="$(git -C "${VIM_SOURCE_DIR}" log -1 --pretty='format:%B' "${vim_commit}" \
       | sed -e 's/\(#[0-9]\{1,\}\)/vim\/vim\1/g')"
+  vim_coauthor="$(git -C "${VIM_SOURCE_DIR}" log -1 --pretty='format:Co-authored-by: %an <%ae>' "${vim_commit}")"
   if [[ ${munge_commit_line} == "true" ]]; then
     # Remove first line of commit message.
     vim_message="$(echo "${vim_message}" | sed -e '1s/^patch /vim-patch:/')"
@@ -194,6 +195,10 @@ preprocess_patch() {
   # Remove *.proto, Make*, INSTALL*, gui_*, beval.*, some if_*, gvim, libvterm, tee, VisVim, xpm, xxd
   local na_src='auto\|configure.*\|GvimExt\|libvterm\|proto\|tee\|VisVim\|xpm\|xxd\|Make.*\|INSTALL.*\|beval.*\|gui.*\|if_cscop\|if_lua\|if_mzsch\|if_olepp\|if_ole\|if_perl\|if_py\|if_ruby\|if_tcl\|if_xcmdsrv'
   2>/dev/null $nvim --cmd 'set dir=/tmp' +'g@^diff --git a/src/\S*\<\%(testdir/\)\@<!\%('"${na_src}"'\)\>@norm! d/\v(^diff)|%$' +w +q "$file"
+
+  # Remove runtime files ported to Lua.
+  local na_rt='filetype\.vim\|scripts\.vim\|autoload\/ft\/dist\.vim'
+  2>/dev/null $nvim --cmd 'set dir=/tmp' +'g@^diff --git a/runtime/\<\%('"${na_rt}"'\)\>@norm! d/\v(^diff)|%$' +w +q "$file"
 
   # Remove unwanted Vim doc files.
   local na_doc='channel\.txt\|if_cscop\.txt\|netbeans\.txt\|os_\w\+\.txt\|term\.txt\|todo\.txt\|version\d\.txt\|vim9\.txt\|sponsor\.txt\|intro\.txt\|tags'
@@ -466,7 +471,7 @@ submit_pr() {
 
 # Gets all Vim commits since the "start" commit.
 list_vim_commits() { (
-  cd "${VIM_SOURCE_DIR}" && git log --reverse v8.0.0000..HEAD "$@"
+  cd "${VIM_SOURCE_DIR}" && git log --reverse v8.1.0000..HEAD "$@"
 ) }
 
 # Prints all (sorted) "vim-patch:xxx" tokens found in the Nvim git log.
@@ -484,7 +489,7 @@ list_vimpatch_tokens() {
 list_vimpatch_numbers() {
   # Transform "vim-patch:X.Y.ZZZZ" to "ZZZZ".
   list_vimpatch_tokens | while read -r vimpatch_token; do
-    echo "$vimpatch_token" | grep '8\.0\.' | sed 's/.*vim-patch:8\.0\.\([0-9a-z]\+\).*/\1/'
+    echo "$vimpatch_token" | grep '8\.1\.' | sed -E 's/.*vim-patch:8\.1\.([0-9a-z]+).*/\1/'
   done
 }
 
@@ -581,7 +586,7 @@ _set_missing_vimpatches() {
     else
       info=${line#* }
       if [[ -n $info ]]; then
-        # Remove any "patch 8.0.0902: " prefixes, and prefix with ": ".
+        # Remove any "patch 8.1.0902: " prefixes, and prefix with ": ".
         info=": ${info#patch*: }"
       fi
     fi
@@ -624,7 +629,7 @@ show_vimpatches() {
 
 Instructions:
   To port one of the above patches to Neovim, execute this script with the patch revision as argument and follow the instructions, e.g.
-  '${BASENAME} -p v8.0.1234', or '${BASENAME} -P v8.0.1234'
+  '${BASENAME} -p v8.1.1234', or '${BASENAME} -P v8.1.1234'
 
   NOTE: Please port the _oldest_ patch if you possibly can.
         You can use '${BASENAME} -l path/to/file' to see what patches are missing for a file.

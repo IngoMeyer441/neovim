@@ -564,6 +564,7 @@ describe('extmark decorations', function()
       [24] = {bold = true};
       [25] = {background = Screen.colors.LightRed};
       [26] = {background=Screen.colors.DarkGrey, foreground=Screen.colors.LightGrey};
+      [27] = {background = Screen.colors.Plum1};
     }
 
     ns = meths.create_namespace 'test'
@@ -959,6 +960,55 @@ end]]
                                                           |
       ]])
   end)
+
+  it('avoids redraw issue #20651', function()
+    exec_lua[[
+      vim.cmd.normal'10oXXX'
+      vim.cmd.normal'gg'
+      local ns = vim.api.nvim_create_namespace('ns')
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_open_win(bufnr, false, { relative = 'win', height = 1, width = 1, row = 0, col = 0 })
+
+      vim.api.nvim_create_autocmd('CursorMoved', { callback = function()
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        vim.api.nvim_buf_set_extmark(0, ns, row, 0, { id = 1 })
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, true, {})
+        vim.schedule(function()
+          vim.api.nvim_buf_set_extmark(0, ns, row, 0, {
+            id = 1,
+            virt_text = {{'HELLO', 'Normal'}},
+          })
+        end)
+      end
+      })
+    ]]
+
+    for _ = 1, 3 do
+      helpers.sleep(10)
+      feed 'j'
+    end
+
+    screen:expect{grid=[[
+      {27: }                                                 |
+      XXX                                               |
+      XXX                                               |
+      ^XXX HELLO                                         |
+      XXX                                               |
+      XXX                                               |
+      XXX                                               |
+      XXX                                               |
+      XXX                                               |
+      XXX                                               |
+      XXX                                               |
+      {1:~                                                 }|
+      {1:~                                                 }|
+      {1:~                                                 }|
+                                                        |
+    ]]}
+
+  end)
+
 end)
 
 describe('decorations: virtual lines', function()
@@ -1065,7 +1115,7 @@ if (h->n_buckets < new_n_buckets) { // expand
     ]]}
 
     meths.buf_set_extmark(0, ns, 5, 0, {
-      virt_lines = { {{"^^ REVIEW:", "Todo"}, {" new_vals variable seems unneccesary?", "Comment"}} };
+      virt_lines = { {{"^^ REVIEW:", "Todo"}, {" new_vals variable seems unnecessary?", "Comment"}} };
     })
     -- TODO: what about the cursor??
     screen:expect{grid=[[
@@ -1078,7 +1128,7 @@ if (h->n_buckets < new_n_buckets) { // expand
         if (kh_is_map && val_size) {                    |
           ^char *new_vals = {3:krealloc}( h->vals_buf, new_n_|
       buckets * val_size);                              |
-      {5:^^ REVIEW:}{6: new_vals variable seems unneccesary?}   |
+      {5:^^ REVIEW:}{6: new_vals variable seems unnecessary?}   |
           h->vals_buf = new_vals;                       |
                                                         |
     ]]}

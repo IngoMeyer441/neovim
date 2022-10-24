@@ -170,7 +170,7 @@ local extension = {
     return require('vim.filetype.detect').bindzone(bufnr, 'dcl')
   end,
   db = function(path, bufnr)
-    return require('vim.filetype.detect').bindzone(bufnr, '')
+    return require('vim.filetype.detect').bindzone(bufnr)
   end,
   bicep = 'bicep',
   bb = 'bitbake',
@@ -564,7 +564,7 @@ local extension = {
   json5 = 'json5',
   jsonc = 'jsonc',
   jsonnet = 'jsonnet',
-  libjsonnet = 'jsonnet',
+  libsonnet = 'jsonnet',
   jsp = 'jsp',
   jl = 'julia',
   kv = 'kivy',
@@ -611,7 +611,9 @@ local extension = {
   c = function(path, bufnr)
     return require('vim.filetype.detect').lpc(bufnr)
   end,
-  lsl = 'lsl',
+  lsl = function(path, bufnr)
+    return require('vim.filetype.detect').lsl(bufnr)
+  end,
   lss = 'lss',
   nse = 'lua',
   rockspec = 'lua',
@@ -674,6 +676,7 @@ local extension = {
   DEF = 'modula2',
   ['m2'] = 'modula2',
   mi = 'modula2',
+  lm3 = 'modula3',
   ssc = 'monk',
   monk = 'monk',
   tsc = 'monk',
@@ -735,6 +738,7 @@ local extension = {
   opam = 'opam',
   ['or'] = 'openroad',
   scad = 'openscad',
+  ovpn = 'openvpn',
   ora = 'ora',
   org = 'org',
   org_archive = 'org',
@@ -1458,6 +1462,9 @@ local filename = {
   ['.sawfishrc'] = 'lisp',
   ['/etc/login.access'] = 'loginaccess',
   ['/etc/login.defs'] = 'logindefs',
+  ['.lsl'] = function(path, bufnr)
+    return require('vim.filetype.detect').lsl(bufnr)
+  end,
   ['.luacheckrc'] = 'lua',
   ['lynx.cfg'] = 'lynx',
   ['m3overrides'] = 'm3build',
@@ -1669,6 +1676,7 @@ local filename = {
   fglrxrc = 'xml',
   ['/etc/blkid.tab'] = 'xml',
   ['/etc/blkid.tab.old'] = 'xml',
+  ['.clang-format'] = 'yaml',
   ['.clang-tidy'] = 'yaml',
   ['/etc/zprofile'] = 'zsh',
   ['.zlogin'] = 'zsh',
@@ -1783,6 +1791,8 @@ local pattern = {
   ['.*/etc/DIR_COLORS'] = 'dircolors',
   ['.*/etc/dnsmasq%.conf'] = 'dnsmasq',
   ['php%.ini%-.*'] = 'dosini',
+  ['.*/%.aws/config'] = 'confini',
+  ['.*/%.aws/credentials'] = 'confini',
   ['.*/etc/pacman%.conf'] = 'confini',
   ['.*/etc/yum%.conf'] = 'dosini',
   ['.*lvs'] = 'dracula',
@@ -2043,6 +2053,7 @@ local pattern = {
   ['.*%.ml%.cppo'] = 'ocaml',
   ['.*%.mli%.cppo'] = 'ocaml',
   ['.*%.opam%.template'] = 'opam',
+  ['.*/openvpn/.*/.*%.conf'] = 'openvpn',
   ['.*%.[Oo][Pp][Ll]'] = 'opl',
   ['.*/etc/pam%.conf'] = 'pamconf',
   ['.*/etc/pam%.d/.*'] = starsetf('pamconf'),
@@ -2285,8 +2296,6 @@ end
 ---
 --- See $VIMRUNTIME/lua/vim/filetype.lua for more examples.
 ---
---- Note that Lua filetype detection is disabled when |g:do_legacy_filetype| is set.
----
 --- Example:
 --- <pre>
 ---  vim.filetype.add({
@@ -2323,7 +2332,7 @@ end
 ---  })
 --- </pre>
 ---
---- To add a fallback match on contents (see |new-filetype-scripts|), use
+--- To add a fallback match on contents, use
 --- <pre>
 --- vim.filetype.add {
 ---   pattern = {

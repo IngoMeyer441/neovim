@@ -1820,10 +1820,17 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
           } else if (get_fpos_of_mouse(&m_pos) != IN_BUFFER) {
             jump_flags = MOUSE_MAY_STOP_VIS;
           } else {
-            if ((lt(curwin->w_cursor, VIsual)
-                 && (lt(m_pos, curwin->w_cursor) || lt(VIsual, m_pos)))
-                || (lt(VIsual, curwin->w_cursor)
-                    && (lt(m_pos, VIsual) || lt(curwin->w_cursor, m_pos)))) {
+            if (VIsual_mode == 'V') {
+              if ((curwin->w_cursor.lnum <= VIsual.lnum
+                   && (m_pos.lnum < curwin->w_cursor.lnum || VIsual.lnum < m_pos.lnum))
+                  || (VIsual.lnum < curwin->w_cursor.lnum
+                      && (m_pos.lnum < VIsual.lnum || curwin->w_cursor.lnum < m_pos.lnum))) {
+                jump_flags = MOUSE_MAY_STOP_VIS;
+              }
+            } else if ((ltoreq(curwin->w_cursor, VIsual)
+                        && (lt(m_pos, curwin->w_cursor) || lt(VIsual, m_pos)))
+                       || (lt(VIsual, curwin->w_cursor)
+                           && (lt(m_pos, VIsual) || lt(curwin->w_cursor, m_pos)))) {
               jump_flags = MOUSE_MAY_STOP_VIS;
             } else if (VIsual_mode == Ctrl_V) {
               getvcols(curwin, &curwin->w_cursor, &VIsual, &leftcol, &rightcol);
@@ -3059,7 +3066,7 @@ static void nv_gd(oparg_T *oap, int nchar, int thisblock)
 
 /// @return true if line[offset] is not inside a C-style comment or string,
 ///         false otherwise.
-static bool is_ident(char_u *line, int offset)
+static bool is_ident(const char_u *line, int offset)
 {
   bool incomment = false;
   int instring = 0;
@@ -6511,8 +6518,7 @@ static void n_opencmd(cmdarg_T *cap)
     if (u_save((linenr_T)(curwin->w_cursor.lnum -
                           (cap->cmdchar == 'O' ? 1 : 0)),
                (linenr_T)(curwin->w_cursor.lnum +
-                          (cap->cmdchar == 'o' ? 1 : 0))
-               )
+                          (cap->cmdchar == 'o' ? 1 : 0)))
         && open_line(cap->cmdchar == 'O' ? BACKWARD : FORWARD,
                      has_format_option(FO_OPEN_COMS) ? OPENLINE_DO_COM : 0,
                      0, NULL)) {
