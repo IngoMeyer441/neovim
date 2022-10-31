@@ -2,6 +2,8 @@
 (h2) @text.title
 (h3) @text.title
 (column_heading) @text.title
+(column_heading
+   "~" @conceal (#set! conceal ""))
 (tag
    "*" @conceal (#set! conceal "")
    text: (_) @label)
@@ -14,6 +16,10 @@
    "`" @conceal (#set! conceal "")
    text: (_) @text.literal)
 (codeblock) @text.literal
+(codeblock
+   ">" @conceal (#set! conceal ""))
+(block
+   "<" @conceal (#set! conceal ""))
 (argument) @parameter
 (keycode) @string.special
 (url) @text.uri

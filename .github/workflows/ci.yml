@@ -38,7 +38,6 @@ jobs:
             automake \
             build-essential \
             cmake \
-            flake8 \
             gettext \
             libluajit-5.1-dev \
             libmsgpack-dev \
@@ -100,15 +99,12 @@ jobs:
         uses: JohnnyMorganz/stylua-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
           args: --check runtime/
 
       - if: "!cancelled()"
         name: lintlua
         run: make lintlua
-
-      - if: "!cancelled()"
-        name: lintpy
-        run: make lintpy
 
       - if: "!cancelled()"
         name: lintsh
@@ -213,11 +209,11 @@ jobs:
       matrix:
         include:
           - flavor: asan
-            cc: clang-13
+            cc: clang
             runner: ubuntu-22.04
             os: linux
           - flavor: tsan
-            cc: clang-13
+            cc: clang
             runner: ubuntu-22.04
             os: linux
           - flavor: uchar
@@ -274,14 +270,6 @@ jobs:
             exit 1
           }
 
-      - name: Install new clang
-        if: matrix.flavor == 'asan' || matrix.flavor == 'tsan'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod a+x llvm.sh
-          sudo ./llvm.sh 13
-          rm llvm.sh
-
       - name: Install brew packages
         if: matrix.os == 'osx'
         run: |
@@ -327,9 +315,8 @@ jobs:
     runs-on: windows-2019
     timeout-minutes: 45
     env:
-      DEPS_BUILD_DIR: ${{ format('{0}/nvim-deps', github.workspace) }}
-      DEPS_PREFIX: ${{ format('{0}/nvim-deps/usr', github.workspace) }}
-      CMAKE_BUILD_TYPE: "RelWithDebInfo"
+      DEPS_BUILD_DIR: ${{ github.workspace }}/nvim-deps
+      DEPS_PREFIX: ${{ github.workspace }}/nvim-deps/usr
     name: windows (MSVC_64)
     steps:
       - uses: actions/checkout@v3
@@ -337,7 +324,7 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: ${{ env.DEPS_BUILD_DIR }}
-          key: ${{ hashFiles('cmake.deps\**') }}
+          key: windows-${{ hashFiles('cmake.deps/**', 'ci/build.ps1') }}
 
       - name: Build deps
         run: .\ci\build.ps1 -BuildDeps
@@ -346,7 +333,6 @@ jobs:
         run: .\ci\build.ps1 -Build
 
       - name: Install test deps
-        continue-on-error: false
         run: .\ci\build.ps1 -EnsureTestDeps
 
       - if: "!cancelled()"

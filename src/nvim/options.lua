@@ -19,7 +19,7 @@
 -- types: bool, number, string
 -- lists: (nil), comma, onecomma, flags, flagscomma
 -- scopes: global, buffer, window
--- redraw options: statuslines, current_window, curent_window_only,
+-- redraw options: statuslines, tabline, current_window, curent_window_only,
 --                 current_buffer, all_windows, curswant
 -- defaults: {condition=#if condition, if_true=default, if_false=default}
 -- #if condition:
@@ -639,6 +639,15 @@ return {
       deny_in_modelines=true,
       varname='p_enc',
       defaults={if_true=macros('ENC_DFLT')}
+    },
+    {
+      full_name='endoffile', abbreviation='eof',
+      short_desc=N_("write CTRL-Z for last line in file"),
+      type='bool', scope={'buffer'},
+      no_mkrc=true,
+      redraw={'statuslines'},
+      varname='p_eof',
+      defaults={if_true=true}
     },
     {
       full_name='endofline', abbreviation='eol',
@@ -2407,7 +2416,7 @@ return {
       short_desc=N_("custom format for the console tab pages line"),
       type='string', scope={'global'},
       modelineexpr=true,
-      redraw={'statuslines'},
+      redraw={'tabline'},
       varname='p_tal',
       defaults={if_true=""}
     },

@@ -24,6 +24,7 @@
 #define P_NO_MKRC      0x200U       ///< don't include in :mkvimrc output
 
 // when option changed, what to display:
+#define P_RTABL        0x800U       ///< redraw tabline
 #define P_RSTAT        0x1000U      ///< redraw status lines
 #define P_RWIN         0x2000U      ///< redraw current window and recompute text
 #define P_RBUF         0x4000U      ///< redraw current buffer and recompute text
@@ -496,6 +497,7 @@ EXTERN char_u *p_ef;            // 'errorfile'
 EXTERN char *p_efm;             // 'errorformat'
 EXTERN char *p_gefm;            // 'grepformat'
 EXTERN char *p_gp;              // 'grepprg'
+EXTERN int p_eof;               ///< 'endoffile'
 EXTERN int p_eol;               ///< 'endofline'
 EXTERN char *p_ei;              // 'eventignore'
 EXTERN int p_et;                ///< 'expandtab'
@@ -857,6 +859,7 @@ enum {
   BV_CFU,
   BV_DEF,
   BV_INC,
+  BV_EOF,
   BV_EOL,
   BV_FIXEOL,
   BV_EP,

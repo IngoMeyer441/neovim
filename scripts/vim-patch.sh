@@ -279,6 +279,35 @@ preprocess_patch() {
     "$file" > "$file".tmp && mv "$file".tmp "$file"
 }
 
+uncrustify_patch() {
+  git diff --quiet || {
+    >&2 echo 'Vim source working tree dirty, aborting.'
+    exit 1
+  }
+
+  local patch_path=$NVIM_SOURCE_DIR/build/vim_patch
+  rm -rf "$patch_path"
+  mkdir -p "$patch_path"/{a,b}
+
+  local commit="$1"
+  for file in $(git diff-tree --name-only --no-commit-id -r --diff-filter=a "$commit"); do
+    git --work-tree="$patch_path"/a checkout --quiet "$commit"~ -- "$file"
+  done
+  for file in $(git diff-tree --name-only --no-commit-id -r --diff-filter=d "$commit"); do
+    git --work-tree="$patch_path"/b checkout --quiet "$commit" -- "$file"
+  done
+  git reset --quiet --hard HEAD
+
+  # If the difference are drastic enough uncrustify may need to be used more
+  # than once. This is obviously a bug that needs to be fixed on uncrustify's
+  # end, but in the meantime this workaround is sufficient.
+  for _ in {1..2}; do
+    uncrustify -c "$NVIM_SOURCE_DIR"/src/uncrustify.cfg -q --replace --no-backup "$patch_path"/{a,b}/src/*.[ch]
+  done
+
+  (cd "$patch_path" && (git --no-pager diff --no-index --no-prefix --patch --unified=5 --color=never a/ b/ || true))
+}
+
 get_vimpatch() {
   get_vim_sources
 
@@ -287,7 +316,11 @@ get_vimpatch() {
   msg_ok "Found Vim revision '${vim_commit}'."
 
   local patch_content
-  patch_content="$(git --no-pager show --unified=5 --color=never -1 --pretty=medium "${vim_commit}")"
+  if check_executable uncrustify; then
+    patch_content="$(uncrustify_patch "${vim_commit}")"
+  else
+    patch_content="$(git --no-pager show --unified=5 --color=never -1 --pretty=medium "${vim_commit}")"
+  fi
 
   cd "${NVIM_SOURCE_DIR}"
 

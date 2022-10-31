@@ -63,6 +63,7 @@ function Test_lambda_fails()
   call assert_equal(3, {a, b -> a + b}(1, 2))
   call assert_fails('echo {a, a -> a + a}(1, 2)', 'E853:')
   call assert_fails('echo {a, b -> a + b)}(1, 2)', 'E15:')
+  echo assert_fails('echo 10->{a -> a + 2}', 'E107:')
 endfunc
 
 func Test_not_lambda()
@@ -125,7 +126,7 @@ func Test_lambda_closure_counter()
   endfunc
 
   let l:F = s:foo()
-  call garbagecollect()
+  call test_garbagecollect_now()
   call assert_equal(1, l:F())
   call assert_equal(2, l:F())
   call assert_equal(3, l:F())
@@ -208,9 +209,9 @@ func Test_lambda_circular_reference()
   endfunc
 
   call s:Foo()
-  call garbagecollect()
+  call test_garbagecollect_now()
   let i = 0 | while i < 10000 | call s:Foo() | let i+= 1 | endwhile
-  call garbagecollect()
+  call test_garbagecollect_now()
 endfunc
 
 func Test_lambda_combination()
@@ -239,11 +240,16 @@ func Test_closure_counter()
   endfunc
 
   let l:F = s:foo()
-  call garbagecollect()
+  call test_garbagecollect_now()
   call assert_equal(1, l:F())
   call assert_equal(2, l:F())
   call assert_equal(3, l:F())
   call assert_equal(4, l:F())
+
+  call assert_match("^\n   function <SNR>\\d\\+_bar() closure"
+  \              .. "\n1        let x += 1"
+  \              .. "\n2        return x"
+  \              .. "\n   endfunction$", execute('func s:bar'))
 endfunc
 
 func Test_closure_unlet()
@@ -257,7 +263,7 @@ func Test_closure_unlet()
   endfunc
 
   call assert_false(has_key(s:foo(), 'x'))
-  call garbagecollect()
+  call test_garbagecollect_now()
 endfunc
 
 func LambdaFoo()
@@ -294,7 +300,7 @@ func Test_named_function_closure()
   endfunc
   call Afoo()
   call assert_equal(14, s:Abar())
-  call garbagecollect()
+  call test_garbagecollect_now()
   call assert_equal(14, s:Abar())
 endfunc
 

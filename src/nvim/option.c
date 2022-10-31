@@ -2648,6 +2648,10 @@ void check_redraw(uint32_t flags)
     status_redraw_all();
   }
 
+  if ((flags & P_RTABL) || all) {  // mark tablines dirty
+    redraw_tabline = true;
+  }
+
   if ((flags & P_RBUF) || (flags & P_RWIN) || all) {
     changed_window_setting();
   }
@@ -3974,6 +3978,8 @@ static char_u *get_varp(vimoption_T *p)
     return (char_u *)&(curbuf->b_p_cfu);
   case PV_OFU:
     return (char_u *)&(curbuf->b_p_ofu);
+  case PV_EOF:
+    return (char_u *)&(curbuf->b_p_eof);
   case PV_EOL:
     return (char_u *)&(curbuf->b_p_eol);
   case PV_FIXEOL:
