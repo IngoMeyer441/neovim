@@ -44,6 +44,8 @@ typedef struct {
 #include "klib/kvec.h"
 // for marktree
 #include "nvim/marktree.h"
+// for float window title
+#include "nvim/extmark_defs.h"
 
 #define GETFILE_SUCCESS(x)    ((x) <= 0)
 #define MODIFIABLE(buf) (buf->b_p_ma)
@@ -673,8 +675,11 @@ struct file_buffer {
   char *b_p_csl;                ///< 'completeslash'
 #endif
   char *b_p_cfu;                ///< 'completefunc'
+  Callback b_cfu_cb;            ///< 'completefunc' callback
   char *b_p_ofu;                ///< 'omnifunc'
+  Callback b_ofu_cb;            ///< 'omnifunc' callback
   char *b_p_tfu;                ///< 'tagfunc'
+  Callback b_tfu_cb;            ///< 'tagfunc' callback
   int b_p_eof;                  ///< 'endoffile'
   int b_p_eol;                  ///< 'endofline'
   int b_p_fixeol;               ///< 'fixendofline'
@@ -746,6 +751,7 @@ struct file_buffer {
   char *b_p_dict;               ///< 'dictionary' local value
   char *b_p_tsr;                ///< 'thesaurus' local value
   char *b_p_tsrfu;              ///< 'thesaurusfunc' local value
+  Callback b_tsrfu_cb;          ///< 'thesaurusfunc' callback
   long b_p_ul;                  ///< 'undolevels' local value
   int b_p_udf;                  ///< 'undofile'
   char *b_p_lw;                 ///< 'lispwords' local value
@@ -894,6 +900,8 @@ struct diffblock_S {
   diff_T *df_next;
   linenr_T df_lnum[DB_COUNT];           // line number in buffer
   linenr_T df_count[DB_COUNT];          // nr of inserted/changed lines
+  bool is_linematched;  // has the linematch algorithm ran on this diff hunk to divide it into
+                        // smaller diff hunks?
 };
 
 #define SNAP_HELP_IDX   0
@@ -961,7 +969,8 @@ struct frame_S {
                             // for first
   // fr_child and fr_win are mutually exclusive
   frame_T *fr_child;        // first contained frame
-  win_T *fr_win;          // window that fills this frame
+  win_T *fr_win;        // window that fills this frame; for a snapshot
+                        // set to the current window
 };
 
 #define FR_LEAF 0       // frame is a leaf
@@ -1045,6 +1054,12 @@ typedef enum {
   kWinStyleMinimal,  /// Minimal UI: no number column, eob markers, etc
 } WinStyle;
 
+typedef enum {
+  kAlignLeft   = 0,
+  kAlignCenter = 1,
+  kAlignRight  = 2,
+} AlignTextPos;
+
 typedef struct {
   Window window;
   lpos_T bufpos;
@@ -1057,10 +1072,14 @@ typedef struct {
   int zindex;
   WinStyle style;
   bool border;
+  bool title;
   bool shadow;
   schar_T border_chars[8];
   int border_hl_ids[8];
   int border_attr[8];
+  AlignTextPos title_pos;
+  VirtText title_chunks;
+  int title_width;
   bool noautocmd;
 } FloatConfig;
 
@@ -1338,6 +1357,7 @@ struct window_S {
   int w_briopt_shift;               // additional shift for breakindent
   bool w_briopt_sbr;                // sbr in 'briopt'
   int w_briopt_list;                // additional indent for lists
+  int w_briopt_vcol;                // indent for specific column
 
   // transform a pointer to a "onebuf" option into a "allbuf" option
 #define GLOBAL_WO(p)    ((char *)(p) + sizeof(winopt_T))
@@ -1404,7 +1424,9 @@ struct window_S {
 };
 
 /// Macros defined in Vim, but not in Neovim
+// uncrustify:off
 #define CHANGEDTICK(buf) \
   (=== Include buffer.h & use buf_(get|set|inc) _changedtick ===)
+// uncrustify:on
 
 #endif  // NVIM_BUFFER_DEFS_H

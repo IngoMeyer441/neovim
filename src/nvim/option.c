@@ -51,6 +51,7 @@
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
+#include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/locale.h"
 #include "nvim/macros.h"
@@ -78,6 +79,7 @@
 #include "nvim/spellsuggest.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
+#include "nvim/tag.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/undo.h"
@@ -577,6 +579,7 @@ void free_all_options(void)
     }
   }
   free_operatorfunc_option();
+  free_tagfunc_option();
 }
 #endif
 
@@ -1975,14 +1978,12 @@ static char *set_bool_option(const int opt_idx, char_u *const varp, const int va
   } else if ((int *)varp == &curbuf->b_p_ma) {
     // when 'modifiable' is changed, redraw the window title
     redraw_titles();
-  } else if ((int *)varp == &curbuf->b_p_eol) {
-    // when 'endofline' is changed, redraw the window title
-    redraw_titles();
-  } else if ((int *)varp == &curbuf->b_p_fixeol) {
-    // when 'fixeol' is changed, redraw the window title
-    redraw_titles();
-  } else if ((int *)varp == &curbuf->b_p_bomb) {
-    // when 'bomb' is changed, redraw the window title and tab page text
+  } else if ((int *)varp == &curbuf->b_p_eof
+             || (int *)varp == &curbuf->b_p_eol
+             || (int *)varp == &curbuf->b_p_fixeol
+             || (int *)varp == &curbuf->b_p_bomb) {
+    // redraw the window title and tab page text when 'endoffile', 'endofline',
+    // 'fixeol' or 'bomb' is changed
     redraw_titles();
   } else if ((int *)varp == &curbuf->b_p_bin) {
     // when 'bin' is set also set some other options
@@ -4381,10 +4382,13 @@ void buf_copy_options(buf_T *buf, int flags)
 #endif
       buf->b_p_cfu = xstrdup(p_cfu);
       COPY_OPT_SCTX(buf, BV_CFU);
+      set_buflocal_cfu_callback(buf);
       buf->b_p_ofu = xstrdup(p_ofu);
       COPY_OPT_SCTX(buf, BV_OFU);
+      set_buflocal_ofu_callback(buf);
       buf->b_p_tfu = xstrdup(p_tfu);
       COPY_OPT_SCTX(buf, BV_TFU);
+      set_buflocal_tfu_callback(buf);
       buf->b_p_sts = p_sts;
       COPY_OPT_SCTX(buf, BV_STS);
       buf->b_p_sts_nopaste = p_sts_nopaste;
@@ -4704,8 +4708,7 @@ void set_context_in_set_cmd(expand_T *xp, char_u *arg, int opt_flags)
         || p == (char_u *)&p_cdpath
         || p == (char_u *)&p_vdir) {
       xp->xp_context = EXPAND_DIRECTORIES;
-      if (p == (char_u *)&p_path
-          || p == (char_u *)&p_cdpath) {
+      if (p == (char_u *)&p_path || p == (char_u *)&p_cdpath) {
         xp->xp_backslash = XP_BS_THREE;
       } else {
         xp->xp_backslash = XP_BS_ONE;
@@ -5218,6 +5221,17 @@ bool can_bs(int what)
 unsigned int get_bkc_value(buf_T *buf)
 {
   return buf->b_bkc_flags ? buf->b_bkc_flags : bkc_flags;
+}
+
+/// Get the local or global value of 'formatlistpat'.
+///
+/// @param buf The buffer.
+char *get_flp_value(buf_T *buf)
+{
+  if (buf->b_p_flp == NULL || *buf->b_p_flp == NUL) {
+    return p_flp;
+  }
+  return buf->b_p_flp;
 }
 
 /// Get the local or global value of the 'virtualedit' flags.

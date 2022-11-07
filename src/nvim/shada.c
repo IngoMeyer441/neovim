@@ -166,7 +166,7 @@ typedef enum {
 
 /// Possible results of shada_write function.
 typedef enum {
-  kSDWriteSuccessfull,   ///< Writing was successful.
+  kSDWriteSuccessful,    ///< Writing was successful.
   kSDWriteReadNotShada,  ///< Writing was successful, but when reading it
                          ///< attempted to read file that did not look like
                          ///< a ShaDa file.
@@ -1476,7 +1476,7 @@ static char *shada_filename(const char *file)
       file = p_shadafile;
     } else {
       if ((file = (char *)find_shada_parameter('n')) == NULL || *file == NUL) {
-        file =  shada_get_default_file();
+        file = shada_get_default_file();
       }
       // XXX It used to be one level lower, so that whatever is in
       //     `p_shadafile` was expanded. I intentionally moved it here
@@ -1511,7 +1511,7 @@ static char *shada_filename(const char *file)
 /// @param[in]  max_kbyte  Maximum size of an item in KiB. Zero means no
 ///                        restrictions.
 ///
-/// @return kSDWriteSuccessfull, kSDWriteFailed or kSDWriteIgnError.
+/// @return kSDWriteSuccessful, kSDWriteFailed or kSDWriteIgnError.
 static ShaDaWriteResult shada_pack_entry(msgpack_packer *const packer, ShadaEntry entry,
                                          const size_t max_kbyte)
   FUNC_ATTR_NONNULL_ALL
@@ -1819,7 +1819,7 @@ static ShaDaWriteResult shada_pack_entry(msgpack_packer *const packer, ShadaEntr
   }
   msgpack_packer_free(spacker);
   msgpack_sbuffer_destroy(&sbuf);
-  return kSDWriteSuccessfull;
+  return kSDWriteSuccessful;
 shada_pack_entry_error:
   msgpack_packer_free(spacker);
   msgpack_sbuffer_destroy(&sbuf);
@@ -1839,7 +1839,7 @@ static inline ShaDaWriteResult shada_pack_pfreed_entry(msgpack_packer *const pac
                                                        const size_t max_kbyte)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_ALWAYS_INLINE
 {
-  ShaDaWriteResult ret = kSDWriteSuccessfull;
+  ShaDaWriteResult ret = kSDWriteSuccessful;
   ret = shada_pack_entry(packer, entry.data, max_kbyte);
   if (entry.can_free_entry) {
     shada_free_shada_entry(&entry.data);
@@ -2053,7 +2053,7 @@ static inline ShaDaWriteResult shada_read_when_writing(ShaDaReadDef *const sd_re
                                                        msgpack_packer *const packer)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  ShaDaWriteResult ret = kSDWriteSuccessfull;
+  ShaDaWriteResult ret = kSDWriteSuccessful;
   ShadaEntry entry;
   ShaDaReadResult srni_ret;
 
@@ -2492,7 +2492,7 @@ static int hist_type2char(const int type)
 static ShaDaWriteResult shada_write(ShaDaWriteDef *const sd_writer, ShaDaReadDef *const sd_reader)
   FUNC_ATTR_NONNULL_ARG(1)
 {
-  ShaDaWriteResult ret = kSDWriteSuccessfull;
+  ShaDaWriteResult ret = kSDWriteSuccessful;
   int max_kbyte_i = get_shada_parameter('s');
   if (max_kbyte_i < 0) {
     max_kbyte_i = 10;
@@ -2652,7 +2652,7 @@ static ShaDaWriteResult shada_write(ShaDaWriteDef *const sd_writer, ShaDaReadDef
       }
       tv_clear(&vartv);
       tv_clear(&tgttv);
-      if (spe_ret == kSDWriteSuccessfull) {
+      if (spe_ret == kSDWriteSuccessful) {
         int kh_ret;
         (void)kh_put(strset, &wms->dumped_variables, name, &kh_ret);
       }
@@ -2817,7 +2817,7 @@ static ShaDaWriteResult shada_write(ShaDaWriteDef *const sd_writer, ShaDaReadDef
   if (sd_reader != NULL) {
     const ShaDaWriteResult srww_ret = shada_read_when_writing(sd_reader, srni_flags, max_kbyte, wms,
                                                               packer);
-    if (srww_ret != kSDWriteSuccessfull) {
+    if (srww_ret != kSDWriteSuccessful) {
       ret = srww_ret;
     }
   }
@@ -3078,33 +3078,38 @@ shada_write_file_nomerge: {}
   if (!nomerge) {
     sd_reader.close(&sd_reader);
     bool did_remove = false;
-    if (sw_ret == kSDWriteSuccessfull) {
-#ifdef UNIX
-      // For Unix we check the owner of the file.  It's not very nice to
-      // overwrite a user’s viminfo file after a "su root", with a
-      // viminfo file that the user can't read.
+    if (sw_ret == kSDWriteSuccessful) {
       FileInfo old_info;
-      if (os_fileinfo(fname, &old_info)) {
-        if (getuid() == ROOT_UID) {
-          if (old_info.stat.st_uid != ROOT_UID
-              || old_info.stat.st_gid != getgid()) {
-            const uv_uid_t old_uid = (uv_uid_t)old_info.stat.st_uid;
-            const uv_gid_t old_gid = (uv_gid_t)old_info.stat.st_gid;
-            const int fchown_ret = os_fchown(file_fd(sd_writer.cookie),
-                                             old_uid, old_gid);
-            if (fchown_ret != 0) {
-              semsg(_(RNERR "Failed setting uid and gid for file %s: %s"),
-                    tempname, os_strerror(fchown_ret));
-              goto shada_write_file_did_not_remove;
-            }
+      if (!os_fileinfo(fname, &old_info)
+          || S_ISDIR(old_info.stat.st_mode)
+#ifdef UNIX
+          // For Unix we check the owner of the file.  It's not very nice
+          // to overwrite a user's viminfo file after a "su root", with a
+          // viminfo file that the user can't read.
+          || (getuid() != ROOT_UID
+              && !(old_info.stat.st_uid == getuid()
+                   ? (old_info.stat.st_mode & 0200)
+                   : (old_info.stat.st_gid == getgid()
+                      ? (old_info.stat.st_mode & 0020)
+                      : (old_info.stat.st_mode & 0002))))
+#endif
+          ) {
+        semsg(_("E137: ShaDa file is not writable: %s"), fname);
+        goto shada_write_file_did_not_remove;
+      }
+#ifdef UNIX
+      if (getuid() == ROOT_UID) {
+        if (old_info.stat.st_uid != ROOT_UID
+            || old_info.stat.st_gid != getgid()) {
+          const uv_uid_t old_uid = (uv_uid_t)old_info.stat.st_uid;
+          const uv_gid_t old_gid = (uv_gid_t)old_info.stat.st_gid;
+          const int fchown_ret = os_fchown(file_fd(sd_writer.cookie),
+                                           old_uid, old_gid);
+          if (fchown_ret != 0) {
+            semsg(_(RNERR "Failed setting uid and gid for file %s: %s"),
+                  tempname, os_strerror(fchown_ret));
+            goto shada_write_file_did_not_remove;
           }
-        } else if (!(old_info.stat.st_uid == getuid()
-                     ? (old_info.stat.st_mode & 0200)
-                     : (old_info.stat.st_gid == getgid()
-                        ? (old_info.stat.st_mode & 0020)
-                        : (old_info.stat.st_mode & 0002)))) {
-          semsg(_("E137: ShaDa file is not writable: %s"), fname);
-          goto shada_write_file_did_not_remove;
         }
       }
 #endif
@@ -3125,9 +3130,7 @@ shada_write_file_nomerge: {}
       }
     }
     if (!did_remove) {
-#ifdef UNIX
 shada_write_file_did_not_remove:
-#endif
       semsg(_(RNERR "Do not forget to remove %s or rename it manually to %s."),
             tempname, fname);
     }

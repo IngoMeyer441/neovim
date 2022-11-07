@@ -809,9 +809,7 @@ func Test_issue_3969()
 endfunc
 
 func Test_start_with_tabs()
-  if !CanRunVimInTerminal()
-    return
-  endif
+  CheckRunVimInTerminal
 
   let buf = RunVimInTerminal('-p a b c', {})
   call VerifyScreenDump(buf, 'Test_start_with_tabs', {})
@@ -968,9 +966,7 @@ endfunc
 
 " Test for specifying a non-existing vimrc file using "-u"
 func Test_missing_vimrc()
-  if !CanRunVimInTerminal()
-    throw 'Skipped: cannot run vim in terminal'
-  endif
+  CheckRunVimInTerminal
   let after =<< trim [CODE]
     call assert_match('^E282:', v:errmsg)
     call writefile(v:errors, 'Xtestout')
@@ -1281,6 +1277,21 @@ func Test_progname()
 
   call delete('Xprogname_after')
   call delete('Xprogname', 'd')
+endfunc
+
+" Test for doing a write from .vimrc
+func Test_write_in_vimrc()
+  call writefile(['silent! write'], 'Xvimrc')
+  let after =<< trim [CODE]
+    call assert_match('E32: ', v:errmsg)
+    call writefile(v:errors, 'Xtestout')
+    qall
+  [CODE]
+  if RunVim([], after, '-u Xvimrc')
+    call assert_equal([], readfile('Xtestout'))
+    call delete('Xtestout')
+  endif
+  call delete('Xvimrc')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

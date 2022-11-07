@@ -36,8 +36,7 @@ static char e_no_such_user_defined_command_in_current_buffer_str[]
 
 /// List of names for completion for ":command" with the EXPAND_ flag.
 /// Must be alphabetical for completion.
-static const char *command_complete[] =
-{
+static const char *command_complete[] = {
   [EXPAND_ARGLIST] = "arglist",
   [EXPAND_AUGROUP] = "augroup",
   [EXPAND_BEHAVE] = "behave",
@@ -86,8 +85,7 @@ static struct {
   cmd_addr_T expand;
   char *name;
   char *shortname;
-} addr_type_complete[] =
-{
+} addr_type_complete[] = {
   { ADDR_ARGUMENTS, "arguments", "arg" },
   { ADDR_LINES, "lines", "line" },
   { ADDR_LOADED_BUFFERS, "loaded_buffers", "load" },
@@ -1217,7 +1215,7 @@ static size_t add_cmd_modifier(char *buf, char *mod_str, bool *multi_mods)
 /// was added.
 ///
 /// @return the number of bytes added
-size_t add_win_cmd_modifers(char *buf, const cmdmod_T *cmod, bool *multi_mods)
+size_t add_win_cmd_modifiers(char *buf, const cmdmod_T *cmod, bool *multi_mods)
 {
   size_t result = 0;
 
@@ -1322,7 +1320,7 @@ size_t uc_mods(char *buf, const cmdmod_T *cmod, bool quote)
     }
   }
   // flags from cmod->cmod_split
-  result += add_win_cmd_modifers(buf, cmod, &multi_mods);
+  result += add_win_cmd_modifiers(buf, cmod, &multi_mods);
 
   if (quote && buf != NULL) {
     buf += result - 2;

@@ -337,8 +337,7 @@ static const size_t LINE_MAXLEN = 4096;
 static struct fmtpattern {
   char convchar;
   char *pattern;
-} fmt_pat[FMT_PATTERNS] =
-{
+} fmt_pat[FMT_PATTERNS] = {
   { 'f', ".\\+" },      // only used when at end
   { 'n', "\\d\\+" },    // 1
   { 'l', "\\d\\+" },    // 2
@@ -5326,10 +5325,8 @@ static int vgr_process_args(exarg_T *eap, vgr_args_T *args)
   }
 
   // Parse the list of arguments, wildcards have already been expanded.
-  if (get_arglist_exp(p, &args->fcount, &args->fnames, true) == FAIL) {
-    return FAIL;
-  }
-  if (args->fcount == 0) {
+  if (get_arglist_exp(p, &args->fcount, &args->fnames, true) == FAIL
+      || args->fcount == 0) {
     emsg(_(e_nomatch));
     return FAIL;
   }
@@ -7066,7 +7063,7 @@ static void hgr_search_in_rtp(qf_list_T *qfl, regmatch_T *p_regmatch, const char
 void ex_helpgrep(exarg_T *eap)
 {
   qf_info_T *qi = &ql_info;
-  char *au_name =  NULL;
+  char *au_name = NULL;
 
   switch (eap->cmdidx) {
   case CMD_helpgrep:

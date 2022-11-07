@@ -39,13 +39,13 @@ extern MemRealloc mem_realloc;
 extern bool entered_free_all_mem;
 #endif
 
-EXTERN size_t arena_alloc_count INIT(=0);
+EXTERN size_t arena_alloc_count INIT(= 0);
 
 typedef struct consumed_blk {
   struct consumed_blk *prev;
 } *ArenaMem;
 
-#define ARENA_ALIGN sizeof(void *)
+#define ARENA_ALIGN MAX(sizeof(void *), sizeof(double))
 
 typedef struct {
   char *cur_blk;

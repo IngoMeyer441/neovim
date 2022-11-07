@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
@@ -585,6 +586,7 @@ wingotofile:
       cmdmod.cmod_tab = tabpage_index(curtab) + 1;
       nchar = xchar;
       goto wingotofile;
+
     case 't':                       // CTRL-W gt: go to next tab page
       goto_tabpage((int)Prenum);
       break;
@@ -4213,6 +4215,8 @@ static int leave_tabpage(buf_T *new_curbuf, bool trigger_leave_autocmds)
       return FAIL;
     }
   }
+
+  reset_dragwin();
   tp->tp_curwin = curwin;
   tp->tp_prevwin = prevwin;
   tp->tp_firstwin = firstwin;
@@ -4274,6 +4278,10 @@ static void enter_tabpage(tabpage_T *tp, buf_T *old_curbuf, bool trigger_enter_a
   if (row < cmdline_row && cmdline_row <= Rows - p_ch) {
     clear_cmdline = true;
   }
+
+  // If there was a click in a window, it won't be usable for a following
+  // drag.
+  reset_dragwin();
 
   // The tabpage line may have appeared or disappeared, may need to resize the frames for that.
   // When the Vim window was resized or ROWS_AVAIL changed need to update frame sizes too.
@@ -5058,6 +5066,9 @@ static void win_free(win_T *wp, tabpage_T *tp)
       }
     }
   }
+
+  // free the border title text
+  clear_virttext(&wp->w_float_config.title_chunks);
 
   clear_matches(wp);
 

@@ -504,9 +504,8 @@ void ex_sort(exarg_T *eap)
       eap->nextcmd = check_nextcmd(p);
       break;
     } else if (!ASCII_ISALPHA(*p) && regmatch.regprog == NULL) {
-      s = skip_regexp(p + 1, *p, true, NULL);
-      if (*s != *p) {
-        emsg(_(e_invalpat));
+      s = skip_regexp_err(p + 1, *p, true);
+      if (s == NULL) {
         goto sortend;
       }
       *s = NUL;
@@ -1773,6 +1772,17 @@ void ex_write(exarg_T *eap)
   }
 }
 
+#ifdef UNIX
+static int check_writable(const char *fname)
+{
+  if (os_nodetype(fname) == NODE_OTHER) {
+    semsg(_("E503: \"%s\" is not a file or writable device"), fname);
+    return FAIL;
+  }
+  return OK;
+}
+#endif
+
 /// write current buffer to file 'eap->arg'
 /// if 'eap->append' is true, append to the file
 ///
@@ -1830,7 +1840,11 @@ int do_write(exarg_T *eap)
   // Writing to the current file is not allowed in readonly mode
   // and a file name is required.
   // "nofile" and "nowrite" buffers cannot be written implicitly either.
-  if (!other && (bt_dontwrite_msg(curbuf) || check_fname() == FAIL
+  if (!other && (bt_dontwrite_msg(curbuf)
+                 || check_fname() == FAIL
+#ifdef UNIX
+                 || check_writable(curbuf->b_ffname) == FAIL
+#endif
                  || check_readonly(&eap->forceit, curbuf))) {
     goto theend;
   }
@@ -1906,6 +1920,13 @@ int do_write(exarg_T *eap)
       // Autocommands may have changed buffer names, esp. when
       // 'autochdir' is set.
       fname = curbuf->b_sfname;
+    }
+
+    if (eap->mkdir_p) {
+      if (os_file_mkdir(fname, 0755) < 0) {
+        retval = FAIL;
+        goto theend;
+      }
     }
 
     name_was_missing = curbuf->b_ffname == NULL;
@@ -3503,7 +3524,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
       which_pat = RE_LAST;                  // use last used regexp
       delimiter = (char_u)(*cmd++);                   // remember delimiter character
       pat = cmd;                            // remember start of search pat
-      cmd = skip_regexp(cmd, delimiter, p_magic, &eap->arg);
+      cmd = skip_regexp_ex(cmd, delimiter, p_magic, &eap->arg, NULL);
       if (cmd[0] == delimiter) {            // end delimiter found
         *cmd++ = NUL;                       // replace it with a NUL
         has_second_delim = true;
@@ -4536,7 +4557,7 @@ void ex_global(exarg_T *eap)
     delim = *cmd;               // get the delimiter
     cmd++;                      // skip delimiter if there is one
     pat = cmd;                  // remember start of pattern
-    cmd = skip_regexp(cmd, delim, p_magic, &eap->arg);
+    cmd = skip_regexp_ex(cmd, delim, p_magic, &eap->arg, NULL);
     if (cmd[0] == delim) {                  // end delimiter found
       *cmd++ = NUL;                         // replace it with a NUL
     }
@@ -4849,7 +4870,7 @@ char *skip_vimgrep_pat(char *p, char **s, int *flags)
       *s = p + 1;
     }
     c = (char_u)(*p);
-    p = skip_regexp(p + 1, c, true, NULL);
+    p = skip_regexp(p + 1, c, true);
     if (*p != c) {
       return NULL;
     }

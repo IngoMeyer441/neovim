@@ -476,13 +476,14 @@ func Test_winsize_cmd()
 endfunc
 
 " Test for the :redir command
+" NOTE: if you run tests as root this will fail.  Don't run tests as root!
 func Test_redir_cmd()
   call assert_fails('redir @@', 'E475:')
   call assert_fails('redir abc', 'E475:')
   call assert_fails('redir => 1abc', 'E474:')
   call assert_fails('redir => a b', 'E488:')
-  call assert_fails('redir => abc[1]', 'E475:')
-  let b=0zFF
+  call assert_fails('redir => abc[1]', 'E121:')
+  let b = 0zFF
   call assert_fails('redir =>> b', 'E734:')
   unlet b
 
@@ -491,13 +492,6 @@ func Test_redir_cmd()
     call mkdir('Xdir')
     call assert_fails('redir > Xdir', 'E17:')
     call delete('Xdir', 'd')
-  endif
-  if !has('bsd')
-    " Redirecting to a read-only file
-    call writefile([], 'Xfile')
-    call setfperm('Xfile', 'r--r--r--')
-    call assert_fails('redir! > Xfile', 'E190:')
-    call delete('Xfile')
   endif
 
   " Test for redirecting to a register
@@ -509,6 +503,16 @@ func Test_redir_cmd()
   redir => color | echon 'blue ' | redir END
   redir =>> color | echon 'sky' | redir END
   call assert_equal('blue sky', color)
+endfunc
+
+func Test_redir_cmd_readonly()
+  CheckNotRoot
+
+  " Redirecting to a read-only file
+  call writefile([], 'Xfile')
+  call setfperm('Xfile', 'r--r--r--')
+  call assert_fails('redir! > Xfile', 'E190:')
+  call delete('Xfile')
 endfunc
 
 " Test for the :filetype command

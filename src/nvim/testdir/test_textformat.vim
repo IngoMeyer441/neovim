@@ -1044,6 +1044,22 @@ func Test_empty_matchpairs()
   bwipe!
 endfunc
 
+func Test_mps_error()
+  let encoding_save = &encoding
+
+  " for e in ['utf-8', 'latin1']
+  for e in ['utf-8']
+    exe 'set encoding=' .. e
+
+    call assert_fails('set mps=<:', 'E474:', e)
+    call assert_fails('set mps=:>', 'E474:', e)
+    call assert_fails('set mps=<>', 'E474:', e)
+    call assert_fails('set mps=<:>_', 'E474:', e)
+  endfor
+
+  let &encoding = encoding_save
+endfunc
+
 " Test for ra on multi-byte characters
 func Test_ra_multibyte()
   new
@@ -1095,6 +1111,20 @@ func Test_fo_a_w()
   setlocal fo+=aw tw=10
   call feedkeys("iabc abc a abc\<Esc>k0weade", 'xt')
   call assert_equal(['abc abcde ', 'a abc'], getline(1, '$'))
+
+  " when a line ends with space, it is not broken up.
+  %d
+  call feedkeys("ione two to    ", 'xt')
+  call assert_equal('one two to    ', getline(1))
+
+  " when a line ends with spaces and backspace is used in the next line, the
+  " last space in the previous line should be removed.
+  %d
+  set backspace=indent,eol,start
+  call setline(1, ['one    ', 'two'])
+  exe "normal 2Gi\<BS>"
+  call assert_equal(['one   two'], getline(1, '$'))
+  set backspace&
 
   " Test for 'a', 'w' and '1' options.
   setlocal textwidth=0

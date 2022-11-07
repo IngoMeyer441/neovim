@@ -112,6 +112,10 @@ PRAGMA_DIAG_POP
 static char *e_listblobarg = N_("E899: Argument of %s must be a List or Blob");
 static char *e_invalwindow = N_("E957: Invalid window number");
 static char *e_reduceempty = N_("E998: Reduce of an empty %s with no initial value");
+static char e_using_number_as_bool_nr[]
+  = N_("E1023: Using a Number as a Bool: %d");
+static char e_cannot_resize_window_in_another_tab_page[]
+  = N_("E1308: Cannot resize a window in another tab page");
 
 /// Dummy va_list for passing to vim_snprintf
 ///
@@ -363,21 +367,32 @@ static void f_api_info(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "append(lnum, string/list)" function
 static void f_append(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
+  const int did_emsg_before = did_emsg;
   const linenr_T lnum = tv_get_lnum(&argvars[0]);
-
-  set_buffer_lines(curbuf, lnum, true, &argvars[1], rettv);
+  if (did_emsg == did_emsg_before) {
+    set_buffer_lines(curbuf, lnum, true, &argvars[1], rettv);
+  }
 }
 
-/// "appendbufline(buf, lnum, string/list)" function
-static void f_appendbufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+/// Set or append lines to a buffer.
+static void buf_set_append_line(typval_T *argvars, typval_T *rettv, bool append)
 {
+  const int did_emsg_before = did_emsg;
   buf_T *const buf = tv_get_buf(&argvars[0], false);
   if (buf == NULL) {
     rettv->vval.v_number = 1;  // FAIL
   } else {
     const linenr_T lnum = tv_get_lnum_buf(&argvars[1], buf);
-    set_buffer_lines(buf, lnum, true, &argvars[2], rettv);
+    if (did_emsg == did_emsg_before) {
+      set_buffer_lines(buf, lnum, append, &argvars[2], rettv);
+    }
   }
+}
+
+/// "appendbufline(buf, lnum, string/list)" function
+static void f_appendbufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  buf_set_append_line(argvars, rettv, true);
 }
 
 /// "atan2()" function
@@ -893,7 +908,7 @@ static void f_charidx(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     countcc = (int)tv_get_number(&argvars[2]);
   }
   if (countcc < 0 || countcc > 1) {
-    emsg(_(e_invarg));
+    semsg(_(e_using_number_as_bool_nr), countcc);
     return;
   }
 
@@ -1345,10 +1360,10 @@ static void f_deepcopy(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   int noref = 0;
 
   if (argvars[1].v_type != VAR_UNKNOWN) {
-    noref = (int)tv_get_number_chk(&argvars[1], NULL);
+    noref = (int)tv_get_bool_chk(&argvars[1], NULL);
   }
   if (noref < 0 || noref > 1) {
-    emsg(_(e_invarg));
+    semsg(_(e_using_number_as_bool_nr), noref);
   } else {
     var_item_copy(NULL, &argvars[0], rettv, true, (noref == 0
                                                    ? get_copyID()
@@ -1468,9 +1483,10 @@ static void f_dictwatcherdel(typval_T *argvars, typval_T *rettv, EvalFuncData fp
 /// "deletebufline()" function
 static void f_deletebufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
+  const int did_emsg_before = did_emsg;
+  rettv->vval.v_number = 1;   // FAIL by default
   buf_T *const buf = tv_get_buf(&argvars[0], false);
   if (buf == NULL) {
-    rettv->vval.v_number = 1;  // FAIL
     return;
   }
   const bool is_curbuf = buf == curbuf;
@@ -1478,6 +1494,9 @@ static void f_deletebufline(typval_T *argvars, typval_T *rettv, EvalFuncData fpt
 
   linenr_T last;
   const linenr_T first = tv_get_lnum_buf(&argvars[1], buf);
+  if (did_emsg > did_emsg_before) {
+    return;
+  }
   if (argvars[2].v_type != VAR_UNKNOWN) {
     last = tv_get_lnum_buf(&argvars[2], buf);
   } else {
@@ -1486,12 +1505,12 @@ static void f_deletebufline(typval_T *argvars, typval_T *rettv, EvalFuncData fpt
 
   if (buf->b_ml.ml_mfp == NULL || first < 1
       || first > buf->b_ml.ml_line_count || last < first) {
-    rettv->vval.v_number = 1;  // FAIL
     return;
   }
 
   buf_T *curbuf_save = NULL;
   win_T *curwin_save = NULL;
+  // After this don't use "return", goto "cleanup"!
   if (!is_curbuf) {
     VIsual_active = false;
     curbuf_save = curbuf;
@@ -1512,28 +1531,30 @@ static void f_deletebufline(typval_T *argvars, typval_T *rettv, EvalFuncData fpt
   }
 
   if (u_save(first - 1, last + 1) == FAIL) {
-    rettv->vval.v_number = 1;  // FAIL
-  } else {
-    for (linenr_T lnum = first; lnum <= last; lnum++) {
-      ml_delete(first, true);
-    }
-
-    FOR_ALL_TAB_WINDOWS(tp, wp) {
-      if (wp->w_buffer == buf) {
-        if (wp->w_cursor.lnum > last) {
-          wp->w_cursor.lnum -= (linenr_T)count;
-        } else if (wp->w_cursor.lnum > first) {
-          wp->w_cursor.lnum = first;
-        }
-        if (wp->w_cursor.lnum > wp->w_buffer->b_ml.ml_line_count) {
-          wp->w_cursor.lnum = wp->w_buffer->b_ml.ml_line_count;
-        }
-      }
-    }
-    check_cursor_col();
-    deleted_lines_mark(first, count);
+    goto cleanup;
   }
 
+  for (linenr_T lnum = first; lnum <= last; lnum++) {
+    ml_delete(first, true);
+  }
+
+  FOR_ALL_TAB_WINDOWS(tp, wp) {
+    if (wp->w_buffer == buf) {
+      if (wp->w_cursor.lnum > last) {
+        wp->w_cursor.lnum -= (linenr_T)count;
+      } else if (wp->w_cursor.lnum > first) {
+        wp->w_cursor.lnum = first;
+      }
+      if (wp->w_cursor.lnum > wp->w_buffer->b_ml.ml_line_count) {
+        wp->w_cursor.lnum = wp->w_buffer->b_ml.ml_line_count;
+      }
+    }
+  }
+  check_cursor_col();
+  deleted_lines_mark(first, count);
+  rettv->vval.v_number = 0;  // OK
+
+cleanup:
   if (!is_curbuf) {
     curbuf = curbuf_save;
     curwin = curwin_save;
@@ -1571,9 +1592,10 @@ static void f_diff_hlID(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       || changedtick != buf_get_changedtick(curbuf)
       || fnum != curbuf->b_fnum) {
     // New line, buffer, change: need to get the values.
-    int filler_lines = diff_check(curwin, lnum);
-    if (filler_lines < 0) {
-      if (filler_lines == -1) {
+    int linestatus = 0;
+    int filler_lines = diff_check_with_linestatus(curwin, lnum, &linestatus);
+    if (filler_lines < 0 || linestatus < 0) {
+      if (filler_lines == -1 || linestatus == -1) {
         change_start = MAXCOL;
         change_end = -1;
         if (diff_find_change(curwin, lnum, &change_start, &change_end)) {
@@ -2038,6 +2060,12 @@ static void f_menu_get(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 static void f_expandcmd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   char *errormsg = NULL;
+  bool emsgoff = true;
+
+  if (argvars[1].v_type == VAR_DICT
+      && tv_dict_get_bool(argvars[1].vval.v_dict, "errmsg", kBoolVarFalse)) {
+    emsgoff = false;
+  }
 
   rettv->v_type = VAR_STRING;
   char *cmdstr = xstrdup(tv_get_string(&argvars[0]));
@@ -2051,9 +2079,17 @@ static void f_expandcmd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   };
   eap.argt |= EX_NOSPC;
 
-  emsg_off++;
-  expand_filename(&eap, &cmdstr, &errormsg);
-  emsg_off--;
+  if (emsgoff) {
+    emsg_off++;
+  }
+  if (expand_filename(&eap, &cmdstr, &errormsg) == FAIL) {
+    if (!emsgoff && errormsg != NULL && *errormsg != NUL) {
+      emsg(errormsg);
+    }
+  }
+  if (emsgoff) {
+    emsg_off--;
+  }
 
   rettv->vval.v_string = cmdstr;
 }
@@ -2572,9 +2608,12 @@ static void get_buffer_lines(buf_T *buf, linenr_T start, linenr_T end, int retli
 /// "getbufline()" function
 static void f_getbufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
+  const int did_emsg_before = did_emsg;
   buf_T *const buf = tv_get_buf_from_arg(&argvars[0]);
-
   const linenr_T lnum = tv_get_lnum_buf(&argvars[1], buf);
+  if (did_emsg > did_emsg_before) {
+    return;
+  }
   const linenr_T end = (argvars[2].v_type == VAR_UNKNOWN
                         ? lnum
                         : tv_get_lnum_buf(&argvars[2], buf));
@@ -5870,11 +5909,11 @@ static void f_readdir(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   ga_clear_strings(&ga);
 }
 
-/// "readfile()" function
-static void f_readfile(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+/// "readfile()" or "readblob()" function
+static void read_file_or_blob(typval_T *argvars, typval_T *rettv, bool always_blob)
 {
   bool binary = false;
-  bool blob = false;
+  bool blob = always_blob;
   FILE *fd;
   char buf[(IOSIZE/256) * 256];    // rounded to avoid odd + 1
   int io_size = sizeof(buf);
@@ -6009,8 +6048,8 @@ static void f_readfile(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
             int adjust_prevlen = 0;
 
             if (dest < buf) {  // -V782
-              adjust_prevlen = (int)(buf - dest);  // -V782
               // adjust_prevlen must be 1 or 2.
+              adjust_prevlen = (int)(buf - dest);  // -V782
               dest = buf;
             }
             if (readlen > p - buf + 1) {
@@ -6051,6 +6090,18 @@ static void f_readfile(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   xfree(prev);
   fclose(fd);
+}
+
+/// "readblob()" function
+static void f_readblob(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  read_file_or_blob(argvars, rettv, true);
+}
+
+/// "readfile()" function
+static void f_readfile(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  read_file_or_blob(argvars, rettv, false);
 }
 
 /// "getreginfo()" function
@@ -7486,16 +7537,7 @@ static void f_serverstop(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "setbufline()" function
 static void f_setbufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  linenr_T lnum;
-  buf_T *buf;
-
-  buf = tv_get_buf(&argvars[0], false);
-  if (buf == NULL) {
-    rettv->vval.v_number = 1;  // FAIL
-  } else {
-    lnum = tv_get_lnum_buf(&argvars[1], buf);
-    set_buffer_lines(buf, lnum, false, &argvars[2], rettv);
-  }
+  buf_set_append_line(argvars, rettv, false);
 }
 
 /// Set the cursor or mark position.
@@ -7624,8 +7666,11 @@ static void f_setfperm(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "setline()" function
 static void f_setline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
+  const int did_emsg_before = did_emsg;
   linenr_T lnum = tv_get_lnum(&argvars[0]);
-  set_buffer_lines(curbuf, lnum, false, &argvars[1], rettv);
+  if (did_emsg == did_emsg_before) {
+    set_buffer_lines(curbuf, lnum, false, &argvars[1], rettv);
+  }
 }
 
 /// "setpos()" function
@@ -8133,7 +8178,7 @@ static void f_split(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       typeerr = true;
     }
     if (argvars[2].v_type != VAR_UNKNOWN) {
-      keepempty = (bool)tv_get_number_chk(&argvars[2], &typeerr);
+      keepempty = (bool)tv_get_bool_chk(&argvars[2], &typeerr);
     }
   }
   if (pat == NULL || *pat == NUL) {
@@ -8263,7 +8308,7 @@ static void f_str2nr(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       emsg(_(e_invarg));
       return;
     }
-    if (argvars[2].v_type != VAR_UNKNOWN && tv_get_number(&argvars[2])) {
+    if (argvars[2].v_type != VAR_UNKNOWN && tv_get_bool(&argvars[2])) {
       what |= STR2NR_QUOTE;
     }
   }
@@ -8418,26 +8463,38 @@ static void f_strlen(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   rettv->vval.v_number = (varnumber_T)strlen(tv_get_string(&argvars[0]));
 }
 
-/// "strchars()" function
-static void f_strchars(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+static void strchar_common(typval_T *argvars, typval_T *rettv, bool skipcc)
 {
   const char *s = tv_get_string(&argvars[0]);
-  int skipcc = 0;
   varnumber_T len = 0;
   int (*func_mb_ptr2char_adv)(const char_u **pp);
 
+  func_mb_ptr2char_adv = skipcc ? mb_ptr2char_adv : mb_cptr2char_adv;
+  while (*s != NUL) {
+    func_mb_ptr2char_adv((const char_u **)&s);
+    len++;
+  }
+  rettv->vval.v_number = len;
+}
+
+/// "strcharlen()" function
+static void f_strcharlen(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  strchar_common(argvars, rettv, true);
+}
+
+/// "strchars()" function
+static void f_strchars(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  int skipcc = false;
+
   if (argvars[1].v_type != VAR_UNKNOWN) {
-    skipcc = (int)tv_get_number_chk(&argvars[1], NULL);
+    skipcc = (int)tv_get_bool(&argvars[1]);
   }
   if (skipcc < 0 || skipcc > 1) {
-    emsg(_(e_invarg));
+    semsg(_(e_using_number_as_bool_nr), skipcc);
   } else {
-    func_mb_ptr2char_adv = skipcc ? mb_ptr2char_adv : mb_cptr2char_adv;
-    while (*s != NUL) {
-      func_mb_ptr2char_adv((const char_u **)&s);
-      len++;
-    }
-    rettv->vval.v_number = len;
+    strchar_common(argvars, rettv, skipcc);
   }
 }
 
@@ -9676,6 +9733,10 @@ static void f_win_move_separator(typval_T *argvars, typval_T *rettv, EvalFuncDat
   if (wp == NULL || wp->w_floating) {
     return;
   }
+  if (!win_valid(wp)) {
+    emsg(_(e_cannot_resize_window_in_another_tab_page));
+    return;
+  }
 
   int offset = (int)tv_get_number(&argvars[1]);
   win_drag_vsep_line(wp, offset);
@@ -9692,6 +9753,10 @@ static void f_win_move_statusline(typval_T *argvars, typval_T *rettv, EvalFuncDa
 
   wp = find_win_by_nr_or_id(&argvars[0]);
   if (wp == NULL || wp->w_floating) {
+    return;
+  }
+  if (!win_valid(wp)) {
+    emsg(_(e_cannot_resize_window_in_another_tab_page));
     return;
   }
 
@@ -9905,6 +9970,7 @@ static void f_writefile(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   bool binary = false;
   bool append = false;
   bool do_fsync = !!p_fs;
+  bool mkdir_p = false;
   if (argvars[2].v_type != VAR_UNKNOWN) {
     const char *const flags = tv_get_string_chk(&argvars[2]);
     if (flags == NULL) {
@@ -9920,6 +9986,8 @@ static void f_writefile(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
         do_fsync = true; break;
       case 'S':
         do_fsync = false; break;
+      case 'p':
+        mkdir_p = true; break;
       default:
         // Using %s, p and not %c, *p to preserve multibyte characters
         semsg(_("E5060: Unknown flag: %s"), p);
@@ -9939,6 +10007,7 @@ static void f_writefile(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     emsg(_("E482: Can't open file with an empty name"));
   } else if ((error = file_open(&fp, fname,
                                 ((append ? kFileAppend : kFileTruncate)
+                                 | (mkdir_p ? kFileMkDir : kFileCreate)
                                  | kFileCreate), 0666)) != 0) {
     semsg(_("E482: Can't open file %s for writing: %s"),
           fname, os_strerror(error));

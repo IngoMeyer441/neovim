@@ -194,6 +194,12 @@ EXTERN int emsg_skip INIT(= 0);             // don't display errors for
                                             // expression that is skipped
 EXTERN bool emsg_severe INIT(= false);      // use message of next of several
                                             //  emsg() calls for throw
+// used by assert_fails()
+EXTERN bool emsg_assert_fails_used INIT(= false);
+EXTERN char *emsg_assert_fails_msg INIT(= NULL);
+EXTERN long emsg_assert_fails_lnum INIT(= 0);
+EXTERN char *emsg_assert_fails_context INIT(= NULL);
+
 EXTERN bool did_endif INIT(= false);        // just had ":endif"
 EXTERN dict_T vimvardict;                   // Dictionary with v: variables
 EXTERN dict_T globvardict;                  // Dictionary with g: variables
@@ -613,7 +619,7 @@ EXTERN int State INIT(= MODE_NORMAL);
 EXTERN bool debug_mode INIT(= false);
 EXTERN bool finish_op INIT(= false);    // true while an operator is pending
 EXTERN long opcount INIT(= 0);          // count for pending operator
-EXTERN int motion_force INIT(=0);       // motion force for pending operator
+EXTERN int motion_force INIT(= 0);       // motion force for pending operator
 
 // Ex Mode (Q) state
 EXTERN bool exmode_active INIT(= false);  // true if Ex mode is active
@@ -621,7 +627,7 @@ EXTERN bool exmode_active INIT(= false);  // true if Ex mode is active
 /// Flag set when normal_check() should return 0 when entering Ex mode.
 EXTERN bool pending_exmode_active INIT(= false);
 
-EXTERN bool ex_no_reprint INIT(=false);   // No need to print after z or p.
+EXTERN bool ex_no_reprint INIT(= false);   // No need to print after z or p.
 
 // 'inccommand' command preview state
 EXTERN bool cmdpreview INIT(= false);

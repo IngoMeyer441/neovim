@@ -38,6 +38,7 @@
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
 #include "nvim/strings.h"
+#include "nvim/tag.h"
 #include "nvim/ui.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -696,6 +697,10 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
   } else if (varp == &curwin->w_p_briopt) {  // 'breakindentopt'
     if (briopt_check(curwin) == FAIL) {
       errmsg = e_invarg;
+    }
+    // list setting requires a redraw
+    if (curwin->w_briopt_list) {
+      redraw_all_later(UPD_NOT_VALID);
     }
   } else if (varp == &p_isi
              || varp == &(curbuf->b_p_isk)
@@ -1468,12 +1473,28 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
         }
       }
     }
+  } else if (gvarp == &p_cfu) {  // 'completefunc'
+    if (set_completefunc_option() == FAIL) {
+      errmsg = e_invarg;
+    }
+  } else if (gvarp == &p_ofu) {  // 'omnifunc'
+    if (set_omnifunc_option() == FAIL) {
+      errmsg = e_invarg;
+    }
+  } else if (gvarp == &p_tsrfu) {  // 'thesaurusfunc'
+    if (set_thesaurusfunc_option() == FAIL) {
+      errmsg = e_invarg;
+    }
   } else if (varp == &p_opfunc) {  // 'operatorfunc'
     if (set_operatorfunc_option() == FAIL) {
       errmsg = e_invarg;
     }
   } else if (varp == &p_qftf) {  // 'quickfixtextfunc'
     if (qf_process_qftf_option() == FAIL) {
+      errmsg = e_invarg;
+    }
+  } else if (gvarp == &p_tfu) {  // 'tagfunc'
+    if (set_tagfunc_option() == FAIL) {
       errmsg = e_invarg;
     }
   } else {
@@ -1599,6 +1620,12 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
 
   if (varp == &p_mouse) {
     setmouse();  // in case 'mouse' changed
+  }
+
+  // Changing Formatlistpattern when briopt includes the list setting:
+  // redraw
+  if ((varp == &p_flp || varp == &(curbuf->b_p_flp)) && curwin->w_briopt_list) {
+    redraw_all_later(UPD_NOT_VALID);
   }
 
   if (curwin->w_curswant != MAXCOL

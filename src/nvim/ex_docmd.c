@@ -726,7 +726,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
   if (cstack.cs_idx >= 0) {
     // If a sourced file or executed function ran to its end, report the
     // unclosed conditional.
-    if (!got_int && !did_throw
+    if (!got_int && !did_throw && !aborting()
         && ((getline_equal(fgetline, cookie, getsourceline)
              && !source_finished(fgetline, cookie))
             || (getline_equal(fgetline, cookie, get_func_line)
@@ -807,6 +807,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
           next = messages->next;
           emsg(messages->msg);
           xfree(messages->msg);
+          xfree(messages->sfile);
           xfree(messages);
           messages = next;
         } while (messages != NULL);
@@ -3351,7 +3352,7 @@ static linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, int 
         goto error;
       }
       if (skip) {                       // skip "/pat/"
-        cmd = skip_regexp(cmd, c, p_magic, NULL);
+        cmd = skip_regexp(cmd, c, p_magic);
         if (*cmd == c) {
           cmd++;
         }
@@ -4070,6 +4071,13 @@ static int getargopt(exarg_T *eap)
   if (STRNCMP(arg, "edit", 4) == 0) {
     eap->read_edit = true;
     eap->arg = skipwhite(arg + 4);
+    return OK;
+  }
+
+  // ":write ++p foo/bar/file
+  if (strncmp(arg, "p", 1) == 0) {
+    eap->mkdir_p = true;
+    eap->arg = skipwhite(arg + 1);
     return OK;
   }
 
@@ -5212,7 +5220,7 @@ void do_exedit(exarg_T *eap, win_T *old_curwin)
                   old_curwin == NULL ? curwin : NULL);
   } else if ((eap->cmdidx != CMD_split && eap->cmdidx != CMD_vsplit)
              || *eap->arg != NUL) {
-    // Can't edit another file when "curbuf->b_ro_lockec" is set.  Only ":edit"
+    // Can't edit another file when "curbuf->b_ro_locked" is set.  Only ":edit"
     // can bring us here, others are stopped earlier.
     if (*eap->arg != NUL && curbuf_locked()) {
       return;
@@ -6494,7 +6502,7 @@ static void ex_findpat(exarg_T *eap)
   if (*eap->arg == '/') {   // Match regexp, not just whole words
     whole = false;
     eap->arg++;
-    char *p = skip_regexp(eap->arg, '/', p_magic, NULL);
+    char *p = skip_regexp(eap->arg, '/', p_magic);
     if (*p) {
       *p++ = NUL;
       p = skipwhite(p);

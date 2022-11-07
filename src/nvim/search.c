@@ -80,8 +80,7 @@
 // one for other searches.  last_idx points to the one that was used the last
 // time.
 
-static struct spat spats[2] =
-{
+static struct spat spats[2] = {
   // Last used search pattern
   [0] = { NULL, true, false, 0, { '/', false, false, 0L }, NULL },
   // Last used substitute pattern
@@ -1081,7 +1080,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char_u *pat, long count,
       // Find end of regular expression.
       // If there is a matching '/' or '?', toss it.
       ps = (char_u *)strcopy;
-      p = (char_u *)skip_regexp((char *)pat, search_delim, p_magic, &strcopy);
+      p = (char_u *)skip_regexp_ex((char *)pat, search_delim, p_magic, &strcopy, NULL);
       if (strcopy != (char *)ps) {
         // made a copy of "pat" to change "\?" to "?"
         searchcmdlen += (int)(STRLEN(pat) - strlen(strcopy));

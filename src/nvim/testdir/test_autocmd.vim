@@ -175,9 +175,7 @@ func Test_autocmd_bufunload_avoiding_SEGV_01()
     exe 'autocmd BufUnload <buffer> ' . (lastbuf + 1) . 'bwipeout!'
   augroup END
 
-  " Todo: check for E937 generated first
-  " call assert_fails('edit bb.txt', 'E937:')
-  call assert_fails('edit bb.txt', 'E517:')
+  call assert_fails('edit bb.txt', ['E937:', 'E517:'])
 
   autocmd! test_autocmd_bufunload
   augroup! test_autocmd_bufunload
@@ -533,6 +531,8 @@ func Test_augroup_warning()
   redir END
   call assert_notmatch("W19:", res)
   au! VimEnter
+
+  call assert_fails('augroup!', 'E471:')
 endfunc
 
 func Test_BufReadCmdHelp()
@@ -2865,6 +2865,7 @@ func Test_autocmd_invalid_args()
   call assert_fails('doautocmd * BufEnter', 'E217:')
   call assert_fails('augroup! x1a2b3', 'E367:')
   call assert_fails('autocmd BufNew <buffer=999> pwd', 'E680:')
+  call assert_fails('autocmd BufNew \) set ff=unix', 'E55:')
 endfunc
 
 " Test for deep nesting of autocmds
@@ -2931,7 +2932,7 @@ func Test_BufDelete_changebuf()
   augroup END
   let save_cpo = &cpo
   set cpo+=f
-  call assert_fails('r Xfile', 'E484:')
+  call assert_fails('r Xfile', ['E812:', 'E484:'])
   call assert_equal('somefile', @%)
   let &cpo = save_cpo
   augroup TestAuCmd

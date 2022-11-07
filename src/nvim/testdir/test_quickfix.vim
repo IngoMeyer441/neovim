@@ -740,7 +740,7 @@ func s:test_xhelpgrep(cchar)
   " Search for non existing help string
   call assert_fails('Xhelpgrep a1b2c3', 'E480:')
   " Invalid regular expression
-  call assert_fails('Xhelpgrep \@<!', 'E480:')
+  call assert_fails('Xhelpgrep \@<!', 'E866:')
 endfunc
 
 func Test_helpgrep()
@@ -4101,8 +4101,8 @@ endfunc
 
 func Test_lvimgrep_crash2()
   au BufNewFile x sfind
-  call assert_fails('lvimgrep x x', 'E480:')
-  call assert_fails('lvimgrep x x x', 'E480:')
+  call assert_fails('lvimgrep x x', 'E471:')
+  call assert_fails('lvimgrep x x x', 'E471:')
 
   au! BufNewFile
 endfunc
@@ -5799,6 +5799,21 @@ func Test_win_gettype()
   wincmd p
   call assert_equal("loclist", win_gettype(wid))
   lclose
+endfunc
+
+fun Test_vimgrep_nomatch()
+  call XexprTests('c')
+  call g:Xsetlist([{'lnum':10,'text':'Line1'}])
+  copen
+  if has("win32")
+    call assert_fails('vimgrep foo *.zzz', 'E479:')
+    let expected = [{'lnum': 10, 'bufnr': 0, 'end_lnum': 0, 'pattern': '', 'valid': 0, 'vcol': 0, 'nr': 0, 'module': '', 'type': '', 'end_col': 0, 'col': 0, 'text': 'Line1'}]
+  else
+    call assert_fails('vimgrep foo *.zzz', 'E480:')
+    let expected = []
+  endif
+  call assert_equal(expected, getqflist())
+  cclose
 endfunc
 
 " Test for opening the quickfix window in two tab pages and then closing one

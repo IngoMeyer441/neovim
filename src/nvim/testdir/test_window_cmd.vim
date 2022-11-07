@@ -501,10 +501,13 @@ func Test_win_screenpos()
   call assert_equal([1, 32], win_screenpos(2))
   call assert_equal([12, 1], win_screenpos(3))
   call assert_equal([0, 0], win_screenpos(4))
+  call assert_fails('let l = win_screenpos([])', 'E745:')
   only
 endfunc
 
 func Test_window_jump_tag()
+  CheckFeature quickfix
+
   help
   /iccf
   call assert_match('^|iccf|',  getline('.'))
@@ -542,6 +545,7 @@ func Test_window_newtab()
   call assert_equal(2, tabpagenr('$'))
   call assert_equal(['Xb', 'Xa'], map(tabpagebuflist(1), 'bufname(v:val)'))
   call assert_equal(['Xc'      ], map(2->tabpagebuflist(), 'bufname(v:val)'))
+  call assert_equal(['Xc'      ], map(tabpagebuflist(), 'bufname(v:val)'))
 
   %bw!
 endfunc
@@ -733,6 +737,7 @@ func Test_relative_cursor_position_in_one_line_window()
 
   only!
   bwipe!
+  call assert_fails('call winrestview(v:_null_dict)', 'E474:')
 endfunc
 
 func Test_relative_cursor_position_after_move_and_resize()
@@ -909,6 +914,10 @@ func Test_winnr()
   call assert_fails("echo winnr('ll')", 'E15:')
   call assert_fails("echo winnr('5')", 'E15:')
   call assert_equal(4, winnr('0h'))
+  call assert_fails("let w = winnr([])", 'E730:')
+  call assert_equal('unknown', win_gettype(-1))
+  call assert_equal(-1, winheight(-1))
+  call assert_equal(-1, winwidth(-1))
 
   tabnew
   call assert_equal(8, tabpagewinnr(1, 'j'))
@@ -929,9 +938,12 @@ func Test_winrestview()
   call assert_equal(view, winsaveview())
 
   bwipe!
+  call assert_fails('call winrestview(v:_null_dict)', 'E474:')
 endfunc
 
 func Test_win_splitmove()
+  CheckFeature quickfix
+
   edit a
   leftabove split b
   leftabove vsplit c
@@ -957,6 +969,7 @@ func Test_win_splitmove()
   call assert_equal(bufname(winbufnr(2)), 'b')
   call assert_equal(bufname(winbufnr(3)), 'a')
   call assert_equal(bufname(winbufnr(4)), 'd')
+  call assert_fails('call win_splitmove(winnr(), winnr("k"), v:_null_dict)', 'E474:')
   only | bd
 
   call assert_fails('call win_splitmove(winnr(), 123)', 'E957:')
@@ -1129,6 +1142,18 @@ func Test_split_cmds_with_no_room()
   call Run_noroom_for_newwindow_test('v')
 endfunc
 
+" Test for various wincmd failures
+func Test_wincmd_fails()
+  only!
+  call assert_beeps("normal \<C-W>w")
+  call assert_beeps("normal \<C-W>p")
+  call assert_beeps("normal \<C-W>gk")
+  call assert_beeps("normal \<C-W>r")
+  call assert_beeps("normal \<C-W>K")
+  call assert_beeps("normal \<C-W>H")
+  call assert_beeps("normal \<C-W>2gt")
+endfunc
+
 func Test_window_resize()
   " Vertical :resize (absolute, relative, min and max size).
   vsplit
@@ -1214,7 +1239,7 @@ endfunc
 
 " Test for jumping to a vertical/horizontal neighbor window based on the
 " current cursor position
-func Test_window_goto_neightbor()
+func Test_window_goto_neighbor()
   %bw!
 
   " Vertical window movement
@@ -1393,17 +1418,20 @@ func Test_win_move_separator()
   call assert_equal(w0, winwidth(0))
   call assert_true(win_move_separator(0, -1))
   call assert_equal(w0, winwidth(0))
+
   " check that win_move_separator doesn't error with offsets beyond moving
   " possibility
   call assert_true(win_move_separator(id, 5000))
   call assert_true(winwidth(id) > w)
   call assert_true(win_move_separator(id, -5000))
   call assert_true(winwidth(id) < w)
+
   " check that win_move_separator returns false for an invalid window
   wincmd =
   let w = winwidth(0)
   call assert_false(win_move_separator(-1, 1))
   call assert_equal(w, winwidth(0))
+
   " check that win_move_separator returns false for a floating window
   let id = nvim_open_win(
         \ 0, 0, #{relative: 'editor', row: 2, col: 2, width: 5, height: 3})
@@ -1411,6 +1439,13 @@ func Test_win_move_separator()
   call assert_false(win_move_separator(id, 1))
   call assert_equal(w, winwidth(id))
   call nvim_win_close(id, 1)
+
+  " check that using another tabpage fails without crash
+  let id = win_getid()
+  tabnew
+  call assert_fails('call win_move_separator(id, -1)', 'E1308:')
+  tabclose
+
   %bwipe!
 endfunc
 
@@ -1459,17 +1494,20 @@ func Test_win_move_statusline()
     call assert_true(id->win_move_statusline(-offset))
     call assert_equal(h, winheight(id))
   endfor
+
   " check that win_move_statusline doesn't error with offsets beyond moving
   " possibility
   call assert_true(win_move_statusline(id, 5000))
   call assert_true(winheight(id) > h)
   call assert_true(win_move_statusline(id, -5000))
   call assert_true(winheight(id) < h)
+
   " check that win_move_statusline returns false for an invalid window
   wincmd =
   let h = winheight(0)
   call assert_false(win_move_statusline(-1, 1))
   call assert_equal(h, winheight(0))
+
   " check that win_move_statusline returns false for a floating window
   let id = nvim_open_win(
         \ 0, 0, #{relative: 'editor', row: 2, col: 2, width: 5, height: 3})
@@ -1477,6 +1515,13 @@ func Test_win_move_statusline()
   call assert_false(win_move_statusline(id, 1))
   call assert_equal(h, winheight(id))
   call nvim_win_close(id, 1)
+
+  " check that using another tabpage fails without crash
+  let id = win_getid()
+  tabnew
+  call assert_fails('call win_move_statusline(id, -1)', 'E1308:')
+  tabclose
+
   %bwipe!
 endfunc
 
