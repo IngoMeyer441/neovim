@@ -56,24 +56,26 @@
 
 #define CTRL_X_WANT_IDENT       0x100
 
-#define CTRL_X_NORMAL           0  ///< CTRL-N CTRL-P completion, default
-#define CTRL_X_NOT_DEFINED_YET  1
-#define CTRL_X_SCROLL           2
-#define CTRL_X_WHOLE_LINE       3
-#define CTRL_X_FILES            4
-#define CTRL_X_TAGS             (5 + CTRL_X_WANT_IDENT)
-#define CTRL_X_PATH_PATTERNS    (6 + CTRL_X_WANT_IDENT)
-#define CTRL_X_PATH_DEFINES     (7 + CTRL_X_WANT_IDENT)
-#define CTRL_X_FINISHED         8
-#define CTRL_X_DICTIONARY       (9 + CTRL_X_WANT_IDENT)
-#define CTRL_X_THESAURUS        (10 + CTRL_X_WANT_IDENT)
-#define CTRL_X_CMDLINE          11
-#define CTRL_X_FUNCTION         12
-#define CTRL_X_OMNI             13
-#define CTRL_X_SPELL            14
-#define CTRL_X_LOCAL_MSG        15  ///< only used in "ctrl_x_msgs"
-#define CTRL_X_EVAL             16  ///< for builtin function complete()
-#define CTRL_X_CMDLINE_CTRL_X   17  ///< CTRL-X typed in CTRL_X_CMDLINE
+enum {
+  CTRL_X_NORMAL = 0,  ///< CTRL-N CTRL-P completion, default
+  CTRL_X_NOT_DEFINED_YET = 1,
+  CTRL_X_SCROLL = 2,
+  CTRL_X_WHOLE_LINE = 3,
+  CTRL_X_FILES = 4,
+  CTRL_X_TAGS = (5 + CTRL_X_WANT_IDENT),
+  CTRL_X_PATH_PATTERNS = (6 + CTRL_X_WANT_IDENT),
+  CTRL_X_PATH_DEFINES = (7 + CTRL_X_WANT_IDENT),
+  CTRL_X_FINISHED = 8,
+  CTRL_X_DICTIONARY = (9 + CTRL_X_WANT_IDENT),
+  CTRL_X_THESAURUS = (10 + CTRL_X_WANT_IDENT),
+  CTRL_X_CMDLINE = 11,
+  CTRL_X_FUNCTION = 12,
+  CTRL_X_OMNI = 13,
+  CTRL_X_SPELL = 14,
+  CTRL_X_LOCAL_MSG = 15,       ///< only used in "ctrl_x_msgs"
+  CTRL_X_EVAL = 16,            ///< for builtin function complete()
+  CTRL_X_CMDLINE_CTRL_X = 17,  ///< CTRL-X typed in CTRL_X_CMDLINE
+};
 
 #define CTRL_X_MSG(i) ctrl_x_msgs[(i) & ~CTRL_X_WANT_IDENT]
 
@@ -240,7 +242,6 @@ static expand_T compl_xp;
 
 // List of flags for method of completion.
 static int compl_cont_status = 0;
-
 #define CONT_ADDING    1        ///< "normal" or "adding" expansion
 #define CONT_INTRPT    (2 + 4)  ///< a ^X interrupted the current expansion
                                 ///< it's set only iff N_ADDS is set
@@ -420,7 +421,7 @@ void compl_status_clear(void)
   compl_cont_status = 0;
 }
 
-// @return  true if completion is using the forward direction matches
+/// @return  true if completion is using the forward direction matches
 static bool compl_dir_forward(void)
 {
   return compl_direction == FORWARD;
@@ -452,7 +453,7 @@ bool check_compl_option(bool dict_opt)
     msg_attr((dict_opt
               ? _("'dictionary' option is empty")
               : _("'thesaurus' option is empty")), HL_ATTR(HLF_E));
-    if (emsg_silent == 0) {
+    if (emsg_silent == 0 && !in_assert_fails) {
       vim_beep(BO_COMPL);
       setcursor();
       ui_flush();
@@ -2233,7 +2234,7 @@ static Callback tsrfu_cb;  ///< 'thesaurusfunc' callback function
 static void copy_global_to_buflocal_cb(Callback *globcb, Callback *bufcb)
 {
   callback_free(bufcb);
-  if (globcb->data.funcref != NULL && *globcb->data.funcref != NUL) {
+  if (globcb->type != kCallbackNone) {
     callback_copy(bufcb, globcb);
   }
 }
@@ -2290,15 +2291,24 @@ int set_thesaurusfunc_option(void)
 
   if (*curbuf->b_p_tsrfu != NUL) {
     // buffer-local option set
-    callback_free(&curbuf->b_tsrfu_cb);
     retval = option_set_callback_func(curbuf->b_p_tsrfu, &curbuf->b_tsrfu_cb);
   } else {
     // global option set
-    callback_free(&tsrfu_cb);
     retval = option_set_callback_func(p_tsrfu, &tsrfu_cb);
   }
 
   return retval;
+}
+
+/// Mark the global 'completefunc' 'omnifunc' and 'thesaurusfunc' callbacks with
+/// "copyID" so that they are not garbage collected.
+bool set_ref_in_insexpand_funcs(int copyID)
+{
+  bool abort = set_ref_in_callback(&cfu_cb, copyID, NULL, NULL);
+  abort = abort || set_ref_in_callback(&ofu_cb, copyID, NULL, NULL);
+  abort = abort || set_ref_in_callback(&tsrfu_cb, copyID, NULL, NULL);
+
+  return abort;
 }
 
 /// Get the user-defined completion function name for completion "type"
@@ -3286,7 +3296,7 @@ static int ins_compl_get_exp(pos_T *ini)
   assert(st.ins_buf != NULL);
 
   compl_old_match = compl_curr_match;   // remember the last current match
-  st.cur_match_pos = (compl_dir_forward() ? &st.last_match_pos : &st.first_match_pos);
+  st.cur_match_pos = compl_dir_forward() ? &st.last_match_pos : &st.first_match_pos;
 
   // For ^N/^P loop over all the flags/windows/buffers in 'complete'
   for (;;) {

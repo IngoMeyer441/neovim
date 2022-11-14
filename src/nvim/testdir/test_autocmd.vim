@@ -175,7 +175,7 @@ func Test_autocmd_bufunload_avoiding_SEGV_01()
     exe 'autocmd BufUnload <buffer> ' . (lastbuf + 1) . 'bwipeout!'
   augroup END
 
-  call assert_fails('edit bb.txt', ['E937:', 'E517:'])
+  call assert_fails('edit bb.txt', 'E937:')
 
   autocmd! test_autocmd_bufunload
   augroup! test_autocmd_bufunload
@@ -481,17 +481,20 @@ endfunc
 func Test_early_bar()
   " test that a bar is recognized before the {event}
   call s:AddAnAutocmd()
-  augroup vimBarTest | au! | augroup END
+  augroup vimBarTest | au! | let done = 77 | augroup END
   call assert_equal(1, len(split(execute('au vimBarTest'), "\n")))
+  call assert_equal(77, done)
 
   call s:AddAnAutocmd()
-  augroup vimBarTest| au!| augroup END
+  augroup vimBarTest| au!| let done = 88 | augroup END
   call assert_equal(1, len(split(execute('au vimBarTest'), "\n")))
+  call assert_equal(88, done)
 
   " test that a bar is recognized after the {event}
   call s:AddAnAutocmd()
-  augroup vimBarTest| au!BufReadCmd| augroup END
+  augroup vimBarTest| au!BufReadCmd| let done = 99 | augroup END
   call assert_equal(1, len(split(execute('au vimBarTest'), "\n")))
+  call assert_equal(99, done)
 
   " test that a bar is recognized after the {group}
   call s:AddAnAutocmd()
@@ -1975,9 +1978,7 @@ func Test_change_mark_in_autocmds()
 endfunc
 
 func Test_Filter_noshelltemp()
-  if !executable('cat')
-    return
-  endif
+  CheckExecutable cat
 
   enew!
   call setline(1, ['a', 'b', 'c', 'd'])

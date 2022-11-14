@@ -30,6 +30,7 @@
 #include "nvim/ex_session.h"
 #include "nvim/getchar.h"
 #include "nvim/highlight_group.h"
+#include "nvim/insexpand.h"
 #include "nvim/locale.h"
 #include "nvim/lua/executor.h"
 #include "nvim/mark.h"
@@ -49,6 +50,7 @@
 #include "nvim/search.h"
 #include "nvim/sign.h"
 #include "nvim/syntax.h"
+#include "nvim/tag.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/undo.h"
@@ -1073,11 +1075,11 @@ int get_spellword(list_T *const list, const char **ret_word)
   return (int)tv_list_find_nr(list, -1, NULL);
 }
 
-// Call some vim script function and return the result in "*rettv".
-// Uses argv[0] to argv[argc-1] for the function arguments. argv[argc]
-// should have type VAR_UNKNOWN.
-//
-// @return  OK or FAIL.
+/// Call some Vim script function and return the result in "*rettv".
+/// Uses argv[0] to argv[argc - 1] for the function arguments. argv[argc]
+/// should have type VAR_UNKNOWN.
+///
+/// @return  OK or FAIL.
 int call_vim_function(const char *func, int argc, typval_T *argv, typval_T *rettv)
   FUNC_ATTR_NONNULL_ALL
 {
@@ -1111,7 +1113,9 @@ fail:
   return ret;
 }
 
-/// Call Vim script function and return the result as a string
+/// Call Vim script function and return the result as a string.
+/// Uses "argv[0]" to "argv[argc - 1]" for the function arguments. "argv[argc]"
+/// should have type VAR_UNKNOWN.
 ///
 /// @param[in]  func  Function name.
 /// @param[in]  argc  Number of arguments.
@@ -1134,7 +1138,8 @@ char *call_func_retstr(const char *const func, int argc, typval_T *argv)
   return retval;
 }
 
-/// Call Vim script function and return the result as a List
+/// Call Vim script function and return the result as a List.
+/// Uses "argv" and "argc" as call_func_retstr().
 ///
 /// @param[in]  func  Function name.
 /// @param[in]  argc  Number of arguments.
@@ -1925,11 +1930,10 @@ bool next_for_item(void *fi_void, char *arg)
   listitem_T *item = fi->fi_lw.lw_item;
   if (item == NULL) {
     return false;
-  } else {
-    fi->fi_lw.lw_item = TV_LIST_ITEM_NEXT(fi->fi_list, item);
-    return (ex_let_vars(arg, TV_LIST_ITEM_TV(item), true,
-                        fi->fi_semicolon, fi->fi_varcount, false, NULL) == OK);
   }
+  fi->fi_lw.lw_item = TV_LIST_ITEM_NEXT(fi->fi_list, item);
+  return (ex_let_vars(arg, TV_LIST_ITEM_TV(item), true,
+                      fi->fi_semicolon, fi->fi_varcount, false, NULL) == OK);
 }
 
 // TODO(ZyX-I): move to eval/ex_cmds
@@ -3689,10 +3693,10 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
 int get_option_tv(const char **const arg, typval_T *const rettv, const bool evaluate)
   FUNC_ATTR_NONNULL_ARG(1)
 {
-  int opt_flags;
+  int scope;
 
   // Isolate the option name and find its value.
-  char *option_end = (char *)find_option_end(arg, &opt_flags);
+  char *option_end = (char *)find_option_end(arg, &scope);
   if (option_end == NULL) {
     if (rettv != NULL) {
       semsg(_("E112: Option name missing: %s"), *arg);
@@ -3712,7 +3716,7 @@ int get_option_tv(const char **const arg, typval_T *const rettv, const bool eval
   char c = *option_end;
   *option_end = NUL;
   getoption_T opt_type = get_option_value(*arg, &numval,
-                                          rettv == NULL ? NULL : &stringval, opt_flags);
+                                          rettv == NULL ? NULL : &stringval, NULL, scope);
 
   if (opt_type == gov_unknown) {
     if (rettv != NULL) {
@@ -4168,9 +4172,22 @@ bool garbage_collect(bool testing)
     ABORTING(set_ref_dict)(buf->additional_data, copyID);
 
     // buffer callback functions
-    set_ref_in_callback(&buf->b_prompt_callback, copyID, NULL, NULL);
-    set_ref_in_callback(&buf->b_prompt_interrupt, copyID, NULL, NULL);
+    ABORTING(set_ref_in_callback)(&buf->b_prompt_callback, copyID, NULL, NULL);
+    ABORTING(set_ref_in_callback)(&buf->b_prompt_interrupt, copyID, NULL, NULL);
+    ABORTING(set_ref_in_callback)(&buf->b_cfu_cb, copyID, NULL, NULL);
+    ABORTING(set_ref_in_callback)(&buf->b_ofu_cb, copyID, NULL, NULL);
+    ABORTING(set_ref_in_callback)(&buf->b_tsrfu_cb, copyID, NULL, NULL);
+    ABORTING(set_ref_in_callback)(&buf->b_tfu_cb, copyID, NULL, NULL);
   }
+
+  // 'completefunc', 'omnifunc' and 'thesaurusfunc' callbacks
+  ABORTING(set_ref_in_insexpand_funcs)(copyID);
+
+  // 'operatorfunc' callback
+  ABORTING(set_ref_in_opfunc)(copyID);
+
+  // 'tagfunc' callback
+  ABORTING(set_ref_in_tagfunc)(copyID);
 
   FOR_ALL_TAB_WINDOWS(tp, wp) {
     // window-local variables
@@ -5860,6 +5877,7 @@ bool callback_from_typval(Callback *const callback, typval_T *const arg)
   return true;
 }
 
+/// @return  whether the callback could be called.
 bool callback_call(Callback *const callback, const int argcount_in, typval_T *const argvars_in,
                    typval_T *const rettv)
   FUNC_ATTR_NONNULL_ALL
@@ -5909,8 +5927,8 @@ bool callback_call(Callback *const callback, const int argcount_in, typval_T *co
   return call_func(name, -1, rettv, argcount_in, argvars_in, &funcexe);
 }
 
-static bool set_ref_in_callback(Callback *callback, int copyID, ht_stack_T **ht_stack,
-                                list_stack_T **list_stack)
+bool set_ref_in_callback(Callback *callback, int copyID, ht_stack_T **ht_stack,
+                         list_stack_T **list_stack)
 {
   typval_T tv;
   switch (callback->type) {
@@ -7162,9 +7180,8 @@ int check_luafunc_name(const char *const str, const bool paren)
   const char *const p = skip_luafunc_name(str);
   if (*p != (paren ? '(' : NUL)) {
     return 0;
-  } else {
-    return (int)(p - str);
   }
+  return (int)(p - str);
 }
 
 /// Handle:
@@ -7794,19 +7811,19 @@ void ex_execute(exarg_T *eap)
 ///
 /// @return  NULL when no option name found.  Otherwise pointer to the char
 ///          after the option name.
-const char *find_option_end(const char **const arg, int *const opt_flags)
+const char *find_option_end(const char **const arg, int *const scope)
 {
   const char *p = *arg;
 
   p++;
   if (*p == 'g' && p[1] == ':') {
-    *opt_flags = OPT_GLOBAL;
+    *scope = OPT_GLOBAL;
     p += 2;
   } else if (*p == 'l' && p[1] == ':') {
-    *opt_flags = OPT_LOCAL;
+    *scope = OPT_LOCAL;
     p += 2;
   } else {
-    *opt_flags = 0;
+    *scope = 0;
   }
 
   if (!ASCII_ISALPHA(*p)) {
@@ -7910,9 +7927,8 @@ static var_flavour_T var_flavour(char *varname)
       }
     }
     return VAR_FLAVOUR_SHADA;
-  } else {
-    return VAR_FLAVOUR_DEFAULT;
   }
+  return VAR_FLAVOUR_DEFAULT;
 }
 
 /// Iterate over global variables
@@ -8705,9 +8721,9 @@ bool invoke_prompt_interrupt(void)
   argv[0].v_type = VAR_UNKNOWN;
 
   got_int = false;  // don't skip executing commands
-  callback_call(&curbuf->b_prompt_interrupt, 0, argv, &rettv);
+  int ret = callback_call(&curbuf->b_prompt_interrupt, 0, argv, &rettv);
   tv_clear(&rettv);
-  return true;
+  return ret != FAIL;
 }
 
 /// Compare "typ1" and "typ2".  Put the result in "typ1".

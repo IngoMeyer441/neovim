@@ -2153,12 +2153,11 @@ static char *qf_push_dir(char *dirbuf, struct dir_stack_T **stackptr, bool is_fi
 
   if ((*stackptr)->dirname != NULL) {
     return (*stackptr)->dirname;
-  } else {
-    ds_ptr = *stackptr;
-    *stackptr = (*stackptr)->next;
-    xfree(ds_ptr);
-    return NULL;
   }
+  ds_ptr = *stackptr;
+  *stackptr = (*stackptr)->next;
+  xfree(ds_ptr);
+  return NULL;
 }
 
 // pop dirbuf from the directory stack and return previous directory or NULL if
@@ -2706,11 +2705,10 @@ static int qf_jump_edit_buffer(qf_info_T *qi, qfline_T *qf_ptr, int forceit, int
     if (!can_abandon(curbuf, forceit)) {
       no_write_message();
       return FAIL;
-    } else {
-      retval = do_ecmd(qf_ptr->qf_fnum, NULL, NULL, NULL, (linenr_T)1,
-                       ECMD_HIDE + ECMD_SET_HELP,
-                       prev_winid == curwin->handle ? curwin : NULL);
     }
+    retval = do_ecmd(qf_ptr->qf_fnum, NULL, NULL, NULL, (linenr_T)1,
+                     ECMD_HIDE + ECMD_SET_HELP,
+                     prev_winid == curwin->handle ? curwin : NULL);
   } else {
     retval = buflist_getfile(qf_ptr->qf_fnum, (linenr_T)1,
                              GETF_SETMARK | GETF_SWITCH, forceit);
@@ -5140,11 +5138,10 @@ static bool vgr_qflist_valid(win_T *wp, qf_info_T *qi, unsigned qfid, char *titl
       // An autocmd has freed the location list
       emsg(_(e_current_location_list_was_changed));
       return false;
-    } else {
-      // Quickfix list is not found, create a new one.
-      qf_new_list(qi, title);
-      return true;
     }
+    // Quickfix list is not found, create a new one.
+    qf_new_list(qi, title);
+    return true;
   }
   if (qf_restore_list(qi, qfid) == FAIL) {
     return false;
@@ -6686,7 +6683,8 @@ int set_errorlist(win_T *wp, list_T *list, int action, char *title, dict_T *what
   return retval;
 }
 
-/// Mark the context as in use for all the lists in a quickfix stack.
+/// Mark the quickfix context and callback function as in use for all the lists
+/// in a quickfix stack.
 static bool mark_quickfix_ctx(qf_info_T *qi, int copyID)
 {
   bool abort = false;
@@ -6695,8 +6693,11 @@ static bool mark_quickfix_ctx(qf_info_T *qi, int copyID)
     typval_T *ctx = qi->qf_lists[i].qf_ctx;
     if (ctx != NULL && ctx->v_type != VAR_NUMBER
         && ctx->v_type != VAR_STRING && ctx->v_type != VAR_FLOAT) {
-      abort = set_ref_in_item(ctx, copyID, NULL, NULL);
+      abort = abort || set_ref_in_item(ctx, copyID, NULL, NULL);
     }
+
+    Callback *cb = &qi->qf_lists[i].qf_qftf_cb;
+    abort = abort || set_ref_in_callback(cb, copyID, NULL, NULL);
   }
 
   return abort;
@@ -6707,6 +6708,11 @@ static bool mark_quickfix_ctx(qf_info_T *qi, int copyID)
 bool set_ref_in_quickfix(int copyID)
 {
   bool abort = mark_quickfix_ctx(&ql_info, copyID);
+  if (abort) {
+    return abort;
+  }
+
+  abort = set_ref_in_callback(&qftf_cb, copyID, NULL, NULL);
   if (abort) {
     return abort;
   }

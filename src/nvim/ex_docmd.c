@@ -78,6 +78,7 @@
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/state.h"
+#include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/tag.h"
@@ -3481,9 +3482,10 @@ static linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, int 
       } else {
         i = (char_u)(*cmd++);
       }
-      if (!ascii_isdigit(*cmd)) {       // '+' is '+1', but '+0' is not '+1'
+      if (!ascii_isdigit(*cmd)) {       // '+' is '+1'
         n = 1;
       } else {
+        // "number", "+number" or "-number"
         n = getdigits_int32(&cmd, false, MAXLNUM);
         if (n == MAXLNUM) {
           emsg(_(e_line_number_out_of_range));
@@ -3498,8 +3500,8 @@ static linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, int 
       } else if (addr_type == ADDR_LOADED_BUFFERS || addr_type == ADDR_BUFFERS) {
         lnum = compute_buffer_local_count(addr_type, lnum, (i == '-') ? -1 * n : n);
       } else {
-        // Relative line addressing, need to adjust for folded lines
-        // now, but only do it after the first address.
+        // Relative line addressing: need to adjust for lines in a
+        // closed fold after the first address.
         if (addr_type == ADDR_LINES && (i == '-' || i == '+')
             && address_count >= 2) {
           (void)hasFolding(lnum, NULL, &lnum);
@@ -4231,7 +4233,7 @@ static void ex_autocmd(exarg_T *eap)
     secure = 2;
     eap->errmsg = _(e_curdir);
   } else if (eap->cmdidx == CMD_autocmd) {
-    do_autocmd(eap->arg, eap->forceit);
+    do_autocmd(eap, eap->arg, eap->forceit);
   } else {
     do_augroup(eap->arg, eap->forceit);
   }
@@ -4364,9 +4366,8 @@ char *check_nextcmd(char *p)
 
   if (*s == '|' || *s == '\n') {
     return s + 1;
-  } else {
-    return NULL;
   }
+  return NULL;
 }
 
 /// - if there are more files to edit
@@ -4765,9 +4766,8 @@ static void ex_only(exarg_T *eap)
     for (wp = firstwin; --wnr > 0;) {
       if (wp->w_next == NULL) {
         break;
-      } else {
-        wp = wp->w_next;
       }
+      wp = wp->w_next;
     }
   } else {
     wp = curwin;

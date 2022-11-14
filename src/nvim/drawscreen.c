@@ -165,14 +165,10 @@ bool default_grid_alloc(void)
   // size is wrong.
 
   grid_alloc(&default_grid, Rows, Columns, true, true);
-  StlClickDefinition *new_tab_page_click_defs =
-    xcalloc((size_t)Columns, sizeof(*new_tab_page_click_defs));
 
   stl_clear_click_defs(tab_page_click_defs, tab_page_click_defs_size);
-  xfree(tab_page_click_defs);
-
-  tab_page_click_defs = new_tab_page_click_defs;
-  tab_page_click_defs_size = Columns;
+  tab_page_click_defs = stl_alloc_click_defs(tab_page_click_defs, Columns,
+                                             &tab_page_click_defs_size);
 
   default_grid.comp_height = Rows;
   default_grid.comp_width = Columns;
@@ -455,6 +451,7 @@ int update_screen(void)
     }
     msg_scrolled = 0;
     msg_scrolled_at_flush = 0;
+    msg_grid_scroll_discount = 0;
     need_wait_return = false;
   }
 

@@ -52,6 +52,7 @@
 #include "nvim/regexp.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
+#include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
@@ -271,9 +272,8 @@ newwindow:
         for (wp = firstwin; --Prenum > 0;) {
           if (wp->w_next == NULL) {
             break;
-          } else {
-            wp = wp->w_next;
           }
+          wp = wp->w_next;
         }
       } else {
         if (nchar == 'W') {  // go to previous window
@@ -873,9 +873,8 @@ int win_fdccol_count(win_T *wp)
     const int fdccol = fdc[4] == ':' ? fdc[5] - '0' : 1;
     int needed_fdccols = getDeepestNesting(wp);
     return MIN(fdccol, needed_fdccols);
-  } else {
-    return fdc[0] - '0';
   }
+  return fdc[0] - '0';
 }
 
 void ui_ext_win_position(win_T *wp, bool validate)
@@ -4870,12 +4869,11 @@ win_T *buf_jump_open_win(buf_T *buf)
   if (curwin->w_buffer == buf) {
     win_enter(curwin, false);
     return curwin;
-  } else {
-    FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-      if (wp->w_buffer == buf) {
-        win_enter(wp, false);
-        return wp;
-      }
+  }
+  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+    if (wp->w_buffer == buf) {
+      win_enter(wp, false);
+      return wp;
     }
   }
 
@@ -5030,10 +5028,10 @@ static void win_free(win_T *wp, tabpage_T *tp)
   xfree(wp->w_localdir);
   xfree(wp->w_prevdir);
 
-  stl_clear_click_defs(wp->w_status_click_defs, (long)wp->w_status_click_defs_size);
+  stl_clear_click_defs(wp->w_status_click_defs, wp->w_status_click_defs_size);
   xfree(wp->w_status_click_defs);
 
-  stl_clear_click_defs(wp->w_winbar_click_defs, (long)wp->w_winbar_click_defs_size);
+  stl_clear_click_defs(wp->w_winbar_click_defs, wp->w_winbar_click_defs_size);
   xfree(wp->w_winbar_click_defs);
 
   // Remove the window from the b_wininfo lists, it may happen that the
@@ -6587,7 +6585,7 @@ static void win_remove_status_line(win_T *wp, bool add_hsep)
   }
   comp_col();
 
-  stl_clear_click_defs(wp->w_status_click_defs, (long)wp->w_status_click_defs_size);
+  stl_clear_click_defs(wp->w_status_click_defs, wp->w_status_click_defs_size);
   xfree(wp->w_status_click_defs);
   wp->w_status_click_defs_size = 0;
   wp->w_status_click_defs = NULL;
@@ -6646,12 +6644,11 @@ static bool resize_frame_for_winbar(frame_T *fr)
   if (fp == NULL || fp == fr) {
     emsg(_(e_noroom));
     return false;
-  } else {
-    frame_new_height(fp, fp->fr_height - 1, false, false);
-    win_new_height(wp, wp->w_height + 1);
-    frame_fix_height(wp);
-    (void)win_comp_pos();
   }
+  frame_new_height(fp, fp->fr_height - 1, false, false);
+  win_new_height(wp, wp->w_height + 1);
+  frame_fix_height(wp);
+  (void)win_comp_pos();
 
   return true;
 }
@@ -6724,7 +6721,7 @@ int set_winbar_win(win_T *wp, bool make_room, bool valid_cursor)
 
     if (winbar_height == 0) {
       // When removing winbar, deallocate the w_winbar_click_defs array
-      stl_clear_click_defs(wp->w_winbar_click_defs, (long)wp->w_winbar_click_defs_size);
+      stl_clear_click_defs(wp->w_winbar_click_defs, wp->w_winbar_click_defs_size);
       xfree(wp->w_winbar_click_defs);
       wp->w_winbar_click_defs_size = 0;
       wp->w_winbar_click_defs = NULL;

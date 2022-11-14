@@ -25,6 +25,7 @@
 #include "nvim/plines.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
+#include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/ui.h"
@@ -1179,17 +1180,15 @@ retnomove:
       // Don't use start_arrow() if we're in the same window
       if (curwin == old_curwin) {
         return IN_STATUS_LINE;
-      } else {
-        return IN_STATUS_LINE | CURSOR_MOVED;
       }
+      return IN_STATUS_LINE | CURSOR_MOVED;
     }
     if (sep_line_offset) {                          // In (or below) status line
       // Don't use start_arrow() if we're in the same window
       if (curwin == old_curwin) {
         return IN_SEP_LINE;
-      } else {
-        return IN_SEP_LINE | CURSOR_MOVED;
       }
+      return IN_SEP_LINE | CURSOR_MOVED;
     }
 
     curwin->w_cursor.lnum = curwin->w_topline;
