@@ -5,44 +5,45 @@
 
 #include <assert.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "klib/kvec.h"
 #include "nvim/api/extmark.h"
+#include "nvim/api/private/defs.h"
+#include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
 #include "nvim/arabic.h"
 #include "nvim/ascii.h"
-#include "nvim/assert.h"
+#include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/cmdhist.h"
 #include "nvim/cursor.h"
-#include "nvim/cursor_shape.h"
 #include "nvim/digraph.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
-#include "nvim/event/loop.h"
+#include "nvim/eval/typval.h"
 #include "nvim/ex_cmds.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
-#include "nvim/fileio.h"
-#include "nvim/func_attr.h"
+#include "nvim/extmark.h"
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
+#include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
-#include "nvim/highlight.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
-#include "nvim/indent.h"
 #include "nvim/keycodes.h"
-#include "nvim/log.h"
-#include "nvim/main.h"
+#include "nvim/macros.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -51,15 +52,18 @@
 #include "nvim/message.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
+#include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
-#include "nvim/os/time.h"
+#include "nvim/os/os.h"
 #include "nvim/path.h"
 #include "nvim/popupmenu.h"
+#include "nvim/pos.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
+#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
@@ -1609,6 +1613,8 @@ static int command_line_handle_key(CommandLineState *s)
     return 0;                         // back to cmd mode
 
   case Ctrl_R: {                      // insert register
+    const int save_new_cmdpos = new_cmdpos;
+
     putcmdline('"', true);
     no_mapping++;
     allow_keys++;
@@ -1623,8 +1629,6 @@ static int command_line_handle_key(CommandLineState *s)
     no_mapping--;
     allow_keys--;
     // Insert the result of an expression.
-    // Need to save the current command line, to be able to enter
-    // a new one...
     new_cmdpos = -1;
     if (s->c == '=') {
       if (ccline.cmdfirstc == '='   // can't do this recursively
@@ -1656,8 +1660,12 @@ static int command_line_handle_key(CommandLineState *s)
         }
       }
     }
+    new_cmdpos = save_new_cmdpos;
+
+    // remove the double quote
     ccline.special_char = NUL;
     redrawcmd();
+
     return command_line_changed(s);
   }
 

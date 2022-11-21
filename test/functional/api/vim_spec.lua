@@ -605,10 +605,10 @@ describe('API', function()
       eq([[Error loading lua: [string "<nvim>"]:0: unexpected symbol]],
         pcall_err(meths.exec_lua, 'aa=bb\0', {}))
 
-      eq([[Error executing lua: [string "<nvim>"]:0: attempt to call global 'bork' (a nil value)]],
+      eq([[attempt to call global 'bork' (a nil value)]],
         pcall_err(meths.exec_lua, 'bork()', {}))
 
-      eq('Error executing lua: [string "<nvim>"]:0: did\nthe\nfail',
+      eq('did\nthe\nfail',
         pcall_err(meths.exec_lua, 'error("did\\nthe\\nfail")', {}))
     end)
 
@@ -1149,7 +1149,7 @@ describe('API', function()
     end)
     it('vim.paste() failure', function()
       nvim('exec_lua', 'vim.paste = (function(lines, phase) error("fake fail") end)', {})
-      eq([[Error executing lua: [string "<nvim>"]:0: fake fail]],
+      eq('fake fail',
         pcall_err(request, 'nvim_paste', 'line 1\nline 2\nline 3', false, 1))
     end)
   end)
@@ -2324,12 +2324,6 @@ describe('API', function()
       meths.set_option('isident', '')
     end)
 
-    local it_maybe_pending = it
-    if helpers.isCI() and os.getenv('CONFIGURATION') == 'MSVC_32' then
-      -- For "works with &opt" (flaky on MSVC_32), but not easy to skip alone.  #10241
-      it_maybe_pending = pending
-    end
-
     local function simplify_east_api_node(line, east_api_node)
       if east_api_node == NIL then
         return nil
@@ -2526,7 +2520,7 @@ describe('API', function()
       end
     end
     require('test.unit.viml.expressions.parser_tests')(
-        it_maybe_pending, _check_parsing, hl, fmtn)
+        it, _check_parsing, hl, fmtn)
   end)
 
   describe('nvim_list_uis', function()

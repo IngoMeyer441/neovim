@@ -13,21 +13,34 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include "nvim/ascii.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/eval.h"
+#include "nvim/eval/typval.h"
+#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/garray.h"
+#include "nvim/gettext.h"
+#include "nvim/globals.h"
+#include "nvim/keycodes.h"
+#include "nvim/macros.h"
 #include "nvim/mark.h"
+#include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
+#include "nvim/option_defs.h"
 #include "nvim/os/input.h"
 #include "nvim/plines.h"
-#include "nvim/profile.h"
+#include "nvim/pos.h"
 #include "nvim/regexp.h"
+#include "nvim/regexp_defs.h"
 #include "nvim/strings.h"
+#include "nvim/types.h"
+#include "nvim/undo_defs.h"
 #include "nvim/vim.h"
 
 #ifdef REGEXP_DEBUG
@@ -2226,6 +2239,25 @@ list_T *reg_submatch_list(int no)
 
   tv_list_ref(list);
   return list;
+}
+
+/// Initialize the values used for matching against multiple lines
+///
+/// @param win   window in which to search or NULL
+/// @param buf   buffer in which to search
+/// @param lnum  nr of line to start looking for match
+static void init_regexec_multi(regmmatch_T *rmp, win_T *win, buf_T *buf, linenr_T lnum)
+{
+  rex.reg_match = NULL;
+  rex.reg_mmatch = rmp;
+  rex.reg_buf = buf;
+  rex.reg_win = win;
+  rex.reg_firstlnum = lnum;
+  rex.reg_maxline = rex.reg_buf->b_ml.ml_line_count - lnum;
+  rex.reg_line_lbr = false;
+  rex.reg_ic = rmp->rmm_ic;
+  rex.reg_icombine = false;
+  rex.reg_maxcol = rmp->rmm_maxcol;
 }
 
 // XXX Do not allow headers generator to catch definitions from regexp_nfa.c

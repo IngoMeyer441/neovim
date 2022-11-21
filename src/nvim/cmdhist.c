@@ -3,14 +3,30 @@
 
 // cmdhist.c: Functions for the history of the command-line.
 
+#include <assert.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
 #include "nvim/ascii.h"
 #include "nvim/charset.h"
 #include "nvim/cmdhist.h"
+#include "nvim/eval/typval.h"
 #include "nvim/ex_cmds.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_getln.h"
+#include "nvim/gettext.h"
+#include "nvim/globals.h"
+#include "nvim/macros.h"
+#include "nvim/memory.h"
+#include "nvim/message.h"
+#include "nvim/option_defs.h"
+#include "nvim/pos.h"
 #include "nvim/regexp.h"
 #include "nvim/strings.h"
-#include "nvim/ui.h"
+#include "nvim/types.h"
 #include "nvim/vim.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -124,7 +140,7 @@ void init_history(void)
   // Tables are circular arrays (current position marked by hisidx[type]).
   // On copying them to the new arrays, we take the chance to reorder them.
   for (int type = 0; type < HIST_COUNT; type++) {
-    histentry_T *temp = (newlen
+    histentry_T *temp = (newlen > 0
                          ? xmalloc((size_t)newlen * sizeof(*temp))
                          : NULL);
 
@@ -159,7 +175,7 @@ void init_history(void)
 
     // clear remaining space, if any
     int l3 = j < 0 ? 0 : MIN(newlen, oldlen);  // number of copied entries
-    if (newlen) {
+    if (newlen > 0) {
       memset(temp + l3, 0, (size_t)(newlen - l3) * sizeof(*temp));
     }
 

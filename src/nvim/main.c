@@ -3,41 +3,52 @@
 
 #define EXTERN
 #include <assert.h>
-#include <msgpack.h>
+#include <limits.h>
+#include <msgpack/pack.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
+#include "auto/config.h"
 #include "nvim/arglist.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
-#include "nvim/charset.h"
 #include "nvim/decoration.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/diff.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
+#include "nvim/eval/typval.h"
+#include "nvim/eval/typval_defs.h"
+#include "nvim/event/multiqueue.h"
+#include "nvim/event/stream.h"
 #include "nvim/ex_cmds.h"
-#include "nvim/ex_cmds2.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_getln.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
 #include "nvim/garray.h"
+#include "nvim/getchar.h"
+#include "nvim/gettext.h"
+#include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/hashtab.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
-#include "nvim/iconv.h"
+#include "nvim/keycodes.h"
 #include "nvim/locale.h"
 #include "nvim/log.h"
 #include "nvim/lua/executor.h"
+#include "nvim/macros.h"
 #include "nvim/main.h"
-#include "nvim/mapping.h"
 #include "nvim/mark.h"
-#include "nvim/mbyte.h"
+#include "nvim/memfile_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
@@ -46,24 +57,27 @@
 #include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fileio.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
-#include "nvim/os/os_defs.h"
+#include "nvim/os/pty_process.h"
+#include "nvim/os/stdpaths_defs.h"
 #include "nvim/os/time.h"
-#include "nvim/os_unix.h"
 #include "nvim/path.h"
 #include "nvim/popupmenu.h"
+#include "nvim/pos.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/runtime.h"
 #include "nvim/shada.h"
 #include "nvim/sign.h"
-#include "nvim/state.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
+#include "nvim/terminal.h"
+#include "nvim/types.h"
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
 #include "nvim/ui_compositor.h"
@@ -73,8 +87,8 @@
 #ifdef MSWIN
 # include "nvim/os/os_win_console.h"
 #endif
+#include "nvim/api/extmark.h"
 #include "nvim/api/private/defs.h"
-#include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/ui.h"
 #include "nvim/event/loop.h"
@@ -83,10 +97,6 @@
 #include "nvim/msgpack_rpc/helpers.h"
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/os/signal.h"
-#ifndef MSWIN
-# include "nvim/os/pty_process_unix.h"
-#endif
-#include "nvim/api/extmark.h"
 
 // values for "window_layout"
 enum {
@@ -1273,7 +1283,7 @@ scripterror:
             vim_snprintf((char *)IObuff, IOSIZE,
                          _("Attempt to open script file again: \"%s %s\"\n"),
                          argv[-1], argv[0]);
-            mch_errmsg((const char *)IObuff);
+            mch_errmsg(IObuff);
             os_exit(2);
           }
           int error;
@@ -1292,7 +1302,7 @@ scripterror:
             vim_snprintf((char *)IObuff, IOSIZE,
                          _("Cannot open for reading: \"%s\": %s\n"),
                          argv[0], os_strerror(error));
-            mch_errmsg((const char *)IObuff);
+            mch_errmsg(IObuff);
             os_exit(2);
           }
           save_typebuf();
@@ -1979,35 +1989,22 @@ static void source_startup_scripts(const mparm_T *const parmp)
     do_system_initialization();
 
     if (do_user_initialization()) {
-      // Read initialization commands from ".vimrc" or ".exrc" in current
+      // Read initialization commands from ".nvimrc" or ".exrc" in current
       // directory.  This is only done if the 'exrc' option is set.
-      // Because of security reasons we disallow shell and write commands
-      // now, except for unix if the file is owned by the user or 'secure'
-      // option has been reset in environment of global "exrc" or "vimrc".
       // Only do this if VIMRC_FILE is not the same as vimrc file sourced in
       // do_user_initialization.
-#if defined(UNIX)
-      // If vimrc file is not owned by user, set 'secure' mode.
-      if (!os_file_owned(VIMRC_FILE))  // NOLINT(readability/braces)
-#endif
-      secure = p_secure;
-
-      if (do_source(VIMRC_FILE, true, DOSO_VIMRC) == FAIL) {
-#if defined(UNIX)
-        // if ".exrc" is not owned by user set 'secure' mode
-        if (!os_file_owned(EXRC_FILE)) {
-          secure = p_secure;
-        } else {
-          secure = 0;
+      char *str = nlua_read_secure(VIMRC_FILE);
+      if (str != NULL) {
+        do_source_str(str, VIMRC_FILE);
+        xfree(str);
+      } else {
+        str = nlua_read_secure(EXRC_FILE);
+        if (str != NULL) {
+          do_source_str(str, EXRC_FILE);
+          xfree(str);
         }
-#endif
-        (void)do_source(EXRC_FILE, false, DOSO_NONE);
       }
     }
-    if (secure == 2) {
-      need_wait_return = true;
-    }
-    secure = 0;
   }
   TIME_MSG("sourcing vimrc file(s)");
 }
@@ -2055,7 +2052,7 @@ static void mainerr(const char *errstr, const char *str)
   mch_errmsg(_(errstr));
   if (str != NULL) {
     mch_errmsg(": \"");
-    mch_errmsg(str);
+    mch_errmsg((char *)str);
     mch_errmsg("\"");
   }
   mch_errmsg(_("\nMore info with \""));

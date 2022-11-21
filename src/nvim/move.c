@@ -11,8 +11,9 @@
 // The 'scrolloff' option makes this a bit complicated.
 
 #include <assert.h>
-#include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "nvim/ascii.h"
 #include "nvim/buffer.h"
@@ -23,19 +24,26 @@
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
+#include "nvim/eval/typval_defs.h"
 #include "nvim/fold.h"
 #include "nvim/getchar.h"
+#include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
+#include "nvim/macros.h"
 #include "nvim/mbyte.h"
-#include "nvim/memline.h"
+#include "nvim/memline_defs.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
 #include "nvim/plines.h"
 #include "nvim/popupmenu.h"
+#include "nvim/pos.h"
+#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
+#include "nvim/types.h"
+#include "nvim/vim.h"
 #include "nvim/window.h"
 
 typedef struct {
@@ -331,15 +339,6 @@ void update_topline(win_T *wp)
   }
 
   *so_ptr = save_so;
-}
-
-// Update win->w_topline to move the cursor onto the screen.
-void update_topline_win(win_T *win)
-{
-  switchwin_T switchwin;
-  switch_win(&switchwin, win, NULL, true);
-  update_topline(curwin);
-  restore_win(&switchwin, true);
 }
 
 // Return the scrolljump value to use for the current window.

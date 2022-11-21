@@ -3001,24 +3001,6 @@ func Test_normal47_visual_buf_wipe()
   set nomodified
 endfunc
 
-func Test_normal47_autocmd()
-  " disabled, does not seem to be possible currently
-  throw "Skipped: not possible to test cursorhold autocmd while waiting for input in normal_cmd"
-  new
-  call append(0, repeat('-',20))
-  au CursorHold * call feedkeys('2l', '')
-  1
-  set updatetime=20
-  " should delete 12 chars (d12l)
-  call feedkeys('d1', '!')
-  call assert_equal('--------', getline(1))
-
-  " clean up
-  au! CursorHold
-  set updatetime=4000
-  bw!
-endfunc
-
 func Test_normal48_wincmd()
   new
   exe "norm! \<c-w>c"
@@ -3711,6 +3693,39 @@ func Test_normal_count_out_of_range()
   normal 44444444444y44444444444|
   call assert_equal(999999999, v:count)
   bwipe!
+endfunc
+
+" Test that mouse shape is restored to Normal mode after failed "c" operation.
+func Test_mouse_shape_after_failed_change()
+  CheckFeature mouseshape
+  CheckCanRunGui
+
+  let lines =<< trim END
+    set mouseshape+=o:busy
+    setlocal nomodifiable
+    let g:mouse_shapes = []
+
+    func SaveMouseShape(timer)
+      let g:mouse_shapes += [getmouseshape()]
+    endfunc
+
+    func SaveAndQuit(timer)
+      call writefile(g:mouse_shapes, 'Xmouseshapes')
+      quit
+    endfunc
+
+    call timer_start(50, {_ -> feedkeys('c')})
+    call timer_start(100, 'SaveMouseShape')
+    call timer_start(150, {_ -> feedkeys('c')})
+    call timer_start(200, 'SaveMouseShape')
+    call timer_start(250, 'SaveAndQuit')
+  END
+  call writefile(lines, 'Xmouseshape.vim', 'D')
+  call RunVim([], [], "-g -S Xmouseshape.vim")
+  sleep 300m
+  call assert_equal(['busy', 'arrow'], readfile('Xmouseshapes'))
+
+  call delete('Xmouseshapes')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

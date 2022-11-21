@@ -131,6 +131,7 @@ CONFIG = {
             'filetype.lua',
             'keymap.lua',
             'fs.lua',
+            'secure.lua',
         ],
         'files': [
             'runtime/lua/vim/_editor.lua',
@@ -140,6 +141,7 @@ CONFIG = {
             'runtime/lua/vim/filetype.lua',
             'runtime/lua/vim/keymap.lua',
             'runtime/lua/vim/fs.lua',
+            'runtime/lua/vim/secure.lua',
         ],
         'file_patterns': '*.lua',
         'fn_name_prefix': '',
@@ -166,6 +168,7 @@ CONFIG = {
             'filetype': 'vim.filetype',
             'keymap': 'vim.keymap',
             'fs': 'vim.fs',
+            'secure': 'vim.secure',
         },
         'append_only': [
             'shared.lua',
@@ -796,7 +799,8 @@ def extract_from_xml(filename, target, width, fmt_vimhelp):
 
         prefix = '%s(' % name
         suffix = '%s)' % ', '.join('{%s}' % a[1] for a in params
-                                   if a[0] not in ('void', 'Error', 'Arena'))
+                                   if a[0] not in ('void', 'Error', 'Arena',
+                                                   'lua_State'))
 
         if not fmt_vimhelp:
             c_decl = '%s %s(%s);' % (return_type, name, ', '.join(c_args))

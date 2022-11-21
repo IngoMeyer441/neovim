@@ -2,9 +2,13 @@
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
 // autocmd.c: Autocommand related functions
-#include <signal.h>
 
-#include "lauxlib.h"
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
@@ -12,26 +16,43 @@
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
-#include "nvim/edit.h"
 #include "nvim/eval.h"
+#include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
+#include "nvim/event/defs.h"
+#include "nvim/event/loop.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
 #include "nvim/fileio.h"
+#include "nvim/garray.h"
 #include "nvim/getchar.h"
+#include "nvim/gettext.h"
 #include "nvim/grid.h"
+#include "nvim/hashtab.h"
+#include "nvim/highlight_defs.h"
 #include "nvim/insexpand.h"
 #include "nvim/lua/executor.h"
+#include "nvim/main.h"
 #include "nvim/map.h"
+#include "nvim/memline_defs.h"
+#include "nvim/memory.h"
+#include "nvim/message.h"
+#include "nvim/option_defs.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
+#include "nvim/os/os.h"
+#include "nvim/os/time.h"
+#include "nvim/path.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
+#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
+#include "nvim/strings.h"
+#include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -1121,13 +1142,17 @@ int autocmd_register(int64_t id, event_T event, char *pat, int patlen, int group
     }
 
     // Initialize the fields checked by the WinScrolled trigger to
-    // stop it from firing right after the first autocmd is defined.
+    // prevent it from firing right after the first autocmd is
+    // defined.
     if (event == EVENT_WINSCROLLED && !has_event(EVENT_WINSCROLLED)) {
-      curwin->w_last_topline = curwin->w_topline;
-      curwin->w_last_leftcol = curwin->w_leftcol;
-      curwin->w_last_skipcol = curwin->w_skipcol;
-      curwin->w_last_width = curwin->w_width;
-      curwin->w_last_height = curwin->w_height;
+      tabpage_T *save_curtab = curtab;
+      FOR_ALL_TABS(tp) {
+        unuse_tabpage(curtab);
+        use_tabpage(tp);
+        snapshot_windows_scroll_size();
+      }
+      unuse_tabpage(curtab);
+      use_tabpage(save_curtab);
     }
 
     ap->cmds = NULL;

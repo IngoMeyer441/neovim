@@ -5,25 +5,47 @@
 ///
 /// Management of runtime files (including packages)
 
+#include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include <uv.h>
+
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/debugger.h"
 #include "nvim/eval.h"
 #include "nvim/eval/userfunc.h"
-#include "nvim/ex_cmds.h"
-#include "nvim/ex_cmds2.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
+#include "nvim/getchar.h"
+#include "nvim/gettext.h"
+#include "nvim/globals.h"
 #include "nvim/lua/executor.h"
+#include "nvim/macros.h"
+#include "nvim/map.h"
+#include "nvim/mbyte.h"
 #include "nvim/memline.h"
+#include "nvim/memory.h"
+#include "nvim/message.h"
 #include "nvim/option.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
+#include "nvim/os/stdpaths_defs.h"
+#include "nvim/path.h"
 #include "nvim/profile.h"
 #include "nvim/runtime.h"
+#include "nvim/strings.h"
+#include "nvim/usercmd.h"
 #include "nvim/vim.h"
 
 /// Structure used to store info for each sourced file.
@@ -1908,7 +1930,7 @@ int do_source(char *fname, int check_other, int is_vimrc)
 
   cookie.fp = fopen_noinh_readbin(fname_exp);
   if (cookie.fp == NULL && check_other) {
-    // Try again, replacing file name ".vimrc" by "_vimrc" or vice versa,
+    // Try again, replacing file name ".nvimrc" by "_nvimrc" or vice versa,
     // and ".exrc" by "_exrc" or vice versa.
     p = path_tail(fname_exp);
     if ((*p == '.' || *p == '_')

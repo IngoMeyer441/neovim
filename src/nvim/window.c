@@ -2,21 +2,30 @@
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
 #include <assert.h>
+#include <ctype.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/api/vim.h"
 #include "nvim/arglist.h"
 #include "nvim/ascii.h"
+#include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
+#include "nvim/decoration.h"
 #include "nvim/diff.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
+#include "nvim/eval/typval.h"
+#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/vars.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
@@ -28,15 +37,19 @@
 #include "nvim/fold.h"
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
+#include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/hashtab.h"
-#include "nvim/highlight.h"
+#include "nvim/keycodes.h"
+#include "nvim/macros.h"
 #include "nvim/main.h"
-#include "nvim/mapping.h"
+#include "nvim/map.h"
+#include "nvim/mapping.h"  // IWYU pragma: keep (langmap_adjust_mb)
 #include "nvim/mark.h"
 #include "nvim/match.h"
-#include "nvim/memline.h"
+#include "nvim/mbyte.h"
+#include "nvim/memline_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/mouse.h"
@@ -45,17 +58,18 @@
 #include "nvim/option.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
-#include "nvim/os_unix.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
+#include "nvim/pos.h"
 #include "nvim/quickfix.h"
-#include "nvim/regexp.h"
+#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
+#include "nvim/types.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/undo.h"
@@ -3854,6 +3868,27 @@ void close_others(int message, int forceit)
   }
 }
 
+/// Store the relevant window pointers for tab page "tp".  To be used before
+/// use_tabpage().
+void unuse_tabpage(tabpage_T *tp)
+{
+  tp->tp_topframe = topframe;
+  tp->tp_firstwin = firstwin;
+  tp->tp_lastwin = lastwin;
+  tp->tp_curwin = curwin;
+}
+
+/// Set the relevant pointers to use tab page "tp".  May want to call
+/// unuse_tabpage() first.
+void use_tabpage(tabpage_T *tp)
+{
+  curtab = tp;
+  topframe = curtab->tp_topframe;
+  firstwin = curtab->tp_firstwin;
+  lastwin = curtab->tp_lastwin;
+  curwin = curtab->tp_curwin;
+}
+
 // Allocate the first window and put an empty buffer in it.
 // Only called from main().
 void win_alloc_first(void)
@@ -3864,11 +3899,8 @@ void win_alloc_first(void)
   }
 
   first_tabpage = alloc_tabpage();
-  first_tabpage->tp_topframe = topframe;
   curtab = first_tabpage;
-  curtab->tp_firstwin = firstwin;
-  curtab->tp_lastwin = lastwin;
-  curtab->tp_curwin = curwin;
+  unuse_tabpage(first_tabpage);
 }
 
 // Init `aucmd_win`. This can only be done after the first window
@@ -4239,10 +4271,7 @@ static void enter_tabpage(tabpage_T *tp, buf_T *old_curbuf, bool trigger_enter_a
   win_T *next_prevwin = tp->tp_prevwin;
   tabpage_T *old_curtab = curtab;
 
-  curtab = tp;
-  firstwin = tp->tp_firstwin;
-  lastwin = tp->tp_lastwin;
-  topframe = tp->tp_topframe;
+  use_tabpage(tp);
 
   if (old_curtab != curtab) {
     tabpage_check_windows(old_curtab);
@@ -5249,35 +5278,60 @@ void win_new_screen_cols(void)
   win_reconfig_floats();  // The size of floats might change
 }
 
-/// Trigger WinScrolled for "curwin" if needed.
+/// Make a snapshot of all the window scroll positions and sizes of the current
+/// tab page.
+void snapshot_windows_scroll_size(void)
+{
+  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+    wp->w_last_topline = wp->w_topline;
+    wp->w_last_leftcol = wp->w_leftcol;
+    wp->w_last_skipcol = wp->w_skipcol;
+    wp->w_last_width = wp->w_width;
+    wp->w_last_height = wp->w_height;
+  }
+}
+
+static bool did_initial_scroll_size_snapshot = false;
+
+void may_make_initial_scroll_size_snapshot(void)
+{
+  if (!did_initial_scroll_size_snapshot) {
+    did_initial_scroll_size_snapshot = true;
+    snapshot_windows_scroll_size();
+  }
+}
+
+/// Trigger WinScrolled if any window scrolled or changed size.
 void may_trigger_winscrolled(void)
 {
   static bool recursive = false;
 
-  if (recursive || !has_event(EVENT_WINSCROLLED)) {
+  if (recursive
+      || !has_event(EVENT_WINSCROLLED)
+      || !did_initial_scroll_size_snapshot) {
     return;
   }
 
-  win_T *wp = curwin;
-  if (wp->w_last_topline != wp->w_topline
-      || wp->w_last_leftcol != wp->w_leftcol
-      || wp->w_last_skipcol != wp->w_skipcol
-      || wp->w_last_width != wp->w_width
-      || wp->w_last_height != wp->w_height) {
-    char winid[NUMBUFLEN];
-    vim_snprintf(winid, sizeof(winid), "%d", wp->handle);
+  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+    if (wp->w_last_topline != wp->w_topline
+        || wp->w_last_leftcol != wp->w_leftcol
+        || wp->w_last_skipcol != wp->w_skipcol
+        || wp->w_last_width != wp->w_width
+        || wp->w_last_height != wp->w_height) {
+      // WinScrolled is triggered only once, even when multiple windows
+      // scrolled or changed size.  Store the current values before
+      // triggering the event, if a scroll or resize happens as a side
+      // effect then WinScrolled is triggered again later.
+      snapshot_windows_scroll_size();
 
-    recursive = true;
-    apply_autocmds(EVENT_WINSCROLLED, winid, winid, false, wp->w_buffer);
-    recursive = false;
+      char winid[NUMBUFLEN];
+      vim_snprintf(winid, sizeof(winid), "%d", wp->handle);
 
-    // an autocmd may close the window, "wp" may be invalid now
-    if (win_valid_any_tab(wp)) {
-      wp->w_last_topline = wp->w_topline;
-      wp->w_last_leftcol = wp->w_leftcol;
-      wp->w_last_skipcol = wp->w_skipcol;
-      wp->w_last_width = wp->w_width;
-      wp->w_last_height = wp->w_height;
+      recursive = true;
+      apply_autocmds(EVENT_WINSCROLLED, winid, winid, false, wp->w_buffer);
+      recursive = false;
+
+      break;
     }
   }
 }
