@@ -1475,13 +1475,13 @@ static bool findtags_in_help_init(findtags_state_T *st)
 {
   int i;
 
-  // Keep 'en' as the language if the file extension is '.txt'
+  // Keep "en" as the language if the file extension is ".txt"
   if (st->is_txt) {
     STRCPY(st->help_lang, "en");
   } else {
     // Prefer help tags according to 'helplang'.  Put the two-letter
     // language name in help_lang[].
-    i = (int)STRLEN(st->tag_fname);
+    i = (int)strlen(st->tag_fname);
     if (i > 3 && st->tag_fname[i - 3] == '-') {
       STRLCPY(st->help_lang, st->tag_fname + i - 2, 3);
     } else {
@@ -1507,7 +1507,7 @@ static bool findtags_in_help_init(findtags_state_T *st)
   } else {
     st->help_pri = 1;
     char *s;
-    for (s = (char *)p_hlg; *s != NUL; s++) {
+    for (s = p_hlg; *s != NUL; s++) {
       if (STRNICMP(s, st->help_lang, 2) == 0) {
         break;
       }
@@ -1584,7 +1584,7 @@ static tags_read_status_T findtags_get_next_line(findtags_state_T *st, tagsearch
     // Adjust the search file offset to the correct position
     sinfo_p->curr_offset_used = sinfo_p->curr_offset;
     vim_ignored = vim_fseek(st->fp, sinfo_p->curr_offset, SEEK_SET);
-    eof = vim_fgets((char_u *)st->lbuf, st->lbuf_size, st->fp);
+    eof = vim_fgets(st->lbuf, st->lbuf_size, st->fp);
     if (!eof && sinfo_p->curr_offset != 0) {
       sinfo_p->curr_offset = vim_ftell(st->fp);
       if (sinfo_p->curr_offset == sinfo_p->high_offset) {
@@ -1592,12 +1592,12 @@ static tags_read_status_T findtags_get_next_line(findtags_state_T *st, tagsearch
         vim_ignored = vim_fseek(st->fp, sinfo_p->low_offset, SEEK_SET);
         sinfo_p->curr_offset = sinfo_p->low_offset;
       }
-      eof = vim_fgets((char_u *)st->lbuf, st->lbuf_size, st->fp);
+      eof = vim_fgets(st->lbuf, st->lbuf_size, st->fp);
     }
     // skip empty and blank lines
     while (!eof && vim_isblankline(st->lbuf)) {
       sinfo_p->curr_offset = vim_ftell(st->fp);
-      eof = vim_fgets((char_u *)st->lbuf, st->lbuf_size, st->fp);
+      eof = vim_fgets(st->lbuf, st->lbuf_size, st->fp);
     }
     if (eof) {
       // Hit end of file.  Skip backwards.
@@ -1611,7 +1611,7 @@ static tags_read_status_T findtags_get_next_line(findtags_state_T *st, tagsearch
 
     // skip empty and blank lines
     do {
-      eof = vim_fgets((char_u *)st->lbuf, st->lbuf_size, st->fp);
+      eof = vim_fgets(st->lbuf, st->lbuf_size, st->fp);
     } while (!eof && vim_isblankline(st->lbuf));
 
     if (eof) {
@@ -1724,6 +1724,14 @@ static bool findtags_start_state_handler(findtags_state_T *st, bool *sortic,
 }
 
 /// Parse a tag line read from a tags file.
+/// Also compares the tag name in "tagpp->tagname" with a search pattern in
+/// "st->orgpat->head" as a quick check if the tag may match.
+/// Returns:
+/// - TAG_MATCH_SUCCESS if the tag may match
+/// - TAG_MATCH_FAIL if the tag doesn't match
+/// - TAG_MATCH_NEXT to look for the next matching tag (used in a binary search)
+/// - TAG_MATCH_STOP if all the tags are processed without a match.
+/// Uses the values in "margs" for doing the comparison.
 static tagmatch_status_T findtags_parse_line(findtags_state_T *st, tagptrs_T *tagpp,
                                              findtags_match_args_T *margs,
                                              tagsearch_info_T *sinfo_p)
@@ -1875,13 +1883,10 @@ static void findtags_matchargs_init(findtags_match_args_T *margs, int flags)
 }
 
 /// Compares the tag name in "tagpp->tagname" with a search pattern in
-/// "st->orgpat.head".
-/// Returns TAG_MATCH_SUCCESS if the tag matches, TAG_MATCH_FAIL if the tag
-/// doesn't match, TAG_MATCH_NEXT to look for the next matching tag (used in a
-/// binary search) and TAG_MATCH_STOP if all the tags are processed without a
-/// match. Uses the values in "margs" for doing the comparison.
-static tagmatch_status_T findtags_match_tag(findtags_state_T *st, tagptrs_T *tagpp,
-                                            findtags_match_args_T *margs)
+/// "st->orgpat->pat".
+/// Returns true if the tag matches, false if the tag doesn't match.
+/// Uses the values in "margs" for doing the comparison.
+static bool findtags_match_tag(findtags_state_T *st, tagptrs_T *tagpp, findtags_match_args_T *margs)
 {
   bool match = false;
 
@@ -1925,7 +1930,7 @@ static tagmatch_status_T findtags_match_tag(findtags_state_T *st, tagptrs_T *tag
     margs->match_re = true;
   }
 
-  return match ? TAG_MATCH_SUCCESS : TAG_MATCH_FAIL;
+  return match;
 }
 
 /// Convert the encoding of a line read from a tags file in "st->lbuf".
@@ -2182,16 +2187,8 @@ line_read_in:
       return;
     }
 
-    retval = (int)findtags_match_tag(st, &tagp, margs);
-    if (retval == TAG_MATCH_NEXT) {
-      continue;
-    }
-    if (retval == TAG_MATCH_STOP) {
-      break;
-    }
-
     // If a match is found, add it to ht_match[] and ga_match[].
-    if (retval == TAG_MATCH_SUCCESS) {
+    if (findtags_match_tag(st, &tagp, margs)) {
       findtags_add_match(st, &tagp, margs, buf_ffname, &hash);
     }
   }  // forever
@@ -2602,7 +2599,7 @@ int get_tagfname(tagname_T *tnp, int first, char *buf)
       // move the filename one char forward and truncate the
       // filepath with a NUL
       filename = (char_u *)path_tail(buf);
-      STRMOVE(filename + 1, filename);
+      STRMOVE(filename + 1, (char *)filename);
       *filename++ = NUL;
 
       tnp->tn_search_ctx = vim_findfile_init(buf, (char *)filename,
@@ -2997,7 +2994,7 @@ static int jumpto_tag(const char_u *lbuf_arg, int forceit, int keep_help)
         // start search before first line
         curwin->w_cursor.lnum = 0;
       }
-      if (do_search(NULL, pbuf[0], pbuf[0], pbuf + 1, (long)1,
+      if (do_search(NULL, pbuf[0], pbuf[0], (char *)pbuf + 1, (long)1,
                     search_options, NULL)) {
         retval = OK;
       } else {
@@ -3006,7 +3003,7 @@ static int jumpto_tag(const char_u *lbuf_arg, int forceit, int keep_help)
 
         // try again, ignore case now
         p_ic = true;
-        if (!do_search(NULL, pbuf[0], pbuf[0], pbuf + 1, (long)1,
+        if (!do_search(NULL, pbuf[0], pbuf[0], (char *)pbuf + 1, (long)1,
                        search_options, NULL)) {
           // Failed to find pattern, take a guess: "^func  ("
           found = 2;
@@ -3014,11 +3011,11 @@ static int jumpto_tag(const char_u *lbuf_arg, int forceit, int keep_help)
           cc = *tagp.tagname_end;
           *tagp.tagname_end = NUL;
           snprintf((char *)pbuf, LSIZE, "^%s\\s\\*(", tagp.tagname);
-          if (!do_search(NULL, '/', '/', pbuf, (long)1, search_options, NULL)) {
+          if (!do_search(NULL, '/', '/', (char *)pbuf, (long)1, search_options, NULL)) {
             // Guess again: "^char * \<func  ("
             snprintf((char *)pbuf, LSIZE, "^\\[#a-zA-Z_]\\.\\*\\<%s\\s\\*(",
                      tagp.tagname);
-            if (!do_search(NULL, '/', '/', pbuf, (long)1,
+            if (!do_search(NULL, '/', '/', (char *)pbuf, (long)1,
                            search_options, NULL)) {
               found = 0;
             }

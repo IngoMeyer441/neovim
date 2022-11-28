@@ -105,8 +105,7 @@ estack_T *estack_push(etype_T type, char *name, linenr_T lnum)
 void estack_push_ufunc(ufunc_T *ufunc, linenr_T lnum)
 {
   estack_T *entry = estack_push(ETYPE_UFUNC,
-                                (char *)(ufunc->uf_name_exp != NULL
-                                         ? ufunc->uf_name_exp : ufunc->uf_name),
+                                ufunc->uf_name_exp != NULL ? (char *)ufunc->uf_name_exp : ufunc->uf_name,
                                 lnum);
   if (entry != NULL) {
     entry->es_info.ufunc = ufunc;
@@ -2043,7 +2042,7 @@ int do_source(char *fname, int check_other, int is_vimrc)
   } else {
     // Read the first line so we can check for a UTF-8 BOM.
     firstline = (uint8_t *)getsourceline(0, (void *)&cookie, 0, true);
-    if (firstline != NULL && STRLEN(firstline) >= 3 && firstline[0] == 0xef
+    if (firstline != NULL && strlen((char *)firstline) >= 3 && firstline[0] == 0xef
         && firstline[1] == 0xbb && firstline[2] == 0xbf) {
       // Found BOM; setup conversion, skip over BOM and recode the line.
       convert_setup(&cookie.conv, "utf-8", p_enc);

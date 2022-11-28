@@ -425,7 +425,7 @@ static void next_search_hl(win_T *win, match_T *search_hl, match_T *shl, linenr_
   const int called_emsg_before = called_emsg;
 
   // for :{range}s/pat only highlight inside the range
-  if (lnum < search_first_line || lnum > search_last_line) {
+  if ((lnum < search_first_line || lnum > search_last_line) && cur == NULL) {
     shl->lnum = 0;
     return;
   }
@@ -597,9 +597,10 @@ static void check_cur_search_hl(win_T *wp, match_T *shl)
 }
 
 /// Prepare for 'hlsearch' and match highlighting in one window line.
-/// Return true if there is such highlighting and set "search_attr" to the
-/// current highlight attribute.
-bool prepare_search_hl_line(win_T *wp, linenr_T lnum, colnr_T mincol, char_u **line,
+///
+/// @return  true if there is such highlighting and set "search_attr" to the
+///          current highlight attribute.
+bool prepare_search_hl_line(win_T *wp, linenr_T lnum, colnr_T mincol, char **line,
                             match_T *search_hl, int *search_attr, bool *search_attr_from_match)
 {
   matchitem_T *cur = wp->w_match_head;  // points to the match list
@@ -630,7 +631,7 @@ bool prepare_search_hl_line(win_T *wp, linenr_T lnum, colnr_T mincol, char_u **l
 
     // Need to get the line again, a multi-line regexp may have made it
     // invalid.
-    *line = (char_u *)ml_get_buf(wp->w_buffer, lnum, false);
+    *line = ml_get_buf(wp->w_buffer, lnum, false);
 
     if (shl->lnum != 0 && shl->lnum <= lnum) {
       if (shl->lnum == lnum) {
@@ -653,7 +654,7 @@ bool prepare_search_hl_line(win_T *wp, linenr_T lnum, colnr_T mincol, char_u **l
       // Highlight one character for an empty match.
       if (shl->startcol == shl->endcol) {
         if ((*line)[shl->endcol] != NUL) {
-          shl->endcol += utfc_ptr2len((char *)(*line) + shl->endcol);
+          shl->endcol += utfc_ptr2len(*line + shl->endcol);
         } else {
           shl->endcol++;
         }
@@ -677,9 +678,11 @@ bool prepare_search_hl_line(win_T *wp, linenr_T lnum, colnr_T mincol, char_u **l
 /// After end, check for start/end of next match.
 /// When another match, have to check for start again.
 /// Watch out for matching an empty string!
+/// "on_last_col" is set to true with non-zero search_attr and the next column
+/// is endcol.
 /// Return the updated search_attr.
-int update_search_hl(win_T *wp, linenr_T lnum, colnr_T col, char_u **line, match_T *search_hl,
-                     int *has_match_conc, int *match_conc, int lcs_eol_one,
+int update_search_hl(win_T *wp, linenr_T lnum, colnr_T col, char **line, match_T *search_hl,
+                     int *has_match_conc, int *match_conc, int lcs_eol_one, bool *on_last_col,
                      bool *search_attr_from_match)
 {
   matchitem_T *cur = wp->w_match_head;  // points to the match list
@@ -707,7 +710,7 @@ int update_search_hl(win_T *wp, linenr_T lnum, colnr_T col, char_u **line, match
       if (shl->startcol != MAXCOL
           && col >= shl->startcol
           && col < shl->endcol) {
-        int next_col = col + utfc_ptr2len((char *)(*line) + col);
+        int next_col = col + utfc_ptr2len(*line + col);
 
         if (shl->endcol < next_col) {
           shl->endcol = next_col;
@@ -738,7 +741,7 @@ int update_search_hl(win_T *wp, linenr_T lnum, colnr_T col, char_u **line, match
 
         // Need to get the line again, a multi-line regexp
         // may have made it invalid.
-        *line = (char_u *)ml_get_buf(wp->w_buffer, lnum, false);
+        *line = ml_get_buf(wp->w_buffer, lnum, false);
 
         if (shl->lnum == lnum) {
           shl->startcol = shl->rm.startpos[0].col;
@@ -755,7 +758,7 @@ int update_search_hl(win_T *wp, linenr_T lnum, colnr_T col, char_u **line, match
 
           if (shl->startcol == shl->endcol) {
             // highlight empty match, try again after it
-            char *p = (char *)(*line) + shl->endcol;
+            char *p = *line + shl->endcol;
 
             if (*p == NUL) {
               shl->endcol++;
@@ -792,6 +795,7 @@ int update_search_hl(win_T *wp, linenr_T lnum, colnr_T col, char_u **line, match
     }
     if (shl->attr_cur != 0) {
       search_attr = shl->attr_cur;
+      *on_last_col = col + 1 >= shl->endcol;
       *search_attr_from_match = shl != search_hl;
     }
     if (shl != search_hl && cur != NULL) {

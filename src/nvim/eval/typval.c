@@ -2098,7 +2098,7 @@ char **tv_dict_to_env(dict_T *denv)
   TV_DICT_ITER(denv, var, {
     const char *str = tv_get_string(&var->di_tv);
     assert(str);
-    size_t len = STRLEN(var->di_key) + strlen(str) + strlen("=") + 1;
+    size_t len = strlen((char *)var->di_key) + strlen(str) + strlen("=") + 1;
     env[i] = xmalloc(len);
     snprintf(env[i], len, "%s=%s", (char *)var->di_key, str);
     i++;
@@ -2230,7 +2230,7 @@ int tv_dict_add(dict_T *const d, dictitem_T *const item)
   if (tv_dict_wrong_func_name(d, &item->di_tv, (const char *)item->di_key)) {
     return FAIL;
   }
-  return hash_add(&d->dv_hashtab, item->di_key);
+  return hash_add(&d->dv_hashtab, (char *)item->di_key);
 }
 
 /// Add a list entry to dictionary
@@ -2446,10 +2446,10 @@ void tv_dict_clear(dict_T *const d)
 ///
 /// @param  d1  Dictionary to extend.
 /// @param[in]  d2  Dictionary to extend with.
-/// @param[in]  action  "error", "force", "keep":
-///
+/// @param[in]  action  "error", "force", "move", "keep":
 ///                     e*, including "error": duplicate key gives an error.
 ///                     f*, including "force": duplicate d2 keys override d1.
+///                     m*, including "move": move items instead of copying.
 ///                     other, including "keep": duplicate d2 keys ignored.
 void tv_dict_extend(dict_T *const d1, dict_T *const d2, const char *const action)
   FUNC_ATTR_NONNULL_ALL
@@ -2458,19 +2458,33 @@ void tv_dict_extend(dict_T *const d1, dict_T *const d2, const char *const action
   const char *const arg_errmsg = _("extend() argument");
   const size_t arg_errmsg_len = strlen(arg_errmsg);
 
-  TV_DICT_ITER(d2, di2, {
+  if (*action == 'm') {
+    hash_lock(&d2->dv_hashtab);  // don't rehash on hash_remove()
+  }
+
+  HASHTAB_ITER(&d2->dv_hashtab, hi2, {
+    dictitem_T *const di2 = TV_DICT_HI2DI(hi2);
     dictitem_T *const di1 = tv_dict_find(d1, (const char *)di2->di_key, -1);
     // Check the key to be valid when adding to any scope.
     if (d1->dv_scope != VAR_NO_SCOPE && !valid_varname((const char *)di2->di_key)) {
       break;
     }
     if (di1 == NULL) {
-      dictitem_T *const new_di = tv_dict_item_copy(di2);
-      if (tv_dict_add(d1, new_di) == FAIL) {
-        tv_dict_item_free(new_di);
-      } else if (watched) {
-        tv_dict_watcher_notify(d1, (const char *)new_di->di_key, &new_di->di_tv,
-                               NULL);
+      if (*action == 'm') {
+        // Cheap way to move a dict item from "d2" to "d1".
+        // If dict_add() fails then "d2" won't be empty.
+        dictitem_T *const new_di = di2;
+        if (tv_dict_add(d1, new_di) == OK) {
+          hash_remove(&d2->dv_hashtab, hi2);
+          tv_dict_watcher_notify(d1, (const char *)new_di->di_key, &new_di->di_tv, NULL);
+        }
+      } else {
+        dictitem_T *const new_di = tv_dict_item_copy(di2);
+        if (tv_dict_add(d1, new_di) == FAIL) {
+          tv_dict_item_free(new_di);
+        } else if (watched) {
+          tv_dict_watcher_notify(d1, (const char *)new_di->di_key, &new_di->di_tv, NULL);
+        }
       }
     } else if (*action == 'e') {
       semsg(_("E737: Key already exists: %s"), di2->di_key);
@@ -2501,6 +2515,10 @@ void tv_dict_extend(dict_T *const d1, dict_T *const d2, const char *const action
       }
     }
   });
+
+  if (*action == 'm') {
+    hash_unlock(&d2->dv_hashtab);
+  }
 }
 
 /// Compare two dictionaries
@@ -2568,7 +2586,7 @@ dict_T *tv_dict_copy(const vimconv_T *const conv, dict_T *const orig, const bool
     if (conv == NULL || conv->vc_type == CONV_NONE) {
       new_di = tv_dict_item_alloc((const char *)di->di_key);
     } else {
-      size_t len = STRLEN(di->di_key);
+      size_t len = strlen((char *)di->di_key);
       char *const key = (char *)string_convert(conv, (char *)di->di_key, &len);
       if (key == NULL) {
         new_di = tv_dict_item_alloc_len((const char *)di->di_key, len);

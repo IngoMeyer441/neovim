@@ -742,7 +742,7 @@ void ex_breaklist(exarg_T *eap)
 /// @param after  after this line number
 linenr_T dbg_find_breakpoint(bool file, char *fname, linenr_T after)
 {
-  return debuggy_find(file, (char_u *)fname, after, &dbg_breakp, NULL);
+  return debuggy_find(file, fname, after, &dbg_breakp, NULL);
 }
 
 /// @param file     true for a file, false for a function
@@ -752,7 +752,7 @@ linenr_T dbg_find_breakpoint(bool file, char *fname, linenr_T after)
 /// @returns true if profiling is on for a function or sourced file.
 bool has_profiling(bool file, char *fname, bool *fp)
 {
-  return debuggy_find(file, (char_u *)fname, (linenr_T)0, &prof_ga, fp)
+  return debuggy_find(file, fname, (linenr_T)0, &prof_ga, fp)
          != (linenr_T)0;
 }
 
@@ -763,11 +763,11 @@ bool has_profiling(bool file, char *fname, bool *fp)
 /// @param after  after this line number
 /// @param gap  either &dbg_breakp or &prof_ga
 /// @param fp  if not NULL: return forceit
-static linenr_T debuggy_find(bool file, char_u *fname, linenr_T after, garray_T *gap, bool *fp)
+static linenr_T debuggy_find(bool file, char *fname, linenr_T after, garray_T *gap, bool *fp)
 {
   struct debuggy *bp;
   linenr_T lnum = 0;
-  char_u *name = fname;
+  char *name = fname;
   int prev_got_int;
 
   // Return quickly when there are no breakpoints.
@@ -776,8 +776,8 @@ static linenr_T debuggy_find(bool file, char_u *fname, linenr_T after, garray_T 
   }
 
   // Replace K_SNR in function name with "<SNR>".
-  if (!file && fname[0] == K_SPECIAL) {
-    name = xmalloc(STRLEN(fname) + 3);
+  if (!file && (uint8_t)fname[0] == K_SPECIAL) {
+    name = xmalloc(strlen(fname) + 3);
     STRCPY(name, "<SNR>");
     STRCPY(name + 5, fname + 3);
   }
@@ -795,7 +795,7 @@ static linenr_T debuggy_find(bool file, char_u *fname, linenr_T after, garray_T 
       // while matching should abort it.
       prev_got_int = got_int;
       got_int = false;
-      if (vim_regexec_prog(&bp->dbg_prog, false, name, (colnr_T)0)) {
+      if (vim_regexec_prog(&bp->dbg_prog, false, (char_u *)name, (colnr_T)0)) {
         lnum = bp->dbg_lnum;
         if (fp != NULL) {
           *fp = bp->dbg_forceit;
@@ -808,26 +808,26 @@ static linenr_T debuggy_find(bool file, char_u *fname, linenr_T after, garray_T 
       typval_T *const tv = eval_expr_no_emsg(bp);
       if (tv != NULL) {
         if (bp->dbg_val == NULL) {
-          debug_oldval = typval_tostring(NULL);
+          debug_oldval = typval_tostring(NULL, true);
           bp->dbg_val = tv;
-          debug_newval = typval_tostring(bp->dbg_val);
+          debug_newval = typval_tostring(bp->dbg_val, true);
           line = true;
         } else {
           if (typval_compare(tv, bp->dbg_val, EXPR_IS, false) == OK
               && tv->vval.v_number == false) {
             line = true;
-            debug_oldval = typval_tostring(bp->dbg_val);
+            debug_oldval = typval_tostring(bp->dbg_val, true);
             // Need to evaluate again, typval_compare() overwrites "tv".
             typval_T *const v = eval_expr_no_emsg(bp);
-            debug_newval = typval_tostring(v);
+            debug_newval = typval_tostring(v, true);
             tv_free(bp->dbg_val);
             bp->dbg_val = v;
           }
           tv_free(tv);
         }
       } else if (bp->dbg_val != NULL) {
-        debug_oldval = typval_tostring(bp->dbg_val);
-        debug_newval = typval_tostring(NULL);
+        debug_oldval = typval_tostring(bp->dbg_val, true);
+        debug_newval = typval_tostring(NULL, true);
         tv_free(bp->dbg_val);
         bp->dbg_val = NULL;
         line = true;

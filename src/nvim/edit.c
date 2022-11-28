@@ -1339,8 +1339,7 @@ void ins_redraw(bool ready)
   }
 
   if (ready) {
-    // Trigger Scroll if viewport changed.
-    may_trigger_winscrolled();
+    may_trigger_win_scrolled_resized();
   }
 
   // Trigger BufModified if b_changed_invalid is set.
@@ -4594,7 +4593,7 @@ static bool ins_tab(void)
       // Delete following spaces.
       i = cursor->col - fpos.col;
       if (i > 0) {
-        STRMOVE(ptr, ptr + i);
+        STRMOVE(ptr, (char *)ptr + i);
         // correct replace stack.
         if ((State & REPLACE_FLAG)
             && !(State & VREPLACE_FLAG)) {

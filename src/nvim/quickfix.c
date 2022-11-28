@@ -2784,7 +2784,7 @@ static void qf_jump_goto_line(linenr_T qf_lnum, int qf_col, char qf_viscol, char
     // Move the cursor to the first line in the buffer
     pos_T save_cursor = curwin->w_cursor;
     curwin->w_cursor.lnum = 0;
-    if (!do_search(NULL, '/', '/', (char_u *)qf_pattern, (long)1, SEARCH_KEEP, NULL)) {
+    if (!do_search(NULL, '/', '/', qf_pattern, (long)1, SEARCH_KEEP, NULL)) {
       curwin->w_cursor = save_cursor;
     }
   }
@@ -4242,7 +4242,7 @@ static char *make_get_auname(cmdidx_T cmdidx)
 static char *make_get_fullcmd(const char *makecmd, const char *fname)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_NONNULL_RET
 {
-  size_t len = STRLEN(p_shq) * 2 + strlen(makecmd) + 1;
+  size_t len = strlen(p_shq) * 2 + strlen(makecmd) + 1;
   if (*p_sp != NUL) {
     len += strlen(p_sp) + strlen(fname) + 3;
   }
@@ -6711,7 +6711,7 @@ static bool mark_quickfix_ctx(qf_info_T *qi, int copyID)
     typval_T *ctx = qi->qf_lists[i].qf_ctx;
     if (ctx != NULL && ctx->v_type != VAR_NUMBER
         && ctx->v_type != VAR_STRING && ctx->v_type != VAR_FLOAT) {
-      abort = abort || set_ref_in_item(ctx, copyID, NULL, NULL);
+      abort = set_ref_in_item(ctx, copyID, NULL, NULL);
     }
 
     Callback *cb = &qi->qf_lists[i].qf_qftf_cb;
@@ -6993,7 +6993,7 @@ static void hgr_search_file(qf_list_T *qfl, char *fname, regmatch_T *p_regmatch)
   }
 
   linenr_T lnum = 1;
-  while (!vim_fgets((char_u *)IObuff, IOSIZE, fd) && !got_int) {
+  while (!vim_fgets(IObuff, IOSIZE, fd) && !got_int) {
     char *line = (char *)IObuff;
 
     if (vim_regexec(p_regmatch, line, (colnr_T)0)) {

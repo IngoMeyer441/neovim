@@ -2343,13 +2343,13 @@ static void findfilendir(typval_T *argvars, typval_T *rettv, int find_what)
       if (rettv->v_type == VAR_STRING || rettv->v_type == VAR_LIST) {
         xfree(fresult);
       }
-      fresult = find_file_in_path_option(first ? (char_u *)fname : NULL,
-                                         first ? strlen(fname) : 0,
-                                         0, first, path,
-                                         find_what, (char_u *)curbuf->b_ffname,
-                                         (find_what == FINDFILE_DIR
-                                          ? (char_u *)""
-                                          : (char_u *)curbuf->b_p_sua));
+      fresult = (char_u *)find_file_in_path_option(first ? (char *)fname : NULL,
+                                                   first ? strlen(fname) : 0,
+                                                   0, first, (char *)path,
+                                                   find_what, curbuf->b_ffname,
+                                                   (find_what == FINDFILE_DIR
+                                                    ? ""
+                                                    : curbuf->b_p_sua));
       first = false;
 
       if (fresult != NULL && rettv->v_type == VAR_LIST) {
@@ -2671,8 +2671,9 @@ static void get_buffer_lines(buf_T *buf, linenr_T start, linenr_T end, int retli
   }
 }
 
-/// "getbufline()" function
-static void f_getbufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+/// @param retlist  true: "getbufline()" function
+///                 false: "getbufoneline()" function
+static void getbufline(typval_T *argvars, typval_T *rettv, bool retlist)
 {
   const int did_emsg_before = did_emsg;
   buf_T *const buf = tv_get_buf_from_arg(&argvars[0]);
@@ -2684,7 +2685,19 @@ static void f_getbufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
                         ? lnum
                         : tv_get_lnum_buf(&argvars[2], buf));
 
-  get_buffer_lines(buf, lnum, end, true, rettv);
+  get_buffer_lines(buf, lnum, end, retlist, rettv);
+}
+
+/// "getbufline()" function
+static void f_getbufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  getbufline(argvars, rettv, true);
+}
+
+/// "getbufoneline()" function
+static void f_getbufoneline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  getbufline(argvars, rettv, false);
 }
 
 /// "getchangelist()" function
@@ -5232,7 +5245,7 @@ static void max_min(const typval_T *const tv, typval_T *const rettv, const bool 
     TV_LIST_ITER_CONST(tv->vval.v_list, li, {
       const varnumber_T i = tv_get_number_chk(TV_LIST_ITEM_TV(li), &error);
       if (error) {
-        return;
+        return;  // type error; errmsg already given
       }
       if (domax ? i > n : i < n) {
         n = i;
@@ -5245,7 +5258,7 @@ static void max_min(const typval_T *const tv, typval_T *const rettv, const bool 
     TV_DICT_ITER(tv->vval.v_dict, di, {
       const varnumber_T i = tv_get_number_chk(&di->di_tv, &error);
       if (error) {
-        return;
+        return;  // type error; errmsg already given
       }
       if (domax ? i > n : i < n) {
         n = i;
@@ -5255,6 +5268,7 @@ static void max_min(const typval_T *const tv, typval_T *const rettv, const bool 
     semsg(_(e_listdictarg), domax ? "max()" : "min()");
     return;
   }
+
   rettv->vval.v_number = n;
 }
 
@@ -7982,8 +7996,7 @@ static void f_shellescape(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   const bool do_special = non_zero_arg(&argvars[1]);
 
   rettv->vval.v_string =
-    (char *)vim_strsave_shellescape((const char_u *)tv_get_string(&argvars[0]), do_special,
-                                    do_special);
+    vim_strsave_shellescape(tv_get_string(&argvars[0]), do_special, do_special);
   rettv->v_type = VAR_STRING;
 }
 
