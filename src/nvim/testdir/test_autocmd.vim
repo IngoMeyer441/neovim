@@ -2334,9 +2334,8 @@ function Test_dirchanged_auto()
 endfunc
 
 " Test TextChangedI and TextChangedP
-" See test/functional/viml/completion_spec.lua'
 func Test_ChangedP()
-  CheckFunction test_override
+  throw 'Skipped: use test/functional/editor/completion_spec.lua'
   new
   call setline(1, ['foo', 'bar', 'foobar'])
   call test_override("char_avail", 1)
@@ -3483,5 +3482,28 @@ func Test_autocmd_split_dummy()
   bwipe! Xerr
   call delete('Xerr')
 endfunc
+
+" This was crashing because there was only one window to execute autocommands
+" in.
+func Test_autocmd_nested_setbufvar()
+  CheckFeature python3
+
+  set hidden
+  edit Xaaa
+  edit Xbbb
+  call setline(1, 'bar')
+  enew
+  au BufWriteCmd Xbbb ++nested call setbufvar('Xaaa', '&ft', 'foo') | bw! Xaaa
+  au FileType foo call py3eval('vim.current.buffer.options["cindent"]')
+  wall
+
+  au! BufWriteCmd
+  au! FileType foo
+  set nohidden
+  call delete('Xaaa')
+  call delete('Xbbb')
+  %bwipe!
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

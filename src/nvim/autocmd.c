@@ -304,7 +304,7 @@ static void au_show_for_event(int group, event_T event, char *pat)
         // all buffer-local patterns.
         if ((group == AUGROUP_ALL || ap->group == group)
             && ap->patlen == patlen
-            && STRNCMP(pat, ap->pat, patlen) == 0) {
+            && strncmp(pat, ap->pat, (size_t)patlen) == 0) {
           // Show autocmd's for this autopat, or buflocals <buffer=X>
           aupat_show(ap, event, previous_group);
           previous_group = ap->group;
@@ -659,8 +659,21 @@ void free_all_autocmds(void)
     api_free_string(name);
   })
   map_destroy(int, String)(&map_augroup_id_to_name);
+
+  // aucmd_win[] is freed in win_free_all()
 }
 #endif
+
+/// Return true if "win" is an active entry in aucmd_win[].
+bool is_aucmd_win(win_T *win)
+{
+  for (int i = 0; i < AUCMD_WIN_COUNT; i++) {
+    if (aucmd_win[i].auc_win_used && aucmd_win[i].auc_win == win) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // Return the event number for event name "start".
 // Return NUM_EVENTS if the event name was not found.
@@ -1002,7 +1015,7 @@ int do_autocmd_event(event_T event, char *pat, bool once, int nested, char *cmd,
           // all buffer-local patterns.
           if (ap->group == findgroup
               && ap->patlen == patlen
-              && STRNCMP(pat, ap->pat, patlen) == 0) {
+              && strncmp(pat, ap->pat, (size_t)patlen) == 0) {
             // Remove existing autocommands.
             // If adding any new autocmd's for this AutoPat, don't
             // delete the pattern from the autopat list, append to
@@ -1086,7 +1099,7 @@ int autocmd_register(int64_t id, event_T event, char *pat, int patlen, int group
       // all buffer-local patterns.
       if (ap->group == findgroup
           && ap->patlen == patlen
-          && STRNCMP(pat, ap->pat, patlen) == 0) {
+          && strncmp(pat, ap->pat, (size_t)patlen) == 0) {
         if (ap->next == NULL) {
           // Add autocmd to this autopat, if it's the last one.
           break;
@@ -1319,7 +1332,7 @@ void ex_doautoall(exarg_T *eap)
       // Execute the modeline settings, but don't set window-local
       // options if we are using the current window for another
       // buffer.
-      do_modelines(curwin == aucmd_win ? OPT_NOWIN : 0);
+      do_modelines(is_aucmd_win(curwin) ? OPT_NOWIN : 0);
     }
 
     // restore the current window
@@ -1349,7 +1362,7 @@ void ex_doautoall(exarg_T *eap)
 bool check_nomodeline(char **argp)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  if (STRNCMP(*argp, "<nomodeline>", 12) == 0) {
+  if (strncmp(*argp, "<nomodeline>", 12) == 0) {
     *argp = skipwhite(*argp + 12);
     return false;
   }
@@ -1358,7 +1371,7 @@ bool check_nomodeline(char **argp)
 
 /// Prepare for executing autocommands for (hidden) buffer `buf`.
 /// If the current buffer is not in any visible window, put it in a temporary
-/// floating window `aucmd_win`.
+/// floating window using an entry in `aucmd_win[]`.
 /// Set `curbuf` and `curwin` to match `buf`.
 ///
 /// @param aco  structure to save values in
@@ -1381,15 +1394,29 @@ void aucmd_prepbuf(aco_save_T *aco, buf_T *buf)
     }
   }
 
-  // Allocate the `aucmd_win` dummy floating window.
-  if (win == NULL && aucmd_win == NULL) {
-    win_alloc_aucmd_win();
-    need_append = false;
-  }
-  if (win == NULL && aucmd_win_used) {
-    // Strange recursive autocommand, fall back to using the current
-    // window.  Expect a few side effects...
-    win = curwin;
+  // Allocate a window when needed.
+  win_T *auc_win = NULL;
+  int auc_idx = AUCMD_WIN_COUNT;
+  if (win == NULL) {
+    for (auc_idx = 0; auc_idx < AUCMD_WIN_COUNT; auc_idx++) {
+      if (!aucmd_win[auc_idx].auc_win_used) {
+        break;
+      }
+    }
+
+    if (auc_idx == AUCMD_WIN_COUNT) {
+      kv_push(aucmd_win_vec, ((aucmdwin_T){
+        .auc_win = NULL,
+        .auc_win_used = false,
+      }));
+    }
+
+    if (aucmd_win[auc_idx].auc_win == NULL) {
+      win_alloc_aucmd_win(auc_idx);
+      need_append = false;
+    }
+    auc_win = aucmd_win[auc_idx].auc_win;
+    aucmd_win[auc_idx].auc_win_used = true;
   }
 
   aco->save_curwin_handle = curwin->handle;
@@ -1399,42 +1426,41 @@ void aucmd_prepbuf(aco_save_T *aco, buf_T *buf)
     // There is a window for "buf" in the current tab page, make it the
     // curwin.  This is preferred, it has the least side effects (esp. if
     // "buf" is curbuf).
-    aco->use_aucmd_win = false;
+    aco->use_aucmd_win_idx = -1;
     curwin = win;
   } else {
-    // There is no window for "buf", use "aucmd_win".  To minimize the side
+    // There is no window for "buf", use "auc_win".  To minimize the side
     // effects, insert it in the current tab page.
     // Anything related to a window (e.g., setting folds) may have
     // unexpected results.
-    aco->use_aucmd_win = true;
-    aucmd_win_used = true;
-    aucmd_win->w_buffer = buf;
-    aucmd_win->w_s = &buf->b_s;
+    aco->use_aucmd_win_idx = auc_idx;
+    auc_win->w_buffer = buf;
+    auc_win->w_s = &buf->b_s;
     buf->b_nwindows++;
-    win_init_empty(aucmd_win);  // set cursor and topline to safe values
+    win_init_empty(auc_win);  // set cursor and topline to safe values
 
     // Make sure w_localdir and globaldir are NULL to avoid a chdir() in
     // win_enter_ext().
-    XFREE_CLEAR(aucmd_win->w_localdir);
+    XFREE_CLEAR(auc_win->w_localdir);
     aco->globaldir = globaldir;
     globaldir = NULL;
 
     block_autocmds();  // We don't want BufEnter/WinEnter autocommands.
     if (need_append) {
-      win_append(lastwin, aucmd_win);
-      pmap_put(handle_T)(&window_handles, aucmd_win->handle, aucmd_win);
-      win_config_float(aucmd_win, aucmd_win->w_float_config);
+      win_append(lastwin, auc_win);
+      pmap_put(handle_T)(&window_handles, auc_win->handle, auc_win);
+      win_config_float(auc_win, auc_win->w_float_config);
     }
     // Prevent chdir() call in win_enter_ext(), through do_autochdir()
     int save_acd = p_acd;
     p_acd = false;
     // no redrawing and don't set the window title
     RedrawingDisabled++;
-    win_enter(aucmd_win, false);
+    win_enter(auc_win, false);
     RedrawingDisabled--;
     p_acd = save_acd;
     unblock_autocmds();
-    curwin = aucmd_win;
+    curwin = auc_win;
   }
   curbuf = buf;
   aco->new_curwin_handle = curwin->handle;
@@ -1451,18 +1477,20 @@ void aucmd_prepbuf(aco_save_T *aco, buf_T *buf)
 /// @param aco  structure holding saved values
 void aucmd_restbuf(aco_save_T *aco)
 {
-  if (aco->use_aucmd_win) {
+  if (aco->use_aucmd_win_idx >= 0) {
+    win_T *awp = aucmd_win[aco->use_aucmd_win_idx].auc_win;
+
     curbuf->b_nwindows--;
-    // Find "aucmd_win", it can't be closed, but it may be in another tab page.
+    // Find "awp", it can't be closed, but it may be in another tab page.
     // Do not trigger autocommands here.
     block_autocmds();
-    if (curwin != aucmd_win) {
+    if (curwin != awp) {
       FOR_ALL_TAB_WINDOWS(tp, wp) {
-        if (wp == aucmd_win) {
+        if (wp == awp) {
           if (tp != curtab) {
             goto_tabpage_tp(tp, true, true);
           }
-          win_goto(aucmd_win);
+          win_goto(awp);
           goto win_found;
         }
       }
@@ -1477,7 +1505,9 @@ win_found:
       grid_free(&curwin->w_grid_alloc);
     }
 
-    aucmd_win_used = false;
+    // The window is marked as not used, but it is not freed, it can be
+    // used again.
+    aucmd_win[aco->use_aucmd_win_idx].auc_win_used = false;
 
     if (!valid_tabpage_win(curtab)) {
       // no valid window in current tabpage
@@ -1498,8 +1528,8 @@ win_found:
     entering_window(curwin);
 
     prevwin = win_find_by_handle(aco->save_prevwin_handle);
-    vars_clear(&aucmd_win->w_vars->dv_hashtab);         // free all w: variables
-    hash_init(&aucmd_win->w_vars->dv_hashtab);          // re-use the hashtab
+    vars_clear(&awp->w_vars->dv_hashtab);         // free all w: variables
+    hash_init(&awp->w_vars->dv_hashtab);          // re-use the hashtab
 
     xfree(globaldir);
     globaldir = aco->globaldir;
@@ -2459,7 +2489,7 @@ bool aupat_is_buflocal(char *pat, int patlen)
   FUNC_ATTR_PURE
 {
   return patlen >= 8
-         && STRNCMP(pat, "<buffer", 7) == 0
+         && strncmp(pat, "<buffer", 7) == 0
          && (pat)[patlen - 1] == '>';
 }
 
@@ -2665,7 +2695,7 @@ static int arg_augroup_get(char **argp)
 /// Handles grabbing arguments from `:autocmd` such as ++once and ++nested
 static bool arg_autocmd_flag_get(bool *flag, char **cmd_ptr, char *pattern, int len)
 {
-  if (STRNCMP(*cmd_ptr, pattern, len) == 0 && ascii_iswhite((*cmd_ptr)[len])) {
+  if (strncmp(*cmd_ptr, pattern, (size_t)len) == 0 && ascii_iswhite((*cmd_ptr)[len])) {
     if (*flag) {
       semsg(_(e_duparg2), pattern);
       return true;

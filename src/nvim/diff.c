@@ -1047,8 +1047,8 @@ static int check_external_diff(diffio_T *diffio)
               break;
             }
 
-            if (STRNCMP(linebuf, "1c1", 3) == 0
-                || STRNCMP(linebuf, "@@ -1 +1 @@", 11) == 0) {
+            if (strncmp(linebuf, "1c1", 3) == 0
+                || strncmp(linebuf, "@@ -1 +1 @@", 11) == 0) {
               ok = kTrue;
             }
           }
@@ -1573,13 +1573,13 @@ static bool extract_hunk(FILE *fd, diffhunk_T *hunk, diffstyle_T *diffstyle)
       // @@ -1,3 +1,5 @@
       if (isdigit(*line)) {
         *diffstyle = DIFF_ED;
-      } else if ((STRNCMP(line, "@@ ", 3) == 0)) {
+      } else if ((strncmp(line, "@@ ", 3) == 0)) {
         *diffstyle = DIFF_UNIFIED;
-      } else if ((STRNCMP(line, "--- ", 4) == 0)  // -V501
+      } else if ((strncmp(line, "--- ", 4) == 0)  // -V501
                  && (vim_fgets(line, LBUFLEN, fd) == 0)  // -V501
-                 && (STRNCMP(line, "+++ ", 4) == 0)
+                 && (strncmp(line, "+++ ", 4) == 0)
                  && (vim_fgets(line, LBUFLEN, fd) == 0)  // -V501
-                 && (STRNCMP(line, "@@ ", 3) == 0)) {
+                 && (strncmp(line, "@@ ", 3) == 0)) {
         *diffstyle = DIFF_UNIFIED;
       } else {
         // Format not recognized yet, skip over this line.  Cygwin diff
@@ -1597,7 +1597,7 @@ static bool extract_hunk(FILE *fd, diffhunk_T *hunk, diffstyle_T *diffstyle)
       }
     } else {
       assert(*diffstyle == DIFF_UNIFIED);
-      if (STRNCMP(line, "@@ ", 3) != 0) {
+      if (strncmp(line, "@@ ", 3) != 0) {
         continue;   // not the start of a diff block
       }
       if (parse_diff_unified(line, hunk) == FAIL) {
@@ -1890,7 +1890,7 @@ static void count_filler_lines_and_topline(int *curlinenum_to, int *linesfiller,
   const diff_T *curdif = thistopdiff;
   int ch_virtual_lines = 0;
   int isfiller = 0;
-  while (virtual_lines_passed) {
+  while (virtual_lines_passed > 0) {
     if (ch_virtual_lines) {
       virtual_lines_passed--;
       ch_virtual_lines--;
@@ -1946,7 +1946,6 @@ static void calculate_topfill_and_topline(const int fromidx, const int toidx, co
   virtual_lines_passed -= from_topfill;
 
   // count the same amount of virtual lines in the toidx buffer
-  curdif = thistopdiff;
   int curlinenum_to = thistopdiff->df_lnum[toidx];
   int linesfiller = 0;
   count_filler_lines_and_topline(&curlinenum_to, &linesfiller,
@@ -2263,7 +2262,7 @@ static bool diff_equal_char(const char *const p1, const char *const p2, int *con
     return false;
   }
   if (l > 1) {
-    if (STRNCMP(p1, p2, l) != 0
+    if (strncmp(p1, p2, (size_t)l) != 0
         && (!(diff_flags & DIFF_ICASE)
             || utf_fold(utf_ptr2char(p1)) != utf_fold(utf_ptr2char(p2)))) {
       return false;
@@ -2466,69 +2465,69 @@ int diffopt_changed(void)
 
   char *p = p_dip;
   while (*p != NUL) {
-    if (STRNCMP(p, "filler", 6) == 0) {
+    if (strncmp(p, "filler", 6) == 0) {
       p += 6;
       diff_flags_new |= DIFF_FILLER;
-    } else if ((STRNCMP(p, "context:", 8) == 0) && ascii_isdigit(p[8])) {
+    } else if ((strncmp(p, "context:", 8) == 0) && ascii_isdigit(p[8])) {
       p += 8;
       diff_context_new = getdigits_int(&p, false, diff_context_new);
-    } else if (STRNCMP(p, "iblank", 6) == 0) {
+    } else if (strncmp(p, "iblank", 6) == 0) {
       p += 6;
       diff_flags_new |= DIFF_IBLANK;
-    } else if (STRNCMP(p, "icase", 5) == 0) {
+    } else if (strncmp(p, "icase", 5) == 0) {
       p += 5;
       diff_flags_new |= DIFF_ICASE;
-    } else if (STRNCMP(p, "iwhiteall", 9) == 0) {
+    } else if (strncmp(p, "iwhiteall", 9) == 0) {
       p += 9;
       diff_flags_new |= DIFF_IWHITEALL;
-    } else if (STRNCMP(p, "iwhiteeol", 9) == 0) {
+    } else if (strncmp(p, "iwhiteeol", 9) == 0) {
       p += 9;
       diff_flags_new |= DIFF_IWHITEEOL;
-    } else if (STRNCMP(p, "iwhite", 6) == 0) {
+    } else if (strncmp(p, "iwhite", 6) == 0) {
       p += 6;
       diff_flags_new |= DIFF_IWHITE;
-    } else if (STRNCMP(p, "horizontal", 10) == 0) {
+    } else if (strncmp(p, "horizontal", 10) == 0) {
       p += 10;
       diff_flags_new |= DIFF_HORIZONTAL;
-    } else if (STRNCMP(p, "vertical", 8) == 0) {
+    } else if (strncmp(p, "vertical", 8) == 0) {
       p += 8;
       diff_flags_new |= DIFF_VERTICAL;
-    } else if ((STRNCMP(p, "foldcolumn:", 11) == 0) && ascii_isdigit(p[11])) {
+    } else if ((strncmp(p, "foldcolumn:", 11) == 0) && ascii_isdigit(p[11])) {
       p += 11;
       diff_foldcolumn_new = getdigits_int(&p, false, diff_foldcolumn_new);
-    } else if (STRNCMP(p, "hiddenoff", 9) == 0) {
+    } else if (strncmp(p, "hiddenoff", 9) == 0) {
       p += 9;
       diff_flags_new |= DIFF_HIDDEN_OFF;
-    } else if (STRNCMP(p, "closeoff", 8) == 0) {
+    } else if (strncmp(p, "closeoff", 8) == 0) {
       p += 8;
       diff_flags_new |= DIFF_CLOSE_OFF;
-    } else if (STRNCMP(p, "followwrap", 10) == 0) {
+    } else if (strncmp(p, "followwrap", 10) == 0) {
       p += 10;
       diff_flags_new |= DIFF_FOLLOWWRAP;
-    } else if (STRNCMP(p, "indent-heuristic", 16) == 0) {
+    } else if (strncmp(p, "indent-heuristic", 16) == 0) {
       p += 16;
       diff_indent_heuristic = XDF_INDENT_HEURISTIC;
-    } else if (STRNCMP(p, "internal", 8) == 0) {
+    } else if (strncmp(p, "internal", 8) == 0) {
       p += 8;
       diff_flags_new |= DIFF_INTERNAL;
-    } else if (STRNCMP(p, "algorithm:", 10) == 0) {
+    } else if (strncmp(p, "algorithm:", 10) == 0) {
       p += 10;
-      if (STRNCMP(p, "myers", 5) == 0) {
+      if (strncmp(p, "myers", 5) == 0) {
         p += 5;
         diff_algorithm_new = 0;
-      } else if (STRNCMP(p, "minimal", 7) == 0) {
+      } else if (strncmp(p, "minimal", 7) == 0) {
         p += 7;
         diff_algorithm_new = XDF_NEED_MINIMAL;
-      } else if (STRNCMP(p, "patience", 8) == 0) {
+      } else if (strncmp(p, "patience", 8) == 0) {
         p += 8;
         diff_algorithm_new = XDF_PATIENCE_DIFF;
-      } else if (STRNCMP(p, "histogram", 9) == 0) {
+      } else if (strncmp(p, "histogram", 9) == 0) {
         p += 9;
         diff_algorithm_new = XDF_HISTOGRAM_DIFF;
       } else {
         return FAIL;
       }
-    } else if ((STRNCMP(p, "linematch:", 10) == 0) && ascii_isdigit(p[10])) {
+    } else if ((strncmp(p, "linematch:", 10) == 0) && ascii_isdigit(p[10])) {
       p += 10;
       linematch_lines_new = getdigits_int(&p, false, linematch_lines_new);
       diff_flags_new |= DIFF_LINEMATCH;
@@ -2628,7 +2627,7 @@ bool diff_find_change(win_T *wp, linenr_T lnum, int *startp, int *endp)
       break;
     }
   }
-  if (dp->is_linematched) {
+  if (dp != NULL && dp->is_linematched) {
     while (dp && dp->df_next
            && lnum == dp->df_count[idx] + dp->df_lnum[idx]
            && dp->df_next->df_lnum[idx] == lnum) {
@@ -2943,7 +2942,7 @@ void ex_diffgetput(exarg_T *eap)
     // Need to make the other buffer the current buffer to be able to make
     // changes in it.
 
-    // set curwin/curbuf to buf and save a few things
+    // Set curwin/curbuf to buf and save a few things.
     aucmd_prepbuf(&aco, curtab->tp_diffbuf[idx_other]);
   }
 

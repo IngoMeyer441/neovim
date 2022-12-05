@@ -591,7 +591,7 @@ void cleanup_help_tags(int num_file, char **file)
       for (j = 0; j < num_file; j++) {
         if (j != i
             && (int)strlen(file[j]) == len + 3
-            && STRNCMP(file[i], file[j], len + 1) == 0) {
+            && strncmp(file[i], file[j], (size_t)len + 1) == 0) {
           break;
         }
       }
@@ -743,26 +743,24 @@ void fix_help_buffer(void)
             // If foo.abx is found use it instead of foo.txt in
             // the same directory.
             for (int i1 = 0; i1 < fcount; i1++) {
-              for (int i2 = 0; i2 < fcount; i2++) {
-                if (i1 == i2) {
-                  continue;
-                }
-                if (fnames[i1] == NULL || fnames[i2] == NULL) {
-                  continue;
-                }
-                const char *const f1 = fnames[i1];
+              const char *const f1 = fnames[i1];
+              const char *const t1 = path_tail(f1);
+              const char *const e1 = strrchr(t1, '.');
+              if (path_fnamecmp(e1, ".txt") != 0
+                  && path_fnamecmp(e1, fname + 4) != 0) {
+                // Not .txt and not .abx, remove it.
+                XFREE_CLEAR(fnames[i1]);
+                continue;
+              }
+
+              for (int i2 = i1 + 1; i2 < fcount; i2++) {
                 const char *const f2 = fnames[i2];
-                const char *const t1 = path_tail(f1);
+                if (f2 == NULL) {
+                  continue;
+                }
                 const char *const t2 = path_tail(f2);
-                const char *const e1 = strrchr(t1, '.');
                 const char *const e2 = strrchr(t2, '.');
                 if (e1 == NULL || e2 == NULL) {
-                  continue;
-                }
-                if (path_fnamecmp(e1, ".txt") != 0
-                    && path_fnamecmp(e1, fname + 4) != 0) {
-                  // Not .txt and not .abx, remove it.
-                  XFREE_CLEAR(fnames[i1]);
                   continue;
                 }
                 if (e1 - f1 != e2 - f2
@@ -943,6 +941,7 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
     }
     const char *const fname = files[fi] + dirlen + 1;
 
+    bool in_example = false;
     bool firstline = true;
     while (!vim_fgets(IObuff, IOSIZE, fd) && !got_int) {
       if (firstline) {
@@ -973,6 +972,13 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
         }
         firstline = false;
       }
+      if (in_example) {
+        // skip over example; a non-white in the first column ends it
+        if (vim_strchr(" \t\n\r", IObuff[0])) {
+          continue;
+        }
+        in_example = false;
+      }
       p1 = vim_strchr((char *)IObuff, '*');       // find first '*'
       while (p1 != NULL) {
         p2 = strchr((const char *)p1 + 1, '*');  // Find second '*'.
@@ -992,7 +998,7 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
                   || s[1] == '\0')) {
             *p2 = '\0';
             p1++;
-            size_t s_len= (size_t)(p2 - p1) + strlen(fname) + 2;
+            size_t s_len = (size_t)(p2 - p1) + strlen(fname) + 2;
             s = xmalloc(s_len);
             GA_APPEND(char *, &ga, s);
             snprintf(s, s_len, "%s\t%s", p1, fname);
@@ -1002,6 +1008,11 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
           }
         }
         p1 = p2;
+      }
+      size_t len = strlen(IObuff);
+      if ((len == 2 && strcmp(&IObuff[len - 2], ">\n") == 0)
+          || (len >= 3 && strcmp(&IObuff[len - 3], " >\n") == 0)) {
+        in_example = true;
       }
       line_breakcheck();
     }
@@ -1041,7 +1052,7 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
     // Write the tags into the file.
     for (int i = 0; i < ga.ga_len; i++) {
       s = ((char **)ga.ga_data)[i];
-      if (STRNCMP(s, "help-tags\t", 10) == 0) {
+      if (strncmp(s, "help-tags\t", 10) == 0) {
         // help-tags entry was added in formatted form
         fputs(s, fd_tags);
       } else {
@@ -1122,7 +1133,7 @@ static void do_helptags(char *dirname, bool add_help_tags, bool ignore_writeerr)
 
     // Did we find this language already?
     for (j = 0; j < ga.ga_len; j += 2) {
-      if (STRNCMP(lang, ((char_u *)ga.ga_data) + j, 2) == 0) {
+      if (strncmp(lang, ((char *)ga.ga_data) + j, 2) == 0) {
         break;
       }
     }
@@ -1170,7 +1181,7 @@ void ex_helptags(exarg_T *eap)
   bool add_help_tags = false;
 
   // Check for ":helptags ++t {dir}".
-  if (STRNCMP(eap->arg, "++t", 3) == 0 && ascii_iswhite(eap->arg[3])) {
+  if (strncmp(eap->arg, "++t", 3) == 0 && ascii_iswhite(eap->arg[3])) {
     add_help_tags = true;
     eap->arg = skipwhite(eap->arg + 3);
   }

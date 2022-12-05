@@ -3507,9 +3507,9 @@ static void nv_ident(cmdarg_T *cap)
     xfree(p);
   } else {
     if (cmdchar == '*') {
-      aux_ptr = (p_magic ? "/.*~[^$\\" : "/^$\\");
+      aux_ptr = (magic_isset() ? "/.*~[^$\\" : "/^$\\");
     } else if (cmdchar == '#') {
-      aux_ptr = (p_magic ? "/?.*~[^$\\" : "/?^$\\");
+      aux_ptr = (magic_isset() ? "/?.*~[^$\\" : "/?^$\\");
     } else if (tag_cmd) {
       if (curbuf->b_help) {
         // ":help" handles unescaped argument
@@ -4217,7 +4217,7 @@ static void nv_brackets(cmdarg_T *cap)
     } else {
       // Make a copy, if the line was changed it will be freed.
       ptr = xstrnsave(ptr, len);
-      find_pattern_in_path((char_u *)ptr, 0, len, true,
+      find_pattern_in_path(ptr, 0, len, true,
                            cap->count0 == 0 ? !isupper(cap->nchar) : false,
                            (((cap->nchar & 0xf) == ('d' & 0xf))
                             ? FIND_DEFINE

@@ -53,6 +53,7 @@
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/input.h"
+#include "nvim/lua/executor.h"
 #include "nvim/macros.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
@@ -716,187 +717,6 @@ sortend:
   if (got_int) {
     emsg(_(e_interr));
   }
-}
-
-/// ":retab".
-void ex_retab(exarg_T *eap)
-{
-  linenr_T lnum;
-  bool got_tab = false;
-  long num_spaces = 0;
-  long num_tabs;
-  long len;
-  long col;
-  long vcol;
-  long start_col = 0;                   // For start of white-space string
-  long start_vcol = 0;                  // For start of white-space string
-  long old_len;
-  char *ptr;
-  char *new_line = (char *)1;  // init to non-NULL
-  bool did_undo;                         // called u_save for current line
-  long *new_vts_array = NULL;
-  char *new_ts_str;  // string value of tab argument
-
-  int save_list;
-  linenr_T first_line = 0;              // first changed line
-  linenr_T last_line = 0;               // last changed line
-
-  save_list = curwin->w_p_list;
-  curwin->w_p_list = 0;             // don't want list mode here
-
-  new_ts_str = eap->arg;
-  if (!tabstop_set(eap->arg, &new_vts_array)) {
-    return;
-  }
-  while (ascii_isdigit(*(eap->arg)) || *(eap->arg) == ',') {
-    (eap->arg)++;
-  }
-
-  // This ensures that either new_vts_array and new_ts_str are freshly
-  // allocated, or new_vts_array points to an existing array and new_ts_str
-  // is null.
-  if (new_vts_array == NULL) {
-    new_vts_array = curbuf->b_p_vts_array;
-    new_ts_str = NULL;
-  } else {
-    new_ts_str = xstrnsave(new_ts_str, (size_t)(eap->arg - new_ts_str));
-  }
-  for (lnum = eap->line1; !got_int && lnum <= eap->line2; lnum++) {
-    ptr = ml_get(lnum);
-    col = 0;
-    vcol = 0;
-    did_undo = false;
-    for (;;) {
-      if (ascii_iswhite(ptr[col])) {
-        if (!got_tab && num_spaces == 0) {
-          // First consecutive white-space
-          start_vcol = vcol;
-          start_col = col;
-        }
-        if (ptr[col] == ' ') {
-          num_spaces++;
-        } else {
-          got_tab = true;
-        }
-      } else {
-        if (got_tab || (eap->forceit && num_spaces > 1)) {
-          // Retabulate this string of white-space
-
-          // len is virtual length of white string
-          len = num_spaces = vcol - start_vcol;
-          num_tabs = 0;
-          if (!curbuf->b_p_et) {
-            int t, s;
-
-            tabstop_fromto((colnr_T)start_vcol, (colnr_T)vcol,
-                           curbuf->b_p_ts, new_vts_array, &t, &s);
-            num_tabs = t;
-            num_spaces = s;
-          }
-          if (curbuf->b_p_et || got_tab
-              || (num_spaces + num_tabs < len)) {
-            if (did_undo == false) {
-              did_undo = true;
-              if (u_save((linenr_T)(lnum - 1),
-                         (linenr_T)(lnum + 1)) == FAIL) {
-                new_line = NULL;  // flag out-of-memory
-                break;
-              }
-            }
-
-            // len is actual number of white characters used
-            len = num_spaces + num_tabs;
-            old_len = (long)strlen(ptr);
-            const long new_len = old_len - col + start_col + len + 1;
-            if (new_len <= 0 || new_len >= MAXCOL) {
-              emsg(_(e_resulting_text_too_long));
-              break;
-            }
-            new_line = xmalloc((size_t)new_len);
-
-            if (start_col > 0) {
-              memmove(new_line, ptr, (size_t)start_col);
-            }
-            memmove(new_line + start_col + len,
-                    ptr + col, (size_t)(old_len - col + 1));
-            ptr = new_line + start_col;
-            for (col = 0; col < len; col++) {
-              ptr[col] = (col < num_tabs) ? '\t' : ' ';
-            }
-            if (ml_replace(lnum, new_line, false) == OK) {
-              // "new_line" may have been copied
-              new_line = curbuf->b_ml.ml_line_ptr;
-              extmark_splice_cols(curbuf, lnum - 1, 0, (colnr_T)old_len,
-                                  (colnr_T)new_len - 1, kExtmarkUndo);
-            }
-            if (first_line == 0) {
-              first_line = lnum;
-            }
-            last_line = lnum;
-            ptr = new_line;
-            col = start_col + len;
-          }
-        }
-        got_tab = false;
-        num_spaces = 0;
-      }
-      if (ptr[col] == NUL) {
-        break;
-      }
-      vcol += win_chartabsize(curwin, ptr + col, (colnr_T)vcol);
-      if (vcol >= MAXCOL) {
-        emsg(_(e_resulting_text_too_long));
-        break;
-      }
-      col += utfc_ptr2len(ptr + col);
-    }
-    if (new_line == NULL) {                 // out of memory
-      break;
-    }
-    line_breakcheck();
-  }
-  if (got_int) {
-    emsg(_(e_interr));
-  }
-
-  // If a single value was given then it can be considered equal to
-  // either the value of 'tabstop' or the value of 'vartabstop'.
-  if (tabstop_count(curbuf->b_p_vts_array) == 0
-      && tabstop_count(new_vts_array) == 1
-      && curbuf->b_p_ts == tabstop_first(new_vts_array)) {
-    // not changed
-  } else if (tabstop_count(curbuf->b_p_vts_array) > 0
-             && tabstop_eq(curbuf->b_p_vts_array, new_vts_array)) {
-    // not changed
-  } else {
-    redraw_curbuf_later(UPD_NOT_VALID);
-  }
-  if (first_line != 0) {
-    changed_lines(first_line, 0, last_line + 1, 0L, true);
-  }
-
-  curwin->w_p_list = save_list;         // restore 'list'
-
-  if (new_ts_str != NULL) {  // set the new tabstop
-    // If 'vartabstop' is in use or if the value given to retab has more
-    // than one tabstop then update 'vartabstop'.
-    long *old_vts_ary = curbuf->b_p_vts_array;
-
-    if (tabstop_count(old_vts_ary) > 0 || tabstop_count(new_vts_array) > 1) {
-      set_string_option_direct("vts", -1, new_ts_str, OPT_FREE | OPT_LOCAL, 0);
-      curbuf->b_p_vts_array = new_vts_array;
-      xfree(old_vts_ary);
-    } else {
-      // 'vartabstop' wasn't in use and a single value was given to
-      // retab then update 'tabstop'.
-      curbuf->b_p_ts = tabstop_first(new_vts_array);
-      xfree(new_vts_array);
-    }
-    xfree(new_ts_str);
-  }
-  coladvance(curwin->w_curswant);
-
-  u_clearline();
 }
 
 /// :move command - move lines line1-line2 to line dest
@@ -3311,7 +3131,7 @@ static bool sub_joining_lines(exarg_T *eap, char *pat, const char *sub, const ch
 
     if (save) {
       if ((cmdmod.cmod_flags & CMOD_KEEPPATTERNS) == 0) {
-        save_re_pat(RE_SUBST, pat, p_magic);
+        save_re_pat(RE_SUBST, pat, magic_isset());
       }
       // put pattern in history
       add_to_history(HIST_SEARCH, pat, true, NUL);
@@ -3536,7 +3356,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
       which_pat = RE_LAST;                  // use last used regexp
       delimiter = (char_u)(*cmd++);                   // remember delimiter character
       pat = cmd;                            // remember start of search pat
-      cmd = skip_regexp_ex(cmd, delimiter, p_magic, &eap->arg, NULL);
+      cmd = skip_regexp_ex(cmd, delimiter, magic_isset(), &eap->arg, NULL, NULL);
       if (cmd[0] == delimiter) {            // end delimiter found
         *cmd++ = NUL;                       // replace it with a NUL
         has_second_delim = true;
@@ -3652,7 +3472,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
     sub = xstrdup(sub);
     sub_copy = sub;
   } else {
-    char *newsub = regtilde(sub, p_magic, cmdpreview);
+    char *newsub = regtilde(sub, magic_isset(), cmdpreview);
     if (newsub != sub) {
       // newsub was allocated, free it later.
       sub_copy = newsub;
@@ -4075,7 +3895,8 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           sublen = vim_regsub_multi(&regmatch,
                                     sub_firstlnum - regmatch.startpos[0].lnum,
                                     (char_u *)sub, (char_u *)sub_firstline, 0,
-                                    REGSUB_BACKSLASH | (p_magic ? REGSUB_MAGIC : 0));
+                                    REGSUB_BACKSLASH
+                                    | (magic_isset() ? REGSUB_MAGIC : 0));
           textlock--;
 
           // If getting the substitute string caused an error, don't do
@@ -4117,7 +3938,8 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           (void)vim_regsub_multi(&regmatch,
                                  sub_firstlnum - regmatch.startpos[0].lnum,
                                  (char_u *)sub, (char_u *)new_end, sublen,
-                                 REGSUB_COPY | REGSUB_BACKSLASH | (p_magic ? REGSUB_MAGIC : 0));
+                                 REGSUB_COPY | REGSUB_BACKSLASH
+                                 | (magic_isset() ? REGSUB_MAGIC : 0));
           textlock--;
           sub_nsubs++;
           did_sub = true;
@@ -4569,7 +4391,7 @@ void ex_global(exarg_T *eap)
     delim = *cmd;               // get the delimiter
     cmd++;                      // skip delimiter if there is one
     pat = cmd;                  // remember start of pattern
-    cmd = skip_regexp_ex(cmd, delim, p_magic, &eap->arg, NULL);
+    cmd = skip_regexp_ex(cmd, delim, magic_isset(), &eap->arg, NULL, NULL);
     if (cmd[0] == delim) {                  // end delimiter found
       *cmd++ = NUL;                         // replace it with a NUL
     }
@@ -4959,4 +4781,30 @@ void ex_oldfiles(exarg_T *eap)
       }
     }
   }
+}
+
+void ex_trust(exarg_T *eap)
+{
+  const char *const p = skiptowhite(eap->arg);
+  char *arg1 = xmemdupz(eap->arg, (size_t)(p - eap->arg));
+  const char *action = "allow";
+  const char *path = skipwhite(p);
+
+  if (strcmp(arg1, "++deny") == 0) {
+    action = "deny";
+  } else if (strcmp(arg1, "++remove") == 0) {
+    action = "remove";
+  } else if (*arg1 != '\0') {
+    semsg(e_invarg2, arg1);
+    goto theend;
+  }
+
+  if (path[0] == '\0') {
+    path = NULL;
+  }
+
+  nlua_trust(action, path);
+
+theend:
+  xfree(arg1);
 }

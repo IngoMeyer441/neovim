@@ -1939,7 +1939,7 @@ failed:
 bool is_dev_fd_file(char *fname)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  return STRNCMP(fname, "/dev/fd/", 8) == 0
+  return strncmp(fname, "/dev/fd/", 8) == 0
          && ascii_isdigit((uint8_t)fname[8])
          && *skipdigits(fname + 9) == NUL
          && (fname[9] != NUL
@@ -4090,7 +4090,7 @@ static int get_fio_flags(const char_u *name)
   if (*name == NUL) {
     name = (char_u *)p_enc;
   }
-  prop = enc_canon_props(name);
+  prop = enc_canon_props((char *)name);
   if (prop & ENC_UNICODE) {
     if (prop & ENC_2BYTE) {
       if (prop & ENC_ENDIAN_L) {
@@ -5003,7 +5003,7 @@ void buf_reload(buf_T *buf, int orig_mode, bool reload_options)
   aco_save_T aco;
   int flags = READ_NEW;
 
-  // set curwin/curbuf for "buf" and save some things
+  // Set curwin/curbuf for "buf" and save some things.
   aucmd_prepbuf(&aco, buf);
 
   // Unless reload_options is set, we only want to read the text from the
