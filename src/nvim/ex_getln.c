@@ -117,7 +117,6 @@ typedef struct command_line_state {
   incsearch_state_T is_state;
   int did_wild_list;                    // did wild_list() recently
   int wim_index;                        // index in wim_flags[]
-  int res;
   int save_msg_scroll;
   int save_State;                 // remember State when called
   char *save_p_icm;
@@ -156,6 +155,14 @@ typedef struct cmdpreview_info {
   cmdmod_T save_cmdmod;
   garray_T save_view;
 } CpInfo;
+
+/// Return value when handling keys in command-line mode.
+enum {
+  CMDLINE_NOT_CHANGED = 1,
+  CMDLINE_CHANGED     = 2,
+  GOTO_NORMAL_MODE    = 3,
+  PROCESS_NEXT_KEY    = 4,
+};
 
 /// The current cmdline_info.  It is initialized in getcmdline() and after that
 /// used by other functions.  When invoking getcmdline() recursively it needs
@@ -597,12 +604,42 @@ static void finish_incsearch_highlighting(int gotesc, incsearch_state_T *s, bool
   }
 }
 
+/// Initialize the current command-line info.
+static void init_ccline(int firstc, int indent)
+{
+  ccline.overstrike = false;                // always start in insert mode
+
+  assert(indent >= 0);
+
+  // set some variables for redrawcmd()
+  ccline.cmdfirstc = (firstc == '@' ? 0 : firstc);
+  ccline.cmdindent = (firstc > 0 ? indent : 0);
+
+  // alloc initial ccline.cmdbuff
+  alloc_cmdbuff(indent + 50);
+  ccline.cmdlen = ccline.cmdpos = 0;
+  ccline.cmdbuff[0] = NUL;
+
+  ccline.last_colors = (ColoredCmdline){ .cmdbuff = NULL,
+                                         .colors = KV_INITIAL_VALUE };
+  sb_text_start_cmdline();
+
+  // autoindent for :insert and :append
+  if (firstc <= 0) {
+    memset(ccline.cmdbuff, ' ', (size_t)indent);
+    ccline.cmdbuff[indent] = NUL;
+    ccline.cmdpos = indent;
+    ccline.cmdspos = indent;
+    ccline.cmdlen = indent;
+  }
+}
+
 /// Internal entry point for cmdline mode.
 ///
 /// @param count  only used for incremental search
 /// @param indent  indent for inside conditionals
-/// @param init_ccline  clear ccline first
-static uint8_t *command_line_enter(int firstc, long count, int indent, bool init_ccline)
+/// @param clear_ccline  clear ccline first
+static uint8_t *command_line_enter(int firstc, long count, int indent, bool clear_ccline)
 {
   // can be invoked recursively, identify each level
   static int cmdline_level = 0;
@@ -625,14 +662,14 @@ static uint8_t *command_line_enter(int firstc, long count, int indent, bool init
   bool did_save_ccline = false;
 
   if (ccline.cmdbuff != NULL) {
-    // Currently ccline can never be in use if init_ccline is false.
+    // Currently ccline can never be in use if clear_ccline is false.
     // Some changes will be needed if this is no longer the case.
-    assert(init_ccline);
+    assert(clear_ccline);
     // Being called recursively.  Since ccline is global, we need to save
     // the current buffer and restore it when returning.
     save_cmdline(&save_ccline);
     did_save_ccline = true;
-  } else if (init_ccline) {
+  } else if (clear_ccline) {
     CLEAR_FIELD(ccline);
   }
 
@@ -646,33 +683,9 @@ static uint8_t *command_line_enter(int firstc, long count, int indent, bool init
     cmd_hkmap = 0;
   }
 
+  init_ccline(s->firstc, s->indent);
   ccline.prompt_id = last_prompt_id++;
   ccline.level = cmdline_level;
-  ccline.overstrike = false;                // always start in insert mode
-
-  assert(indent >= 0);
-
-  // set some variables for redrawcmd()
-  ccline.cmdfirstc = (s->firstc == '@' ? 0 : s->firstc);
-  ccline.cmdindent = (s->firstc > 0 ? s->indent : 0);
-
-  // alloc initial ccline.cmdbuff
-  alloc_cmdbuff(indent + 50);
-  ccline.cmdlen = ccline.cmdpos = 0;
-  ccline.cmdbuff[0] = NUL;
-
-  ccline.last_colors = (ColoredCmdline){ .cmdbuff = NULL,
-                                         .colors = KV_INITIAL_VALUE };
-  sb_text_start_cmdline();
-
-  // autoindent for :insert and :append
-  if (s->firstc <= 0) {
-    memset(ccline.cmdbuff, ' ', (size_t)s->indent);
-    ccline.cmdbuff[s->indent] = NUL;
-    ccline.cmdpos = s->indent;
-    ccline.cmdspos = s->indent;
-    ccline.cmdlen = s->indent;
-  }
 
   if (cmdline_level == 50) {
     // Somehow got into a loop recursively calling getcmdline(), bail out.
@@ -738,13 +751,14 @@ static uint8_t *command_line_enter(int firstc, long count, int indent, bool init
   TryState tstate;
   Error err = ERROR_INIT;
   bool tl_ret = true;
-  save_v_event_T save_v_event;
-  dict_T *dict = get_v_event(&save_v_event);
   char firstcbuf[2];
   firstcbuf[0] = (char)(firstc > 0 ? firstc : '-');
   firstcbuf[1] = 0;
 
   if (has_event(EVENT_CMDLINEENTER)) {
+    save_v_event_T save_v_event;
+    dict_T *dict = get_v_event(&save_v_event);
+
     // set v:event to a dictionary with information about the commandline
     tv_dict_add_str(dict, S_LEN("cmdtype"), firstcbuf);
     tv_dict_add_nr(dict, S_LEN("cmdlevel"), ccline.level);
@@ -806,6 +820,9 @@ static uint8_t *command_line_enter(int firstc, long count, int indent, bool init
   state_enter(&s->state);
 
   if (has_event(EVENT_CMDLINELEAVE)) {
+    save_v_event_T save_v_event;
+    dict_T *dict = get_v_event(&save_v_event);
+
     tv_dict_add_str(dict, S_LEN("cmdtype"), firstcbuf);
     tv_dict_add_nr(dict, S_LEN("cmdlevel"), ccline.level);
     tv_dict_set_keys_readonly(dict);
@@ -920,6 +937,175 @@ static int command_line_check(VimState *state)
   cursorcmd();             // set the cursor on the right spot
   ui_cursor_shape();
   return 1;
+}
+
+/// Handle CTRL-\ pressed in Command-line mode:
+/// - CTRL-\ CTRL-N or CTRL-\ CTRL-G goes to Normal mode.
+/// - CTRL-\ e prompts for an expression.
+static int command_line_handle_ctrl_bsl(CommandLineState *s)
+{
+  no_mapping++;
+  allow_keys++;
+  s->c = plain_vgetc();
+  no_mapping--;
+  allow_keys--;
+
+  // CTRL-\ e doesn't work when obtaining an expression, unless it
+  // is in a mapping.
+  if (s->c != Ctrl_N
+      && s->c != Ctrl_G
+      && (s->c != 'e'
+          || (ccline.cmdfirstc == '=' && KeyTyped)
+          || cmdline_star > 0)) {
+    vungetc(s->c);
+    return PROCESS_NEXT_KEY;
+  }
+
+  if (s->c == 'e') {
+    // Replace the command line with the result of an expression.
+    // This will call getcmdline() recursively in get_expr_register().
+    if (ccline.cmdpos == ccline.cmdlen) {
+      new_cmdpos = 99999;           // keep it at the end
+    } else {
+      new_cmdpos = ccline.cmdpos;
+    }
+
+    s->c = get_expr_register();
+    if (s->c == '=') {
+      // Evaluate the expression.  Set "textlock" to avoid nasty things
+      // like going to another buffer.
+      textlock++;
+      char *p = get_expr_line();
+      textlock--;
+
+      if (p != NULL) {
+        int len = (int)strlen(p);
+        realloc_cmdbuff(len + 1);
+        ccline.cmdlen = len;
+        STRCPY(ccline.cmdbuff, p);
+        xfree(p);
+
+        // Restore the cursor or use the position set with
+        // set_cmdline_pos().
+        if (new_cmdpos > ccline.cmdlen) {
+          ccline.cmdpos = ccline.cmdlen;
+        } else {
+          ccline.cmdpos = new_cmdpos;
+        }
+
+        KeyTyped = false;                 // Don't do p_wc completion.
+        redrawcmd();
+        return CMDLINE_CHANGED;
+      }
+    }
+    beep_flush();
+    got_int = false;                // don't abandon the command line
+    did_emsg = false;
+    emsg_on_display = false;
+    redrawcmd();
+    return CMDLINE_NOT_CHANGED;
+  }
+
+  s->gotesc = true;  // will free ccline.cmdbuff after putting it in history
+  return GOTO_NORMAL_MODE;
+}
+
+/// Completion for 'wildchar' or 'wildcharm' key.
+/// - hitting <ESC> twice means: abandon command line.
+/// - wildcard expansion is only done when the 'wildchar' key is really
+///   typed, not when it comes from a macro
+/// @return  CMDLINE_CHANGED if command line is changed or CMDLINE_NOT_CHANGED.
+static int command_line_wildchar_complete(CommandLineState *s)
+{
+  int res;
+  int options = WILD_NO_BEEP;
+  if (wim_flags[s->wim_index] & WIM_BUFLASTUSED) {
+    options |= WILD_BUFLASTUSED;
+  }
+  if (s->xpc.xp_numfiles > 0) {       // typed p_wc at least twice
+    // if 'wildmode' contains "list" may still need to list
+    if (s->xpc.xp_numfiles > 1
+        && !s->did_wild_list
+        && ((wim_flags[s->wim_index] & WIM_LIST)
+            || (p_wmnu && (wim_flags[s->wim_index] & WIM_FULL) != 0))) {
+      (void)showmatches(&s->xpc, p_wmnu && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
+      redrawcmd();
+      s->did_wild_list = true;
+    }
+
+    if (wim_flags[s->wim_index] & WIM_LONGEST) {
+      res = nextwild(&s->xpc, WILD_LONGEST, options, s->firstc != '@');
+    } else if (wim_flags[s->wim_index] & WIM_FULL) {
+      res = nextwild(&s->xpc, WILD_NEXT, options, s->firstc != '@');
+    } else {
+      res = OK;                 // don't insert 'wildchar' now
+    }
+  } else {                    // typed p_wc first time
+    s->wim_index = 0;
+    int j = ccline.cmdpos;
+
+    // if 'wildmode' first contains "longest", get longest
+    // common part
+    if (wim_flags[0] & WIM_LONGEST) {
+      res = nextwild(&s->xpc, WILD_LONGEST, options, s->firstc != '@');
+    } else {
+      res = nextwild(&s->xpc, WILD_EXPAND_KEEP, options, s->firstc != '@');
+    }
+
+    // if interrupted while completing, behave like it failed
+    if (got_int) {
+      (void)vpeekc();               // remove <C-C> from input stream
+      got_int = false;              // don't abandon the command line
+      (void)ExpandOne(&s->xpc, NULL, NULL, 0, WILD_FREE);
+      s->xpc.xp_context = EXPAND_NOTHING;
+      return CMDLINE_CHANGED;
+    }
+
+    // when more than one match, and 'wildmode' first contains
+    // "list", or no change and 'wildmode' contains "longest,list",
+    // list all matches
+    if (res == OK && s->xpc.xp_numfiles > 1) {
+      // a "longest" that didn't do anything is skipped (but not
+      // "list:longest")
+      if (wim_flags[0] == WIM_LONGEST && ccline.cmdpos == j) {
+        s->wim_index = 1;
+      }
+      if ((wim_flags[s->wim_index] & WIM_LIST)
+          || (p_wmnu && (wim_flags[s->wim_index] & WIM_FULL) != 0)) {
+        if (!(wim_flags[0] & WIM_LONGEST)) {
+          int p_wmnu_save = p_wmnu;
+          p_wmnu = 0;
+          // remove match
+          nextwild(&s->xpc, WILD_PREV, 0, s->firstc != '@');
+          p_wmnu = p_wmnu_save;
+        }
+
+        (void)showmatches(&s->xpc, p_wmnu && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
+        redrawcmd();
+        s->did_wild_list = true;
+
+        if (wim_flags[s->wim_index] & WIM_LONGEST) {
+          nextwild(&s->xpc, WILD_LONGEST, options, s->firstc != '@');
+        } else if (wim_flags[s->wim_index] & WIM_FULL) {
+          nextwild(&s->xpc, WILD_NEXT, options, s->firstc != '@');
+        }
+      } else {
+        vim_beep(BO_WILD);
+      }
+    } else if (s->xpc.xp_numfiles == -1) {
+      s->xpc.xp_context = EXPAND_NOTHING;
+    }
+  }
+
+  if (s->wim_index < 3) {
+    s->wim_index++;
+  }
+
+  if (s->c == ESC) {
+    s->gotesc = true;
+  }
+
+  return (res == OK) ? CMDLINE_CHANGED : CMDLINE_NOT_CHANGED;
 }
 
 static void command_line_end_wildmenu(CommandLineState *s)
@@ -1039,7 +1225,7 @@ static int command_line_execute(VimState *state, int key)
   if (cmdline_pum_active() || s->did_wild_list) {
     if (s->c == Ctrl_E || s->c == Ctrl_Y) {
       const int wild_type = (s->c == Ctrl_E) ? WILD_CANCEL : WILD_APPLY;
-      s->res = nextwild(&s->xpc, wild_type, WILD_NO_BEEP, s->firstc != '@');
+      (void)nextwild(&s->xpc, wild_type, WILD_NO_BEEP, s->firstc != '@');
       s->c = Ctrl_E;
     }
   }
@@ -1055,71 +1241,19 @@ static int command_line_execute(VimState *state, int key)
     s->c = wildmenu_process_key(&ccline, s->c, &s->xpc);
   }
 
-  // CTRL-\ CTRL-N goes to Normal mode, CTRL-\ e prompts for an expression.
+  // CTRL-\ CTRL-N or CTRL-\ CTRL-G goes to Normal mode,
+  // CTRL-\ e prompts for an expression.
   if (s->c == Ctrl_BSL) {
-    no_mapping++;
-    allow_keys++;
-    s->c = plain_vgetc();
-    no_mapping--;
-    allow_keys--;
-    // CTRL-\ e doesn't work when obtaining an expression, unless it
-    // is in a mapping.
-    if (s->c != Ctrl_N
-        && s->c != Ctrl_G
-        && (s->c != 'e'
-            || (ccline.cmdfirstc == '=' && KeyTyped)
-            || cmdline_star > 0)) {
-      vungetc(s->c);
-      s->c = Ctrl_BSL;
-    } else if (s->c == 'e') {
-      char *p = NULL;
-      int len;
-
-      // Replace the command line with the result of an expression.
-      // Need to save and restore the current command line, to be
-      // able to enter a new one...
-      if (ccline.cmdpos == ccline.cmdlen) {
-        new_cmdpos = 99999;           // keep it at the end
-      } else {
-        new_cmdpos = ccline.cmdpos;
-      }
-
-      s->c = get_expr_register();
-      if (s->c == '=') {
-        textlock++;
-        p = get_expr_line();
-        textlock--;
-
-        if (p != NULL) {
-          len = (int)strlen(p);
-          realloc_cmdbuff(len + 1);
-          ccline.cmdlen = len;
-          STRCPY(ccline.cmdbuff, p);
-          xfree(p);
-
-          // Restore the cursor or use the position set with
-          // set_cmdline_pos().
-          if (new_cmdpos > ccline.cmdlen) {
-            ccline.cmdpos = ccline.cmdlen;
-          } else {
-            ccline.cmdpos = new_cmdpos;
-          }
-
-          KeyTyped = false;                 // Don't do p_wc completion.
-          redrawcmd();
-          return command_line_changed(s);
-        }
-      }
-      beep_flush();
-      got_int = false;                // don't abandon the command line
-      did_emsg = false;
-      emsg_on_display = false;
-      redrawcmd();
+    switch (command_line_handle_ctrl_bsl(s)) {
+    case CMDLINE_CHANGED:
+      return command_line_changed(s);
+    case CMDLINE_NOT_CHANGED:
       return command_line_not_changed(s);
-    } else {
-      s->gotesc = true;        // will free ccline.cmdbuff after putting it
-                               // in history
-      return 0;                // back to Normal mode
+    case GOTO_NORMAL_MODE:
+      return 0;                   // back to cmd mode
+    default:
+      s->c = Ctrl_BSL;            // backslash key not processed by
+                                  // command_line_handle_ctrl_bsl()
     }
   }
 
@@ -1167,107 +1301,8 @@ static int command_line_execute(VimState *state, int key)
   }
 
   // Completion for 'wildchar' or 'wildcharm' key.
-  // - hitting <ESC> twice means: abandon command line.
-  // - wildcard expansion is only done when the 'wildchar' key is really
-  //   typed, not when it comes from a macro
-  if ((s->c == p_wc && !s->gotesc && KeyTyped) || s->c == p_wcm
-      || s->c == Ctrl_Z) {
-    int options = WILD_NO_BEEP;
-    if (wim_flags[s->wim_index] & WIM_BUFLASTUSED) {
-      options |= WILD_BUFLASTUSED;
-    }
-    if (s->xpc.xp_numfiles > 0) {       // typed p_wc at least twice
-      // if 'wildmode' contains "list" may still need to list
-      if (s->xpc.xp_numfiles > 1
-          && !s->did_wild_list
-          && ((wim_flags[s->wim_index] & WIM_LIST)
-              || (p_wmnu && (wim_flags[s->wim_index] & WIM_FULL) != 0))) {
-        (void)showmatches(&s->xpc, p_wmnu
-                          && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
-        redrawcmd();
-        s->did_wild_list = true;
-      }
-
-      if (wim_flags[s->wim_index] & WIM_LONGEST) {
-        s->res = nextwild(&s->xpc, WILD_LONGEST, options,
-                          s->firstc != '@');
-      } else if (wim_flags[s->wim_index] & WIM_FULL) {
-        s->res = nextwild(&s->xpc, WILD_NEXT, options,
-                          s->firstc != '@');
-      } else {
-        s->res = OK;                 // don't insert 'wildchar' now
-      }
-    } else {                    // typed p_wc first time
-      s->wim_index = 0;
-      int j = ccline.cmdpos;
-
-      // if 'wildmode' first contains "longest", get longest
-      // common part
-      if (wim_flags[0] & WIM_LONGEST) {
-        s->res = nextwild(&s->xpc, WILD_LONGEST, options,
-                          s->firstc != '@');
-      } else {
-        s->res = nextwild(&s->xpc, WILD_EXPAND_KEEP, options,
-                          s->firstc != '@');
-      }
-
-      // if interrupted while completing, behave like it failed
-      if (got_int) {
-        (void)vpeekc();               // remove <C-C> from input stream
-        got_int = false;              // don't abandon the command line
-        (void)ExpandOne(&s->xpc, NULL, NULL, 0, WILD_FREE);
-        s->xpc.xp_context = EXPAND_NOTHING;
-        return command_line_changed(s);
-      }
-
-      // when more than one match, and 'wildmode' first contains
-      // "list", or no change and 'wildmode' contains "longest,list",
-      // list all matches
-      if (s->res == OK && s->xpc.xp_numfiles > 1) {
-        // a "longest" that didn't do anything is skipped (but not
-        // "list:longest")
-        if (wim_flags[0] == WIM_LONGEST && ccline.cmdpos == j) {
-          s->wim_index = 1;
-        }
-        if ((wim_flags[s->wim_index] & WIM_LIST)
-            || (p_wmnu && (wim_flags[s->wim_index] & WIM_FULL) != 0)) {
-          if (!(wim_flags[0] & WIM_LONGEST)) {
-            int p_wmnu_save = p_wmnu;
-            p_wmnu = 0;
-            // remove match
-            nextwild(&s->xpc, WILD_PREV, 0, s->firstc != '@');
-            p_wmnu = p_wmnu_save;
-          }
-
-          (void)showmatches(&s->xpc, p_wmnu
-                            && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
-          redrawcmd();
-          s->did_wild_list = true;
-
-          if (wim_flags[s->wim_index] & WIM_LONGEST) {
-            nextwild(&s->xpc, WILD_LONGEST, options,
-                     s->firstc != '@');
-          } else if (wim_flags[s->wim_index] & WIM_FULL) {
-            nextwild(&s->xpc, WILD_NEXT, options,
-                     s->firstc != '@');
-          }
-        } else {
-          vim_beep(BO_WILD);
-        }
-      } else if (s->xpc.xp_numfiles == -1) {
-        s->xpc.xp_context = EXPAND_NOTHING;
-      }
-    }
-
-    if (s->wim_index < 3) {
-      s->wim_index++;
-    }
-
-    if (s->c == ESC) {
-      s->gotesc = true;
-    }
-
-    if (s->res == OK) {
+  if ((s->c == p_wc && !s->gotesc && KeyTyped) || s->c == p_wcm || s->c == Ctrl_Z) {
+    if (command_line_wildchar_complete(s) == CMDLINE_CHANGED) {
       return command_line_changed(s);
     }
   }
@@ -1410,6 +1445,199 @@ static int may_do_command_line_next_incsearch(int firstc, long count, incsearch_
   return FAIL;
 }
 
+/// Handle backspace, delete and CTRL-W keys in the command-line mode.
+static int command_line_erase_chars(CommandLineState *s)
+{
+  if (s->c == K_KDEL) {
+    s->c = K_DEL;
+  }
+
+  // Delete current character is the same as backspace on next
+  // character, except at end of line
+  if (s->c == K_DEL && ccline.cmdpos != ccline.cmdlen) {
+    ccline.cmdpos++;
+  }
+
+  if (s->c == K_DEL) {
+    ccline.cmdpos += mb_off_next((char_u *)ccline.cmdbuff,
+                                 (char_u *)ccline.cmdbuff + ccline.cmdpos);
+  }
+
+  if (ccline.cmdpos > 0) {
+    char_u *p;
+
+    int j = ccline.cmdpos;
+    p = mb_prevptr((char_u *)ccline.cmdbuff, (char_u *)ccline.cmdbuff + j);
+
+    if (s->c == Ctrl_W) {
+      while (p > (char_u *)ccline.cmdbuff && ascii_isspace(*p)) {
+        p = mb_prevptr((char_u *)ccline.cmdbuff, p);
+      }
+
+      int i = mb_get_class(p);
+      while (p > (char_u *)ccline.cmdbuff && mb_get_class(p) == i) {
+        p = mb_prevptr((char_u *)ccline.cmdbuff, p);
+      }
+
+      if (mb_get_class(p) != i) {
+        p += utfc_ptr2len((char *)p);
+      }
+    }
+
+    ccline.cmdpos = (int)(p - (char_u *)ccline.cmdbuff);
+    ccline.cmdlen -= j - ccline.cmdpos;
+    int i = ccline.cmdpos;
+
+    while (i < ccline.cmdlen) {
+      ccline.cmdbuff[i++] = ccline.cmdbuff[j++];
+    }
+
+    // Truncate at the end, required for multi-byte chars.
+    ccline.cmdbuff[ccline.cmdlen] = NUL;
+    if (ccline.cmdlen == 0) {
+      s->is_state.search_start = s->is_state.save_cursor;
+      // save view settings, so that the screen won't be restored at the
+      // wrong position
+      s->is_state.old_viewstate = s->is_state.init_viewstate;
+    }
+    redrawcmd();
+  } else if (ccline.cmdlen == 0 && s->c != Ctrl_W
+             && ccline.cmdprompt == NULL && s->indent == 0) {
+    // In ex and debug mode it doesn't make sense to return.
+    if (exmode_active || ccline.cmdfirstc == '>') {
+      return CMDLINE_NOT_CHANGED;
+    }
+
+    XFREE_CLEAR(ccline.cmdbuff);        // no commandline to return
+    if (!cmd_silent && !ui_has(kUICmdline)) {
+      if (cmdmsg_rl) {
+        msg_col = Columns;
+      } else {
+        msg_col = 0;
+      }
+      msg_putchar(' ');                             // delete ':'
+    }
+    s->is_state.search_start = s->is_state.save_cursor;
+    redraw_cmdline = true;
+    return GOTO_NORMAL_MODE;
+  }
+  return CMDLINE_CHANGED;
+}
+
+/// Handle the CTRL-^ key in the command-line mode and toggle the use of the
+/// language :lmap mappings and/or Input Method.
+static void command_line_toggle_langmap(CommandLineState *s)
+{
+  if (map_to_exists_mode("", MODE_LANGMAP, false)) {
+    // ":lmap" mappings exists, toggle use of mappings.
+    State ^= MODE_LANGMAP;
+    if (s->b_im_ptr != NULL) {
+      if (State & MODE_LANGMAP) {
+        *s->b_im_ptr = B_IMODE_LMAP;
+      } else {
+        *s->b_im_ptr = B_IMODE_NONE;
+      }
+    }
+  }
+
+  if (s->b_im_ptr != NULL) {
+    if (s->b_im_ptr == &curbuf->b_p_iminsert) {
+      set_iminsert_global();
+    } else {
+      set_imsearch_global();
+    }
+  }
+  ui_cursor_shape();                // may show different cursor shape
+  // Show/unshow value of 'keymap' in status lines later.
+  status_redraw_curbuf();
+}
+
+/// Handle the CTRL-R key in the command-line mode and insert the contents of a
+/// numbered or named register.
+static int command_line_insert_reg(CommandLineState *s)
+{
+  const int save_new_cmdpos = new_cmdpos;
+
+  putcmdline('"', true);
+  no_mapping++;
+  allow_keys++;
+  int i = s->c = plain_vgetc();      // CTRL-R <char>
+  if (i == Ctrl_O) {
+    i = Ctrl_R;                      // CTRL-R CTRL-O == CTRL-R CTRL-R
+  }
+
+  if (i == Ctrl_R) {
+    s->c = plain_vgetc();              // CTRL-R CTRL-R <char>
+  }
+  no_mapping--;
+  allow_keys--;
+  // Insert the result of an expression.
+  new_cmdpos = -1;
+  if (s->c == '=') {
+    if (ccline.cmdfirstc == '='   // can't do this recursively
+        || cmdline_star > 0) {    // or when typing a password
+      beep_flush();
+      s->c = ESC;
+    } else {
+      s->c = get_expr_register();
+    }
+  }
+
+  if (s->c != ESC) {               // use ESC to cancel inserting register
+    cmdline_paste(s->c, i == Ctrl_R, false);
+
+    // When there was a serious error abort getting the
+    // command line.
+    if (aborting()) {
+      s->gotesc = true;              // will free ccline.cmdbuff after
+                                     // putting it in history
+      return GOTO_NORMAL_MODE;
+    }
+    KeyTyped = false;                // Don't do p_wc completion.
+    if (new_cmdpos >= 0) {
+      // set_cmdline_pos() was used
+      if (new_cmdpos > ccline.cmdlen) {
+        ccline.cmdpos = ccline.cmdlen;
+      } else {
+        ccline.cmdpos = new_cmdpos;
+      }
+    }
+  }
+  new_cmdpos = save_new_cmdpos;
+
+  // remove the double quote
+  ccline.special_char = NUL;
+  redrawcmd();
+
+  // The text has been stuffed, the command line didn't change yet.
+  return CMDLINE_NOT_CHANGED;
+}
+
+/// Handle the Left and Right mouse clicks in the command-line mode.
+static void command_line_left_right_mouse(CommandLineState *s)
+{
+  if (s->c == K_LEFTRELEASE || s->c == K_RIGHTRELEASE) {
+    s->ignore_drag_release = true;
+  } else {
+    s->ignore_drag_release = false;
+  }
+
+  ccline.cmdspos = cmd_startcol();
+  for (ccline.cmdpos = 0; ccline.cmdpos < ccline.cmdlen;
+       ccline.cmdpos++) {
+    int cells = cmdline_charsize(ccline.cmdpos);
+    if (mouse_row <= cmdline_row + ccline.cmdspos / Columns
+        && mouse_col < ccline.cmdspos % Columns + cells) {
+      break;
+    }
+
+    // Count ">" for double-wide char that doesn't fit.
+    correct_screencol(ccline.cmdpos, cells, &ccline.cmdspos);
+    ccline.cmdpos += utfc_ptr2len(ccline.cmdbuff + ccline.cmdpos) - 1;
+    ccline.cmdspos += cells;
+  }
+}
+
 static void command_line_next_histidx(CommandLineState *s, bool next_match)
 {
   int j = (int)strlen(s->lookfor);
@@ -1462,6 +1690,94 @@ static void command_line_next_histidx(CommandLineState *s, bool next_match)
   }
 }
 
+/// Handle the Up, Down, Page Up, Page down, CTRL-N and CTRL-P key in the
+/// command-line mode.
+static int command_line_browse_history(CommandLineState *s)
+{
+  if (s->histype == HIST_INVALID || get_hislen() == 0 || s->firstc == NUL) {
+    // no history
+    return CMDLINE_NOT_CHANGED;
+  }
+
+  s->save_hiscnt = s->hiscnt;
+
+  // save current command string so it can be restored later
+  if (s->lookfor == NULL) {
+    s->lookfor = xstrdup(ccline.cmdbuff);
+    s->lookfor[ccline.cmdpos] = NUL;
+  }
+
+  bool next_match = (s->c == K_DOWN || s->c == K_S_DOWN || s->c == Ctrl_N
+                     || s->c == K_PAGEDOWN || s->c == K_KPAGEDOWN);
+  command_line_next_histidx(s, next_match);
+
+  if (s->hiscnt != s->save_hiscnt) {
+    // jumped to other entry
+    char *p;
+    int len = 0;
+    int old_firstc;
+
+    XFREE_CLEAR(ccline.cmdbuff);
+    s->xpc.xp_context = EXPAND_NOTHING;
+    if (s->hiscnt == get_hislen()) {
+      p = s->lookfor;                  // back to the old one
+    } else {
+      p = get_histentry(s->histype)[s->hiscnt].hisstr;
+    }
+
+    if (s->histype == HIST_SEARCH
+        && p != s->lookfor
+        && (old_firstc = (uint8_t)p[strlen(p) + 1]) != s->firstc) {
+      // Correct for the separator character used when
+      // adding the history entry vs the one used now.
+      // First loop: count length.
+      // Second loop: copy the characters.
+      for (int i = 0; i <= 1; i++) {
+        len = 0;
+        for (int j = 0; p[j] != NUL; j++) {
+          // Replace old sep with new sep, unless it is
+          // escaped.
+          if (p[j] == old_firstc
+              && (j == 0 || p[j - 1] != '\\')) {
+            if (i > 0) {
+              ccline.cmdbuff[len] = (char)s->firstc;
+            }
+          } else {
+            // Escape new sep, unless it is already
+            // escaped.
+            if (p[j] == s->firstc
+                && (j == 0 || p[j - 1] != '\\')) {
+              if (i > 0) {
+                ccline.cmdbuff[len] = '\\';
+              }
+              len++;
+            }
+
+            if (i > 0) {
+              ccline.cmdbuff[len] = p[j];
+            }
+          }
+          len++;
+        }
+
+        if (i == 0) {
+          alloc_cmdbuff(len);
+        }
+      }
+      ccline.cmdbuff[len] = NUL;
+    } else {
+      alloc_cmdbuff((int)strlen(p));
+      STRCPY(ccline.cmdbuff, p);
+    }
+
+    ccline.cmdpos = ccline.cmdlen = (int)strlen(ccline.cmdbuff);
+    redrawcmd();
+    return CMDLINE_CHANGED;
+  }
+  beep_flush();
+  return CMDLINE_NOT_CHANGED;
+}
+
 static int command_line_handle_key(CommandLineState *s)
 {
   // Big switch for a typed command line character.
@@ -1471,80 +1787,14 @@ static int command_line_handle_key(CommandLineState *s)
   case K_DEL:
   case K_KDEL:
   case Ctrl_W:
-    if (s->c == K_KDEL) {
-      s->c = K_DEL;
+    switch (command_line_erase_chars(s)) {
+    case CMDLINE_NOT_CHANGED:
+      return command_line_not_changed(s);
+    case GOTO_NORMAL_MODE:
+      return 0;  // back to cmd mode
+    default:
+      return command_line_changed(s);
     }
-
-    // delete current character is the same as backspace on next
-    // character, except at end of line
-    if (s->c == K_DEL && ccline.cmdpos != ccline.cmdlen) {
-      ccline.cmdpos++;
-    }
-
-    if (s->c == K_DEL) {
-      ccline.cmdpos += mb_off_next((char_u *)ccline.cmdbuff,
-                                   (char_u *)ccline.cmdbuff + ccline.cmdpos);
-    }
-
-    if (ccline.cmdpos > 0) {
-      char_u *p;
-
-      int j = ccline.cmdpos;
-      p = mb_prevptr((char_u *)ccline.cmdbuff, (char_u *)ccline.cmdbuff + j);
-
-      if (s->c == Ctrl_W) {
-        while (p > (char_u *)ccline.cmdbuff && ascii_isspace(*p)) {
-          p = mb_prevptr((char_u *)ccline.cmdbuff, p);
-        }
-
-        int i = mb_get_class(p);
-        while (p > (char_u *)ccline.cmdbuff && mb_get_class(p) == i) {
-          p = mb_prevptr((char_u *)ccline.cmdbuff, p);
-        }
-
-        if (mb_get_class(p) != i) {
-          p += utfc_ptr2len((char *)p);
-        }
-      }
-
-      ccline.cmdpos = (int)(p - (char_u *)ccline.cmdbuff);
-      ccline.cmdlen -= j - ccline.cmdpos;
-      int i = ccline.cmdpos;
-
-      while (i < ccline.cmdlen) {
-        ccline.cmdbuff[i++] = ccline.cmdbuff[j++];
-      }
-
-      // Truncate at the end, required for multi-byte chars.
-      ccline.cmdbuff[ccline.cmdlen] = NUL;
-      if (ccline.cmdlen == 0) {
-        s->is_state.search_start = s->is_state.save_cursor;
-        // save view settings, so that the screen won't be restored at the
-        // wrong position
-        s->is_state.old_viewstate = s->is_state.init_viewstate;
-      }
-      redrawcmd();
-    } else if (ccline.cmdlen == 0 && s->c != Ctrl_W
-               && ccline.cmdprompt == NULL && s->indent == 0) {
-      // In ex and debug mode it doesn't make sense to return.
-      if (exmode_active || ccline.cmdfirstc == '>') {
-        return command_line_not_changed(s);
-      }
-
-      XFREE_CLEAR(ccline.cmdbuff);        // no commandline to return
-      if (!cmd_silent && !ui_has(kUICmdline)) {
-        if (cmdmsg_rl) {
-          msg_col = Columns;
-        } else {
-          msg_col = 0;
-        }
-        msg_putchar(' ');                             // delete ':'
-      }
-      s->is_state.search_start = s->is_state.save_cursor;
-      redraw_cmdline = true;
-      return 0;                           // back to cmd mode
-    }
-    return command_line_changed(s);
 
   case K_INS:
   case K_KINS:
@@ -1554,28 +1804,7 @@ static int command_line_handle_key(CommandLineState *s)
     return command_line_not_changed(s);
 
   case Ctrl_HAT:
-    if (map_to_exists_mode("", MODE_LANGMAP, false)) {
-      // ":lmap" mappings exists, toggle use of mappings.
-      State ^= MODE_LANGMAP;
-      if (s->b_im_ptr != NULL) {
-        if (State & MODE_LANGMAP) {
-          *s->b_im_ptr = B_IMODE_LMAP;
-        } else {
-          *s->b_im_ptr = B_IMODE_NONE;
-        }
-      }
-    }
-
-    if (s->b_im_ptr != NULL) {
-      if (s->b_im_ptr == &curbuf->b_p_iminsert) {
-        set_iminsert_global();
-      } else {
-        set_imsearch_global();
-      }
-    }
-    ui_cursor_shape();                // may show different cursor shape
-    // Show/unshow value of 'keymap' in status lines later.
-    status_redraw_curbuf();
+    command_line_toggle_langmap(s);
     return command_line_not_changed(s);
 
   case Ctrl_U: {
@@ -1611,62 +1840,15 @@ static int command_line_handle_key(CommandLineState *s)
                                       // putting it in history
     return 0;                         // back to cmd mode
 
-  case Ctrl_R: {                      // insert register
-    const int save_new_cmdpos = new_cmdpos;
-
-    putcmdline('"', true);
-    no_mapping++;
-    allow_keys++;
-    int i = s->c = plain_vgetc();      // CTRL-R <char>
-    if (i == Ctrl_O) {
-      i = Ctrl_R;                      // CTRL-R CTRL-O == CTRL-R CTRL-R
+  case Ctrl_R:                        // insert register
+    switch (command_line_insert_reg(s)) {
+    case CMDLINE_NOT_CHANGED:
+      return command_line_not_changed(s);
+    case GOTO_NORMAL_MODE:
+      return 0;  // back to cmd mode
+    default:
+      return command_line_changed(s);
     }
-
-    if (i == Ctrl_R) {
-      s->c = plain_vgetc();              // CTRL-R CTRL-R <char>
-    }
-    no_mapping--;
-    allow_keys--;
-    // Insert the result of an expression.
-    new_cmdpos = -1;
-    if (s->c == '=') {
-      if (ccline.cmdfirstc == '='   // can't do this recursively
-          || cmdline_star > 0) {    // or when typing a password
-        beep_flush();
-        s->c = ESC;
-      } else {
-        s->c = get_expr_register();
-      }
-    }
-
-    if (s->c != ESC) {               // use ESC to cancel inserting register
-      cmdline_paste(s->c, i == Ctrl_R, false);
-
-      // When there was a serious error abort getting the
-      // command line.
-      if (aborting()) {
-        s->gotesc = true;              // will free ccline.cmdbuff after
-                                       // putting it in history
-        return 0;                      // back to cmd mode
-      }
-      KeyTyped = false;                // Don't do p_wc completion.
-      if (new_cmdpos >= 0) {
-        // set_cmdline_pos() was used
-        if (new_cmdpos > ccline.cmdlen) {
-          ccline.cmdpos = ccline.cmdlen;
-        } else {
-          ccline.cmdpos = new_cmdpos;
-        }
-      }
-    }
-    new_cmdpos = save_new_cmdpos;
-
-    // remove the double quote
-    ccline.special_char = NUL;
-    redrawcmd();
-
-    return command_line_changed(s);
-  }
 
   case Ctrl_D:
     if (showmatches(&s->xpc, false) == EXPAND_NOTHING) {
@@ -1747,26 +1929,7 @@ static int command_line_handle_key(CommandLineState *s)
     FALLTHROUGH;
   case K_LEFTMOUSE:
   case K_RIGHTMOUSE:
-    if (s->c == K_LEFTRELEASE || s->c == K_RIGHTRELEASE) {
-      s->ignore_drag_release = true;
-    } else {
-      s->ignore_drag_release = false;
-    }
-
-    ccline.cmdspos = cmd_startcol();
-    for (ccline.cmdpos = 0; ccline.cmdpos < ccline.cmdlen;
-         ccline.cmdpos++) {
-      int cells = cmdline_charsize(ccline.cmdpos);
-      if (mouse_row <= cmdline_row + ccline.cmdspos / Columns
-          && mouse_col < ccline.cmdspos % Columns + cells) {
-        break;
-      }
-
-      // Count ">" for double-wide char that doesn't fit.
-      correct_screencol(ccline.cmdpos, cells, &ccline.cmdspos);
-      ccline.cmdpos += utfc_ptr2len(ccline.cmdbuff + ccline.cmdpos) - 1;
-      ccline.cmdspos += cells;
-    }
+    command_line_left_right_mouse(s);
     return command_line_not_changed(s);
 
   // Mouse scroll wheel: ignored here
@@ -1849,88 +2012,14 @@ static int command_line_handle_key(CommandLineState *s)
   case K_KPAGEUP:
   case K_PAGEDOWN:
   case K_KPAGEDOWN:
-    if (s->histype == HIST_INVALID || get_hislen() == 0 || s->firstc == NUL) {
-      // no history
+    switch (command_line_browse_history(s)) {
+    case CMDLINE_CHANGED:
+      return command_line_changed(s);
+    case GOTO_NORMAL_MODE:
+      return 0;
+    default:
       return command_line_not_changed(s);
     }
-
-    s->save_hiscnt = s->hiscnt;
-
-    // save current command string so it can be restored later
-    if (s->lookfor == NULL) {
-      s->lookfor = xstrdup(ccline.cmdbuff);
-      s->lookfor[ccline.cmdpos] = NUL;
-    }
-
-    bool next_match = (s->c == K_DOWN || s->c == K_S_DOWN || s->c == Ctrl_N
-                       || s->c == K_PAGEDOWN || s->c == K_KPAGEDOWN);
-    command_line_next_histidx(s, next_match);
-
-    if (s->hiscnt != s->save_hiscnt) {
-      // jumped to other entry
-      char *p;
-      int len = 0;
-      int old_firstc;
-
-      XFREE_CLEAR(ccline.cmdbuff);
-      s->xpc.xp_context = EXPAND_NOTHING;
-      if (s->hiscnt == get_hislen()) {
-        p = s->lookfor;                  // back to the old one
-      } else {
-        p = get_histentry(s->histype)[s->hiscnt].hisstr;
-      }
-
-      if (s->histype == HIST_SEARCH
-          && p != s->lookfor
-          && (old_firstc = (uint8_t)p[strlen(p) + 1]) != s->firstc) {
-        // Correct for the separator character used when
-        // adding the history entry vs the one used now.
-        // First loop: count length.
-        // Second loop: copy the characters.
-        for (int i = 0; i <= 1; i++) {
-          len = 0;
-          for (int j = 0; p[j] != NUL; j++) {
-            // Replace old sep with new sep, unless it is
-            // escaped.
-            if (p[j] == old_firstc
-                && (j == 0 || p[j - 1] != '\\')) {
-              if (i > 0) {
-                ccline.cmdbuff[len] = (char)s->firstc;
-              }
-            } else {
-              // Escape new sep, unless it is already
-              // escaped.
-              if (p[j] == s->firstc
-                  && (j == 0 || p[j - 1] != '\\')) {
-                if (i > 0) {
-                  ccline.cmdbuff[len] = '\\';
-                }
-                len++;
-              }
-
-              if (i > 0) {
-                ccline.cmdbuff[len] = p[j];
-              }
-            }
-            len++;
-          }
-
-          if (i == 0) {
-            alloc_cmdbuff(len);
-          }
-        }
-        ccline.cmdbuff[len] = NUL;
-      } else {
-        alloc_cmdbuff((int)strlen(p));
-        STRCPY(ccline.cmdbuff, p);
-      }
-
-      ccline.cmdpos = ccline.cmdlen = (int)strlen(ccline.cmdbuff);
-      redrawcmd();
-      return command_line_changed(s);
-    }
-    beep_flush();
-    return command_line_not_changed(s);
 
   case Ctrl_G:  // next match
   case Ctrl_T:  // previous match

@@ -648,6 +648,14 @@ static void f_chansend(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   ptrdiff_t input_len = 0;
   char *input = NULL;
+  uint64_t id = (uint64_t)argvars[0].vval.v_number;
+#ifdef UNIX
+  bool crlf = false;
+#else
+  Channel *chan = find_channel(id);
+  bool crlf = (chan != NULL && chan->term) ? true: false;
+#endif
+
   if (argvars[1].v_type == VAR_BLOB) {
     const blob_T *const b = argvars[1].vval.v_blob;
     input_len = tv_blob_len(b);
@@ -655,7 +663,7 @@ static void f_chansend(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       input = xmemdup(b->bv_ga.ga_data, (size_t)input_len);
     }
   } else {
-    input = save_tv_as_string(&argvars[1], &input_len, false);
+    input = save_tv_as_string(&argvars[1], &input_len, false, crlf);
   }
 
   if (!input) {
@@ -663,7 +671,6 @@ static void f_chansend(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     // or there is no input to send.
     return;
   }
-  uint64_t id = (uint64_t)argvars[0].vval.v_number;
   const char *error = NULL;
   rettv->vval.v_number = (varnumber_T)channel_send(id, input, (size_t)input_len, true, &error);
   if (error) {
@@ -5145,10 +5152,11 @@ static void init_srand(uint32_t *const x)
     }
   }
   if (dev_urandom_state != OK) {
-    // Reading /dev/urandom doesn't work, fall back to time().
+    // Reading /dev/urandom doesn't work, fall back to os_hrtime() XOR with process ID
 #endif
   // uncrustify:off
-    *x = (uint32_t)time(NULL);
+    *x = (uint32_t)os_hrtime();
+    *x ^= (uint32_t)os_get_pid();
 #ifndef MSWIN
   }
 #endif
