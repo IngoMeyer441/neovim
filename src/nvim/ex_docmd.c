@@ -3784,7 +3784,6 @@ int expand_filename(exarg_T *eap, char **cmdlinep, char **errormsgp)
         && eap->cmdidx != CMD_bang
         && eap->cmdidx != CMD_grep
         && eap->cmdidx != CMD_grepadd
-        && eap->cmdidx != CMD_hardcopy
         && eap->cmdidx != CMD_lgrep
         && eap->cmdidx != CMD_lgrepadd
         && eap->cmdidx != CMD_lmake
@@ -5171,11 +5170,13 @@ static void ex_find(exarg_T *eap)
     }
   }
 
-  if (fname != NULL) {
-    eap->arg = fname;
-    do_exedit(eap, NULL);
-    xfree(fname);
+  if (fname == NULL) {
+    return;
   }
+
+  eap->arg = fname;
+  do_exedit(eap, NULL);
+  xfree(fname);
 }
 
 /// ":edit", ":badd", ":balt", ":visual".

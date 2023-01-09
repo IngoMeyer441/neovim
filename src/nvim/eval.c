@@ -672,25 +672,6 @@ int eval_charconvert(const char *const enc_from, const char *const enc_to,
   return OK;
 }
 
-int eval_printexpr(const char *const fname, const char *const args)
-{
-  bool err = false;
-
-  set_vim_var_string(VV_FNAME_IN, fname, -1);
-  set_vim_var_string(VV_CMDARG, args, -1);
-  if (eval_to_bool(p_pexpr, &err, NULL, false)) {
-    err = true;
-  }
-  set_vim_var_string(VV_FNAME_IN, NULL, -1);
-  set_vim_var_string(VV_CMDARG, NULL, -1);
-
-  if (err) {
-    os_remove(fname);
-    return FAIL;
-  }
-  return OK;
-}
-
 void eval_diff(const char *const origfile, const char *const newfile, const char *const outfile)
 {
   bool err = false;
@@ -1018,13 +999,15 @@ void prepare_vimvar(int idx, typval_T *save_tv)
 void restore_vimvar(int idx, typval_T *save_tv)
 {
   vimvars[idx].vv_tv = *save_tv;
-  if (vimvars[idx].vv_type == VAR_UNKNOWN) {
-    hashitem_T *hi = hash_find(&vimvarht, (char *)vimvars[idx].vv_di.di_key);
-    if (HASHITEM_EMPTY(hi)) {
-      internal_error("restore_vimvar()");
-    } else {
-      hash_remove(&vimvarht, hi);
-    }
+  if (vimvars[idx].vv_type != VAR_UNKNOWN) {
+    return;
+  }
+
+  hashitem_T *hi = hash_find(&vimvarht, (char *)vimvars[idx].vv_di.di_key);
+  if (HASHITEM_EMPTY(hi)) {
+    internal_error("restore_vimvar()");
+  } else {
+    hash_remove(&vimvarht, hi);
   }
 }
 
@@ -6685,12 +6668,13 @@ void set_vim_var_dict(const VimVarIndex idx, dict_T *const val)
   tv_clear(&vimvars[idx].vv_di.di_tv);
   vimvars[idx].vv_type = VAR_DICT;
   vimvars[idx].vv_dict = val;
-
-  if (val != NULL) {
-    val->dv_refcount++;
-    // Set readonly
-    tv_dict_set_keys_readonly(val);
+  if (val == NULL) {
+    return;
   }
+
+  val->dv_refcount++;
+  // Set readonly
+  tv_dict_set_keys_readonly(val);
 }
 
 /// Set the v:argv list.

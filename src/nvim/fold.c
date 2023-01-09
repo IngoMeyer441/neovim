@@ -477,12 +477,15 @@ static void newFoldLevelWin(win_T *wp)
 /// Apply 'foldlevel' to all folds that don't contain the cursor.
 void foldCheckClose(void)
 {
-  if (*p_fcl != NUL) {  // can only be "all" right now
-    checkupdate(curwin);
-    if (checkCloseRec(&curwin->w_folds, curwin->w_cursor.lnum,
-                      (int)curwin->w_p_fdl)) {
-      changed_window_setting();
-    }
+  if (*p_fcl == NUL) {
+    return;
+  }
+
+  // can only be "all" right now
+  checkupdate(curwin);
+  if (checkCloseRec(&curwin->w_folds, curwin->w_cursor.lnum,
+                    (int)curwin->w_p_fdl)) {
+    changed_window_setting();
   }
 }
 
@@ -1005,15 +1008,18 @@ void foldAdjustVisual(void)
   if (hasFolding(start->lnum, &start->lnum, NULL)) {
     start->col = 0;
   }
-  if (hasFolding(end->lnum, NULL, &end->lnum)) {
-    ptr = ml_get(end->lnum);
-    end->col = (colnr_T)strlen(ptr);
-    if (end->col > 0 && *p_sel == 'o') {
-      end->col--;
-    }
-    // prevent cursor from moving on the trail byte
-    mb_adjust_cursor();
+
+  if (!hasFolding(end->lnum, NULL, &end->lnum)) {
+    return;
   }
+
+  ptr = ml_get(end->lnum);
+  end->col = (colnr_T)strlen(ptr);
+  if (end->col > 0 && *p_sel == 'o') {
+    end->col--;
+  }
+  // prevent cursor from moving on the trail byte
+  mb_adjust_cursor();
 }
 
 // cursor_foldstart() {{{2
@@ -1115,10 +1121,12 @@ static int foldLevelWin(win_T *wp, linenr_T lnum)
 /// Check if the folds in window "wp" are invalid and update them if needed.
 static void checkupdate(win_T *wp)
 {
-  if (wp->w_foldinvalid) {
-    foldUpdate(wp, (linenr_T)1, (linenr_T)MAXLNUM);     // will update all
-    wp->w_foldinvalid = false;
+  if (!wp->w_foldinvalid) {
+    return;
   }
+
+  foldUpdate(wp, (linenr_T)1, (linenr_T)MAXLNUM);     // will update all
+  wp->w_foldinvalid = false;
 }
 
 // setFoldRepeat() {{{2
@@ -1523,23 +1531,25 @@ static bool check_closed(win_T *const wp, fold_T *const fp, bool *const use_leve
 /// @param lnum_off  offset for fp->fd_top
 static void checkSmall(win_T *const wp, fold_T *const fp, const linenr_T lnum_off)
 {
-  if (fp->fd_small == kNone) {
-    // Mark any nested folds to maybe-small
-    setSmallMaybe(&fp->fd_nested);
+  if (fp->fd_small != kNone) {
+    return;
+  }
 
-    if (fp->fd_len > wp->w_p_fml) {
-      fp->fd_small = kFalse;
-    } else {
-      int count = 0;
-      for (int n = 0; n < fp->fd_len; n++) {
-        count += plines_win_nofold(wp, fp->fd_top + lnum_off + n);
-        if (count > wp->w_p_fml) {
-          fp->fd_small = kFalse;
-          return;
-        }
+  // Mark any nested folds to maybe-small
+  setSmallMaybe(&fp->fd_nested);
+
+  if (fp->fd_len > wp->w_p_fml) {
+    fp->fd_small = kFalse;
+  } else {
+    int count = 0;
+    for (int n = 0; n < fp->fd_len; n++) {
+      count += plines_win_nofold(wp, fp->fd_top + lnum_off + n);
+      if (count > wp->w_p_fml) {
+        fp->fd_small = kFalse;
+        return;
       }
-      fp->fd_small = kTrue;
     }
+    fp->fd_small = kTrue;
   }
 }
 
@@ -1595,26 +1605,28 @@ static void foldAddMarker(buf_T *buf, pos_T pos, const char *marker, size_t mark
   size_t line_len = strlen(line);
   size_t added = 0;
 
-  if (u_save(lnum - 1, lnum + 1) == OK) {
-    // Check if the line ends with an unclosed comment
-    skip_comment(line, false, false, &line_is_comment);
-    newline = xmalloc(line_len + markerlen + strlen(cms) + 1);
-    STRCPY(newline, line);
-    // Append the marker to the end of the line
-    if (p == NULL || line_is_comment) {
-      STRLCPY(newline + line_len, marker, markerlen + 1);
-      added = markerlen;
-    } else {
-      STRCPY(newline + line_len, cms);
-      memcpy(newline + line_len + (p - cms), marker, markerlen);
-      STRCPY(newline + line_len + (p - cms) + markerlen, p + 2);
-      added = markerlen + strlen(cms) - 2;
-    }
-    ml_replace_buf(buf, lnum, newline, false);
-    if (added) {
-      extmark_splice_cols(buf, (int)lnum - 1, (int)line_len,
-                          0, (int)added, kExtmarkUndo);
-    }
+  if (u_save(lnum - 1, lnum + 1) != OK) {
+    return;
+  }
+
+  // Check if the line ends with an unclosed comment
+  skip_comment(line, false, false, &line_is_comment);
+  newline = xmalloc(line_len + markerlen + strlen(cms) + 1);
+  STRCPY(newline, line);
+  // Append the marker to the end of the line
+  if (p == NULL || line_is_comment) {
+    STRLCPY(newline + line_len, marker, markerlen + 1);
+    added = markerlen;
+  } else {
+    STRCPY(newline + line_len, cms);
+    memcpy(newline + line_len + (p - cms), marker, markerlen);
+    STRCPY(newline + line_len + (p - cms) + markerlen, p + 2);
+    added = markerlen + strlen(cms) - 2;
+  }
+  ml_replace_buf(buf, lnum, newline, false);
+  if (added) {
+    extmark_splice_cols(buf, (int)lnum - 1, (int)line_len,
+                        0, (int)added, kExtmarkUndo);
   }
 }
 
