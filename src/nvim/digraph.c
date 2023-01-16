@@ -1528,30 +1528,31 @@ int get_digraph(bool cmdline)
   no_mapping--;
   allow_keys--;
 
-  if (c != ESC) {
+  if (c == ESC) {  // ESC cancels CTRL-K
+    return NUL;
+  }
+
+  if (IS_SPECIAL(c)) {
+    // insert special key code
+    return c;
+  }
+
+  if (cmdline) {
+    if ((char2cells(c) == 1) && c < 128 && (cmdline_star == 0)) {
+      putcmdline((char)c, true);
+    }
+  } else {
+    add_to_showcmd(c);
+  }
+  no_mapping++;
+  allow_keys++;
+  int cc = plain_vgetc();
+  no_mapping--;
+  allow_keys--;
+
+  if (cc != ESC) {
     // ESC cancels CTRL-K
-    if (IS_SPECIAL(c)) {
-      // insert special key code
-      return c;
-    }
-
-    if (cmdline) {
-      if ((char2cells(c) == 1) && c < 128 && (cmdline_star == 0)) {
-        putcmdline((char)c, true);
-      }
-    } else {
-      add_to_showcmd(c);
-    }
-    no_mapping++;
-    allow_keys++;
-    int cc = plain_vgetc();
-    no_mapping--;
-    allow_keys--;
-
-    if (cc != ESC) {
-      // ESC cancels CTRL-K
-      return digraph_get(c, cc, true);
-    }
+    return digraph_get(c, cc, true);
   }
   return NUL;
 }
@@ -1655,8 +1656,8 @@ static void registerdigraph(int char1, int char2, int n)
 bool check_digraph_chars_valid(int char1, int char2)
 {
   if (char2 == 0) {
-    char_u msg[MB_MAXBYTES + 1];
-    msg[utf_char2bytes(char1, (char *)msg)] = NUL;
+    char msg[MB_MAXBYTES + 1];
+    msg[utf_char2bytes(char1, msg)] = NUL;
     semsg(_(e_digraph_must_be_just_two_characters_str), msg);
     return false;
   }
@@ -2132,7 +2133,7 @@ void ex_loadkeymap(exarg_T *eap)
     vim_snprintf(buf, sizeof(buf), "<buffer> %s %s",
                  ((kmap_T *)curbuf->b_kmap_ga.ga_data)[i].from,
                  ((kmap_T *)curbuf->b_kmap_ga.ga_data)[i].to);
-    (void)do_map(MAPTYPE_MAP, (char_u *)buf, MODE_LANGMAP, false);
+    (void)do_map(MAPTYPE_MAP, buf, MODE_LANGMAP, false);
   }
 
   p_cpo = save_cpo;
@@ -2169,7 +2170,7 @@ static void keymap_unload(void)
 
   for (int i = 0; i < curbuf->b_kmap_ga.ga_len; i++) {
     vim_snprintf(buf, sizeof(buf), "<buffer> %s", kp[i].from);
-    (void)do_map(MAPTYPE_UNMAP, (char_u *)buf, MODE_LANGMAP, false);
+    (void)do_map(MAPTYPE_UNMAP, buf, MODE_LANGMAP, false);
   }
   keymap_ga_clear(&curbuf->b_kmap_ga);
 

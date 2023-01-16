@@ -573,7 +573,7 @@ int u_savecommon(buf_T *buf, linenr_T top, linenr_T bot, linenr_T newbot, int re
   }
 
   if (size > 0) {
-    uep->ue_array = xmalloc(sizeof(char_u *) * (size_t)size);
+    uep->ue_array = xmalloc(sizeof(char *) * (size_t)size);
     linenr_T lnum;
     long i;
     for (i = 0, lnum = top + 1; i < size; i++) {
@@ -2322,7 +2322,7 @@ static void u_undoredo(int undo, bool do_buf_event)
       linenr_T lnum;
       for (lnum = bot - 1, i = oldsize; --i >= 0; lnum--) {
         // what can we do when we run out of memory?
-        newarray[i] = u_save_line(lnum);
+        newarray[i] = (char_u *)u_save_line(lnum);
         // remember we deleted the last line in the buffer, and a
         // dummy empty line will be inserted
         if (curbuf->b_ml.ml_line_count == 1) {
@@ -2569,7 +2569,7 @@ static void u_undo_end(bool did_undo, bool absolute, bool quiet)
   if (uhp == NULL) {
     *msgbuf = NUL;
   } else {
-    undo_fmt_time(msgbuf, sizeof(msgbuf), uhp->uh_time);
+    undo_fmt_time((char *)msgbuf, sizeof(msgbuf), uhp->uh_time);
   }
 
   {
@@ -2594,7 +2594,7 @@ static void u_undo_end(bool did_undo, bool absolute, bool quiet)
 }
 
 /// Put the timestamp of an undo header in "buf[buflen]" in a nice format.
-void undo_fmt_time(char_u *buf, size_t buflen, time_t tt)
+void undo_fmt_time(char *buf, size_t buflen, time_t tt)
 {
   if (time(NULL) - tt >= 100) {
     struct tm curtime;
@@ -2602,17 +2602,17 @@ void undo_fmt_time(char_u *buf, size_t buflen, time_t tt)
     size_t n;
     if (time(NULL) - tt < (60L * 60L * 12L)) {
       // within 12 hours
-      n = strftime((char *)buf, buflen, "%H:%M:%S", &curtime);
+      n = strftime(buf, buflen, "%H:%M:%S", &curtime);
     } else {
       // longer ago
-      n = strftime((char *)buf, buflen, "%Y/%m/%d %H:%M:%S", &curtime);
+      n = strftime(buf, buflen, "%Y/%m/%d %H:%M:%S", &curtime);
     }
     if (n == 0) {
       buf[0] = NUL;
     }
   } else {
     int64_t seconds = time(NULL) - tt;
-    vim_snprintf((char *)buf, buflen,
+    vim_snprintf(buf, buflen,
                  NGETTEXT("%" PRId64 " second ago",
                           "%" PRId64 " seconds ago", (uint32_t)seconds),
                  seconds);
@@ -2654,15 +2654,15 @@ void ex_undolist(exarg_T *eap)
   while (uhp != NULL) {
     if (uhp->uh_prev.ptr == NULL && uhp->uh_walk != nomark
         && uhp->uh_walk != mark) {
-      vim_snprintf((char *)IObuff, IOSIZE, "%6ld %7d  ", uhp->uh_seq, changes);
-      undo_fmt_time((char_u *)IObuff + strlen(IObuff), IOSIZE - strlen(IObuff), uhp->uh_time);
+      vim_snprintf(IObuff, IOSIZE, "%6ld %7d  ", uhp->uh_seq, changes);
+      undo_fmt_time(IObuff + strlen(IObuff), IOSIZE - strlen(IObuff), uhp->uh_time);
       if (uhp->uh_save_nr > 0) {
         while (strlen(IObuff) < 33) {
           STRCAT(IObuff, " ");
         }
-        vim_snprintf_add((char *)IObuff, IOSIZE, "  %3ld", uhp->uh_save_nr);
+        vim_snprintf_add(IObuff, IOSIZE, "  %3ld", uhp->uh_save_nr);
       }
-      GA_APPEND(char *, &ga, xstrdup((char *)IObuff));
+      GA_APPEND(char *, &ga, xstrdup(IObuff));
     }
 
     uhp->uh_walk = mark;
@@ -2978,7 +2978,7 @@ void u_saveline(linenr_T lnum)
   } else {
     curbuf->b_u_line_colnr = 0;
   }
-  curbuf->b_u_line_ptr = (char *)u_save_line(lnum);
+  curbuf->b_u_line_ptr = u_save_line(lnum);
 }
 
 /// clear the line saved for the "U" command
@@ -3009,7 +3009,7 @@ void u_undoline(void)
     return;
   }
 
-  char *oldp = (char *)u_save_line(curbuf->b_u_line_lnum);
+  char *oldp = u_save_line(curbuf->b_u_line_lnum);
   ml_replace(curbuf->b_u_line_lnum, curbuf->b_u_line_ptr, true);
   changed_bytes(curbuf->b_u_line_lnum, 0);
   extmark_splice_cols(curbuf, (int)curbuf->b_u_line_lnum - 1, 0, (colnr_T)strlen(oldp),
@@ -3043,9 +3043,9 @@ void u_blockfree(buf_T *buf)
 /// Allocate memory and copy curbuf line into it.
 ///
 /// @param lnum the line to copy
-static char_u *u_save_line(linenr_T lnum)
+static char *u_save_line(linenr_T lnum)
 {
-  return (char_u *)u_save_line_buf(curbuf, lnum);
+  return u_save_line_buf(curbuf, lnum);
 }
 
 /// Allocate memory and copy line into it

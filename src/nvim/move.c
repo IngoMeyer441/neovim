@@ -27,12 +27,14 @@
 #include "nvim/eval/window.h"
 #include "nvim/fold.h"
 #include "nvim/getchar.h"
+#include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
 #include "nvim/macros.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline_defs.h"
+#include "nvim/message.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
@@ -379,12 +381,19 @@ static bool check_top_offset(void)
   return false;
 }
 
+/// Update w_curswant.
+void update_curswant_force(void)
+{
+  validate_virtcol();
+  curwin->w_curswant = curwin->w_virtcol;
+  curwin->w_set_curswant = false;
+}
+
+/// Update w_curswant if w_set_curswant is set.
 void update_curswant(void)
 {
   if (curwin->w_set_curswant) {
-    validate_virtcol();
-    curwin->w_curswant = curwin->w_virtcol;
-    curwin->w_set_curswant = false;
+    update_curswant_force();
   }
 }
 
@@ -599,57 +608,67 @@ void validate_virtcol(void)
 void validate_virtcol_win(win_T *wp)
 {
   check_cursor_moved(wp);
-  if (!(wp->w_valid & VALID_VIRTCOL)) {
-    getvvcol(wp, &wp->w_cursor, NULL, &(wp->w_virtcol), NULL);
-    redraw_for_cursorcolumn(wp);
-    wp->w_valid |= VALID_VIRTCOL;
+
+  if (wp->w_valid & VALID_VIRTCOL) {
+    return;
   }
+
+  getvvcol(wp, &wp->w_cursor, NULL, &(wp->w_virtcol), NULL);
+  redraw_for_cursorcolumn(wp);
+  wp->w_valid |= VALID_VIRTCOL;
 }
 
 // Validate curwin->w_cline_height only.
 void validate_cheight(void)
 {
   check_cursor_moved(curwin);
-  if (!(curwin->w_valid & VALID_CHEIGHT)) {
-    curwin->w_cline_height = plines_win_full(curwin, curwin->w_cursor.lnum,
-                                             NULL, &curwin->w_cline_folded,
-                                             true);
-    curwin->w_valid |= VALID_CHEIGHT;
+
+  if (curwin->w_valid & VALID_CHEIGHT) {
+    return;
   }
+
+  curwin->w_cline_height = plines_win_full(curwin, curwin->w_cursor.lnum,
+                                           NULL, &curwin->w_cline_folded,
+                                           true);
+  curwin->w_valid |= VALID_CHEIGHT;
 }
 
 // Validate w_wcol and w_virtcol only.
 void validate_cursor_col(void)
 {
   validate_virtcol();
-  if (!(curwin->w_valid & VALID_WCOL)) {
-    colnr_T col = curwin->w_virtcol;
-    colnr_T off = curwin_col_off();
-    col += off;
-    int width = curwin->w_width_inner - off + curwin_col_off2();
 
-    // long line wrapping, adjust curwin->w_wrow
-    if (curwin->w_p_wrap && col >= (colnr_T)curwin->w_width_inner
-        && width > 0) {
-      // use same formula as what is used in curs_columns()
-      col -= ((col - curwin->w_width_inner) / width + 1) * width;
-    }
-    if (col > (int)curwin->w_leftcol) {
-      col -= curwin->w_leftcol;
-    } else {
-      col = 0;
-    }
-    curwin->w_wcol = col;
-
-    curwin->w_valid |= VALID_WCOL;
+  if (curwin->w_valid & VALID_WCOL) {
+    return;
   }
+
+  colnr_T col = curwin->w_virtcol;
+  colnr_T off = curwin_col_off();
+  col += off;
+  int width = curwin->w_width_inner - off + curwin_col_off2();
+
+  // long line wrapping, adjust curwin->w_wrow
+  if (curwin->w_p_wrap && col >= (colnr_T)curwin->w_width_inner
+      && width > 0) {
+    // use same formula as what is used in curs_columns()
+    col -= ((col - curwin->w_width_inner) / width + 1) * width;
+  }
+  if (col > (int)curwin->w_leftcol) {
+    col -= curwin->w_leftcol;
+  } else {
+    col = 0;
+  }
+  curwin->w_wcol = col;
+
+  curwin->w_valid |= VALID_WCOL;
 }
 
 // Compute offset of a window, occupied by absolute or relative line number,
 // fold column and sign column (these don't move when scrolling horizontally).
 int win_col_off(win_T *wp)
 {
-  return ((wp->w_p_nu || wp->w_p_rnu) ? number_width(wp) + 1 : 0)
+  return ((wp->w_p_nu || wp->w_p_rnu || (*wp->w_p_stc != NUL)) ?
+          (number_width(wp) + (*wp->w_p_stc == NUL)) : 0)
          + (cmdwin_type == 0 || wp != curwin ? 0 : 1)
          + win_fdccol_count(wp)
          + (win_signcol_count(wp) * win_signcol_width(wp));

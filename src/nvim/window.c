@@ -11,12 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/arglist.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/decoration.h"
@@ -59,6 +61,7 @@
 #include "nvim/option.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
 #include "nvim/pos.h"
@@ -648,7 +651,7 @@ wingotofile:
 
 static void cmd_with_count(char *cmd, char *bufp, size_t bufsize, int64_t Prenum)
 {
-  size_t len = STRLCPY(bufp, cmd, bufsize);
+  size_t len = xstrlcpy(bufp, cmd, bufsize);
 
   if (Prenum > 0 && len < bufsize) {
     vim_snprintf(bufp + len, bufsize - len, "%" PRId64, Prenum);
@@ -786,6 +789,12 @@ void win_set_minimal_style(win_T *wp)
     free_string_option(wp->w_p_cc);
     wp->w_p_cc = xstrdup("");
   }
+
+  // statuscolumn: cleared
+  if (wp->w_p_stc != NULL && *wp->w_p_stc != NUL) {
+    free_string_option(wp->w_p_stc);
+    wp->w_p_stc = xstrdup("");
+  }
 }
 
 void win_config_float(win_T *wp, FloatConfig fconfig)
@@ -798,6 +807,15 @@ void win_config_float(win_T *wp, FloatConfig fconfig)
     fconfig.row += curwin->w_wrow;
     fconfig.col += curwin->w_wcol;
     fconfig.window = curwin->handle;
+  } else if (fconfig.relative == kFloatRelativeMouse) {
+    int row = mouse_row, col = mouse_col, grid = mouse_grid;
+    win_T *mouse_win = mouse_find_win(&grid, &row, &col);
+    if (mouse_win != NULL) {
+      fconfig.relative = kFloatRelativeWindow;
+      fconfig.row += row;
+      fconfig.col += col;
+      fconfig.window = mouse_win->handle;
+    }
   }
 
   bool change_external = fconfig.external != wp->w_float_config.external;
@@ -4879,7 +4897,7 @@ void fix_current_dir(void)
   // New directory is either the local directory of the window, tab or NULL.
   char *new_dir = curwin->w_localdir ? curwin->w_localdir : curtab->tp_localdir;
   char cwd[MAXPATHL];
-  if (os_dirname((char_u *)cwd, MAXPATHL) != OK) {
+  if (os_dirname(cwd, MAXPATHL) != OK) {
     cwd[0] = NUL;
   }
 
@@ -5093,6 +5111,9 @@ static void win_free(win_T *wp, tabpage_T *tp)
 
   stl_clear_click_defs(wp->w_winbar_click_defs, wp->w_winbar_click_defs_size);
   xfree(wp->w_winbar_click_defs);
+
+  stl_clear_click_defs(wp->w_statuscol_click_defs, wp->w_statuscol_click_defs_size);
+  xfree(wp->w_statuscol_click_defs);
 
   // Remove the window from the b_wininfo lists, it may happen that the
   // freed memory is re-used for another window.
@@ -5762,6 +5783,10 @@ static void frame_setheight(frame_T *curfrp, int height)
 
   if (curfrp->fr_parent == NULL) {
     // topframe: can only change the command line height
+    // Avoid doing so with external messages.
+    if (ui_has(kUIMessages)) {
+      return;
+    }
     if (height > ROWS_AVAIL) {
       // If height is greater than the available space, try to create space for
       // the frame by reducing 'cmdheight' if possible, while making sure
@@ -6097,13 +6122,13 @@ void win_setminwidth(void)
 /// Status line of dragwin is dragged "offset" lines down (negative is up).
 void win_drag_status_line(win_T *dragwin, int offset)
 {
-  // If the user explicitly set 'cmdheight' to zero, then allow for dragging
-  // the status line making it zero again.
-  if (p_ch == 0) {
-    p_ch_was_zero = true;
+  frame_T *fr = dragwin->w_frame;
+
+  // Avoid changing command line height with external messages.
+  if (fr->fr_next == NULL && ui_has(kUIMessages)) {
+    return;
   }
 
-  frame_T *fr = dragwin->w_frame;
   frame_T *curfr = fr;
   if (fr != topframe) {         // more than one window
     fr = fr->fr_parent;

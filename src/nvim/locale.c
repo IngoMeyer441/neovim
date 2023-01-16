@@ -290,8 +290,7 @@ static char **find_locales(void)
 
   // Find all available locales by running command "locale -a".  If this
   // doesn't work we won't have completion.
-  char *locale_a = (char *)get_cmd_output((char_u *)"locale -a", NULL,
-                                          kShellOptSilent, NULL);
+  char *locale_a = get_cmd_output("locale -a", NULL, kShellOptSilent, NULL);
   if (locale_a == NULL) {
     return NULL;
   }
@@ -318,23 +317,26 @@ static char **find_locales(void)
 static void init_locales(void)
 {
 # ifndef MSWIN
-  if (!did_init_locales) {
-    did_init_locales = true;
-    locales = find_locales();
+  if (did_init_locales) {
+    return;
   }
+
+  did_init_locales = true;
+  locales = find_locales();
 # endif
 }
 
 # if defined(EXITFREE)
 void free_locales(void)
 {
-  int i;
-  if (locales != NULL) {
-    for (i = 0; locales[i] != NULL; i++) {
-      xfree(locales[i]);
-    }
-    XFREE_CLEAR(locales);
+  if (locales == NULL) {
+    return;
   }
+
+  for (int i = 0; locales[i] != NULL; i++) {
+    xfree(locales[i]);
+  }
+  XFREE_CLEAR(locales);
 }
 # endif
 

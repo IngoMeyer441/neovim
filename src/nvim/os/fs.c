@@ -105,12 +105,12 @@ int os_chdir(const char *path)
 /// @param buf Buffer to store the directory name.
 /// @param len Length of `buf`.
 /// @return `OK` for success, `FAIL` for failure.
-int os_dirname(char_u *buf, size_t len)
+int os_dirname(char *buf, size_t len)
   FUNC_ATTR_NONNULL_ALL
 {
   int error_number;
-  if ((error_number = uv_cwd((char *)buf, &len)) != kLibuvSuccess) {
-    STRLCPY(buf, uv_strerror(error_number), len);
+  if ((error_number = uv_cwd(buf, &len)) != kLibuvSuccess) {
+    xstrlcpy(buf, uv_strerror(error_number), len);
     return FAIL;
   }
   return OK;
@@ -379,7 +379,7 @@ static bool is_executable_in_path(const char *name, char **abspath)
     char *e = xstrchrnul(p, ENV_SEPCHAR);
 
     // Combine the $PATH segment with `name`.
-    STRLCPY(buf, p, e - p + 1);
+    xstrlcpy(buf, p, (size_t)(e - p) + 1);
     append_path(buf, name, buf_len);
 
 #ifdef MSWIN
@@ -995,7 +995,7 @@ int os_mkdir_recurse(const char *const dir, int32_t mode, char **const failed_di
 int os_file_mkdir(char *fname, int32_t mode)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  if (!dir_of_file_exists((char_u *)fname)) {
+  if (!dir_of_file_exists(fname)) {
     char *tail = path_tail_with_sep(fname);
     char *last_char = tail + strlen(tail) - 1;
     if (vim_ispathsep(*last_char)) {

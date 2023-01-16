@@ -640,7 +640,7 @@ static void set_b0_fname(ZERO_BL *b0p, buf_T *buf)
       size_t ulen = strlen(uname);
       size_t flen = strlen(b0p->b0_fname);
       if (retval == FAIL || ulen + flen > B0_FNAME_SIZE_CRYPT - 1) {
-        STRLCPY(b0p->b0_fname, buf->b_ffname, B0_FNAME_SIZE_CRYPT);
+        xstrlcpy(b0p->b0_fname, buf->b_ffname, B0_FNAME_SIZE_CRYPT);
       } else {
         memmove(b0p->b0_fname + ulen + 1, b0p->b0_fname + 1, flen);
         memmove(b0p->b0_fname + 1, uname, ulen);
@@ -675,7 +675,7 @@ static void set_b0_fname(ZERO_BL *b0p, buf_T *buf)
 /// not set.
 static void set_b0_dir_flag(ZERO_BL *b0p, buf_T *buf)
 {
-  if (same_directory((char_u *)buf->b_ml.ml_mfp->mf_fname, (char_u *)buf->b_ffname)) {
+  if (same_directory(buf->b_ml.ml_mfp->mf_fname, buf->b_ffname)) {
     b0p->b0_flags |= B0_SAME_DIR;
   } else {
     b0p->b0_flags = (char)(b0p->b0_flags & ~B0_SAME_DIR);
@@ -887,18 +887,18 @@ void ml_recover(bool checkext)
   // If .swp file name given directly, use name from swap file for buffer.
   if (directly) {
     expand_env((char *)b0p->b0_fname, NameBuff, MAXPATHL);
-    if (setfname(curbuf, (char *)NameBuff, NULL, true) == FAIL) {
+    if (setfname(curbuf, NameBuff, NULL, true) == FAIL) {
       goto theend;
     }
   }
 
-  home_replace(NULL, mfp->mf_fname, (char *)NameBuff, MAXPATHL, true);
+  home_replace(NULL, mfp->mf_fname, NameBuff, MAXPATHL, true);
   smsg(_("Using swap file \"%s\""), NameBuff);
 
   if (buf_spname(curbuf) != NULL) {
-    STRLCPY(NameBuff, buf_spname(curbuf), MAXPATHL);
+    xstrlcpy(NameBuff, buf_spname(curbuf), MAXPATHL);
   } else {
-    home_replace(NULL, curbuf->b_ffname, (char *)NameBuff, MAXPATHL, true);
+    home_replace(NULL, curbuf->b_ffname, NameBuff, MAXPATHL, true);
   }
   smsg(_("Original file \"%s\""), NameBuff);
   msg_putchar('\n');
@@ -1349,7 +1349,7 @@ int recover_names(char_u *fname, int list, int nr, char **fname_out)
           msg_puts(".    ");
           msg_puts((const char *)path_tail(files[i]));
           msg_putchar('\n');
-          (void)swapfile_info((char_u *)files[i]);
+          (void)swapfile_info(files[i]);
         }
       } else {
         msg_puts(_("      -- none --\n"));
@@ -1377,17 +1377,19 @@ char *make_percent_swname(const char *dir, const char *name)
 {
   char *d = NULL;
   char *f = fix_fname(name != NULL ? name : "");
-  if (f != NULL) {
-    char *s = xstrdup(f);
-    for (d = s; *d != NUL; MB_PTR_ADV(d)) {
-      if (vim_ispathsep(*d)) {
-        *d = '%';
-      }
-    }
-    d = concat_fnames(dir, s, true);
-    xfree(s);
-    xfree(f);
+  if (f == NULL) {
+    return NULL;
   }
+
+  char *s = xstrdup(f);
+  for (d = s; *d != NUL; MB_PTR_ADV(d)) {
+    if (vim_ispathsep(*d)) {
+      *d = '%';
+    }
+  }
+  d = concat_fnames(dir, s, true);
+  xfree(s);
+  xfree(f);
   return d;
 }
 
@@ -1434,7 +1436,7 @@ void get_b0_dict(const char *fname, dict_T *d)
 /// Give information about an existing swap file.
 ///
 /// @return  timestamp (0 when unknown).
-static time_t swapfile_info(char_u *fname)
+static time_t swapfile_info(char *fname)
 {
   assert(fname != NULL);
   int fd;
@@ -1446,7 +1448,7 @@ static time_t swapfile_info(char_u *fname)
 
   // print the swap file date
   FileInfo file_info;
-  if (os_fileinfo((char *)fname, &file_info)) {
+  if (os_fileinfo(fname, &file_info)) {
 #ifdef UNIX
     // print name of owner of the file
     if (os_get_uname((uv_uid_t)file_info.stat.st_uid, uname, B0_UNAME_SIZE) == OK) {
@@ -1465,7 +1467,7 @@ static time_t swapfile_info(char_u *fname)
   }
 
   // print the original file name
-  fd = os_open((char *)fname, O_RDONLY, 0);
+  fd = os_open(fname, O_RDONLY, 0);
   if (fd >= 0) {
     if (read_eintr(fd, &b0, sizeof(b0)) == sizeof(b0)) {
       if (strncmp(b0.b0_version, "VIM 3.0", 7) == 0) {
@@ -2317,7 +2319,7 @@ void ml_add_deleted_len_buf(buf_T *buf, char *ptr, ssize_t len)
   curbuf->deleted_bytes += (size_t)len + 1;
   curbuf->deleted_bytes2 += (size_t)len + 1;
   if (curbuf->update_need_codepoints) {
-    mb_utflen((char_u *)ptr, (size_t)len, &curbuf->deleted_codepoints,
+    mb_utflen(ptr, (size_t)len, &curbuf->deleted_codepoints,
               &curbuf->deleted_codeunits);
     curbuf->deleted_codepoints++;  // NL char
     curbuf->deleted_codeunits++;
@@ -2641,7 +2643,7 @@ static void ml_flush_line(buf_T *buf)
       DATA_BL *dp = hp->bh_data;
       int idx = lnum - buf->b_ml.ml_locked_low;
       int start = ((dp->db_index[idx]) & DB_INDEX_MASK);
-      char_u *old_line = (char_u *)dp + start;
+      char *old_line = (char *)dp + start;
       int old_len;
       if (idx == 0) {           // line is last in block
         old_len = (int)dp->db_txt_end - start;
@@ -2966,7 +2968,7 @@ int resolve_symlink(const char *fname, char *buf)
   }
 
   // Put the result so far in tmp[], starting with the original name.
-  STRLCPY(tmp, fname, MAXPATHL);
+  xstrlcpy(tmp, fname, MAXPATHL);
 
   for (;;) {
     // Limit symlink depth to 100, catch recursive loops.
@@ -3047,13 +3049,13 @@ char *makeswapname(char *fname, char *ffname, buf_T *buf, char *dir_name)
   }
 
   // Prepend a '.' to the swap file name for the current directory.
-  char_u *r = (char_u *)modname(fname_res, ".swp",
-                                dir_name[0] == '.' && dir_name[1] == NUL);
+  char *r = modname(fname_res, ".swp",
+                    dir_name[0] == '.' && dir_name[1] == NUL);
   if (r == NULL) {          // out of memory
     return NULL;
   }
 
-  s = get_file_in_dir((char *)r, dir_name);
+  s = get_file_in_dir(r, dir_name);
   xfree(r);
   return s;
 }
@@ -3100,14 +3102,14 @@ char *get_file_in_dir(char *fname, char *dname)
 ///
 /// @param buf  buffer being edited
 /// @param fname  swap file name
-static void attention_message(buf_T *buf, char_u *fname)
+static void attention_message(buf_T *buf, char *fname)
 {
   assert(buf->b_fname != NULL);
 
   no_wait_return++;
   (void)emsg(_("E325: ATTENTION"));
   msg_puts(_("\nFound a swap file by the name \""));
-  msg_home_replace((char *)fname);
+  msg_home_replace(fname);
   msg_puts("\"\n");
   const time_t swap_mtime = swapfile_info(fname);
   msg_puts(_("While opening file \""));
@@ -3136,7 +3138,7 @@ static void attention_message(buf_T *buf, char_u *fname)
   msg_outtrans(buf->b_fname);
   msg_puts(_("\"\n    to recover the changes (see \":help recovery\").\n"));
   msg_puts(_("    If you did this already, delete the swap file \""));
-  msg_outtrans((char *)fname);
+  msg_outtrans(fname);
   msg_puts(_("\"\n    to avoid this message.\n"));
   cmdline_row = msg_row;
   no_wait_return--;
@@ -3152,9 +3154,9 @@ static void attention_message(buf_T *buf, char_u *fname)
 ///          4: delete it
 ///          5: quit
 ///          6: abort
-static int do_swapexists(buf_T *buf, char_u *fname)
+static int do_swapexists(buf_T *buf, char *fname)
 {
-  set_vim_var_string(VV_SWAPNAME, (char *)fname, -1);
+  set_vim_var_string(VV_SWAPNAME, fname, -1);
   set_vim_var_string(VV_SWAPCHOICE, NULL, -1);
 
   // Trigger SwapExists autocommands with <afile> set to the file being
@@ -3266,7 +3268,7 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
             if (b0.b0_flags & B0_SAME_DIR) {
               if (path_fnamecmp(path_tail(buf->b_ffname),
                                 path_tail((char *)b0.b0_fname)) != 0
-                  || !same_directory((char_u *)fname, (char_u *)buf->b_ffname)) {
+                  || !same_directory(fname, buf->b_ffname)) {
                 // Symlinks may point to the same file even
                 // when the name differs, need to check the
                 // inode too.
@@ -3311,12 +3313,12 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
           if (choice == 0
               && swap_exists_action != SEA_NONE
               && has_autocmd(EVENT_SWAPEXISTS, buf_fname, buf)) {
-            choice = do_swapexists(buf, (char_u *)fname);
+            choice = do_swapexists(buf, fname);
           }
 
           if (choice == 0) {
             // Show info about the existing swap file.
-            attention_message(buf, (char_u *)fname);
+            attention_message(buf, fname);
 
             // We don't want a 'q' typed at the more-prompt
             // interrupt loading a file.

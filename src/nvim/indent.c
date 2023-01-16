@@ -17,6 +17,7 @@
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval_defs.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/extmark.h"
 #include "nvim/gettext.h"
@@ -24,6 +25,7 @@
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/mark.h"
+#include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
@@ -798,7 +800,7 @@ bool briopt_check(win_T *wp)
 // Return appropriate space number for breakindent, taking influencing
 // parameters into account. Window must be specified, since it is not
 // necessarily always the current one.
-int get_breakindent_win(win_T *wp, char_u *line)
+int get_breakindent_win(win_T *wp, char *line)
   FUNC_ATTR_NONNULL_ALL
 {
   static int prev_indent = 0;  // Cached indent value.
@@ -820,17 +822,17 @@ int get_breakindent_win(win_T *wp, char_u *line)
   // - 'tabstop' changed
   // - 'briopt_list changed' changed or
   // - 'formatlistpattern' changed
-  if (prev_line != line || prev_ts != wp->w_buffer->b_p_ts
+  if (prev_line != (char_u *)line || prev_ts != wp->w_buffer->b_p_ts
       || prev_tick != buf_get_changedtick(wp->w_buffer)
       || prev_listopt != wp->w_briopt_list
       || (prev_flp == NULL || (strcmp(prev_flp, get_flp_value(wp->w_buffer)) != 0))
       || prev_vts != wp->w_buffer->b_p_vts_array) {
-    prev_line = line;
+    prev_line = (char_u *)line;
     prev_ts = wp->w_buffer->b_p_ts;
     prev_tick = buf_get_changedtick(wp->w_buffer);
     prev_vts = wp->w_buffer->b_p_vts_array;
     if (wp->w_briopt_vcol == 0) {
-      prev_indent = get_indent_str_vtab((char *)line,
+      prev_indent = get_indent_str_vtab(line,
                                         wp->w_buffer->b_p_ts,
                                         wp->w_buffer->b_p_vts_array,
                                         wp->w_p_list);
@@ -846,7 +848,7 @@ int get_breakindent_win(win_T *wp, char_u *line)
       };
       if (regmatch.regprog != NULL) {
         regmatch.rm_ic = false;
-        if (vim_regexec(&regmatch, (char *)line, 0)) {
+        if (vim_regexec(&regmatch, line, 0)) {
           if (wp->w_briopt_list > 0) {
             prev_list += wp->w_briopt_list;
           } else {
@@ -1396,11 +1398,13 @@ void fixthisline(IndentGetter get_the_indent)
 {
   int amount = get_the_indent();
 
-  if (amount >= 0) {
-    change_indent(INDENT_SET, amount, false, 0, true);
-    if (linewhite(curwin->w_cursor.lnum)) {
-      did_ai = true;  // delete the indent if the line stays empty
-    }
+  if (amount < 0) {
+    return;
+  }
+
+  change_indent(INDENT_SET, amount, false, 0, true);
+  if (linewhite(curwin->w_cursor.lnum)) {
+    did_ai = true;  // delete the indent if the line stays empty
   }
 }
 

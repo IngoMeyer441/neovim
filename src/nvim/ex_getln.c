@@ -324,7 +324,7 @@ static bool do_incsearch_highlighting(int firstc, int *search_delim, incsearch_s
   }
 
   p = skipwhite(p);
-  delim = (delim_optional && vim_isIDc(*p)) ? ' ' : *p++;
+  delim = (delim_optional && vim_isIDc((uint8_t)(*p))) ? ' ' : *p++;
   *search_delim = delim;
   end = skip_regexp_ex(p, delim, magic_isset(), NULL, NULL, &magic);
 
@@ -1225,6 +1225,8 @@ static int command_line_execute(VimState *state, int key)
   }
 
   if (cmdline_pum_active() || s->did_wild_list) {
+    // Ctrl-Y: Accept the current selection and close the popup menu.
+    // Ctrl-E: cancel the cmdline popup menu and return the original text.
     if (s->c == Ctrl_E || s->c == Ctrl_Y) {
       const int wild_type = (s->c == Ctrl_E) ? WILD_CANCEL : WILD_APPLY;
       (void)nextwild(&s->xpc, wild_type, WILD_NO_BEEP, s->firstc != '@');
@@ -1232,10 +1234,20 @@ static int command_line_execute(VimState *state, int key)
     }
   }
 
+  // The wildmenu is cleared if the pressed key is not used for
+  // navigating the wild menu (i.e. the key is not 'wildchar' or
+  // 'wildcharm' or Ctrl-N or Ctrl-P or Ctrl-A or Ctrl-L).
+  // If the popup menu is displayed, then PageDown and PageUp keys are
+  // also used to navigate the menu.
+  bool end_wildmenu = (!(s->c == p_wc && KeyTyped) && s->c != p_wcm && s->c != Ctrl_Z
+                       && s->c != Ctrl_N && s->c != Ctrl_P && s->c != Ctrl_A
+                       && s->c != Ctrl_L);
+  end_wildmenu = end_wildmenu && (!cmdline_pum_active()
+                                  || (s->c != K_PAGEDOWN && s->c != K_PAGEUP
+                                      && s->c != K_KPAGEDOWN && s->c != K_KPAGEUP));
+
   // free expanded names when finished walking through matches
-  if (!(s->c == p_wc && KeyTyped) && s->c != p_wcm && s->c != Ctrl_Z
-      && s->c != Ctrl_N && s->c != Ctrl_P && s->c != Ctrl_A
-      && s->c != Ctrl_L) {
+  if (end_wildmenu) {
     command_line_end_wildmenu(s);
   }
 
@@ -1462,31 +1474,31 @@ static int command_line_erase_chars(CommandLineState *s)
 
   if (s->c == K_DEL) {
     ccline.cmdpos += mb_off_next((char_u *)ccline.cmdbuff,
-                                 (char_u *)ccline.cmdbuff + ccline.cmdpos);
+                                 ccline.cmdbuff + ccline.cmdpos);
   }
 
   if (ccline.cmdpos > 0) {
-    char_u *p;
+    char *p;
 
     int j = ccline.cmdpos;
-    p = mb_prevptr((char_u *)ccline.cmdbuff, (char_u *)ccline.cmdbuff + j);
+    p = mb_prevptr(ccline.cmdbuff, ccline.cmdbuff + j);
 
     if (s->c == Ctrl_W) {
-      while (p > (char_u *)ccline.cmdbuff && ascii_isspace(*p)) {
-        p = mb_prevptr((char_u *)ccline.cmdbuff, p);
+      while (p > ccline.cmdbuff && ascii_isspace(*p)) {
+        p = mb_prevptr(ccline.cmdbuff, p);
       }
 
       int i = mb_get_class(p);
-      while (p > (char_u *)ccline.cmdbuff && mb_get_class(p) == i) {
-        p = mb_prevptr((char_u *)ccline.cmdbuff, p);
+      while (p > ccline.cmdbuff && mb_get_class(p) == i) {
+        p = mb_prevptr(ccline.cmdbuff, p);
       }
 
       if (mb_get_class(p) != i) {
-        p += utfc_ptr2len((char *)p);
+        p += utfc_ptr2len(p);
       }
     }
 
-    ccline.cmdpos = (int)(p - (char_u *)ccline.cmdbuff);
+    ccline.cmdpos = (int)(p - ccline.cmdbuff);
     ccline.cmdlen -= j - ccline.cmdpos;
     int i = ccline.cmdpos;
 
@@ -1998,8 +2010,8 @@ static int command_line_handle_key(CommandLineState *s)
   case Ctrl_N:            // next match
   case Ctrl_P:            // previous match
     if (s->xpc.xp_numfiles > 0) {
-      if (nextwild(&s->xpc, (s->c == Ctrl_P) ? WILD_PREV : WILD_NEXT,
-                   0, s->firstc != '@') == FAIL) {
+      const int wild_type = (s->c == Ctrl_P) ? WILD_PREV : WILD_NEXT;
+      if (nextwild(&s->xpc, wild_type, 0, s->firstc != '@') == FAIL) {
         break;
       }
       return command_line_not_changed(s);
@@ -2014,13 +2026,26 @@ static int command_line_handle_key(CommandLineState *s)
   case K_KPAGEUP:
   case K_PAGEDOWN:
   case K_KPAGEDOWN:
-    switch (command_line_browse_history(s)) {
-    case CMDLINE_CHANGED:
-      return command_line_changed(s);
-    case GOTO_NORMAL_MODE:
-      return 0;
-    default:
+    if (cmdline_pum_active()
+        && (s->c == K_PAGEUP || s->c == K_PAGEDOWN
+            || s->c == K_KPAGEUP || s->c == K_KPAGEDOWN)) {
+      // If the popup menu is displayed, then PageUp and PageDown
+      // are used to scroll the menu.
+      const int wild_type =
+        (s->c == K_PAGEDOWN || s->c == K_KPAGEDOWN) ? WILD_PAGEDOWN : WILD_PAGEUP;
+      if (nextwild(&s->xpc, wild_type, 0, s->firstc != '@') == FAIL) {
+        break;
+      }
       return command_line_not_changed(s);
+    } else {
+      switch (command_line_browse_history(s)) {
+      case CMDLINE_CHANGED:
+        return command_line_changed(s);
+      case GOTO_NORMAL_MODE:
+        return 0;
+      default:
+        return command_line_not_changed(s);
+      }
     }
 
   case Ctrl_G:  // next match
@@ -2097,11 +2122,11 @@ static int command_line_handle_key(CommandLineState *s)
 
   // put the character in the command line
   if (IS_SPECIAL(s->c) || mod_mask != 0) {
-    put_on_cmdline(get_special_key_name(s->c, mod_mask), -1, true);
+    put_on_cmdline((char *)get_special_key_name(s->c, mod_mask), -1, true);
   } else {
-    int j = utf_char2bytes(s->c, (char *)IObuff);
+    int j = utf_char2bytes(s->c, IObuff);
     IObuff[j] = NUL;                // exclude composing chars
-    put_on_cmdline((char_u *)IObuff, j, true);
+    put_on_cmdline(IObuff, j, true);
   }
   return command_line_changed(s);
 }
@@ -3232,7 +3257,7 @@ static void draw_cmdline(int start, int len)
     for (int i = start; i < start + len; i += mb_l) {
       char_u *p = (char_u *)ccline.cmdbuff + i;
       int u8cc[MAX_MCO];
-      int u8c = utfc_ptr2char_len(p, u8cc, start + len - i);
+      int u8c = utfc_ptr2char_len((char *)p, u8cc, start + len - i);
       mb_l = utfc_ptr2len_len((char *)p, start + len - i);
       if (ARABIC_CHAR(u8c)) {
         do_arabicshape = true;
@@ -3268,7 +3293,7 @@ static void draw_cmdline(int start, int len)
     for (int i = start; i < start + len; i += mb_l) {
       char_u *p = (char_u *)ccline.cmdbuff + i;
       int u8cc[MAX_MCO];
-      int u8c = utfc_ptr2char_len(p, u8cc, start + len - i);
+      int u8c = utfc_ptr2char_len((char *)p, u8cc, start + len - i);
       mb_l = utfc_ptr2len_len((char *)p, start + len - i);
       if (ARABIC_CHAR(u8c)) {
         int pc;
@@ -3292,7 +3317,7 @@ static void draw_cmdline(int start, int len)
           } else {
             int pcc[MAX_MCO];
 
-            pc = utfc_ptr2char_len(p + mb_l, pcc, start + len - i - mb_l);
+            pc = utfc_ptr2char_len((char *)p + mb_l, pcc, start + len - i - mb_l);
             pc1 = pcc[0];
           }
           nc = prev_c;
@@ -3509,14 +3534,14 @@ void unputcmdline(void)
 // part will be redrawn, otherwise it will not.  If this function is called
 // twice in a row, then 'redraw' should be false and redrawcmd() should be
 // called afterwards.
-void put_on_cmdline(char_u *str, int len, int redraw)
+void put_on_cmdline(char *str, int len, int redraw)
 {
   int i;
   int m;
   int c;
 
   if (len < 0) {
-    len = (int)strlen((char *)str);
+    len = (int)strlen(str);
   }
 
   realloc_cmdbuff(ccline.cmdlen + len + 1);
@@ -3529,7 +3554,7 @@ void put_on_cmdline(char_u *str, int len, int redraw)
   } else {
     // Count nr of characters in the new string.
     m = 0;
-    for (i = 0; i < len; i += utfc_ptr2len((char *)str + i)) {
+    for (i = 0; i < len; i += utfc_ptr2len(str + i)) {
       m++;
     }
     // Count nr of bytes in cmdline that are overwritten by these
@@ -3725,7 +3750,7 @@ void cmdline_paste_str(char_u *s, int literally)
   int c, cv;
 
   if (literally) {
-    put_on_cmdline(s, -1, true);
+    put_on_cmdline((char *)s, -1, true);
   } else {
     while (*s != NUL) {
       cv = *s;
@@ -3956,7 +3981,7 @@ char *vim_strsave_fnameescape(const char *const fname, const int what)
   // ":buffer" command.
   for (const char *p = what == VSE_BUFFER ? BUFFER_ESC_CHARS : PATH_ESC_CHARS;
        *p != NUL; p++) {
-    if ((*p != '[' && *p != '{' && *p != '!') || !vim_isfilec(*p)) {
+    if ((*p != '[' && *p != '{' && *p != '!') || !vim_isfilec((uint8_t)(*p))) {
       buf[j++] = *p;
     }
   }
@@ -3964,18 +3989,16 @@ char *vim_strsave_fnameescape(const char *const fname, const int what)
   char *p = (char *)vim_strsave_escaped((const char_u *)fname,
                                         (const char_u *)buf);
 #else
-# define PATH_ESC_CHARS ((char_u *)" \t\n*?[{`$\\%#'\"|!<")
-# define SHELL_ESC_CHARS ((char_u *)" \t\n*?[{`$\\%#'\"|!<>();&")
-# define BUFFER_ESC_CHARS ((char_u *)" \t\n*?[`$\\%#'\"|!<")
-  char *p =
-    (char *)vim_strsave_escaped((const char_u *)fname,
-                                what == VSE_SHELL ? SHELL_ESC_CHARS
-                                : what == VSE_BUFFER ? BUFFER_ESC_CHARS : PATH_ESC_CHARS);
+# define PATH_ESC_CHARS " \t\n*?[{`$\\%#'\"|!<"
+# define SHELL_ESC_CHARS " \t\n*?[{`$\\%#'\"|!<>();&"
+# define BUFFER_ESC_CHARS " \t\n*?[`$\\%#'\"|!<"
+  char *p = vim_strsave_escaped(fname,
+                                what == VSE_SHELL ? SHELL_ESC_CHARS : what ==
+                                VSE_BUFFER ? BUFFER_ESC_CHARS : PATH_ESC_CHARS);
   if (what == VSE_SHELL && csh_like_shell()) {
     // For csh and similar shells need to put two backslashes before '!'.
     // One is taken by Vim, one by the shell.
-    char *s = (char *)vim_strsave_escaped((const char_u *)p,
-                                          (const char_u *)"!");
+    char *s = vim_strsave_escaped(p, "!");
     xfree(p);
     p = s;
   }
@@ -4002,7 +4025,7 @@ void escape_fname(char **pp)
 
 /// For each file name in files[num_files]:
 /// If 'orig_pat' starts with "~/", replace the home directory with "~".
-void tilde_replace(char_u *orig_pat, int num_files, char **files)
+void tilde_replace(char *orig_pat, int num_files, char **files)
 {
   char *p;
 
@@ -4083,12 +4106,14 @@ static char *get_cmdline_completion(void)
   }
   CmdlineInfo *p = get_ccline_ptr();
 
-  if (p != NULL && p->xpc != NULL) {
-    set_expand_context(p->xpc);
-    char *cmd_compl = get_user_cmd_complete(p->xpc, p->xpc->xp_context);
-    if (cmd_compl != NULL) {
-      return xstrdup(cmd_compl);
-    }
+  if (p == NULL || p->xpc == NULL) {
+    return NULL;
+  }
+
+  set_expand_context(p->xpc);
+  char *cmd_compl = get_user_cmd_complete(p->xpc, p->xpc->xp_context);
+  if (cmd_compl != NULL) {
+    return xstrdup(cmd_compl);
   }
 
   return NULL;

@@ -53,7 +53,6 @@
 #include "nvim/search.h"
 #include "nvim/shada.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
 #include "nvim/version.h"
 #include "nvim/vim.h"
 
@@ -1341,7 +1340,7 @@ static void shada_read(ShaDaReadDef *const sd_reader, const int flags)
     case kSDItemBufferList:
       for (size_t i = 0; i < cur_entry.data.buffer_list.size; i++) {
         char *const sfname =
-          (char *)path_try_shorten_fname((char_u *)cur_entry.data.buffer_list.buffers[i].fname);
+          path_try_shorten_fname(cur_entry.data.buffer_list.buffers[i].fname);
         buf_T *const buf =
           buflist_new(cur_entry.data.buffer_list.buffers[i].fname, sfname, 0, BLN_LISTED);
         if (buf != NULL) {
@@ -4017,7 +4016,7 @@ static bool shada_removable(const char *name)
   for (p = p_shada; *p;) {
     (void)copy_option_part(&p, part, ARRAY_SIZE(part), ", ");
     if (part[0] == 'r') {
-      home_replace(NULL, part + 1, (char *)NameBuff, MAXPATHL, true);
+      home_replace(NULL, part + 1, NameBuff, MAXPATHL, true);
       size_t n = strlen(NameBuff);
       if (mb_strnicmp(NameBuff, new_name, n) == 0) {
         retval = true;

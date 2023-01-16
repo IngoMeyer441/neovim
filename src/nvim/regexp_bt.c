@@ -3703,7 +3703,7 @@ static bool regmatch(char_u *scan, proftime_T *tm, int *timed_out)
           if (!re_num_cmp(win_linetabsize(rex.reg_win == NULL
                                           ? curwin : rex.reg_win,
                                           rex.reg_firstlnum + rex.lnum,
-                                          rex.line,
+                                          (char *)rex.line,
                                           (colnr_T)(rex.input - rex.line)) + 1,
                           scan)) {
             status = RA_NOMATCH;
@@ -3716,7 +3716,7 @@ static bool regmatch(char_u *scan, proftime_T *tm, int *timed_out)
           } else {
             // Get class of current and previous char (if it exists).
             const int this_class =
-              mb_get_class_tab(rex.input, rex.reg_buf->b_chartab);
+              mb_get_class_tab((char *)rex.input, rex.reg_buf->b_chartab);
             if (this_class <= 1) {
               status = RA_NOMATCH;  // Not on a word at all.
             } else if (reg_prev_class() == this_class) {
@@ -3732,7 +3732,7 @@ static bool regmatch(char_u *scan, proftime_T *tm, int *timed_out)
             int this_class, prev_class;
 
             // Get class of current and previous char (if it exists).
-            this_class = mb_get_class_tab(rex.input, rex.reg_buf->b_chartab);
+            this_class = mb_get_class_tab((char *)rex.input, rex.reg_buf->b_chartab);
             prev_class = reg_prev_class();
             if (this_class == prev_class
                 || prev_class == 0 || prev_class == 1) {

@@ -7,8 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "auto/config.h"
 #include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/ui.h"
@@ -17,8 +17,6 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/cursor_shape.h"
 #include "nvim/drawscreen.h"
-#include "nvim/event/defs.h"
-#include "nvim/event/loop.h"
 #include "nvim/ex_getln.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
@@ -27,15 +25,14 @@
 #include "nvim/highlight_defs.h"
 #include "nvim/log.h"
 #include "nvim/lua/executor.h"
-#include "nvim/main.h"
+#include "nvim/map.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/msgpack_rpc/channel.h"
 #include "nvim/option.h"
 #include "nvim/os/time.h"
 #include "nvim/strings.h"
-#include "nvim/tui/tui.h"
 #include "nvim/ui.h"
+#include "nvim/ui_client.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -292,34 +289,36 @@ void vim_beep(unsigned val)
 {
   called_vim_beep = true;
 
-  if (emsg_silent == 0 && !in_assert_fails) {
-    if (!((bo_flags & val) || (bo_flags & BO_ALL))) {
-      static int beeps = 0;
-      static uint64_t start_time = 0;
+  if (emsg_silent != 0 || in_assert_fails) {
+    return;
+  }
 
-      // Only beep up to three times per half a second,
-      // otherwise a sequence of beeps would freeze Vim.
-      if (start_time == 0 || os_hrtime() - start_time > 500000000U) {
-        beeps = 0;
-        start_time = os_hrtime();
-      }
-      beeps++;
-      if (beeps <= 3) {
-        if (p_vb) {
-          ui_call_visual_bell();
-        } else {
-          ui_call_bell();
-        }
+  if (!((bo_flags & val) || (bo_flags & BO_ALL))) {
+    static int beeps = 0;
+    static uint64_t start_time = 0;
+
+    // Only beep up to three times per half a second,
+    // otherwise a sequence of beeps would freeze Vim.
+    if (start_time == 0 || os_hrtime() - start_time > 500000000U) {
+      beeps = 0;
+      start_time = os_hrtime();
+    }
+    beeps++;
+    if (beeps <= 3) {
+      if (p_vb) {
+        ui_call_visual_bell();
+      } else {
+        ui_call_bell();
       }
     }
+  }
 
-    // When 'debug' contains "beep" produce a message.  If we are sourcing
-    // a script or executing a function give the user a hint where the beep
-    // comes from.
-    if (vim_strchr(p_debug, 'e') != NULL) {
-      msg_source(HL_ATTR(HLF_W));
-      msg_attr(_("Beep!"), HL_ATTR(HLF_W));
-    }
+  // When 'debug' contains "beep" produce a message.  If we are sourcing
+  // a script or executing a function give the user a hint where the beep
+  // comes from.
+  if (vim_strchr(p_debug, 'e') != NULL) {
+    msg_source(HL_ATTR(HLF_W));
+    msg_attr(_("Beep!"), HL_ATTR(HLF_W));
   }
 }
 

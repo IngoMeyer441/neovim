@@ -140,7 +140,7 @@ void grid_putchar(ScreenGrid *grid, int c, int row, int col, int attr)
 
 /// get a single character directly from grid.chars into "bytes[]".
 /// Also return its attribute in *attrp;
-void grid_getbytes(ScreenGrid *grid, int row, int col, char_u *bytes, int *attrp)
+void grid_getbytes(ScreenGrid *grid, int row, int col, char *bytes, int *attrp)
 {
   size_t off;
 
@@ -150,7 +150,7 @@ void grid_getbytes(ScreenGrid *grid, int row, int col, char_u *bytes, int *attrp
   if (grid->chars != NULL && row < grid->rows && col < grid->cols) {
     off = grid->line_offset[row] + (size_t)col;
     *attrp = grid->attrs[off];
-    schar_copy((char *)bytes, grid->chars[off]);
+    schar_copy(bytes, grid->chars[off]);
   }
 }
 
@@ -253,7 +253,7 @@ void grid_puts_len(ScreenGrid *grid, char *text, int textlen, int row, int col, 
       ? utfc_ptr2len_len(ptr, (int)((text + len) - ptr))
       : utfc_ptr2len(ptr);
     u8c = len >= 0
-      ? utfc_ptr2char_len((char_u *)ptr, u8cc, (int)((text + len) - ptr))
+      ? utfc_ptr2char_len(ptr, u8cc, (int)((text + len) - ptr))
       : utfc_ptr2char(ptr, u8cc);
     mbyte_cells = utf_char2cells(u8c);
     if (p_arshape && !p_tbidi && ARABIC_CHAR(u8c)) {
@@ -264,7 +264,7 @@ void grid_puts_len(ScreenGrid *grid, char *text, int textlen, int row, int col, 
         nc1 = NUL;
       } else {
         nc = len >= 0
-          ? utfc_ptr2char_len((char_u *)ptr + mbyte_blen, pcc,
+          ? utfc_ptr2char_len(ptr + mbyte_blen, pcc,
                               (int)((text + len) - ptr - mbyte_blen))
           : utfc_ptr2char(ptr + mbyte_blen, pcc);
         nc1 = pcc[0];

@@ -74,6 +74,7 @@
 ///      - "editor" The global editor grid
 ///      - "win"    Window given by the `win` field, or current window.
 ///      - "cursor" Cursor position in current window.
+///      - "mouse"  Mouse position
 ///   - win: |window-ID| for relative="win".
 ///   - anchor: Decides which corner of the float to place at (row,col):
 ///      - "NW" northwest (default)
@@ -114,8 +115,9 @@
 ///                    float where the text should not be edited. Disables
 ///                    'number', 'relativenumber', 'cursorline', 'cursorcolumn',
 ///                    'foldcolumn', 'spell' and 'list' options. 'signcolumn'
-///                    is changed to `auto` and 'colorcolumn' is cleared. The
-///                    end-of-buffer region is hidden by setting `eob` flag of
+///                    is changed to `auto` and 'colorcolumn' is cleared.
+///                    'statuscolumn' is changed to empty. The end-of-buffer
+///                     region is hidden by setting `eob` flag of
 ///                    'fillchars' to a space char, and clearing the
 ///                    |hl-EndOfBuffer| region in 'winhighlight'.
 ///   - border: Style of (optional) window border. This can either be a string
@@ -299,7 +301,15 @@ Dictionary nvim_win_get_config(Window window, Error *err)
           ADD(titles, ARRAY_OBJ(tuple));
         }
         PUT(rv, "title", ARRAY_OBJ(titles));
-        PUT(rv, "title_pos", INTEGER_OBJ(config->title_pos));
+        char *title_pos;
+        if (config->title_pos == kAlignLeft) {
+          title_pos = "left";
+        } else if (config->title_pos == kAlignCenter) {
+          title_pos = "center";
+        } else {
+          title_pos = "right";
+        }
+        PUT(rv, "title_pos", CSTR_TO_OBJ(title_pos));
       }
     }
   }
@@ -340,6 +350,8 @@ static bool parse_float_relative(String relative, FloatRelative *out)
     *out = kFloatRelativeWindow;
   } else if (striequal(str, "cursor")) {
     *out = kFloatRelativeCursor;
+  } else if (striequal(str, "mouse")) {
+    *out = kFloatRelativeMouse;
   } else {
     return false;
   }

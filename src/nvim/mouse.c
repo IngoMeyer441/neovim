@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -58,13 +59,13 @@ static int orig_topfill = 0;
 /// 1: punctuation groups
 /// 2: normal word character
 /// >2: multi-byte word character.
-static int get_mouse_class(char_u *p)
+static int get_mouse_class(char *p)
 {
-  if (MB_BYTE2LEN(p[0]) > 1) {
+  if (MB_BYTE2LEN((uint8_t)p[0]) > 1) {
     return mb_get_class(p);
   }
 
-  const int c = *p;
+  const int c = (uint8_t)(*p);
   if (c == ' ' || c == '\t') {
     return 0;
   }
@@ -90,12 +91,12 @@ static void find_start_of_word(pos_T *pos)
   int col;
 
   line = (char_u *)ml_get(pos->lnum);
-  cclass = get_mouse_class(line + pos->col);
+  cclass = get_mouse_class((char *)line + pos->col);
 
   while (pos->col > 0) {
     col = pos->col - 1;
     col -= utf_head_off((char *)line, (char *)line + col);
-    if (get_mouse_class(line + col) != cclass) {
+    if (get_mouse_class((char *)line + col) != cclass) {
       break;
     }
     pos->col = col;
@@ -115,10 +116,10 @@ static void find_end_of_word(pos_T *pos)
     pos->col--;
     pos->col -= utf_head_off((char *)line, (char *)line + pos->col);
   }
-  cclass = get_mouse_class(line + pos->col);
+  cclass = get_mouse_class((char *)line + pos->col);
   while (line[pos->col] != NUL) {
     col = pos->col + utfc_ptr2len((char *)line + pos->col);
-    if (get_mouse_class(line + col) != cclass) {
+    if (get_mouse_class((char *)line + col) != cclass) {
       if (*p_sel == 'e') {
         pos->col = col;
       }
@@ -291,6 +292,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
   pos_T start_visual;
   bool moved;                   // Has cursor moved?
   bool in_winbar;               // mouse in window bar
+  bool in_statuscol;            // mouse in status column
   bool in_status_line;          // mouse in status line
   static bool in_tab_line = false;   // mouse clicked in tab line
   bool in_sep_line;             // mouse in vertical separator line
@@ -645,10 +647,11 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
 
   moved = (jump_flags & CURSOR_MOVED);
   in_winbar = (jump_flags & MOUSE_WINBAR);
+  in_statuscol = (jump_flags & MOUSE_STATUSCOL);
   in_status_line = (jump_flags & IN_STATUS_LINE);
   in_sep_line = (jump_flags & IN_SEP_LINE);
 
-  if ((in_winbar || in_status_line) && is_click) {
+  if ((in_winbar || in_status_line || in_statuscol) && is_click) {
     // Handle click event on window bar or status lin
     int click_grid = mouse_grid;
     int click_row = mouse_row;
@@ -659,7 +662,8 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
     }
 
     StlClickDefinition *click_defs = in_status_line ? wp->w_status_click_defs
-                                                    : wp->w_winbar_click_defs;
+                                                    : in_winbar ? wp->w_winbar_click_defs
+                                                                : wp->w_statuscol_click_defs;
 
     if (in_status_line && global_stl_height() > 0) {
       // global statusline is displayed for the current window,
@@ -682,8 +686,8 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
     }
 
     return false;
-  } else if (in_winbar) {
-    // A drag or release event in the window bar has no side effects.
+  } else if (in_winbar || in_statuscol) {
+    // A drag or release event in the window bar and status column has no side effects.
     return false;
   }
 
@@ -1027,6 +1031,7 @@ int jump_to_mouse(int flags, bool *inclusive, int which_button)
   static bool on_status_line = false;
   static bool on_sep_line = false;
   static bool on_winbar = false;
+  static bool on_statuscol = false;
   static int prev_row = -1;
   static int prev_col = -1;
   static int did_drag = false;          // drag was noticed
@@ -1069,6 +1074,9 @@ retnomove:
     if (on_winbar) {
       return IN_OTHER_WIN | MOUSE_WINBAR;
     }
+    if (on_statuscol) {
+      return IN_OTHER_WIN | MOUSE_STATUSCOL;
+    }
     if (flags & MOUSE_MAY_STOP_VIS) {
       end_visual_mode();
       redraw_curbuf_later(UPD_INVERTED);  // delete the inversion
@@ -1103,6 +1111,10 @@ retnomove:
     ? wp->w_winbar_height != 0
     : false;
 
+  on_statuscol = !on_status_line && !on_winbar && col < win_col_off(wp)
+    ? *wp->w_p_stc != NUL
+    : false;
+
   on_sep_line = grid == DEFAULT_GRID_HANDLE && col >= wp->w_width
     ? col - wp->w_width + 1 == 1
     : false;
@@ -1128,6 +1140,10 @@ retnomove:
   if (!keep_focus) {
     if (on_winbar) {
       return IN_OTHER_WIN | MOUSE_WINBAR;
+    }
+
+    if (on_statuscol) {
+      return IN_OTHER_WIN | MOUSE_STATUSCOL;
     }
 
     fdc = win_fdccol_count(wp);
@@ -1230,6 +1246,9 @@ retnomove:
   } else if (on_winbar && which_button == MOUSE_RIGHT) {
     // After a click on the window bar don't start Visual mode.
     return IN_OTHER_WIN | MOUSE_WINBAR;
+  } else if (on_statuscol && which_button == MOUSE_RIGHT) {
+    // After a click on the status column don't start Visual mode.
+    return IN_OTHER_WIN | MOUSE_STATUSCOL;
   } else {
     // keep_window_focus must be true
     // before moving the cursor for a left click, stop Visual mode

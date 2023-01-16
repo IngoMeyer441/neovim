@@ -869,10 +869,10 @@ void handle_did_throw(void)
   // interrupt message is given elsewhere.
   switch (current_exception->type) {
   case ET_USER:
-    vim_snprintf((char *)IObuff, IOSIZE,
+    vim_snprintf(IObuff, IOSIZE,
                  _("E605: Exception not caught: %s"),
                  current_exception->value);
-    p = xstrdup((char *)IObuff);
+    p = xstrdup(IObuff);
     break;
   case ET_ERROR:
     messages = current_exception->messages;
@@ -1445,7 +1445,7 @@ bool parse_cmdline(char *cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, char **er
     // If the modifier was parsed OK the error must be in the following command
     char *cmdname = after_modifier ? after_modifier : cmdline;
     append_command(cmdname);
-    *errormsg = (char *)IObuff;
+    *errormsg = IObuff;
     goto end;
   }
 
@@ -2038,7 +2038,7 @@ static char *do_one_cmd(char **cmdlinep, int flags, cstack_T *cstack, LineGetter
       if (!(flags & DOCMD_VERBOSE)) {
         append_command(cmdname);
       }
-      errormsg = (char *)IObuff;
+      errormsg = IObuff;
       did_emsg_syntax = true;
       verify_command(cmdname);
     }
@@ -2307,9 +2307,9 @@ doend:
 
   if (errormsg != NULL && *errormsg != NUL && !did_emsg) {
     if (flags & DOCMD_VERBOSE) {
-      if (errormsg != (char *)IObuff) {
+      if (errormsg != IObuff) {
         STRCPY(IObuff, errormsg);
-        errormsg = (char *)IObuff;
+        errormsg = IObuff;
       }
       append_command(*ea.cmdlinep);
     }
@@ -2870,8 +2870,8 @@ static void append_command(char *cmd)
 
   if (len > IOSIZE - 100) {
     // Not enough space, truncate and put in "...".
-    d = (char *)IObuff + IOSIZE - 100;
-    d -= utf_head_off((char *)IObuff, d);
+    d = IObuff + IOSIZE - 100;
+    d -= utf_head_off(IObuff, d);
     STRCPY(d, "...");
   }
   STRCAT(IObuff, ": ");
@@ -3802,7 +3802,7 @@ int expand_filename(exarg_T *eap, char **cmdlinep, char **errormsgp)
 
       for (l = repl; *l; l++) {
         if (vim_strchr((char *)ESCAPE_CHARS, *l) != NULL) {
-          l = (char *)vim_strsave_escaped((char_u *)repl, ESCAPE_CHARS);
+          l = vim_strsave_escaped(repl, (char *)ESCAPE_CHARS);
           xfree(repl);
           repl = l;
           break;
@@ -3817,7 +3817,7 @@ int expand_filename(exarg_T *eap, char **cmdlinep, char **errormsgp)
         && strpbrk(repl, "!") != NULL) {
       char *l;
 
-      l = (char *)vim_strsave_escaped((char_u *)repl, (char_u *)"!");
+      l = vim_strsave_escaped(repl, "!");
       xfree(repl);
       repl = l;
     }
@@ -3840,7 +3840,7 @@ int expand_filename(exarg_T *eap, char **cmdlinep, char **errormsgp)
           || vim_strchr(eap->arg, '~') != NULL) {
         expand_env_esc(eap->arg, NameBuff, MAXPATHL, true, true, NULL);
         has_wildcards = path_has_wildcard(NameBuff);
-        p = (char *)NameBuff;
+        p = NameBuff;
       } else {
         p = NULL;
       }
@@ -4965,8 +4965,8 @@ void ex_splitview(exarg_T *eap)
   }
 
   if (eap->cmdidx == CMD_sfind || eap->cmdidx == CMD_tabfind) {
-    fname = (char *)find_file_in_path((char_u *)eap->arg, strlen(eap->arg),
-                                      FNAME_MESS, true, (char_u *)curbuf->b_ffname);
+    fname = (char *)find_file_in_path(eap->arg, strlen(eap->arg),
+                                      FNAME_MESS, true, curbuf->b_ffname);
     if (fname == NULL) {
       goto theend;
     }
@@ -5089,8 +5089,8 @@ static void ex_tabs(exarg_T *eap)
     }
 
     msg_putchar('\n');
-    vim_snprintf((char *)IObuff, IOSIZE, _("Tab page %d"), tabcount++);
-    msg_outtrans_attr((char *)IObuff, HL_ATTR(HLF_T));
+    vim_snprintf(IObuff, IOSIZE, _("Tab page %d"), tabcount++);
+    msg_outtrans_attr(IObuff, HL_ATTR(HLF_T));
     os_breakcheck();
 
     FOR_ALL_WINDOWS_IN_TAB(wp, tp) {
@@ -5104,11 +5104,11 @@ static void ex_tabs(exarg_T *eap)
       msg_putchar(bufIsChanged(wp->w_buffer) ? '+' : ' ');
       msg_putchar(' ');
       if (buf_spname(wp->w_buffer) != NULL) {
-        STRLCPY(IObuff, buf_spname(wp->w_buffer), IOSIZE);
+        xstrlcpy(IObuff, buf_spname(wp->w_buffer), IOSIZE);
       } else {
-        home_replace(wp->w_buffer, wp->w_buffer->b_fname, (char *)IObuff, IOSIZE, true);
+        home_replace(wp->w_buffer, wp->w_buffer->b_fname, IObuff, IOSIZE, true);
       }
-      msg_outtrans((char *)IObuff);
+      msg_outtrans(IObuff);
       os_breakcheck();
     }
   }
@@ -5158,15 +5158,15 @@ static void ex_resize(exarg_T *eap)
 /// ":find [+command] <file>" command.
 static void ex_find(exarg_T *eap)
 {
-  char *fname = (char *)find_file_in_path((char_u *)eap->arg, strlen(eap->arg),
-                                          FNAME_MESS, true, (char_u *)curbuf->b_ffname);
+  char *fname = (char *)find_file_in_path(eap->arg, strlen(eap->arg),
+                                          FNAME_MESS, true, curbuf->b_ffname);
   if (eap->addr_count > 0) {
     // Repeat finding the file "count" times.  This matters when it
     // appears several times in the path.
     linenr_T count = eap->line2;
     while (fname != NULL && --count > 0) {
       xfree(fname);
-      fname = (char *)find_file_in_path(NULL, 0, FNAME_MESS, false, (char_u *)curbuf->b_ffname);
+      fname = (char *)find_file_in_path(NULL, 0, FNAME_MESS, false, curbuf->b_ffname);
     }
   }
 
@@ -5497,7 +5497,7 @@ static void post_chdir(CdScope scope, bool trigger_dirchanged)
   }
 
   char cwd[MAXPATHL];
-  if (os_dirname((char_u *)cwd, MAXPATHL) != OK) {
+  if (os_dirname(cwd, MAXPATHL) != OK) {
     return;
   }
   switch (scope) {
@@ -5544,7 +5544,7 @@ bool changedir_func(char *new_dir, CdScope scope)
     new_dir = pdir;
   }
 
-  if (os_dirname((char_u *)NameBuff, MAXPATHL) == OK) {
+  if (os_dirname(NameBuff, MAXPATHL) == OK) {
     pdir = xstrdup(NameBuff);
   } else {
     pdir = NULL;
@@ -5559,7 +5559,7 @@ bool changedir_func(char *new_dir, CdScope scope)
 #endif
     // Use NameBuff for home directory name.
     expand_env("$HOME", NameBuff, MAXPATHL);
-    new_dir = (char *)NameBuff;
+    new_dir = NameBuff;
   }
 
   bool dir_differs = pdir == NULL || pathcmp(pdir, new_dir, -1) != 0;
@@ -5627,7 +5627,7 @@ void ex_cd(exarg_T *eap)
 /// ":pwd".
 static void ex_pwd(exarg_T *eap)
 {
-  if (os_dirname((char_u *)NameBuff, MAXPATHL) == OK) {
+  if (os_dirname(NameBuff, MAXPATHL) == OK) {
 #ifdef BACKSLASH_IN_FILENAME
     slash_adjust(NameBuff);
 #endif
@@ -5640,9 +5640,9 @@ static void ex_pwd(exarg_T *eap)
       } else if (curtab->tp_localdir != NULL) {
         context = "tabpage";
       }
-      smsg("[%s] %s", context, (char *)NameBuff);
+      smsg("[%s] %s", context, NameBuff);
     } else {
-      msg((char *)NameBuff);
+      msg(NameBuff);
     }
   } else {
     emsg(_("E187: Unknown"));
@@ -6042,7 +6042,7 @@ static void ex_redir(exarg_T *eap)
         return;
       }
 
-      redir_fd = open_exfile((char_u *)fname, eap->forceit, mode);
+      redir_fd = open_exfile(fname, eap->forceit, mode);
       xfree(fname);
     } else if (*arg == '@') {
       // redirect to a register a-z (resp. A-Z for appending)
@@ -6215,22 +6215,22 @@ int vim_mkdir_emsg(const char *const name, const int prot)
 /// @param mode  "w" for create new file or "a" for append
 ///
 /// @return  file descriptor, or NULL on failure.
-FILE *open_exfile(char_u *fname, int forceit, char *mode)
+FILE *open_exfile(char *fname, int forceit, char *mode)
 {
 #ifdef UNIX
   // with Unix it is possible to open a directory
-  if (os_isdir((char *)fname)) {
+  if (os_isdir(fname)) {
     semsg(_(e_isadir2), fname);
     return NULL;
   }
 #endif
-  if (!forceit && *mode != 'a' && os_path_exists((char *)fname)) {
+  if (!forceit && *mode != 'a' && os_path_exists(fname)) {
     semsg(_("E189: \"%s\" exists (add ! to override)"), fname);
     return NULL;
   }
 
   FILE *fd;
-  if ((fd = os_fopen((char *)fname, mode)) == NULL) {
+  if ((fd = os_fopen(fname, mode)) == NULL) {
     semsg(_("E190: Cannot open \"%s\" for writing"), fname);
   }
 
@@ -6387,7 +6387,7 @@ static void ex_normal(exarg_T *eap)
         check_cursor_moved(curwin);
       }
 
-      exec_normal_cmd((char_u *)(arg != NULL ? arg : eap->arg),
+      exec_normal_cmd((arg != NULL ? arg : eap->arg),
                       eap->forceit ? REMAP_NONE : REMAP_YES, false);
     } while (eap->addr_count > 0 && eap->line1 <= eap->line2 && !got_int);
   }
@@ -6451,10 +6451,10 @@ static void ex_stopinsert(exarg_T *eap)
 
 /// Execute normal mode command "cmd".
 /// "remap" can be REMAP_NONE or REMAP_YES.
-void exec_normal_cmd(char_u *cmd, int remap, bool silent)
+void exec_normal_cmd(char *cmd, int remap, bool silent)
 {
   // Stuff the argument into the typeahead buffer.
-  ins_typebuf((char *)cmd, remap, 0, true, silent);
+  ins_typebuf(cmd, remap, 0, true, silent);
   exec_normal(false);
 }
 
@@ -6851,7 +6851,7 @@ char_u *eval_vars(char_u *src, const char_u *srcstart, size_t *usedlen, linenr_T
         // postponed to avoid a delay when <afile> is not used.
         result = FullName_save(autocmd_fname, false);
         // Copy into `autocmd_fname`, don't reassign it. #8165
-        STRLCPY(autocmd_fname, result, MAXPATHL);
+        xstrlcpy(autocmd_fname, result, MAXPATHL);
         xfree(result);
       }
       result = autocmd_fname;
@@ -6859,7 +6859,7 @@ char_u *eval_vars(char_u *src, const char_u *srcstart, size_t *usedlen, linenr_T
         *errormsg = _("E495: no autocommand file name to substitute for \"<afile>\"");
         return NULL;
       }
-      result = (char *)path_try_shorten_fname((char_u *)result);
+      result = path_try_shorten_fname(result);
       break;
 
     case SPEC_ABUF:             // buffer number for autocommand
@@ -7263,7 +7263,7 @@ static void ex_terminal(exarg_T *eap)
   char ex_cmd[1024];
 
   if (*eap->arg != NUL) {  // Run {cmd} in 'shell'.
-    char *name = (char *)vim_strsave_escaped((char_u *)eap->arg, (char_u *)"\"\\");
+    char *name = vim_strsave_escaped(eap->arg, "\"\\");
     snprintf(ex_cmd, sizeof(ex_cmd),
              ":enew%s | call termopen(\"%s\")",
              eap->forceit ? "!" : "", name);

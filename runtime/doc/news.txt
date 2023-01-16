@@ -50,6 +50,10 @@ NEW FEATURES                                                    *news-features*
 
 The following new APIs or features were added.
 
+• |nvim_open_win()| now accepts a relative `mouse` option to open a floating win
+  relative to the mouse. Note that the mouse doesn't update frequently without
+  setting `vim.o.mousemoveevent = true`
+
 • EditorConfig support is now builtin. This is enabled by default and happens
   automatically. To disable it, users should add >lua
 
@@ -118,6 +122,11 @@ The following new APIs or features were added.
 
 • |'splitkeep'| option to control the scroll behavior of horizontal splits.
 
+• |'statuscolumn'| option to customize the area to the side of a window,
+  normally containing the fold, sign and number columns. This new option follows
+  the 'statusline' syntax and can be used to transform the line numbers, create
+  mouse click callbacks for |signs|, introduce a custom margin or separator etc.
+
 • |nvim_select_popupmenu_item()| now supports |cmdline-completion| popup menu.
 
 • |'diffopt'| now includes a `linematch` option to enable a second-stage diff
@@ -125,6 +134,9 @@ The following new APIs or features were added.
   available to |vim.diff()|
 
   See https://github.com/neovim/neovim/pull/14537.
+
+• |vim.diagnostic.is_disabled()| checks if diagnostics are disabled in a given
+  buffer or namespace.
 
 • |--remote-ui| option was added to connect to a remote instance and display
   in it in a |TUI| in the local terminal. This can be used run a headless nvim

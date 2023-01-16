@@ -25,8 +25,10 @@
 #include "nvim/keycodes.h"
 #include "nvim/lua/executor.h"
 #include "nvim/macros.h"
+#include "nvim/mapping.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
+#include "nvim/menu.h"
 #include "nvim/message.h"
 #include "nvim/option_defs.h"
 #include "nvim/os/input.h"
@@ -93,6 +95,7 @@ static const char *command_complete[] = {
   [EXPAND_TAGS_LISTFILES] = "tag_listfiles",
   [EXPAND_USER] = "user",
   [EXPAND_USER_VARS] = "var",
+  [EXPAND_BREAKPOINT] = "breakpoint",
 };
 
 /// List of names of address types.  Must be alphabetical for completion.
@@ -220,6 +223,7 @@ char *find_ucmd(exarg_T *eap, char *p, int *full, expand_T *xp, int *complp)
   return p;
 }
 
+/// Set completion context for :command
 const char *set_context_in_user_cmd(expand_T *xp, const char *arg_in)
 {
   const char *arg = arg_in;
@@ -269,6 +273,47 @@ const char *set_context_in_user_cmd(expand_T *xp, const char *arg_in)
 
   // And finally comes a normal command.
   return (const char *)skipwhite(p);
+}
+
+/// Set the completion context for the argument of a user defined command.
+const char *set_context_in_user_cmdarg(const char *cmd FUNC_ATTR_UNUSED, const char *arg,
+                                       uint32_t argt, int context, expand_T *xp, bool forceit)
+{
+  if (context == EXPAND_NOTHING) {
+    return NULL;
+  }
+
+  if (argt & EX_XFILE) {
+    // EX_XFILE: file names are handled above.
+    xp->xp_context = context;
+    return NULL;
+  }
+
+  if (context == EXPAND_MENUS) {
+    return (const char *)set_context_in_menu_cmd(xp, cmd, (char *)arg, forceit);
+  }
+  if (context == EXPAND_COMMANDS) {
+    return arg;
+  }
+  if (context == EXPAND_MAPPINGS) {
+    return (const char *)set_context_in_map_cmd(xp, "map", (char *)arg, forceit, false, false,
+                                                CMD_map);
+  }
+  // Find start of last argument.
+  const char *p = arg;
+  while (*p) {
+    if (*p == ' ') {
+      // argument starts after a space
+      arg = p + 1;
+    } else if (*p == '\\' && *(p + 1) != NUL) {
+      p++;  // skip over escaped character
+    }
+    MB_PTR_ADV(p);
+  }
+  xp->xp_pattern = (char *)arg;
+  xp->xp_context = context;
+
+  return NULL;
 }
 
 char *expand_user_command_name(int idx)
@@ -484,14 +529,14 @@ static void uc_list(char *name, size_t name_len)
       if (a & (EX_RANGE | EX_COUNT)) {
         if (a & EX_COUNT) {
           // -count=N
-          snprintf((char *)IObuff + len, IOSIZE, "%" PRId64 "c",
+          snprintf(IObuff + len, IOSIZE, "%" PRId64 "c",
                    (int64_t)cmd->uc_def);
           len += (int)strlen(IObuff + len);
         } else if (a & EX_DFLALL) {
           IObuff[len++] = '%';
         } else if (cmd->uc_def >= 0) {
           // -range=N
-          snprintf((char *)IObuff + len, IOSIZE, "%" PRId64 "",
+          snprintf(IObuff + len, IOSIZE, "%" PRId64 "",
                    (int64_t)cmd->uc_def);
           len += (int)strlen(IObuff + len);
         } else {
@@ -529,7 +574,7 @@ static void uc_list(char *name, size_t name_len)
       } while (len < 25 - over);
 
       IObuff[len] = '\0';
-      msg_outtrans((char *)IObuff);
+      msg_outtrans(IObuff);
 
       if (cmd->uc_luaref != LUA_NOREF) {
         char *fn = nlua_funcref_str(cmd->uc_luaref);
@@ -653,7 +698,7 @@ int parse_compl_arg(const char *value, int vallen, int *complp, uint32_t *argt, 
 }
 
 static int uc_scan_attr(char *attr, size_t len, uint32_t *argt, long *def, int *flags, int *complp,
-                        char_u **compl_arg, cmd_addr_T *addr_type_arg)
+                        char **compl_arg, cmd_addr_T *addr_type_arg)
   FUNC_ATTR_NONNULL_ALL
 {
   char *p;
@@ -764,7 +809,7 @@ invalid_count:
         return FAIL;
       }
 
-      if (parse_compl_arg(val, (int)vallen, complp, argt, (char **)compl_arg)
+      if (parse_compl_arg(val, (int)vallen, complp, argt, compl_arg)
           == FAIL) {
         return FAIL;
       }
@@ -941,7 +986,7 @@ void ex_command(exarg_T *eap)
   while (*p == '-') {
     p++;
     end = skiptowhite(p);
-    if (uc_scan_attr(p, (size_t)(end - p), &argt, &def, &flags, &compl, (char_u **)&compl_arg,
+    if (uc_scan_attr(p, (size_t)(end - p), &argt, &def, &flags, &compl, &compl_arg,
                      &addr_type_arg) == FAIL) {
       goto theend;
     }
@@ -1608,10 +1653,10 @@ int do_ucmd(exarg_T *eap, bool preview)
         end = vim_strchr(start + 1, '>');
       }
       if (buf != NULL) {
-        for (ksp = p; *ksp != NUL && (char_u)(*ksp) != K_SPECIAL; ksp++) {}
-        if ((char_u)(*ksp) == K_SPECIAL
+        for (ksp = p; *ksp != NUL && (uint8_t)(*ksp) != K_SPECIAL; ksp++) {}
+        if ((uint8_t)(*ksp) == K_SPECIAL
             && (start == NULL || ksp < start || end == NULL)
-            && ((char_u)ksp[1] == KS_SPECIAL && ksp[2] == KE_FILLER)) {
+            && ((uint8_t)ksp[1] == KS_SPECIAL && ksp[2] == KE_FILLER)) {
           // K_SPECIAL has been put in the buffer as K_SPECIAL
           // KS_SPECIAL KE_FILLER, like for mappings, but
           // do_cmdline() doesn't handle that, so convert it back.

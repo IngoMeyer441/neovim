@@ -12,6 +12,7 @@
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/eval/typval.h"
@@ -46,31 +47,33 @@ static int win_getid(typval_T *argvars)
   }
   int winnr = (int)tv_get_number(&argvars[0]);
   win_T *wp;
-  if (winnr > 0) {
-    if (argvars[1].v_type == VAR_UNKNOWN) {
-      wp = firstwin;
-    } else {
-      tabpage_T *tp = NULL;
-      int tabnr = (int)tv_get_number(&argvars[1]);
-      FOR_ALL_TABS(tp2) {
-        if (--tabnr == 0) {
-          tp = tp2;
-          break;
-        }
-      }
-      if (tp == NULL) {
-        return -1;
-      }
-      if (tp == curtab) {
-        wp = firstwin;
-      } else {
-        wp = tp->tp_firstwin;
+  if (winnr <= 0) {
+    return 0;
+  }
+
+  if (argvars[1].v_type == VAR_UNKNOWN) {
+    wp = firstwin;
+  } else {
+    tabpage_T *tp = NULL;
+    int tabnr = (int)tv_get_number(&argvars[1]);
+    FOR_ALL_TABS(tp2) {
+      if (--tabnr == 0) {
+        tp = tp2;
+        break;
       }
     }
-    for (; wp != NULL; wp = wp->w_next) {
-      if (--winnr == 0) {
-        return wp->handle;
-      }
+    if (tp == NULL) {
+      return -1;
+    }
+    if (tp == curtab) {
+      wp = firstwin;
+    } else {
+      wp = tp->tp_firstwin;
+    }
+  }
+  for (; wp != NULL; wp = wp->w_next) {
+    if (--winnr == 0) {
+      return wp->handle;
     }
   }
   return 0;
@@ -288,16 +291,18 @@ static int get_winnr(tabpage_T *tp, typval_T *argvar)
     }
   }
 
-  if (nr > 0) {
-    for (win_T *wp = (tp == curtab) ? firstwin : tp->tp_firstwin;
-         wp != twin; wp = wp->w_next) {
-      if (wp == NULL) {
-        // didn't find it in this tabpage
-        nr = 0;
-        break;
-      }
-      nr++;
+  if (nr <= 0) {
+    return 0;
+  }
+
+  for (win_T *wp = (tp == curtab) ? firstwin : tp->tp_firstwin;
+       wp != twin; wp = wp->w_next) {
+    if (wp == NULL) {
+      // didn't find it in this tabpage
+      nr = 0;
+      break;
     }
+    nr++;
   }
   return nr;
 }
@@ -762,7 +767,7 @@ void f_winnr(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "winrestcmd()" function
 void f_winrestcmd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  char_u buf[50];
+  char buf[50];
 
   garray_T ga;
   ga_init(&ga, (int)sizeof(char), 70);
@@ -771,12 +776,12 @@ void f_winrestcmd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   for (int i = 0; i < 2; i++) {
     int winnr = 1;
     FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-      snprintf((char *)buf, sizeof(buf), "%dresize %d|", winnr,
+      snprintf(buf, sizeof(buf), "%dresize %d|", winnr,
                wp->w_height);
-      ga_concat(&ga, (char *)buf);
-      snprintf((char *)buf, sizeof(buf), "vert %dresize %d|", winnr,
+      ga_concat(&ga, buf);
+      snprintf(buf, sizeof(buf), "vert %dresize %d|", winnr,
                wp->w_width);
-      ga_concat(&ga, (char *)buf);
+      ga_concat(&ga, buf);
       winnr++;
     }
   }

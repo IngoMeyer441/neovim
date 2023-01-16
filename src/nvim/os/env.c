@@ -488,8 +488,8 @@ void init_homedir(void)
   if (var != NULL) {
     // Change to the directory and get the actual path.  This resolves
     // links.  Don't do it when we can't return.
-    if (os_dirname((char_u *)os_buf, MAXPATHL) == OK && os_chdir(os_buf) == 0) {
-      if (!os_chdir(var) && os_dirname((char_u *)IObuff, IOSIZE) == OK) {
+    if (os_dirname(os_buf, MAXPATHL) == OK && os_chdir(os_buf) == 0) {
+      if (!os_chdir(var) && os_dirname(IObuff, IOSIZE) == OK) {
         var = (char *)IObuff;
       }
       if (os_chdir(os_buf) != 0) {
@@ -500,7 +500,7 @@ void init_homedir(void)
 
   // Fall back to current working directory if home is not found
   if ((var == NULL || *var == NUL)
-      && os_dirname((char_u *)os_buf, sizeof(os_buf)) == OK) {
+      && os_dirname(os_buf, sizeof(os_buf)) == OK) {
     var = os_buf;
   }
 #endif
@@ -543,7 +543,7 @@ void free_homedir(void)
 /// @see {expand_env}
 char *expand_env_save(char *src)
 {
-  return (char *)expand_env_save_opt((char_u *)src, false);
+  return (char *)expand_env_save_opt(src, false);
 }
 
 /// Similar to expand_env_save() but when "one" is `true` handle the string as
@@ -551,10 +551,10 @@ char *expand_env_save(char *src)
 /// @param src String containing environment variables to expand
 /// @param one Should treat as only one file name
 /// @see {expand_env}
-char_u *expand_env_save_opt(char_u *src, bool one)
+char_u *expand_env_save_opt(char *src, bool one)
 {
   char_u *p = xmalloc(MAXPATHL);
-  expand_env_esc((char *)src, (char *)p, MAXPATHL, false, one, NULL);
+  expand_env_esc(src, (char *)p, MAXPATHL, false, one, NULL);
   return p;
 }
 
@@ -634,7 +634,7 @@ void expand_env_esc(char *restrict srcp, char *restrict dst, int dstlen, bool es
         } else  // NOLINT
 #endif
         {
-          while (c-- > 0 && *tail != NUL && vim_isIDc(*tail)) {
+          while (c-- > 0 && *tail != NUL && vim_isIDc((uint8_t)(*tail))) {
             *var++ = *tail++;
           }
         }
@@ -667,7 +667,7 @@ void expand_env_esc(char *restrict srcp, char *restrict dst, int dstlen, bool es
         int c = dstlen - 1;
         while (c-- > 0
                && *tail
-               && vim_isfilec(*tail)
+               && vim_isfilec((uint8_t)(*tail))
                && !vim_ispathsep(*tail)) {
           *var++ = *tail++;
         }
@@ -711,7 +711,7 @@ void expand_env_esc(char *restrict srcp, char *restrict dst, int dstlen, bool es
       // If "var" contains white space, escape it with a backslash.
       // Required for ":e ~/tt" when $HOME includes a space.
       if (esc && var != NULL && strpbrk(var, " \t") != NULL) {
-        char *p = (char *)vim_strsave_escaped((char_u *)var, (char_u *)" \t");
+        char *p = vim_strsave_escaped(var, " \t");
 
         if (mustfree) {
           xfree(var);
@@ -1056,7 +1056,7 @@ size_t home_replace(const buf_T *const buf, const char *src, char *const dst, si
   }
 
   if (buf != NULL && buf->b_help) {
-    const size_t dlen = STRLCPY(dst, path_tail((char *)src), dstlen);
+    const size_t dlen = xstrlcpy(dst, path_tail((char *)src), dstlen);
     return MIN(dlen, dstlen - 1);
   }
 
@@ -1176,7 +1176,7 @@ char *get_env_name(expand_T *xp, int idx)
   assert(idx >= 0);
   char *envname = os_getenvname_at_index((size_t)idx);
   if (envname) {
-    STRLCPY(xp->xp_buf, envname, EXPAND_BUF_LEN);
+    xstrlcpy(xp->xp_buf, envname, EXPAND_BUF_LEN);
     xfree(envname);
     return xp->xp_buf;
   }

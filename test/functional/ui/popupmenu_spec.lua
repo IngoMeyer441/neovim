@@ -945,6 +945,82 @@ describe('ui/ext_popupmenu', function()
     }}
 
   end)
+
+  it('does not interfere with mousemodel=popup', function()
+    exec([[
+      set mouse=a mousemodel=popup
+
+      aunmenu PopUp
+      menu PopUp.foo :let g:menustr = 'foo'<CR>
+      menu PopUp.bar :let g:menustr = 'bar'<CR>
+      menu PopUp.baz :let g:menustr = 'baz'<CR>
+    ]])
+    feed('o<C-r>=TestComplete()<CR>')
+    screen:expect{grid=[[
+                                                                  |
+      foo^                                                         |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {2:-- INSERT --}                                                |
+    ]], popupmenu={
+      items=expected,
+      pos=0,
+      anchor={1,1,0},
+    }}
+
+    feed('<c-p>')
+    screen:expect{grid=[[
+                                                                  |
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {2:-- INSERT --}                                                |
+    ]], popupmenu={
+      items=expected,
+      pos=-1,
+      anchor={1,1,0},
+    }}
+
+    feed('<esc>')
+    screen:expect{grid=[[
+                                                                  |
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+                                                                  |
+    ]]}
+    feed('<RightMouse><0,0>')
+    screen:expect([[
+                                                                  |
+      {7:^foo }                                                        |
+      {7:bar }{1:                                                        }|
+      {7:baz }{1:                                                        }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+                                                                  |
+    ]])
+    feed('<esc>')
+    screen:expect([[
+                                                                  |
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+                                                                  |
+    ]])
+  end)
 end)
 
 
@@ -2388,8 +2464,130 @@ describe('builtin popupmenu', function()
       {1:~        }{n: xyz            }{1:       }|
       :e あいう/123^                   |
     ]])
+    feed('<Esc>')
 
-    feed('<esc>')
+    -- Pressing <PageDown> should scroll the menu downward
+    feed(':sign <Tab><PageDown>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{n: define         }{1:           }|
+      {1:~    }{n: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{s: undefine       }{1:           }|
+      {1:~    }{n: unplace        }{1:           }|
+      :sign undefine^                  |
+    ]])
+    feed('<PageDown>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{n: define         }{1:           }|
+      {1:~    }{n: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{n: undefine       }{1:           }|
+      {1:~    }{s: unplace        }{1:           }|
+      :sign unplace^                   |
+    ]])
+    feed('<PageDown>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{n: define         }{1:           }|
+      {1:~    }{n: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{n: undefine       }{1:           }|
+      {1:~    }{n: unplace        }{1:           }|
+      :sign ^                          |
+    ]])
+    feed('<PageDown>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{s: define         }{1:           }|
+      {1:~    }{n: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{n: undefine       }{1:           }|
+      {1:~    }{n: unplace        }{1:           }|
+      :sign define^                    |
+    ]])
+    feed('<C-U>sign <Tab><Right><Right><PageDown>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{n: define         }{1:           }|
+      {1:~    }{n: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{n: undefine       }{1:           }|
+      {1:~    }{s: unplace        }{1:           }|
+      :sign unplace^                   |
+    ]])
+
+    -- Pressing <PageUp> should scroll the menu upward
+    feed('<C-U>sign <Tab><PageUp>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{n: define         }{1:           }|
+      {1:~    }{n: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{n: undefine       }{1:           }|
+      {1:~    }{n: unplace        }{1:           }|
+      :sign ^                          |
+    ]])
+    feed('<PageUp>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{n: define         }{1:           }|
+      {1:~    }{n: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{n: undefine       }{1:           }|
+      {1:~    }{s: unplace        }{1:           }|
+      :sign unplace^                   |
+    ]])
+    feed('<PageUp>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{n: define         }{1:           }|
+      {1:~    }{s: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{n: undefine       }{1:           }|
+      {1:~    }{n: unplace        }{1:           }|
+      :sign jump^                      |
+    ]])
+    feed('<PageUp>')
+    screen:expect([[
+                                      |
+      {1:~                               }|
+      {1:~                               }|
+      {1:~    }{s: define         }{1:           }|
+      {1:~    }{n: jump           }{1:           }|
+      {1:~    }{n: list           }{1:           }|
+      {1:~    }{n: place          }{1:           }|
+      {1:~    }{n: undefine       }{1:           }|
+      {1:~    }{n: unplace        }{1:           }|
+      :sign define^                    |
+    ]])
+
+    feed('<Esc>')
 
     -- check positioning with multibyte char in pattern
     command("e långfile1")
@@ -2486,7 +2684,7 @@ describe('builtin popupmenu', function()
     ]])
   end)
 
-  it('wildoptions=pum with scrolled messages ', function()
+  it('wildoptions=pum with scrolled messages', function()
     screen:try_resize(40,10)
     command('set wildmenu')
     command('set wildoptions=pum')

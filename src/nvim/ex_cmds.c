@@ -160,12 +160,12 @@ void do_ascii(const exarg_T *const eap)
 
     dig = (char *)get_digraph_for_char(cval);
     if (dig != NULL) {
-      iobuff_len += (size_t)vim_snprintf((char *)IObuff + iobuff_len,
+      iobuff_len += (size_t)vim_snprintf(IObuff + iobuff_len,
                                          sizeof(IObuff) - iobuff_len,
                                          _("<%s>%s%s  %d,  Hex %02x,  Oct %03o, Digr %s"),
                                          transchar(c), buf1, buf2, cval, cval, cval, dig);
     } else {
-      iobuff_len += (size_t)vim_snprintf((char *)IObuff + iobuff_len,
+      iobuff_len += (size_t)vim_snprintf(IObuff + iobuff_len,
                                          sizeof(IObuff) - iobuff_len,
                                          _("<%s>%s%s  %d,  Hex %02x,  Octal %03o"),
                                          transchar(c), buf1, buf2, cval, cval, cval);
@@ -204,18 +204,18 @@ void do_ascii(const exarg_T *const eap)
     if (utf_iscomposing(c)) {
       IObuff[iobuff_len++] = ' ';  // Draw composing char on top of a space.
     }
-    iobuff_len += (size_t)utf_char2bytes(c, (char *)IObuff + iobuff_len);
+    iobuff_len += (size_t)utf_char2bytes(c, IObuff + iobuff_len);
 
     dig = (char *)get_digraph_for_char(c);
     if (dig != NULL) {
-      iobuff_len += (size_t)vim_snprintf((char *)IObuff + iobuff_len,
+      iobuff_len += (size_t)vim_snprintf(IObuff + iobuff_len,
                                          sizeof(IObuff) - iobuff_len,
                                          (c < 0x10000
                                           ? _("> %d, Hex %04x, Oct %o, Digr %s")
                                           : _("> %d, Hex %08x, Oct %o, Digr %s")),
                                          c, c, c, dig);
     } else {
-      iobuff_len += (size_t)vim_snprintf((char *)IObuff + iobuff_len,
+      iobuff_len += (size_t)vim_snprintf(IObuff + iobuff_len,
                                          sizeof(IObuff) - iobuff_len,
                                          (c < 0x10000
                                           ? _("> %d, Hex %04x, Octal %o")
@@ -228,10 +228,10 @@ void do_ascii(const exarg_T *const eap)
     c = cc[ci++];
   }
   if (ci != MAX_MCO && c != 0) {
-    xstrlcpy((char *)IObuff + iobuff_len, " ...", sizeof(IObuff) - iobuff_len);
+    xstrlcpy(IObuff + iobuff_len, " ...", sizeof(IObuff) - iobuff_len);
   }
 
-  msg((char *)IObuff);
+  msg(IObuff);
 }
 
 /// ":left", ":center" and ":right": align text.
@@ -347,7 +347,7 @@ static int linelen(int *has_tab)
   char save = *last;
   *last = NUL;
   // Get line length.
-  len = linetabsize((char_u *)line);
+  len = linetabsize(line);
   // Check for embedded TAB.
   if (has_tab != NULL) {
     *has_tab = vim_strchr(first, TAB) != NULL;
@@ -1025,7 +1025,7 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
     // If % or # appears in the command, it must have been escaped.
     // Reescape them, so that redoing them does not substitute them by the
     // buffername.
-    char *cmd = (char *)vim_strsave_escaped((char_u *)prevcmd, (char_u *)"%#");
+    char *cmd = vim_strsave_escaped(prevcmd, "%#");
 
     AppendToRedobuffLit(cmd, -1);
     xfree(cmd);
@@ -1179,7 +1179,7 @@ static void do_filter(linenr_T line1, linenr_T line2, exarg_T *eap, char *cmd, b
   read_linecount = curbuf->b_ml.ml_line_count;
 
   // Pass on the kShellOptDoOut flag when the output is being redirected.
-  call_shell((char_u *)cmd_buf, (ShellOpts)(kShellOptFilter | shell_flags), NULL);
+  call_shell(cmd_buf, (ShellOpts)(kShellOptFilter | shell_flags), NULL);
   xfree(cmd_buf);
 
   did_check_timestamps = false;
@@ -1324,7 +1324,7 @@ void do_shell(char *cmd, int flags)
   // This ui_cursor_goto is required for when the '\n' resulted in a "delete line
   // 1" command to the terminal.
   ui_cursor_goto(msg_row, msg_col);
-  (void)call_shell((char_u *)cmd, (ShellOpts)flags, NULL);
+  (void)call_shell(cmd, (ShellOpts)flags, NULL);
   msg_didout = true;
   did_check_timestamps = false;
   need_check_timestamps = true;
@@ -1367,12 +1367,12 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
 {
   bool is_fish_shell =
 #if defined(UNIX)
-    strncmp((char *)invocation_path_tail((char_u *)p_sh, NULL), "fish", 4) == 0;
+    strncmp((char *)invocation_path_tail(p_sh, NULL), "fish", 4) == 0;
 #else
     false;
 #endif
-  bool is_pwsh = strncmp((char *)invocation_path_tail((char_u *)p_sh, NULL), "pwsh", 4) == 0
-                 || strncmp((char *)invocation_path_tail((char_u *)p_sh, NULL), "powershell",
+  bool is_pwsh = strncmp((char *)invocation_path_tail(p_sh, NULL), "pwsh", 4) == 0
+                 || strncmp((char *)invocation_path_tail(p_sh, NULL), "powershell",
                             10) == 0;
 
   size_t len = strlen(cmd) + 1;  // At least enough space for cmd + NULL.
@@ -1382,7 +1382,7 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
                                   : 0;
 
   if (itmp != NULL) {
-    len += is_pwsh  ? strlen(itmp) + sizeof("& { Get-Content " " | & " " }") - 1
+    len += is_pwsh  ? strlen(itmp) + sizeof("& { Get-Content " " | & " " }") - 1 + 6  // +6: #20530
                     : strlen(itmp) + sizeof(" { " " < " " } ") - 1;
   }
   if (otmp != NULL) {
@@ -4510,32 +4510,30 @@ void free_old_sub(void)
 /// @return           true when it was created.
 bool prepare_tagpreview(bool undo_sync)
 {
+  if (curwin->w_p_pvw) {
+    return false;
+  }
+
   // If there is already a preview window open, use that one.
-  if (!curwin->w_p_pvw) {
-    bool found_win = false;
-    FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-      if (wp->w_p_pvw) {
-        win_enter(wp, undo_sync);
-        found_win = true;
-        break;
-      }
-    }
-    if (!found_win) {
-      // There is no preview window open yet.  Create one.
-      if (win_split(g_do_tagpreview > 0 ? g_do_tagpreview : 0, 0)
-          == FAIL) {
-        return false;
-      }
-      curwin->w_p_pvw = true;
-      curwin->w_p_wfh = true;
-      RESET_BINDING(curwin);                // don't take over 'scrollbind' and 'cursorbind'
-      curwin->w_p_diff = false;             // no 'diff'
-      set_string_option_direct("fdc", -1,     // no 'foldcolumn'
-                               "0", OPT_FREE, SID_NONE);
-      return true;
+  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+    if (wp->w_p_pvw) {
+      win_enter(wp, undo_sync);
+      return false;
     }
   }
-  return false;
+
+  // There is no preview window open yet.  Create one.
+  if (win_split(g_do_tagpreview > 0 ? g_do_tagpreview : 0, 0)
+      == FAIL) {
+    return false;
+  }
+  curwin->w_p_pvw = true;
+  curwin->w_p_wfh = true;
+  RESET_BINDING(curwin);                // don't take over 'scrollbind' and 'cursorbind'
+  curwin->w_p_diff = false;             // no 'diff'
+  set_string_option_direct("fdc", -1,     // no 'foldcolumn'
+                           "0", OPT_FREE, SID_NONE);
+  return true;
 }
 
 /// Shows the effects of the :substitute command being typed ('inccommand').
@@ -4692,7 +4690,7 @@ char *skip_vimgrep_pat(char *p, char **s, int *flags)
 {
   int c;
 
-  if (vim_isIDc(*p)) {
+  if (vim_isIDc((uint8_t)(*p))) {
     // ":vimgrep pattern fname"
     if (s != NULL) {
       *s = p;

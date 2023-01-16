@@ -20,6 +20,7 @@
 #include "nvim/os/shell.h"
 #include "nvim/os/time.h"
 #include "nvim/rbuffer.h"
+#include "nvim/ui_client.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "event/process.c.generated.h"
@@ -43,6 +44,9 @@ static int exit_need_delay = 0;
 int process_spawn(Process *proc, bool in, bool out, bool err)
   FUNC_ATTR_NONNULL_ALL
 {
+  // forwarding stderr contradicts with processing it internally
+  assert(!(err && proc->fwd_err));
+
   if (in) {
     uv_pipe_init(&proc->loop->uv, &proc->in.uv.pipe, 0);
   } else {

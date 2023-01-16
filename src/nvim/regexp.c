@@ -1077,7 +1077,8 @@ void unref_extmatch(reg_extmatch_T *em)
 static int reg_prev_class(void)
 {
   if (rex.input > rex.line) {
-    return mb_get_class_tab(rex.input - 1 - utf_head_off((char *)rex.line, (char *)rex.input - 1),
+    return mb_get_class_tab((char *)rex.input - 1 -
+                            utf_head_off((char *)rex.line, (char *)rex.input - 1),
                             rex.reg_buf->b_chartab);
   }
   return -1;
@@ -1149,7 +1150,7 @@ static bool reg_match_visual(void)
     rex.line = reg_getline(rex.lnum);
     rex.input = rex.line + col;
 
-    unsigned int cols_u = win_linetabsize(wp, rex.reg_firstlnum + rex.lnum, rex.line, col);
+    unsigned int cols_u = win_linetabsize(wp, rex.reg_firstlnum + rex.lnum, (char *)rex.line, col);
     assert(cols_u <= MAXCOL);
     colnr_T cols = (colnr_T)cols_u;
     if (cols < start || cols > end - (*p_sel == 'e')) {
@@ -1836,7 +1837,7 @@ static int vim_regsub_both(char *source, typval_T *expr, char *dest, int destlen
         }
         if (had_backslash && (flags & REGSUB_BACKSLASH)) {
           // Backslashes will be consumed, need to double them.
-          s = (char *)vim_strsave_escaped((char_u *)eval_result[nested], (char_u *)"\\");
+          s = vim_strsave_escaped(eval_result[nested], "\\");
           xfree(eval_result[nested]);
           eval_result[nested] = s;
         }
@@ -2140,7 +2141,7 @@ char *reg_submatch(int no)
         // Within one line: take form start to end col.
         len = rsm.sm_mmatch->endpos[no].col - rsm.sm_mmatch->startpos[no].col;
         if (round == 2) {
-          STRLCPY(retval, s, len + 1);
+          xstrlcpy(retval, s, (size_t)len + 1);
         }
         len++;
       } else {

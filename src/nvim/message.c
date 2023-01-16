@@ -491,10 +491,10 @@ int smsg(const char *s, ...)
   va_list arglist;
 
   va_start(arglist, s);
-  vim_vsnprintf((char *)IObuff, IOSIZE, s, arglist);
+  vim_vsnprintf(IObuff, IOSIZE, s, arglist);
   va_end(arglist);
 
-  return msg((char *)IObuff);
+  return msg(IObuff);
 }
 
 int smsg_attr(int attr, const char *s, ...)
@@ -503,7 +503,7 @@ int smsg_attr(int attr, const char *s, ...)
   va_list arglist;
 
   va_start(arglist, s);
-  vim_vsnprintf((char *)IObuff, IOSIZE, s, arglist);
+  vim_vsnprintf(IObuff, IOSIZE, s, arglist);
   va_end(arglist);
   return msg_attr((const char *)IObuff, attr);
 }
@@ -514,7 +514,7 @@ int smsg_attr_keep(int attr, const char *s, ...)
   va_list arglist;
 
   va_start(arglist, s);
-  vim_vsnprintf((char *)IObuff, IOSIZE, s, arglist);
+  vim_vsnprintf(IObuff, IOSIZE, s, arglist);
   va_end(arglist);
   return msg_attr_keep((const char *)IObuff, attr, true, false);
 }
@@ -881,10 +881,10 @@ void msg_schedule_semsg(const char *const fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
-  vim_vsnprintf((char *)IObuff, IOSIZE, fmt, ap);
+  vim_vsnprintf(IObuff, IOSIZE, fmt, ap);
   va_end(ap);
 
-  char *s = xstrdup((char *)IObuff);
+  char *s = xstrdup(IObuff);
   loop_schedule_deferred(&main_loop, event_create(msg_semsg_event, 1, s));
 }
 
@@ -919,9 +919,11 @@ char *msg_trunc_attr(char *s, bool force, int attr)
 /// @note: May change the message by replacing a character with '<'.
 char *msg_may_trunc(bool force, char *s)
 {
-  int room;
+  if (ui_has(kUIMessages)) {
+    return s;
+  }
 
-  room = (Rows - cmdline_row - 1) * Columns + sc_col - 1;
+  int room = (Rows - cmdline_row - 1) * Columns + sc_col - 1;
   if ((force || (shortmess(SHM_TRUNC) && !exmode_active))
       && (int)strlen(s) - room > 0) {
     int size = vim_strsize(s);
@@ -1530,7 +1532,7 @@ char *msg_outtrans_one(char *p, int attr)
     msg_outtrans_len_attr(p, l, attr);
     return p + l;
   }
-  msg_puts_attr((const char *)transchar_byte(*p), attr);
+  msg_puts_attr((const char *)transchar_byte((uint8_t)(*p)), attr);
   return p + 1;
 }
 
@@ -3447,8 +3449,8 @@ void give_warning(char *message, bool hl)
 
 void give_warning2(char *const message, char *const a1, bool hl)
 {
-  vim_snprintf((char *)IObuff, IOSIZE, message, a1);
-  give_warning((char *)IObuff, hl);
+  vim_snprintf(IObuff, IOSIZE, message, a1);
+  give_warning(IObuff, hl);
 }
 
 /// Advance msg cursor to column "col".

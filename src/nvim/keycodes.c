@@ -55,7 +55,7 @@ static const struct modmasktable {
 
 #define MOD_KEYS_ENTRY_SIZE 5
 
-static char_u modifier_keys_table[] = {
+static uint8_t modifier_keys_table[] = {
   //  mod mask      with modifier               without modifier
   MOD_MASK_SHIFT, '&', '9',                   '@', '1',         // begin
   MOD_MASK_SHIFT, '&', '0',                   '@', '2',         // cancel
@@ -403,22 +403,24 @@ int name_to_mod_mask(int c)
 int simplify_key(const int key, int *modifiers)
   FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL
 {
-  if (*modifiers & (MOD_MASK_SHIFT | MOD_MASK_CTRL | MOD_MASK_ALT)) {
-    // TAB is a special case.
-    if (key == TAB && (*modifiers & MOD_MASK_SHIFT)) {
-      *modifiers &= ~MOD_MASK_SHIFT;
-      return K_S_TAB;
-    }
-    const int key0 = KEY2TERMCAP0(key);
-    const int key1 = KEY2TERMCAP1(key);
-    for (int i = 0; modifier_keys_table[i] != NUL; i += MOD_KEYS_ENTRY_SIZE) {
-      if (key0 == modifier_keys_table[i + 3]
-          && key1 == modifier_keys_table[i + 4]
-          && (*modifiers & modifier_keys_table[i])) {
-        *modifiers &= ~modifier_keys_table[i];
-        return TERMCAP2KEY(modifier_keys_table[i + 1],
-                           modifier_keys_table[i + 2]);
-      }
+  if (!(*modifiers & (MOD_MASK_SHIFT | MOD_MASK_CTRL | MOD_MASK_ALT))) {
+    return key;
+  }
+
+  // TAB is a special case.
+  if (key == TAB && (*modifiers & MOD_MASK_SHIFT)) {
+    *modifiers &= ~MOD_MASK_SHIFT;
+    return K_S_TAB;
+  }
+  const int key0 = KEY2TERMCAP0(key);
+  const int key1 = KEY2TERMCAP1(key);
+  for (int i = 0; modifier_keys_table[i] != NUL; i += MOD_KEYS_ENTRY_SIZE) {
+    if (key0 == modifier_keys_table[i + 3]
+        && key1 == modifier_keys_table[i + 4]
+        && (*modifiers & modifier_keys_table[i])) {
+      *modifiers &= ~modifier_keys_table[i];
+      return TERMCAP2KEY(modifier_keys_table[i + 1],
+                         modifier_keys_table[i + 2]);
     }
   }
   return key;
@@ -960,10 +962,10 @@ char *replace_termcodes(const char *const from, const size_t from_len, char **co
       // If "mapleader" or "maplocalleader" isn't set use a backslash.
       if (end - src >= 7 && STRNICMP(src, "<Leader>", 8) == 0) {
         len = 8;
-        p = (char *)get_var_value("g:mapleader");
+        p = get_var_value("g:mapleader");
       } else if (end - src >= 12 && STRNICMP(src, "<LocalLeader>", 13) == 0) {
         len = 13;
-        p = (char *)get_var_value("g:maplocalleader");
+        p = get_var_value("g:maplocalleader");
       } else {
         len = 0;
         p = NULL;

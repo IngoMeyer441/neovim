@@ -2,9 +2,19 @@
 #define NVIM_EVAL_WINDOW_H
 
 #include <stdbool.h>
+#include <string.h>
 
+#include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
+#include "nvim/cursor.h"
 #include "nvim/eval/typval_defs.h"
+#include "nvim/globals.h"
+#include "nvim/mark.h"
+#include "nvim/option_defs.h"
+#include "nvim/os/os.h"
+#include "nvim/pos.h"
+#include "nvim/vim.h"
+#include "nvim/window.h"
 
 /// Structure used by switch_win() to pass values to restore_win()
 typedef struct {
@@ -31,13 +41,13 @@ typedef struct {
         && (curwin->w_localdir != NULL || wp->w_localdir != NULL \
             || (curtab != tp && (curtab->tp_localdir != NULL || tp->tp_localdir != NULL)) \
             || p_acd)) { \
-      cwd_status_ = os_dirname((char_u *)cwd_, MAXPATHL); \
+      cwd_status_ = os_dirname(cwd_, MAXPATHL); \
     } \
     /* If 'acd' is set, check we are using that directory.  If yes, then */ \
     /* apply 'acd' afterwards, otherwise restore the current directory. */ \
     if (cwd_status_ == OK && p_acd) { \
       do_autochdir(); \
-      apply_acd_ = os_dirname((char_u *)autocwd_, MAXPATHL) == OK && strcmp(cwd_, autocwd_) == 0; \
+      apply_acd_ = os_dirname(autocwd_, MAXPATHL) == OK && strcmp(cwd_, autocwd_) == 0; \
     } \
     switchwin_T switchwin_; \
     if (switch_win_noblock(&switchwin_, wp_, (tp), true) == OK) { \

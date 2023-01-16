@@ -6,15 +6,18 @@
 #include <stdlib.h>
 
 #include "nvim/api/private/helpers.h"
+#include "nvim/channel.h"
 #include "nvim/eval.h"
+#include "nvim/eval/typval_defs.h"
 #include "nvim/event/loop.h"
-#include "nvim/event/multiqueue.h"
 #include "nvim/globals.h"
 #include "nvim/highlight.h"
 #include "nvim/log.h"
 #include "nvim/main.h"
 #include "nvim/memory.h"
 #include "nvim/msgpack_rpc/channel.h"
+#include "nvim/msgpack_rpc/channel_defs.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/tui/tui.h"
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
@@ -41,8 +44,11 @@ uint64_t ui_client_start_server(int argc, char **argv)
   }
   args[args_idx++] = NULL;
 
+  CallbackReader on_err = CALLBACK_READER_INIT;
+  on_err.fwd_err = true;
+
   Channel *channel = channel_job_start(args, CALLBACK_READER_INIT,
-                                       CALLBACK_READER_INIT, CALLBACK_NONE,
+                                       on_err, CALLBACK_NONE,
                                        false, true, true, false, kChannelStdinPipe,
                                        NULL, 0, 0, NULL, &exit_status);
   if (ui_client_forward_stdin) {

@@ -566,7 +566,7 @@ buf_notify({bufnr}, {method}, {params})                 *vim.lsp.buf_notify()*
     Parameters: ~
       • {bufnr}   (number|nil) The number of the buffer
       • {method}  (string) Name of the request method
-      • {params}  (string) Arguments to send to the server
+      • {params}  (any) Arguments to send to the server
 
     Return: ~
         true if any client returns true; false otherwise
@@ -1508,8 +1508,8 @@ convert_input_to_markdown_lines({input}, {contents})
 
     Parameters: ~
       • {input}     (`MarkedString` | `MarkedString[]` | `MarkupContent`)
-      • {contents}  (table, optional, default `{}`) List of strings to extend
-                    with converted lines
+      • {contents}  (table|nil) List of strings to extend with converted
+                    lines. Defaults to {}.
 
     Return: ~
         {contents}, extended with lines of converted markdown.
@@ -1612,6 +1612,7 @@ make_floating_popup_options({width}, {height}, {opts})
                   • border (string or table) override `border`
                   • focusable (string or table) override `focusable`
                   • zindex (string or table) override `zindex`, defaults to 50
+                  • relative ("mouse"|"cursor") defaults to "cursor"
 
     Return: ~
         (table) Options

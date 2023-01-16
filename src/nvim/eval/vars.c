@@ -864,7 +864,7 @@ static int do_unlet_var(lval_T *lp, char *name_end, exarg_T *eap, int deep FUNC_
   int cc;
 
   if (lp->ll_tv == NULL) {
-    cc = (char_u)(*name_end);
+    cc = (uint8_t)(*name_end);
     *name_end = NUL;
 
     // Environment variable, normal name or expanded name.
@@ -1112,7 +1112,7 @@ int get_var_tv(const char *name, int len, typval_T *rettv, dictitem_T **dip, boo
 ///          NULL when it doesn't exist.
 ///
 /// @see  tv_get_string() for how long the pointer remains valid.
-char_u *get_var_value(const char *const name)
+char *get_var_value(const char *const name)
 {
   dictitem_T *v;
 
@@ -1120,7 +1120,7 @@ char_u *get_var_value(const char *const name)
   if (v == NULL) {
     return NULL;
   }
-  return (char_u *)tv_get_string(&v->di_tv);
+  return (char *)tv_get_string(&v->di_tv);
 }
 
 /// Clean up a list of internal variables.

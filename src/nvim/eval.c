@@ -267,6 +267,8 @@ static struct vimvar {
   VV(VV__NULL_DICT,       "_null_dict",       VAR_DICT, VV_RO),
   VV(VV__NULL_BLOB,       "_null_blob",       VAR_BLOB, VV_RO),
   VV(VV_LUA,              "lua",              VAR_PARTIAL, VV_RO),
+  VV(VV_RELNUM,           "relnum",           VAR_NUMBER, VV_RO),
+  VV(VV_WRAP,             "wrap",             VAR_BOOL, VV_RO),
 };
 #undef VV
 
@@ -2211,7 +2213,7 @@ static int eval_func(char **const arg, char *const name, const int name_len, typ
   // If "s" is the name of a variable of type VAR_FUNC
   // use its contents.
   partial_T *partial;
-  s = (char *)deref_func_name((const char *)s, &len, &partial, !evaluate);
+  s = deref_func_name((const char *)s, &len, &partial, !evaluate);
 
   // Need to make a copy, in case evaluating the arguments makes
   // the name invalid.
@@ -2224,7 +2226,7 @@ static int eval_func(char **const arg, char *const name, const int name_len, typ
   funcexe.fe_evaluate = evaluate;
   funcexe.fe_partial = partial;
   funcexe.fe_basetv = basetv;
-  int ret = get_func_tv((char_u *)s, len, rettv, arg, &funcexe);
+  int ret = get_func_tv(s, len, rettv, arg, &funcexe);
 
   xfree(s);
 
@@ -3219,7 +3221,7 @@ static int call_func_rettv(char **const arg, typval_T *const rettv, const bool e
   funcexe.fe_partial = pt;
   funcexe.fe_selfdict = selfdict;
   funcexe.fe_basetv = basetv;
-  const int ret = get_func_tv((char_u *)funcname, is_lua ? (int)(*arg - funcname) : -1, rettv,
+  const int ret = get_func_tv(funcname, is_lua ? (int)(*arg - funcname) : -1, rettv,
                               arg, &funcexe);
 
   // Clear the funcref afterwards, so that deleting it while
@@ -5048,7 +5050,7 @@ void common_function(typval_T *argvars, typval_T *rettv, bool is_funcref)
         if (tv_list_len(list) == 0) {
           arg_idx = 0;
         } else if (tv_list_len(list) > MAX_FUNC_ARGS) {
-          emsg_funcname((char *)e_toomanyarg, (char_u *)s);
+          emsg_funcname((char *)e_toomanyarg, s);
           xfree(name);
           goto theend;
         }
@@ -6096,7 +6098,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     }
     int len;
     if (charcol) {
-      len = mb_charlen((char_u *)ml_get(pos.lnum));
+      len = mb_charlen(ml_get(pos.lnum));
     } else {
       len = (int)strlen(ml_get(pos.lnum));
     }
@@ -6182,7 +6184,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     } else {
       pos.lnum = curwin->w_cursor.lnum;
       if (charcol) {
-        pos.col = (colnr_T)mb_charlen((char_u *)get_cursor_line_ptr());
+        pos.col = (colnr_T)mb_charlen(get_cursor_line_ptr());
       } else {
         pos.col = (colnr_T)strlen(get_cursor_line_ptr());
       }
@@ -6273,7 +6275,7 @@ int list2fpos(typval_T *arg, pos_T *posp, int *fnump, colnr_T *curswantp, bool c
 int get_env_len(const char **arg)
 {
   const char *p;
-  for (p = *arg; vim_isIDc(*p); p++) {}
+  for (p = *arg; vim_isIDc((uint8_t)(*p)); p++) {}
   if (p == *arg) {  // No name found.
     return 0;
   }
@@ -7673,8 +7675,7 @@ int store_session_globals(FILE *fd)
         && var_flavour((char *)this_var->di_key) == VAR_FLAVOUR_SESSION) {
       // Escape special characters with a backslash.  Turn a LF and
       // CR into \n and \r.
-      char *const p = (char *)vim_strsave_escaped((const char_u *)tv_get_string(&this_var->di_tv),
-                                                  (const char_u *)"\\\"\n\r");
+      char *const p = (char *)vim_strsave_escaped(tv_get_string(&this_var->di_tv), "\\\"\n\r");
       for (char *t = p; *t != NUL; t++) {
         if (*t == '\n') {
           *t = 'n';
@@ -7815,8 +7816,8 @@ repeat:
     }
 
     // FullName_save() is slow, don't use it when not needed.
-    if (*p != NUL || !vim_isAbsName((char_u *)(*fnamep))) {
-      *fnamep = FullName_save((*fnamep), *p != NUL);
+    if (*p != NUL || !vim_isAbsName(*fnamep)) {
+      *fnamep = FullName_save(*fnamep, *p != NUL);
       xfree(*bufp);          // free any allocated file name
       *bufp = *fnamep;
       if (*fnamep == NULL) {
@@ -7861,7 +7862,7 @@ repeat:
 
     if (p != NULL) {
       if (c == '.') {
-        os_dirname((char_u *)dirname, MAXPATHL);
+        os_dirname(dirname, MAXPATHL);
         if (has_homerelative) {
           s = xstrdup(dirname);
           home_replace(NULL, s, dirname, MAXPATHL, true);
@@ -8005,7 +8006,7 @@ repeat:
       s++;
     }
 
-    int sep = (char_u)(*s++);
+    int sep = (uint8_t)(*s++);
     if (sep) {
       // find end of pattern
       p = vim_strchr(s, sep);
@@ -8038,7 +8039,7 @@ repeat:
 
   if (src[*usedlen] == ':' && src[*usedlen + 1] == 'S') {
     // vim_strsave_shellescape() needs a NUL terminated string.
-    c = (char_u)(*fnamep)[*fnamelen];
+    c = (uint8_t)(*fnamep)[*fnamelen];
     if (c != NUL) {
       (*fnamep)[*fnamelen] = NUL;
     }
