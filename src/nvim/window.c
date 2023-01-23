@@ -508,7 +508,7 @@ wingotofile:
     CHECK_CMDWIN;
 
     linenr_T lnum = -1;
-    char *ptr = (char *)grab_file_name(Prenum1, &lnum);
+    char *ptr = grab_file_name(Prenum1, &lnum);
     if (ptr != NULL) {
       tabpage_T *oldtab = curtab;
       win_T *oldwin = curwin;
@@ -756,20 +756,20 @@ void win_set_minimal_style(win_T *wp)
 
   // Hide EOB region: use " " fillchar and cleared highlighting
   if (wp->w_p_fcs_chars.eob != ' ') {
-    char_u *old = (char_u *)wp->w_p_fcs;
+    char *old = wp->w_p_fcs;
     wp->w_p_fcs = ((*old == NUL)
                    ? xstrdup("eob: ")
-                   : concat_str((char *)old, ",eob: "));
-    free_string_option((char *)old);
+                   : concat_str(old, ",eob: "));
+    free_string_option(old);
   }
 
   // TODO(bfredl): this could use a highlight namespace directly,
   // and avoid peculiarities around window options
-  char_u *old = (char_u *)wp->w_p_winhl;
+  char *old = wp->w_p_winhl;
   wp->w_p_winhl = ((*old == NUL)
                    ? xstrdup("EndOfBuffer:")
-                   : concat_str((char *)old, ",EndOfBuffer:"));
-  free_string_option((char *)old);
+                   : concat_str(old, ",EndOfBuffer:"));
+  free_string_option(old);
   parse_winhl_opt(wp);
 
   // signcolumn: use 'auto'
@@ -2617,8 +2617,8 @@ static bool close_last_window_tabpage(win_T *win, bool free_buf, tabpage_T *prev
   goto_tabpage_tp(alt_tabpage(), false, true);
 
   // save index for tabclosed event
-  char_u prev_idx[NUMBUFLEN];
-  snprintf((char *)prev_idx, NUMBUFLEN, "%i", tabpage_index(prev_curtab));
+  char prev_idx[NUMBUFLEN];
+  snprintf(prev_idx, NUMBUFLEN, "%i", tabpage_index(prev_curtab));
 
   // Safety check: Autocommands may have closed the window when jumping
   // to the other tab page.
@@ -4064,7 +4064,7 @@ void free_tabpage(tabpage_T *tp)
 ///              tabpage in case of 0.
 /// @param filename Will be passed to apply_autocmds().
 /// @return Was the new tabpage created successfully? FAIL or OK.
-int win_new_tabpage(int after, char_u *filename)
+int win_new_tabpage(int after, char *filename)
 {
   tabpage_T *old_curtab = curtab;
 
@@ -4127,7 +4127,7 @@ int win_new_tabpage(int after, char_u *filename)
 
     apply_autocmds(EVENT_WINNEW, NULL, NULL, false, curbuf);
     apply_autocmds(EVENT_WINENTER, NULL, NULL, false, curbuf);
-    apply_autocmds(EVENT_TABNEW, (char *)filename, (char *)filename, false, curbuf);
+    apply_autocmds(EVENT_TABNEW, filename, filename, false, curbuf);
     apply_autocmds(EVENT_TABENTER, NULL, NULL, false, curbuf);
 
     return OK;
@@ -6757,7 +6757,7 @@ static void frame_add_height(frame_T *frp, int n)
 // Get the file name at the cursor.
 // If Visual mode is active, use the selected text if it's in one line.
 // Returns the name in allocated memory, NULL for failure.
-char_u *grab_file_name(long count, linenr_T *file_lnum)
+char *grab_file_name(long count, linenr_T *file_lnum)
 {
   int options = FNAME_MESS | FNAME_EXP | FNAME_REL | FNAME_UNESC;
   if (VIsual_active) {
@@ -6767,12 +6767,12 @@ char_u *grab_file_name(long count, linenr_T *file_lnum)
       return NULL;
     }
     // Only recognize ":123" here
-    if (file_lnum != NULL && ptr[len] == ':' && isdigit(ptr[len + 1])) {
+    if (file_lnum != NULL && ptr[len] == ':' && isdigit((uint8_t)ptr[len + 1])) {
       char *p = ptr + len + 1;
 
       *file_lnum = (linenr_T)getdigits_long(&p, false, 0);
     }
-    return (char_u *)find_file_name_in_path(ptr, len, options, count, curbuf->b_ffname);
+    return find_file_name_in_path(ptr, len, options, count, curbuf->b_ffname);
   }
   return file_name_at_cursor(options | FNAME_HYP, count, file_lnum);
 }
@@ -6788,10 +6788,10 @@ char_u *grab_file_name(long count, linenr_T *file_lnum)
 // FNAME_EXP        expand to path
 // FNAME_HYP        check for hypertext link
 // FNAME_INCL       apply "includeexpr"
-char_u *file_name_at_cursor(int options, long count, linenr_T *file_lnum)
+char *file_name_at_cursor(int options, long count, linenr_T *file_lnum)
 {
-  return file_name_in_line((char_u *)get_cursor_line_ptr(),
-                           curwin->w_cursor.col, options, count, (char_u *)curbuf->b_ffname,
+  return file_name_in_line(get_cursor_line_ptr(),
+                           curwin->w_cursor.col, options, count, curbuf->b_ffname,
                            file_lnum);
 }
 
@@ -6799,11 +6799,11 @@ char_u *file_name_at_cursor(int options, long count, linenr_T *file_lnum)
 /// @param file_lnum  line number after the file name
 ///
 /// @return  the name of the file under or after ptr[col]. Otherwise like file_name_at_cursor().
-char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u *rel_fname,
-                          linenr_T *file_lnum)
+char *file_name_in_line(char *line, int col, int options, long count, char *rel_fname,
+                        linenr_T *file_lnum)
 {
   // search forward for what could be the start of a file name
-  char *ptr = (char *)line + col;
+  char *ptr = line + col;
   while (*ptr != NUL && !vim_isfilec((uint8_t)(*ptr))) {
     MB_PTR_ADV(ptr);
   }
@@ -6820,8 +6820,8 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
 
   // Search backward for first char of the file name.
   // Go one char back to ":" before "//" even when ':' is not in 'isfname'.
-  while ((char_u *)ptr > line) {
-    if ((len = (size_t)(utf_head_off((char *)line, ptr - 1))) > 0) {
+  while (ptr > line) {
+    if ((len = (size_t)(utf_head_off(line, ptr - 1))) > 0) {
       ptr -= len + 1;
     } else if (vim_isfilec((uint8_t)ptr[-1])
                || ((options & FNAME_HYP) && path_is_url(ptr - 1))) {
@@ -6836,7 +6836,7 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
   len = 0;
   while (vim_isfilec((uint8_t)ptr[len]) || (ptr[len] == '\\' && ptr[len + 1] == ' ')
          || ((options & FNAME_HYP) && path_is_url(ptr + len))
-         || (is_url && vim_strchr(":?&=", ptr[len]) != NULL)) {
+         || (is_url && vim_strchr(":?&=", (uint8_t)ptr[len]) != NULL)) {
     // After type:// we also include :, ?, & and = as valid characters, so that
     // http://google.com:8080?q=this&that=ok works.
     if ((ptr[len] >= 'A' && ptr[len] <= 'Z')
@@ -6857,7 +6857,7 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
 
   // If there is trailing punctuation, remove it.
   // But don't remove "..", could be a directory name.
-  if (len > 2 && vim_strchr(".,:;!", ptr[len - 1]) != NULL
+  if (len > 2 && vim_strchr(".,:;!", (uint8_t)ptr[len - 1]) != NULL
       && ptr[len - 2] != '.') {
     len--;
   }
@@ -6878,17 +6878,17 @@ char_u *file_name_in_line(char_u *line, int col, int options, long count, char_u
       p = skipwhite(p);
     }
     if (*p != NUL) {
-      if (!isdigit(*p)) {
+      if (!isdigit((uint8_t)(*p))) {
         p++;                        // skip the separator
       }
       p = skipwhite(p);
-      if (isdigit(*p)) {
+      if (isdigit((uint8_t)(*p))) {
         *file_lnum = (linenr_T)getdigits_long(&p, false, 0);
       }
     }
   }
 
-  return (char_u *)find_file_name_in_path(ptr, len, options, count, (char *)rel_fname);
+  return find_file_name_in_path(ptr, len, options, count, rel_fname);
 }
 
 /// Add or remove a status line from window(s), according to the

@@ -1826,7 +1826,7 @@ static void parse_quoted_string(ParserState *const pstate, ExprASTNode *const no
             flags |= FSK_SIMPLIFY;
           }
           const size_t special_len = trans_special(&p, (size_t)(e - p),
-                                                   (char_u *)v_p, flags, false, NULL);
+                                                   v_p, flags, false, NULL);
           if (special_len != 0) {
             v_p += special_len;
           } else {
@@ -2497,7 +2497,6 @@ viml_pexpr_parse_bracket_closing_error:
           NEW_NODE_WITH_CUR_POS(cur_node, kExprNodeListLiteral);
           *top_node_p = cur_node;
           kvi_push(ast_stack, &cur_node->children);
-          want_node = kENodeValue;
           if (cur_pt == kEPTAssignment) {
             // Additional assignment parse type allows to easily forbid nested
             // lists.

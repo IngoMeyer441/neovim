@@ -92,7 +92,7 @@ typedef struct syn_pattern {
 } synpat_T;
 
 typedef struct syn_cluster_S {
-  char_u *scl_name;         // syntax cluster name
+  char *scl_name;           // syntax cluster name
   char *scl_name_u;         // uppercase of scl_name
   int16_t *scl_list;        // IDs in this syntax cluster
 } syn_cluster_T;
@@ -1490,8 +1490,8 @@ int get_syntax_attr(const colnr_T col, bool *const can_spell, const bool keep_st
 static int syn_current_attr(const bool syncing, const bool displaying, bool *const can_spell,
                             const bool keep_state)
 {
-  lpos_T endpos;                // was: char_u *endp;
-  lpos_T hl_startpos;           // was: int hl_startcol;
+  lpos_T endpos;
+  lpos_T hl_startpos;
   lpos_T hl_endpos;
   lpos_T eos_pos;               // end-of-start match (start region)
   lpos_T eoe_pos;               // end-of-end pattern
@@ -3416,8 +3416,8 @@ static void syn_list_one(const int id, const bool syncing, const bool link_only)
       }
       msg_putchar(' ');
       if (spp->sp_sync_idx >= 0) {
-        msg_outtrans((char *)highlight_group_name(SYN_ITEMS(curwin->w_s)
-                                                  [spp->sp_sync_idx].sp_syn.id - 1));
+        msg_outtrans(highlight_group_name(SYN_ITEMS(curwin->w_s)
+                                          [spp->sp_sync_idx].sp_syn.id - 1));
       } else {
         msg_puts("NONE");
       }
@@ -3430,7 +3430,7 @@ static void syn_list_one(const int id, const bool syncing, const bool link_only)
     (void)syn_list_header(did_header, 0, id, true);
     msg_puts_attr("links to", attr);
     msg_putchar(' ');
-    msg_outtrans((char *)highlight_group_name(highlight_link_id(id - 1) - 1));
+    msg_outtrans(highlight_group_name(highlight_link_id(id - 1) - 1));
   }
 }
 
@@ -3453,7 +3453,7 @@ static void syn_list_cluster(int id)
 
   // slight hack:  roughly duplicate the guts of syn_list_header()
   msg_putchar('\n');
-  msg_outtrans((char *)SYN_CLSTR(curwin->w_s)[id].scl_name);
+  msg_outtrans(SYN_CLSTR(curwin->w_s)[id].scl_name);
 
   if (msg_col >= endcol) {      // output at least one space
     endcol = msg_col + 1;
@@ -3490,9 +3490,9 @@ static void put_id_list(const char *const name, const int16_t *const list, const
       int scl_id = *p - SYNID_CLUSTER;
 
       msg_putchar('@');
-      msg_outtrans((char *)SYN_CLSTR(curwin->w_s)[scl_id].scl_name);
+      msg_outtrans(SYN_CLSTR(curwin->w_s)[scl_id].scl_name);
     } else {
-      msg_outtrans((char *)highlight_group_name(*p - 1));
+      msg_outtrans(highlight_group_name(*p - 1));
     }
     if (p[1]) {
       msg_putchar(',');
@@ -3514,7 +3514,7 @@ static void put_pattern(const char *const s, const int c, const synpat_T *const 
     if (last_matchgroup == 0) {
       msg_outtrans("NONE");
     } else {
-      msg_outtrans((char *)highlight_group_name(last_matchgroup - 1));
+      msg_outtrans(highlight_group_name(last_matchgroup - 1));
     }
     msg_putchar(' ');
   }
@@ -3524,7 +3524,7 @@ static void put_pattern(const char *const s, const int c, const synpat_T *const 
   msg_putchar(c);
 
   // output the pattern, in between a char that is not in the pattern
-  for (i = 0; vim_strchr(spp->sp_pattern, sepchars[i]) != NULL;) {
+  for (i = 0; vim_strchr(spp->sp_pattern, (uint8_t)sepchars[i]) != NULL;) {
     if (sepchars[++i] == NUL) {
       i = 0;            // no good char found, just use the first one
       break;
@@ -3743,7 +3743,7 @@ static void add_keyword(char *const name, const int id, const int flags,
   }
   kp->next_list = copy_id_list(next_list);
 
-  const hash_T hash = hash_hash((char_u *)kp->keyword);
+  const hash_T hash = hash_hash(kp->keyword);
   hashtab_T *const ht = (curwin->w_s->b_syn_ic)
       ? &curwin->w_s->b_keywtab_ic
       : &curwin->w_s->b_keywtab;
@@ -3757,7 +3757,7 @@ static void add_keyword(char *const name, const int id, const int flags,
   if (HASHITEM_EMPTY(hi)) {
     // new keyword, add to hashtable
     kp->ke_next = NULL;
-    hash_add_item(ht, hi, (char_u *)kp->keyword, hash);
+    hash_add_item(ht, hi, kp->keyword, hash);
   } else {
     // keyword already exists, prepend to list
     kp->ke_next = HI2KE(hi);
@@ -4000,7 +4000,7 @@ static void syn_cmd_include(exarg_T *eap, int syncing)
   // filename to include.
   eap->argt |= (EX_XFILE | EX_NOSPC);
   separate_nextcmd(eap);
-  if (*eap->arg == '<' || *eap->arg == '$' || path_is_absolute((char_u *)eap->arg)) {
+  if (*eap->arg == '<' || *eap->arg == '$' || path_is_absolute(eap->arg)) {
     // For an absolute path, "$VIM/..." or "<sfile>.." we ":source" the
     // file.  Need to expand the file name first.  In other cases
     // ":runtime!" is used.
@@ -4634,7 +4634,7 @@ static int syn_add_cluster(char *name)
   syn_cluster_T *scp = GA_APPEND_VIA_PTR(syn_cluster_T,
                                          &curwin->w_s->b_syn_clusters);
   CLEAR_POINTER(scp);
-  scp->scl_name = (char_u *)name;
+  scp->scl_name = name;
   scp->scl_name_u = vim_strsave_up(name);
   scp->scl_list = NULL;
 
@@ -5042,7 +5042,7 @@ static int get_id_list(char **const arg, const int keylen, int16_t **const list,
           regmatch.rm_ic = true;
           id = 0;
           for (int i = highlight_num_groups(); --i >= 0;) {
-            if (vim_regexec(&regmatch, (char *)highlight_group_name(i), (colnr_T)0)) {
+            if (vim_regexec(&regmatch, highlight_group_name(i), (colnr_T)0)) {
               if (round == 2) {
                 // Got more items than expected; can happen
                 // when adding items that match:
@@ -5677,7 +5677,7 @@ static void syntime_report(void)
     msg_puts(profile_msg(p->average));
     msg_puts(" ");
     msg_advance(50);
-    msg_outtrans((char *)highlight_group_name(p->id - 1));
+    msg_outtrans(highlight_group_name(p->id - 1));
     msg_puts(" ");
 
     msg_advance(69);

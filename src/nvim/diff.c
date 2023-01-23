@@ -1218,7 +1218,7 @@ void ex_diffpatch(exarg_T *eap)
   fullname = FullName_save(eap->arg, false);
   esc_name = vim_strsave_shellescape(fullname != NULL ? fullname : eap->arg, true, true);
 #else
-  esc_name = (char *)vim_strsave_shellescape(eap->arg, true, true);
+  esc_name = vim_strsave_shellescape(eap->arg, true, true);
 #endif
   size_t buflen = strlen(tmp_orig) + strlen(esc_name) + strlen(tmp_new) + 16;
   buf = xmalloc(buflen);
@@ -1575,7 +1575,7 @@ static bool extract_hunk(FILE *fd, diffhunk_T *hunk, diffstyle_T *diffstyle)
       // --- file1       2018-03-20 13:23:35.783153140 +0100
       // +++ file2       2018-03-20 13:23:41.183156066 +0100
       // @@ -1,3 +1,5 @@
-      if (isdigit(*line)) {
+      if (isdigit((uint8_t)(*line))) {
         *diffstyle = DIFF_ED;
       } else if ((strncmp(line, "@@ ", 3) == 0)) {
         *diffstyle = DIFF_UNIFIED;
@@ -1593,7 +1593,7 @@ static bool extract_hunk(FILE *fd, diffhunk_T *hunk, diffstyle_T *diffstyle)
     }
 
     if (*diffstyle == DIFF_ED) {
-      if (!isdigit(*line)) {
+      if (!isdigit((uint8_t)(*line))) {
         continue;   // not the start of a diff block
       }
       if (parse_diff_ed(line, hunk) == FAIL) {
@@ -2293,7 +2293,7 @@ static bool diff_equal_char(const char *const p1, const char *const p2, int *con
 static int diff_cmp(char *s1, char *s2)
 {
   if ((diff_flags & DIFF_IBLANK)
-      && (*(char_u *)skipwhite(s1) == NUL || *skipwhite(s2) == NUL)) {
+      && (*skipwhite(s1) == NUL || *skipwhite(s2) == NUL)) {
     return 0;
   }
 

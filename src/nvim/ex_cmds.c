@@ -158,7 +158,7 @@ void do_ascii(const exarg_T *const eap)
     char buf2[20];
     buf2[0] = NUL;
 
-    dig = (char *)get_digraph_for_char(cval);
+    dig = get_digraph_for_char(cval);
     if (dig != NULL) {
       iobuff_len += (size_t)vim_snprintf(IObuff + iobuff_len,
                                          sizeof(IObuff) - iobuff_len,
@@ -206,7 +206,7 @@ void do_ascii(const exarg_T *const eap)
     }
     iobuff_len += (size_t)utf_char2bytes(c, IObuff + iobuff_len);
 
-    dig = (char *)get_digraph_for_char(c);
+    dig = get_digraph_for_char(c);
     if (dig != NULL) {
       iobuff_len += (size_t)vim_snprintf(IObuff + iobuff_len,
                                          sizeof(IObuff) - iobuff_len,
@@ -528,7 +528,7 @@ void ex_sort(exarg_T *eap)
           emsg(_(e_noprevre));
           goto sortend;
         }
-        regmatch.regprog = vim_regcomp((char *)last_search_pat(), RE_MAGIC);
+        regmatch.regprog = vim_regcomp(last_search_pat(), RE_MAGIC);
       } else {
         regmatch.regprog = vim_regcomp(p + 1, RE_MAGIC);
       }
@@ -1348,7 +1348,7 @@ static char *find_pipe(const char *cmd)
     }
     if (*p == '"') {
       inquote = !inquote;
-    } else if (rem_backslash((const char_u *)p)) {
+    } else if (rem_backslash(p)) {
       p++;
     }
   }
@@ -1420,7 +1420,7 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
 #else
     // For shells that don't understand braces around commands, at least allow
     // the use of commands in a pipe.
-    xstrlcpy(buf, (char *)cmd, len);
+    xstrlcpy(buf, cmd, len);
     if (itmp != NULL) {
       // If there is a pipe, we have to put the '<' in front of it.
       // Don't do this when 'shellquote' is not empty, otherwise the
@@ -3332,7 +3332,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
   }
   // new pattern and substitution
   if (eap->cmd[0] == 's' && *cmd != NUL && !ascii_iswhite(*cmd)
-      && vim_strchr("0123456789cegriIp|\"", *cmd) == NULL) {
+      && vim_strchr("0123456789cegriIp|\"", (uint8_t)(*cmd)) == NULL) {
     // don't accept alphanumeric for separator
     if (check_regexp_delim(*cmd) == FAIL) {
       return 0;
@@ -3343,7 +3343,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
     //  //sub/r).  "\&sub&" use last substitute pattern (like //sub/).
     if (*cmd == '\\') {
       cmd++;
-      if (vim_strchr("/?&", *cmd) == NULL) {
+      if (vim_strchr("/?&", (uint8_t)(*cmd)) == NULL) {
         emsg(_(e_backslash));
         return 0;
       }
@@ -3351,11 +3351,11 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
         which_pat = RE_SEARCH;              // use last '/' pattern
       }
       pat = "";                   // empty search pattern
-      delimiter = (char_u)(*cmd++);                   // remember delimiter character
+      delimiter = (uint8_t)(*cmd++);                   // remember delimiter character
       has_second_delim = true;
     } else {          // find the end of the regexp
       which_pat = RE_LAST;                  // use last used regexp
-      delimiter = (char_u)(*cmd++);                   // remember delimiter character
+      delimiter = (uint8_t)(*cmd++);                   // remember delimiter character
       pat = cmd;                            // remember start of search pat
       cmd = skip_regexp_ex(cmd, delimiter, magic_isset(), &eap->arg, NULL, NULL);
       if (cmd[0] == delimiter) {            // end delimiter found
@@ -3443,7 +3443,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
     return 0;
   }
 
-  if (search_regcomp((char_u *)pat, NULL, RE_SUBST, which_pat,
+  if (search_regcomp(pat, NULL, RE_SUBST, which_pat,
                      (cmdpreview ? 0 : SEARCH_HIS), &regmatch) == FAIL) {
     if (subflags.do_error) {
       emsg(_(e_invcmd));
@@ -3697,7 +3697,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
               msg_putchar('\n');
               xfree(prompt);
               if (resp != NULL) {
-                typed = (char_u)(*resp);
+                typed = (uint8_t)(*resp);
                 xfree(resp);
               } else {
                 // getcmdline_prompt() returns NULL if there is no command line to return.
@@ -3895,7 +3895,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           // When it fails sublen is zero.
           sublen = vim_regsub_multi(&regmatch,
                                     sub_firstlnum - regmatch.startpos[0].lnum,
-                                    (char_u *)sub, (char_u *)sub_firstline, 0,
+                                    sub, sub_firstline, 0,
                                     REGSUB_BACKSLASH
                                     | (magic_isset() ? REGSUB_MAGIC : 0));
           textlock--;
@@ -3938,7 +3938,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
           textlock++;
           (void)vim_regsub_multi(&regmatch,
                                  sub_firstlnum - regmatch.startpos[0].lnum,
-                                 (char_u *)sub, (char_u *)new_end, sublen,
+                                 sub, new_end, sublen,
                                  REGSUB_COPY | REGSUB_BACKSLASH
                                  | (magic_isset() ? REGSUB_MAGIC : 0));
           textlock--;
@@ -4372,7 +4372,7 @@ void ex_global(exarg_T *eap)
   //             "\&": use previous substitute pattern.
   if (*cmd == '\\') {
     cmd++;
-    if (vim_strchr("/?&", *cmd) == NULL) {
+    if (vim_strchr("/?&", (uint8_t)(*cmd)) == NULL) {
       emsg(_(e_backslash));
       return;
     }
@@ -4398,8 +4398,8 @@ void ex_global(exarg_T *eap)
     }
   }
 
-  char_u *used_pat;
-  if (search_regcomp((char_u *)pat, &used_pat, RE_BOTH, which_pat,
+  char *used_pat;
+  if (search_regcomp(pat, &used_pat, RE_BOTH, which_pat,
                      SEARCH_HIS, &regmatch) == FAIL) {
     emsg(_(e_invcmd));
     return;
@@ -4704,7 +4704,7 @@ char *skip_vimgrep_pat(char *p, char **s, int *flags)
     if (s != NULL) {
       *s = p + 1;
     }
-    c = (char_u)(*p);
+    c = (uint8_t)(*p);
     p = skip_regexp(p + 1, c, true);
     if (*p != c) {
       return NULL;

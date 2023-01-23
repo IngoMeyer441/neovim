@@ -231,8 +231,12 @@ void stl_fill_click_defs(StlClickDefinition *click_defs, StlClickRecord *click_r
   };
   for (int i = 0; click_recs[i].start != NULL; i++) {
     len += vim_strnsize(buf, (int)(click_recs[i].start - buf));
-    while (col < len) {
-      click_defs[col++] = cur_click_def;
+    if (col < len) {
+      while (col < len) {
+        click_defs[col++] = cur_click_def;
+      }
+    } else {
+      xfree(cur_click_def.func);
     }
     buf = (char *)click_recs[i].start;
     cur_click_def = click_recs[i].def;
@@ -242,8 +246,12 @@ void stl_fill_click_defs(StlClickDefinition *click_defs, StlClickRecord *click_r
       cur_click_def.type = kStlClickDisabled;
     }
   }
-  while (col < width) {
-    click_defs[col++] = cur_click_def;
+  if (col < width) {
+    while (col < width) {
+      click_defs[col++] = cur_click_def;
+    }
+  } else {
+    xfree(cur_click_def.func);
   }
 }
 
@@ -715,7 +723,7 @@ void draw_tabline(void)
   int len;
   int attr_nosel = HL_ATTR(HLF_TP);
   int attr_fill = HL_ATTR(HLF_TPF);
-  char_u *p;
+  char *p;
   int room;
   int use_sep_chars = (t_colors < 8);
 
@@ -732,6 +740,10 @@ void draw_tabline(void)
   if (tabline_height() < 1) {
     return;
   }
+
+  // Clear tab_page_click_defs: Clicking outside of tabs has no effect.
+  assert(tab_page_click_defs_size >= (size_t)Columns);
+  stl_clear_click_defs(tab_page_click_defs, tab_page_click_defs_size);
 
   // Use the 'tabline' option if it's set.
   if (*p_tal != NUL) {
@@ -811,16 +823,16 @@ void draw_tabline(void)
         get_trans_bufname(cwp->w_buffer);
         shorten_dir(NameBuff);
         len = vim_strsize(NameBuff);
-        p = (char_u *)NameBuff;
+        p = NameBuff;
         while (len > room) {
-          len -= ptr2cells((char *)p);
+          len -= ptr2cells(p);
           MB_PTR_ADV(p);
         }
         if (len > Columns - col - 1) {
           len = Columns - col - 1;
         }
 
-        grid_puts_len(&default_grid, (char *)p, (int)strlen((char *)p), 0, col, attr);
+        grid_puts_len(&default_grid, p, (int)strlen(p), 0, col, attr);
         col += len;
       }
       grid_putchar(&default_grid, ' ', 0, col++, attr);
@@ -870,29 +882,30 @@ void draw_tabline(void)
   redraw_tabline = false;
 }
 
-/// Build the 'statuscolumn' string for line "lnum".  If "setnum" is true,
-/// update the "lnum" and "relnum" vim-variables for a new line.
+/// Build the 'statuscolumn' string for line "lnum". When "relnum" == -1,
+/// the v:lnum and v:relnum variables don't have to be updated.
 ///
 /// @param hlrec  HL attributes (can be NULL)
 /// @param stcp  Status column attributes (can be NULL)
 /// @return  The width of the built status column string for line "lnum"
-int build_statuscol_str(win_T *wp, bool setnum, bool wrap, linenr_T lnum, long relnum, int maxwidth,
-                        int fillchar, char *buf, stl_hlrec_t **hlrec, statuscol_T *stcp)
+int build_statuscol_str(win_T *wp, linenr_T lnum, long relnum, int maxwidth, int fillchar,
+                        char *buf, stl_hlrec_t **hlrec, statuscol_T *stcp)
 {
-  if (setnum) {
+  bool fillclick = relnum >= 0 && lnum == wp->w_topline;
+
+  if (relnum >= 0) {
     set_vim_var_nr(VV_LNUM, lnum);
     set_vim_var_nr(VV_RELNUM, relnum);
   }
-  set_vim_var_bool(VV_WRAP, wrap);
 
   StlClickRecord *clickrec;
   char *stc = xstrdup(wp->w_p_stc);
-  int width = build_stl_str_hl(wp, buf, MAXPATHL, stc, "statuscolumn", OPT_LOCAL,
-                               fillchar, maxwidth, hlrec, &clickrec, stcp);
+  int width = build_stl_str_hl(wp, buf, MAXPATHL, stc, "statuscolumn", OPT_LOCAL, fillchar,
+                               maxwidth, hlrec, fillclick ? &clickrec : NULL, stcp);
   xfree(stc);
 
-  // Allocate and fill click def array if width has changed
-  if (wp->w_status_click_defs_size != (size_t)width) {
+  // Only update click definitions once per window per redraw
+  if (fillclick) {
     stl_clear_click_defs(wp->w_statuscol_click_defs, wp->w_statuscol_click_defs_size);
     wp->w_statuscol_click_defs = stl_alloc_click_defs(wp->w_statuscol_click_defs, width,
                                                       &wp->w_statuscol_click_defs_size);
@@ -1324,7 +1337,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
       }
       stl_items[curitem].type = ClickFunc;
       stl_items[curitem].start = out_p;
-      stl_items[curitem].cmd = xmemdupz(t, (size_t)(fmt_p - t));
+      stl_items[curitem].cmd = tabtab ? xmemdupz(t, (size_t)(fmt_p - t)) : NULL;
       stl_items[curitem].minwid = minwid;
       fmt_p++;
       curitem++;
@@ -1365,7 +1378,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
 
     // An invalid item was specified.
     // Continue processing on the next character of the format string.
-    if (vim_strchr(STL_ALL, *fmt_p) == NULL) {
+    if (vim_strchr(STL_ALL, (uint8_t)(*fmt_p)) == NULL) {
       fmt_p++;
       continue;
     }
@@ -1506,13 +1519,12 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
     case STL_LINE:
       // Overload %l with v:lnum for 'statuscolumn'
       if (opt_name != NULL && strcmp(opt_name, "statuscolumn") == 0) {
-        if (wp->w_p_nu) {
+        if (wp->w_p_nu && !get_vim_var_nr(VV_VIRTNUM)) {
           num = get_vim_var_nr(VV_LNUM);
         }
       } else {
         num = (wp->w_buffer->b_ml.ml_flags & ML_EMPTY) ? 0L : (long)(wp->w_cursor.lnum);
       }
-
       break;
 
     case STL_NUMLINES:
@@ -1612,7 +1624,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
     case STL_ROFLAG_ALT:
       // Overload %r with v:relnum for 'statuscolumn'
       if (opt_name != NULL && strcmp(opt_name, "statuscolumn") == 0) {
-        if (wp->w_p_rnu) {
+        if (wp->w_p_rnu && !get_vim_var_nr(VV_VIRTNUM)) {
           num = get_vim_var_nr(VV_RELNUM);
         }
       } else {
@@ -1680,7 +1692,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
         vim_snprintf(buf_tmp, sizeof(buf_tmp), ",%s", wp->w_buffer->b_p_ft);
         // Uppercase the file extension
         for (char *t = buf_tmp; *t != 0; t++) {
-          *t = (char)TOUPPER_LOC(*t);
+          *t = (char)TOUPPER_LOC((uint8_t)(*t));
         }
         str = buf_tmp;
       }
@@ -1980,6 +1992,11 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
       // the truncation point
       for (int i = 0; i < itemcnt; i++) {
         if (stl_items[i].start > trunc_p) {
+          for (int j = i; j < itemcnt; j++) {
+            if (stl_items[j].type == ClickFunc) {
+              XFREE_CLEAR(stl_items[j].cmd);
+            }
+          }
           itemcnt = i;
           break;
         }

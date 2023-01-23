@@ -91,6 +91,40 @@ static int compl_selected;
 
 #define SHOW_MATCH(m) (showtail ? showmatches_gettail(matches[m], false) : matches[m])
 
+/// Returns true if fuzzy completion is supported for a given cmdline completion
+/// context.
+static bool cmdline_fuzzy_completion_supported(const expand_T *const xp)
+  FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE
+{
+  return (wop_flags & WOP_FUZZY)
+         && xp->xp_context != EXPAND_BOOL_SETTINGS
+         && xp->xp_context != EXPAND_COLORS
+         && xp->xp_context != EXPAND_COMPILER
+         && xp->xp_context != EXPAND_DIRECTORIES
+         && xp->xp_context != EXPAND_FILES
+         && xp->xp_context != EXPAND_FILES_IN_PATH
+         && xp->xp_context != EXPAND_FILETYPE
+         && xp->xp_context != EXPAND_HELP
+         && xp->xp_context != EXPAND_LUA
+         && xp->xp_context != EXPAND_OLD_SETTING
+         && xp->xp_context != EXPAND_OWNSYNTAX
+         && xp->xp_context != EXPAND_PACKADD
+         && xp->xp_context != EXPAND_SHELLCMD
+         && xp->xp_context != EXPAND_TAGS
+         && xp->xp_context != EXPAND_TAGS_LISTFILES
+         && xp->xp_context != EXPAND_USER_LIST
+         && xp->xp_context != EXPAND_USER_LUA;
+}
+
+/// Returns true if fuzzy completion for cmdline completion is enabled and
+/// "fuzzystr" is not empty.  If search pattern is empty, then don't use fuzzy
+/// matching.
+bool cmdline_fuzzy_complete(const char *const fuzzystr)
+  FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE
+{
+  return (wop_flags & WOP_FUZZY) && *fuzzystr != NUL;
+}
+
 /// Sort function for the completion matches.
 /// <SNR> functions should be sorted to the end.
 static int sort_func_compare(const void *s1, const void *s2)
@@ -223,8 +257,13 @@ int nextwild(expand_T *xp, int type, int options, bool escape)
     // Get next/previous match for a previous expanded pattern.
     p2 = ExpandOne(xp, NULL, NULL, 0, type);
   } else {
+    if (cmdline_fuzzy_completion_supported(xp)) {
+      // If fuzzy matching, don't modify the search string
+      p1 = xstrdup(xp->xp_pattern);
+    } else {
+      p1 = addstar(xp->xp_pattern, xp->xp_pattern_len, xp->xp_context);
+    }
     // Translate string into pattern and expand it.
-    p1 = addstar(xp->xp_pattern, xp->xp_pattern_len, xp->xp_context);
     const int use_options = (options
                              | WILD_HOME_REPLACE
                              | WILD_ADD_SLASH
@@ -940,7 +979,7 @@ static void showmatches_oneline(expand_T *xp, char **matches, int numMatches, in
         // Expansion was done before and special characters
         // were escaped, need to halve backslashes.  Also
         // $HOME has been replaced with ~/.
-        char *exp_path = (char *)expand_env_save_opt(matches[j], true);
+        char *exp_path = expand_env_save_opt(matches[j], true);
         char *path = exp_path != NULL ? exp_path : matches[j];
         char *halved_slash = backslash_halve_save(path);
         isdir = os_isdir(halved_slash);
@@ -1135,7 +1174,7 @@ static bool expand_showtail(expand_T *xp)
     // separator, on DOS the '*' "path\*\file" must not be skipped.
     if (rem_backslash(s)) {
       s++;
-    } else if (vim_strchr("*?[", *s) != NULL) {
+    } else if (vim_strchr("*?[", (uint8_t)(*s)) != NULL) {
       return false;
     }
   }
@@ -1335,13 +1374,16 @@ static const char *set_cmd_index(const char *cmd, exarg_T *eap, expand_T *xp, in
 {
   const char *p = NULL;
   size_t len = 0;
+  const bool fuzzy = cmdline_fuzzy_complete(cmd);
 
   // Isolate the command and search for it in the command table.
   // Exceptions:
-  // - the 'k' command can directly be followed by any character, but
-  //   do accept "keepmarks", "keepalt" and "keepjumps".
+  // - the 'k' command can directly be followed by any character, but do
+  // accept "keepmarks", "keepalt" and "keepjumps". As fuzzy matching can
+  // find matches anywhere in the command name, do this only for command
+  // expansion based on regular expression and not for fuzzy matching.
   // - the 's' command can be followed directly by 'c', 'g', 'i', 'I' or 'r'
-  if (*cmd == 'k' && cmd[1] != 'e') {
+  if (!fuzzy && (*cmd == 'k' && cmd[1] != 'e')) {
     eap->cmdidx = CMD_k;
     p = cmd + 1;
   } else {
@@ -1363,7 +1405,7 @@ static const char *set_cmd_index(const char *cmd, exarg_T *eap, expand_T *xp, in
       }
     }
     // check for non-alpha command
-    if (p == cmd && vim_strchr("@*!=><&~#", *p) != NULL) {
+    if (p == cmd && vim_strchr("@*!=><&~#", (uint8_t)(*p)) != NULL) {
       p++;
     }
     len = (size_t)(p - cmd);
@@ -1375,7 +1417,11 @@ static const char *set_cmd_index(const char *cmd, exarg_T *eap, expand_T *xp, in
 
     eap->cmdidx = excmd_get_cmdidx(cmd, len);
 
-    if (cmd[0] >= 'A' && cmd[0] <= 'Z') {
+    // User defined commands support alphanumeric characters.
+    // Also when doing fuzzy expansion for non-shell commands, support
+    // alphanumeric characters.
+    if ((cmd[0] >= 'A' && cmd[0] <= 'Z')
+        || (fuzzy && eap->cmdidx != CMD_bang && *p != NUL)) {
       while (ASCII_ISALNUM(*p) || *p == '*') {  // Allow * wild card
         p++;
       }
@@ -1389,7 +1435,7 @@ static const char *set_cmd_index(const char *cmd, exarg_T *eap, expand_T *xp, in
   }
 
   if (eap->cmdidx == CMD_SIZE) {
-    if (*cmd == 's' && vim_strchr("cgriI", cmd[1]) != NULL) {
+    if (*cmd == 's' && vim_strchr("cgriI", (uint8_t)cmd[1]) != NULL) {
       eap->cmdidx = CMD_substitute;
       p = cmd + 1;
     } else if (cmd[0] >= 'A' && cmd[0] <= 'Z') {
@@ -1710,6 +1756,22 @@ static const char *set_context_in_breakadd_cmd(expand_T *xp, const char *arg, cm
     xp->xp_context = EXPAND_EXPRESSION;
     xp->xp_pattern = skipwhite(p + 5);
   }
+
+  return NULL;
+}
+
+static const char *set_context_in_scriptnames_cmd(expand_T *xp, const char *arg)
+{
+  xp->xp_context = EXPAND_NOTHING;
+  xp->xp_pattern = NULL;
+
+  char *p = skipwhite(arg);
+  if (ascii_isdigit(*p)) {
+    return NULL;
+  }
+
+  xp->xp_context = EXPAND_SCRIPTNAMES;
+  xp->xp_pattern = p;
 
   return NULL;
 }
@@ -2073,6 +2135,9 @@ static const char *set_context_by_cmdname(const char *cmd, cmdidx_T cmdidx, expa
   case CMD_breakdel:
     return set_context_in_breakadd_cmd(xp, arg, cmdidx);
 
+  case CMD_scriptnames:
+    return set_context_in_scriptnames_cmd(xp, arg);
+
   case CMD_lua:
     xp->xp_context = EXPAND_LUA;
     break;
@@ -2106,7 +2171,7 @@ static const char *set_one_cmd_context(expand_T *xp, const char *buff)
 
   // 1. skip comment lines and leading space, colons or bars
   const char *cmd;
-  for (cmd = buff; vim_strchr(" \t:|", *cmd) != NULL; cmd++) {}
+  for (cmd = buff; vim_strchr(" \t:|", (uint8_t)(*cmd)) != NULL; cmd++) {}
   xp->xp_pattern = (char *)cmd;
 
   if (*cmd == NUL) {
@@ -2284,7 +2349,7 @@ void set_cmd_context(expand_T *xp, char *str, int len, int col, int use_ccline)
   } else if (use_ccline && ccline->input_fn) {
     xp->xp_context = ccline->xp_context;
     xp->xp_pattern = ccline->cmdbuff;
-    xp->xp_arg = (char *)ccline->xp_arg;
+    xp->xp_arg = ccline->xp_arg;
   } else {
     while (nextcomm != NULL) {
       nextcomm = set_one_cmd_context(xp, nextcomm);
@@ -2330,7 +2395,12 @@ int expand_cmdline(expand_T *xp, const char *str, int col, int *matchcount, char
   // add star to file name, or convert to regexp if not exp. files.
   assert((str + col) - xp->xp_pattern >= 0);
   xp->xp_pattern_len = (size_t)((str + col) - xp->xp_pattern);
-  file_str = addstar(xp->xp_pattern, xp->xp_pattern_len, xp->xp_context);
+  if (cmdline_fuzzy_completion_supported(xp)) {
+    // If fuzzy matching, don't modify the search string
+    file_str = xstrdup(xp->xp_pattern);
+  } else {
+    file_str = addstar(xp->xp_pattern, xp->xp_pattern_len, xp->xp_context);
+  }
 
   if (p_wic) {
     options += WILD_ICASE;
@@ -2445,6 +2515,19 @@ static char *get_breakadd_arg(expand_T *xp FUNC_ATTR_UNUSED, int idx)
   return NULL;
 }
 
+/// Function given to ExpandGeneric() to obtain the possible arguments for the
+/// ":scriptnames" command.
+static char *get_scriptnames_arg(expand_T *xp FUNC_ATTR_UNUSED, int idx)
+{
+  if (!SCRIPT_ID_VALID(idx + 1)) {
+    return NULL;
+  }
+
+  scriptitem_T *si = &SCRIPT_ITEM(idx + 1);
+  home_replace(NULL, si->sn_name, NameBuff, MAXPATHL, true);
+  return NameBuff;
+}
+
 /// Function given to ExpandGeneric() to obtain the possible arguments of the
 /// ":messages {clear}" command.
 static char *get_messages_arg(expand_T *xp FUNC_ATTR_UNUSED, int idx)
@@ -2490,7 +2573,7 @@ static char *get_healthcheck_names(expand_T *xp FUNC_ATTR_UNUSED, int idx)
 }
 
 /// Do the expansion based on xp->xp_context and "rmp".
-static int ExpandOther(expand_T *xp, regmatch_T *rmp, char ***matches, int *numMatches)
+static int ExpandOther(char *pat, expand_T *xp, regmatch_T *rmp, char ***matches, int *numMatches)
 {
   typedef CompleteListItemGetter ExpandFunc;
   static struct expgen {
@@ -2530,6 +2613,7 @@ static int ExpandOther(expand_T *xp, regmatch_T *rmp, char ***matches, int *numM
     { EXPAND_USER, get_users, true, false },
     { EXPAND_ARGLIST, get_arglist_name, true, false },
     { EXPAND_BREAKPOINT, get_breakadd_arg, true, true },
+    { EXPAND_SCRIPTNAMES, get_scriptnames_arg, true, false },
     { EXPAND_CHECKHEALTH, get_healthcheck_names, true, false },
   };
   int ret = FAIL;
@@ -2541,7 +2625,7 @@ static int ExpandOther(expand_T *xp, regmatch_T *rmp, char ***matches, int *numM
       if (tab[i].ic) {
         rmp->rm_ic = true;
       }
-      ExpandGeneric(xp, rmp, matches, numMatches, tab[i].func, tab[i].escaped);
+      ExpandGeneric(pat, xp, rmp, matches, numMatches, tab[i].func, tab[i].escaped);
       ret = OK;
       break;
     }
@@ -2581,9 +2665,11 @@ static int map_wildopts_to_ewflags(int options)
 /// @param options  WILD_ flags
 static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numMatches, int options)
 {
-  regmatch_T regmatch;
+  regmatch_T regmatch = { .rm_ic = false };
   int ret;
   int flags = map_wildopts_to_ewflags(options);
+  const bool fuzzy = cmdline_fuzzy_complete(pat)
+                     && cmdline_fuzzy_completion_supported(xp);
 
   if (xp->xp_context == EXPAND_FILES
       || xp->xp_context == EXPAND_DIRECTORIES
@@ -2624,11 +2710,11 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
   }
   if (xp->xp_context == EXPAND_COLORS) {
     char *directories[] = { "colors", NULL };
-    return ExpandRTDir(pat, DIP_START + DIP_OPT + DIP_LUA, numMatches, matches, directories);
+    return ExpandRTDir(pat, DIP_START + DIP_OPT, numMatches, matches, directories);
   }
   if (xp->xp_context == EXPAND_COMPILER) {
     char *directories[] = { "compiler", NULL };
-    return ExpandRTDir(pat, DIP_LUA, numMatches, matches, directories);
+    return ExpandRTDir(pat, 0, numMatches, matches, directories);
   }
   if (xp->xp_context == EXPAND_OWNSYNTAX) {
     char *directories[] = { "syntax", NULL };
@@ -2636,7 +2722,7 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
   }
   if (xp->xp_context == EXPAND_FILETYPE) {
     char *directories[] = { "syntax", "indent", "ftplugin", NULL };
-    return ExpandRTDir(pat, DIP_LUA, numMatches, matches, directories);
+    return ExpandRTDir(pat, 0, numMatches, matches, directories);
   }
   if (xp->xp_context == EXPAND_USER_LIST) {
     return ExpandUserList(xp, matches, numMatches);
@@ -2664,26 +2750,30 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
     return nlua_expand_pat(xp, pat, numMatches, matches);
   }
 
-  regmatch.regprog = vim_regcomp(pat, magic_isset() ? RE_MAGIC : 0);
-  if (regmatch.regprog == NULL) {
-    return FAIL;
-  }
+  if (!fuzzy) {
+    regmatch.regprog = vim_regcomp(pat, magic_isset() ? RE_MAGIC : 0);
+    if (regmatch.regprog == NULL) {
+      return FAIL;
+    }
 
-  // set ignore-case according to p_ic, p_scs and pat
-  regmatch.rm_ic = ignorecase(pat);
+    // set ignore-case according to p_ic, p_scs and pat
+    regmatch.rm_ic = ignorecase(pat);
+  }
 
   if (xp->xp_context == EXPAND_SETTINGS
       || xp->xp_context == EXPAND_BOOL_SETTINGS) {
-    ret = ExpandSettings(xp, &regmatch, numMatches, matches);
+    ret = ExpandSettings(xp, &regmatch, pat, numMatches, matches, fuzzy);
   } else if (xp->xp_context == EXPAND_MAPPINGS) {
-    ret = ExpandMappings(&regmatch, numMatches, matches);
+    ret = ExpandMappings(pat, &regmatch, numMatches, matches);
   } else if (xp->xp_context == EXPAND_USER_DEFINED) {
-    ret = ExpandUserDefined(xp, &regmatch, matches, numMatches);
+    ret = ExpandUserDefined(pat, xp, &regmatch, matches, numMatches);
   } else {
-    ret = ExpandOther(xp, &regmatch, matches, numMatches);
+    ret = ExpandOther(pat, xp, &regmatch, matches, numMatches);
   }
 
-  vim_regfree(regmatch.regprog);
+  if (!fuzzy) {
+    vim_regfree(regmatch.regprog);
+  }
   xfree(tofree);
 
   return ret;
@@ -2696,70 +2786,105 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
 /// program.  Matching strings are copied into an array, which is returned.
 ///
 /// @param func  returns a string from the list
-static void ExpandGeneric(expand_T *xp, regmatch_T *regmatch, char ***matches, int *numMatches,
-                          CompleteListItemGetter func, int escaped)
+static void ExpandGeneric(const char *const pat, expand_T *xp, regmatch_T *regmatch,
+                          char ***matches, int *numMatches, CompleteListItemGetter func,
+                          int escaped)
 {
-  int i;
-  size_t count = 0;
-  char *str;
+  const bool fuzzy = cmdline_fuzzy_complete(pat);
+  *matches = NULL;
+  *numMatches = 0;
 
-  // count the number of matching names
-  for (i = 0;; i++) {
-    str = (*func)(xp, i);
-    if (str == NULL) {  // end of list
-      break;
-    }
-    if (*str == NUL) {  // skip empty strings
-      continue;
-    }
-    if (vim_regexec(regmatch, str, (colnr_T)0)) {
-      count++;
-    }
+  garray_T ga;
+  if (!fuzzy) {
+    ga_init(&ga, sizeof(char *), 30);
+  } else {
+    ga_init(&ga, sizeof(fuzmatch_str_T), 30);
   }
-  if (count == 0) {
-    return;
-  }
-  assert(count < INT_MAX);
-  *numMatches = (int)count;
-  *matches = xmalloc(count * sizeof(char *));
 
-  // copy the matching names into allocated memory
-  count = 0;
-  for (i = 0;; i++) {
-    str = (*func)(xp, i);
+  for (int i = 0;; i++) {
+    char *str = (*func)(xp, i);
     if (str == NULL) {  // End of list.
       break;
     }
     if (*str == NUL) {  // Skip empty strings.
       continue;
     }
-    if (vim_regexec(regmatch, str, (colnr_T)0)) {
-      if (escaped) {
-        str = vim_strsave_escaped(str, " \t\\.");
+
+    bool match;
+    int score = 0;
+    if (xp->xp_pattern[0] != NUL) {
+      if (!fuzzy) {
+        match = vim_regexec(regmatch, str, (colnr_T)0);
       } else {
-        str = xstrdup(str);
+        score = fuzzy_match_str(str, pat);
+        match = (score != 0);
       }
-      (*matches)[count++] = str;
-      if (func == get_menu_names) {
-        // Test for separator added by get_menu_names().
-        str += strlen(str) - 1;
-        if (*str == '\001') {
-          *str = '.';
-        }
+    } else {
+      match = true;
+    }
+
+    if (!match) {
+      continue;
+    }
+
+    if (escaped) {
+      str = vim_strsave_escaped(str, " \t\\.");
+    } else {
+      str = xstrdup(str);
+    }
+
+    if (fuzzy) {
+      GA_APPEND(fuzmatch_str_T, &ga, ((fuzmatch_str_T){
+        .idx = ga.ga_len,
+        .str = str,
+        .score = score,
+      }));
+    } else {
+      GA_APPEND(char *, &ga, str);
+    }
+
+    if (func == get_menu_names) {
+      // Test for separator added by get_menu_names().
+      str += strlen(str) - 1;
+      if (*str == '\001') {
+        *str = '.';
       }
     }
   }
 
-  // Sort the results.  Keep menu's in the specified order.
-  if (xp->xp_context != EXPAND_MENUNAMES && xp->xp_context != EXPAND_MENUS) {
-    if (xp->xp_context == EXPAND_EXPRESSION
-        || xp->xp_context == EXPAND_FUNCTIONS
-        || xp->xp_context == EXPAND_USER_FUNC) {
+  if (ga.ga_len == 0) {
+    return;
+  }
+
+  // Sort the matches when using regular expression matching and sorting
+  // applies to the completion context. Menus and scriptnames should be kept
+  // in the specified order.
+  const bool sort_matches = !fuzzy
+                            && xp->xp_context != EXPAND_MENUNAMES
+                            && xp->xp_context != EXPAND_MENUS
+                            && xp->xp_context != EXPAND_SCRIPTNAMES;
+
+  // <SNR> functions should be sorted to the end.
+  const bool funcsort = xp->xp_context == EXPAND_EXPRESSION
+                        || xp->xp_context == EXPAND_FUNCTIONS
+                        || xp->xp_context == EXPAND_USER_FUNC;
+
+  // Sort the matches.
+  if (sort_matches) {
+    if (funcsort) {
       // <SNR> functions should be sorted to the end.
-      qsort((void *)(*matches), (size_t)(*numMatches), sizeof(char *), sort_func_compare);
+      qsort(ga.ga_data, (size_t)ga.ga_len, sizeof(char *), sort_func_compare);
     } else {
-      sort_strings(*matches, *numMatches);
+      sort_strings(ga.ga_data, ga.ga_len);
     }
+  }
+
+  if (!fuzzy) {
+    *matches = ga.ga_data;
+    *numMatches = ga.ga_len;
+  } else {
+    fuzzymatches_to_strmatches(ga.ga_data, matches, ga.ga_len, funcsort);
+    *numMatches = ga.ga_len;
   }
 
   // Reset the variables used for special highlight names expansion, so that
@@ -2789,14 +2914,14 @@ static void expand_shellcmd_onedir(char *buf, char *s, size_t l, char *pat, char
 
     if (strlen(name) > l) {
       // Check if this name was already found.
-      hash_T hash = hash_hash((char_u *)name + l);
+      hash_T hash = hash_hash(name + l);
       hashitem_T *hi =
         hash_lookup(ht, (const char *)(name + l), strlen(name + l), hash);
       if (HASHITEM_EMPTY(hi)) {
         // Remove the path that was prepended.
         STRMOVE(name, name + l);
         ((char **)gap->ga_data)[gap->ga_len++] = name;
-        hash_add_item(ht, hi, (char_u *)name, hash);
+        hash_add_item(ht, hi, name, hash);
         name = NULL;
       }
     }
@@ -2842,7 +2967,7 @@ static void expand_shellcmd(char *filepat, char ***matches, int *numMatches, int
     path = ".";
   } else {
     // For an absolute name we don't use $PATH.
-    if (!path_is_absolute((char_u *)pat)) {
+    if (!path_is_absolute(pat)) {
       path = vim_getenv("PATH");
     }
     if (path == NULL) {
@@ -2941,22 +3066,28 @@ static void *call_user_expand_func(user_expand_func_T user_expand_func, expand_T
   return ret;
 }
 
-/// Expand names with a function defined by the user.
-static int ExpandUserDefined(expand_T *xp, regmatch_T *regmatch, char ***matches, int *numMatches)
+/// Expand names with a function defined by the user (EXPAND_USER_DEFINED and
+/// EXPAND_USER_LIST).
+static int ExpandUserDefined(const char *const pat, expand_T *xp, regmatch_T *regmatch,
+                             char ***matches, int *numMatches)
 {
-  char *e;
-  garray_T ga;
-
+  const bool fuzzy = cmdline_fuzzy_complete(pat);
   *matches = NULL;
   *numMatches = 0;
-  char *const retstr = call_user_expand_func((user_expand_func_T)call_func_retstr, xp);
 
+  char *const retstr = call_user_expand_func((user_expand_func_T)call_func_retstr, xp);
   if (retstr == NULL) {
     return FAIL;
   }
 
-  ga_init(&ga, (int)sizeof(char *), 3);
-  for (char *s = retstr; *s != NUL; s = e) {
+  garray_T ga;
+  if (!fuzzy) {
+    ga_init(&ga, (int)sizeof(char *), 3);
+  } else {
+    ga_init(&ga, (int)sizeof(fuzmatch_str_T), 3);
+  }
+
+  for (char *s = retstr, *e; *s != NUL; s = e) {
     e = vim_strchr(s, '\n');
     if (e == NULL) {
       e = s + strlen(s);
@@ -2964,10 +3095,31 @@ static int ExpandUserDefined(expand_T *xp, regmatch_T *regmatch, char ***matches
     const char keep = *e;
     *e = NUL;
 
-    const bool skip = xp->xp_pattern[0] && vim_regexec(regmatch, s, (colnr_T)0) == 0;
+    bool match;
+    int score = 0;
+    if (xp->xp_pattern[0] != NUL) {
+      if (!fuzzy) {
+        match = vim_regexec(regmatch, s, (colnr_T)0);
+      } else {
+        score = fuzzy_match_str(s, pat);
+        match = (score != 0);
+      }
+    } else {
+      match = true;               // match everything
+    }
+
     *e = keep;
-    if (!skip) {
-      GA_APPEND(char *, &ga, xstrnsave(s, (size_t)(e - s)));
+
+    if (match) {
+      if (!fuzzy) {
+        GA_APPEND(char *, &ga, xstrnsave(s, (size_t)(e - s)));
+      } else {
+        GA_APPEND(fuzmatch_str_T, &ga, ((fuzmatch_str_T){
+          .idx = ga.ga_len,
+          .str = xstrnsave(s, (size_t)(e - s)),
+          .score = score,
+        }));
+      }
     }
 
     if (*e != NUL) {
@@ -2975,8 +3127,18 @@ static int ExpandUserDefined(expand_T *xp, regmatch_T *regmatch, char ***matches
     }
   }
   xfree(retstr);
-  *matches = ga.ga_data;
-  *numMatches = ga.ga_len;
+
+  if (ga.ga_len == 0) {
+    return OK;
+  }
+
+  if (!fuzzy) {
+    *matches = ga.ga_data;
+    *numMatches = ga.ga_len;
+  } else {
+    fuzzymatches_to_strmatches(ga.ga_data, matches, ga.ga_len, false);
+    *numMatches = ga.ga_len;
+  }
   return OK;
 }
 
@@ -3369,7 +3531,13 @@ void f_getcompletion(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
 theend:
-  pat = addstar(xpc.xp_pattern, xpc.xp_pattern_len, xpc.xp_context);
+  if (cmdline_fuzzy_completion_supported(&xpc)) {
+    // when fuzzy matching, don't modify the search string
+    pat = xstrdup(xpc.xp_pattern);
+  } else {
+    pat = addstar(xpc.xp_pattern, xpc.xp_pattern_len, xpc.xp_context);
+  }
+
   ExpandOne(&xpc, pat, NULL, options, WILD_ALL_KEEP);
   tv_list_alloc_ret(rettv, xpc.xp_numfiles);
 

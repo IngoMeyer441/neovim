@@ -91,7 +91,7 @@ static char *(p_swb_values[]) = { "useopen", "usetab", "split", "newtab", "vspli
 static char *(p_spk_values[]) = { "cursor", "screen", "topline", NULL };
 static char *(p_tc_values[]) = { "followic", "ignore", "match", "followscs", "smart", NULL };
 static char *(p_ve_values[]) = { "block", "insert", "all", "onemore", "none", "NONE", NULL };
-static char *(p_wop_values[]) = { "tagfile", "pum", NULL };
+static char *(p_wop_values[]) = { "tagfile", "pum", "fuzzy", NULL };
 static char *(p_wak_values[]) = { "yes", "menu", "no", NULL };
 static char *(p_mousem_values[]) = { "extend", "popup", "popup_setpos", "mac", NULL };
 static char *(p_sel_values[]) = { "inclusive", "exclusive", "old", NULL };
@@ -167,36 +167,37 @@ void trigger_optionset_string(int opt_idx, int opt_flags, char *oldval, char *ol
                               char *oldval_g, char *newval)
 {
   // Don't do this recursively.
-  if (oldval != NULL
-      && newval != NULL
-      && *get_vim_var_str(VV_OPTION_TYPE) == NUL) {
-    char buf_type[7];
-
-    vim_snprintf(buf_type, ARRAY_SIZE(buf_type), "%s",
-                 (opt_flags & OPT_LOCAL) ? "local" : "global");
-    set_vim_var_string(VV_OPTION_OLD, oldval, -1);
-    set_vim_var_string(VV_OPTION_NEW, newval, -1);
-    set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
-    if (opt_flags & OPT_LOCAL) {
-      set_vim_var_string(VV_OPTION_COMMAND, "setlocal", -1);
-      set_vim_var_string(VV_OPTION_OLDLOCAL, oldval, -1);
-    }
-    if (opt_flags & OPT_GLOBAL) {
-      set_vim_var_string(VV_OPTION_COMMAND, "setglobal", -1);
-      set_vim_var_string(VV_OPTION_OLDGLOBAL, oldval, -1);
-    }
-    if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0) {
-      set_vim_var_string(VV_OPTION_COMMAND, "set", -1);
-      set_vim_var_string(VV_OPTION_OLDLOCAL, oldval_l, -1);
-      set_vim_var_string(VV_OPTION_OLDGLOBAL, oldval_g, -1);
-    }
-    if (opt_flags & OPT_MODELINE) {
-      set_vim_var_string(VV_OPTION_COMMAND, "modeline", -1);
-      set_vim_var_string(VV_OPTION_OLDLOCAL, oldval, -1);
-    }
-    apply_autocmds(EVENT_OPTIONSET, get_option(opt_idx)->fullname, NULL, false, NULL);
-    reset_v_option_vars();
+  if (oldval == NULL || newval == NULL
+      || *get_vim_var_str(VV_OPTION_TYPE) != NUL) {
+    return;
   }
+
+  char buf_type[7];
+
+  vim_snprintf(buf_type, ARRAY_SIZE(buf_type), "%s",
+               (opt_flags & OPT_LOCAL) ? "local" : "global");
+  set_vim_var_string(VV_OPTION_OLD, oldval, -1);
+  set_vim_var_string(VV_OPTION_NEW, newval, -1);
+  set_vim_var_string(VV_OPTION_TYPE, buf_type, -1);
+  if (opt_flags & OPT_LOCAL) {
+    set_vim_var_string(VV_OPTION_COMMAND, "setlocal", -1);
+    set_vim_var_string(VV_OPTION_OLDLOCAL, oldval, -1);
+  }
+  if (opt_flags & OPT_GLOBAL) {
+    set_vim_var_string(VV_OPTION_COMMAND, "setglobal", -1);
+    set_vim_var_string(VV_OPTION_OLDGLOBAL, oldval, -1);
+  }
+  if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0) {
+    set_vim_var_string(VV_OPTION_COMMAND, "set", -1);
+    set_vim_var_string(VV_OPTION_OLDLOCAL, oldval_l, -1);
+    set_vim_var_string(VV_OPTION_OLDGLOBAL, oldval_g, -1);
+  }
+  if (opt_flags & OPT_MODELINE) {
+    set_vim_var_string(VV_OPTION_COMMAND, "modeline", -1);
+    set_vim_var_string(VV_OPTION_OLDLOCAL, oldval, -1);
+  }
+  apply_autocmds(EVENT_OPTIONSET, get_option(opt_idx)->fullname, NULL, false, NULL);
+  reset_v_option_vars();
 }
 
 static char *illegal_char(char *errbuf, size_t errbuflen, int c)
@@ -205,7 +206,7 @@ static char *illegal_char(char *errbuf, size_t errbuflen, int c)
     return "";
   }
   vim_snprintf(errbuf, errbuflen, _("E539: Illegal character <%s>"),
-               (char *)transchar(c));
+               transchar(c));
   return errbuf;
 }
 
@@ -613,7 +614,7 @@ char *check_stl_option(char *s)
       groupdepth++;
       continue;
     }
-    if (vim_strchr(STL_ALL, *s) == NULL) {
+    if (vim_strchr(STL_ALL, (uint8_t)(*s)) == NULL) {
       return illegal_char(errbuf, sizeof(errbuf), *s);
     }
     if (*s == '{') {
@@ -945,7 +946,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
   } else if (gvarp == &p_com) {  // 'comments'
     for (s = *varp; *s;) {
       while (*s && *s != ':') {
-        if (vim_strchr(COM_ALL, *s) == NULL
+        if (vim_strchr(COM_ALL, (uint8_t)(*s)) == NULL
             && !ascii_isdigit(*s) && *s != '-') {
           errmsg = illegal_char(errbuf, errbuflen, *s);
           break;
@@ -1015,7 +1016,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     free_oldval = (opt->flags & P_ALLOCED);
     for (s = p_shada; *s;) {
       // Check it's a valid character
-      if (vim_strchr("!\"%'/:<@cfhnrs", *s) == NULL) {
+      if (vim_strchr("!\"%'/:<@cfhnrs", (uint8_t)(*s)) == NULL) {
         errmsg = illegal_char(errbuf, errbuflen, *s);
         break;
       }
@@ -1220,7 +1221,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
       if (!*s) {
         break;
       }
-      if (vim_strchr(".wbuksid]tU", *s) == NULL) {
+      if (vim_strchr(".wbuksid]tU", (uint8_t)(*s)) == NULL) {
         errmsg = illegal_char(errbuf, errbuflen, *s);
         break;
       }
@@ -1568,7 +1569,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     }
     if (p != NULL) {
       for (s = *varp; *s; s++) {
-        if (vim_strchr(p, *s) == NULL) {
+        if (vim_strchr(p, (uint8_t)(*s)) == NULL) {
           errmsg = illegal_char(errbuf, errbuflen, *s);
           break;
         }

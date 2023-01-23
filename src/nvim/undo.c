@@ -624,20 +624,20 @@ int u_savecommon(buf_T *buf, linenr_T top, linenr_T bot, linenr_T newbot, int re
 // extra fields for uhp
 #define UHP_SAVE_NR            1
 
-static char_u e_not_open[] = N_("E828: Cannot open undo file for writing: %s");
+static char e_not_open[] = N_("E828: Cannot open undo file for writing: %s");
 
 /// Compute the hash for a buffer text into hash[UNDO_HASH_SIZE].
 ///
 /// @param[in] buf The buffer used to compute the hash
 /// @param[in] hash Array of size UNDO_HASH_SIZE in which to store the value of
 ///                 the hash
-void u_compute_hash(buf_T *buf, char_u *hash)
+void u_compute_hash(buf_T *buf, uint8_t *hash)
 {
   context_sha256_T ctx;
   sha256_start(&ctx);
   for (linenr_T lnum = 1; lnum <= buf->b_ml.ml_line_count; lnum++) {
     char *p = ml_get_buf(buf, lnum, false);
-    sha256_update(&ctx, (char_u *)p, (uint32_t)(strlen(p) + 1));
+    sha256_update(&ctx, (uint8_t *)p, strlen(p) + 1);
   }
   sha256_finish(&ctx, hash);
 }
@@ -677,7 +677,7 @@ char *u_get_undo_file_name(const char *const buf_ffname, const bool reading)
 
   // Loop over 'undodir'.  When reading find the first file that exists.
   // When not reading use the first directory that exists or ".".
-  char *dirp = (char *)p_udir;
+  char *dirp = p_udir;
   while (*dirp != NUL) {
     size_t dir_len = copy_option_part(&dirp, dir_name, MAXPATHL, ",");
     if (dir_len == 1 && dir_name[0] == '.') {
@@ -765,7 +765,7 @@ static void u_free_uhp(u_header_T *uhp)
 /// @param hash The hash of the buffer contents
 //
 /// @returns false in case of an error.
-static bool serialize_header(bufinfo_T *bi, char_u *hash)
+static bool serialize_header(bufinfo_T *bi, uint8_t *hash)
   FUNC_ATTR_NONNULL_ALL
 {
   buf_T *buf = bi->bi_buf;
@@ -788,7 +788,7 @@ static bool serialize_header(bufinfo_T *bi, char_u *hash)
   undo_write_bytes(bi, (uintmax_t)buf->b_ml.ml_line_count, 4);
   size_t len = buf->b_u_line_ptr ? strlen(buf->b_u_line_ptr) : 0;
   undo_write_bytes(bi, len, 4);
-  if (len > 0 && !undo_write(bi, (char_u *)buf->b_u_line_ptr, len)) {
+  if (len > 0 && !undo_write(bi, (uint8_t *)buf->b_u_line_ptr, len)) {
     return false;
   }
   undo_write_bytes(bi, (uintmax_t)buf->b_u_line_lnum, 4);
@@ -1053,7 +1053,7 @@ static bool serialize_uep(bufinfo_T *bi, u_entry_T *uep)
     if (!undo_write_bytes(bi, len, 4)) {
       return false;
     }
-    if (len > 0 && !undo_write(bi, (char_u *)uep->ue_array[i], len)) {
+    if (len > 0 && !undo_write(bi, (uint8_t *)uep->ue_array[i], len)) {
       return false;
     }
   }
@@ -1072,18 +1072,18 @@ static u_entry_T *unserialize_uep(bufinfo_T *bi, bool *error, const char *file_n
   uep->ue_lcount = undo_read_4c(bi);
   uep->ue_size = undo_read_4c(bi);
 
-  char_u **array = NULL;
+  char **array = NULL;
   if (uep->ue_size > 0) {
-    if ((size_t)uep->ue_size < SIZE_MAX / sizeof(char_u *)) {  // -V547
-      array = xmalloc(sizeof(char_u *) * (size_t)uep->ue_size);
-      memset(array, 0, sizeof(char_u *) * (size_t)uep->ue_size);
+    if ((size_t)uep->ue_size < SIZE_MAX / sizeof(char *)) {  // -V547
+      array = xmalloc(sizeof(char *) * (size_t)uep->ue_size);
+      memset(array, 0, sizeof(char *) * (size_t)uep->ue_size);
     }
   }
-  uep->ue_array = (char **)array;
+  uep->ue_array = array;
 
   for (size_t i = 0; i < (size_t)uep->ue_size; i++) {
     int line_len = undo_read_4c(bi);
-    char_u *line;
+    char *line;
     if (line_len >= 0) {
       line = undo_read_string(bi, (size_t)line_len);
     } else {
@@ -1150,7 +1150,7 @@ static void unserialize_visualinfo(bufinfo_T *bi, visualinfo_T *info)
 /// @param[in]  buf  Buffer for which undo file is written.
 /// @param[in]  hash  Hash value of the buffer text. Must have #UNDO_HASH_SIZE
 ///                   size.
-void u_write_undo(const char *const name, const bool forceit, buf_T *const buf, char_u *const hash)
+void u_write_undo(const char *const name, const bool forceit, buf_T *const buf, uint8_t *const hash)
   FUNC_ATTR_NONNULL_ARG(3, 4)
 {
   char *file_name;
@@ -1209,7 +1209,7 @@ void u_write_undo(const char *const name, const bool forceit, buf_T *const buf, 
         }
         goto theend;
       } else {
-        char_u mbuf[UF_START_MAGIC_LEN];
+        char mbuf[UF_START_MAGIC_LEN];
         ssize_t len = read_eintr(fd, mbuf, UF_START_MAGIC_LEN);
         close(fd);
         if (len < UF_START_MAGIC_LEN
@@ -1342,8 +1342,8 @@ write_error:
 #ifdef HAVE_ACL
   if (buf->b_ffname != NULL) {
     // For systems that support ACL: get the ACL from the original file.
-    vim_acl_T acl = os_get_acl((char_u *)buf->b_ffname);
-    os_set_acl((char_u *)file_name, acl);
+    vim_acl_T acl = os_get_acl(buf->b_ffname);
+    os_set_acl(file_name, acl);
     os_free_acl(acl);
   }
 #endif
@@ -1359,11 +1359,11 @@ theend:
 /// a bit more verbose.
 /// Otherwise use curbuf->b_ffname to generate the undo file name.
 /// "hash[UNDO_HASH_SIZE]" must be the hash value of the buffer text.
-void u_read_undo(char *name, const char_u *hash, const char_u *orig_name FUNC_ATTR_UNUSED)
+void u_read_undo(char *name, const uint8_t *hash, const char *orig_name FUNC_ATTR_UNUSED)
   FUNC_ATTR_NONNULL_ARG(2)
 {
   u_header_T **uhp_table = NULL;
-  char_u *line_ptr = NULL;
+  char *line_ptr = NULL;
 
   char *file_name;
   if (name == NULL) {
@@ -1377,7 +1377,7 @@ void u_read_undo(char *name, const char_u *hash, const char_u *orig_name FUNC_AT
     // owner of the text file or equal to the current user.
     FileInfo file_info_orig;
     FileInfo file_info_undo;
-    if (os_fileinfo((const char *)orig_name, &file_info_orig)
+    if (os_fileinfo(orig_name, &file_info_orig)
         && os_fileinfo(file_name, &file_info_undo)
         && file_info_orig.stat.st_uid != file_info_undo.stat.st_uid
         && file_info_undo.stat.st_uid != getuid()) {
@@ -1414,7 +1414,7 @@ void u_read_undo(char *name, const char_u *hash, const char_u *orig_name FUNC_AT
   };
 
   // Read the undo file header.
-  char_u magic_buf[UF_START_MAGIC_LEN];
+  char magic_buf[UF_START_MAGIC_LEN];
   if (fread(magic_buf, UF_START_MAGIC_LEN, 1, fp) != 1
       || memcmp(magic_buf, UF_START_MAGIC, UF_START_MAGIC_LEN) != 0) {
     semsg(_("E823: Not an undo file: %s"), file_name);
@@ -1426,7 +1426,7 @@ void u_read_undo(char *name, const char_u *hash, const char_u *orig_name FUNC_AT
     goto error;
   }
 
-  char_u read_hash[UNDO_HASH_SIZE];
+  uint8_t read_hash[UNDO_HASH_SIZE];
   if (!undo_read(&bi, read_hash, UNDO_HASH_SIZE)) {
     corruption_error("hash", file_name);
     goto error;
@@ -1608,7 +1608,7 @@ void u_read_undo(char *name, const char_u *hash, const char_u *orig_name FUNC_AT
   curbuf->b_u_oldhead = old_idx < 0 ? NULL : uhp_table[old_idx];
   curbuf->b_u_newhead = new_idx < 0 ? NULL : uhp_table[new_idx];
   curbuf->b_u_curhead = cur_idx < 0 ? NULL : uhp_table[cur_idx];
-  curbuf->b_u_line_ptr = (char *)line_ptr;
+  curbuf->b_u_line_ptr = line_ptr;
   curbuf->b_u_line_lnum = line_lnum;
   curbuf->b_u_line_colnr = line_colnr;
   curbuf->b_u_numhead = num_head;
@@ -1743,10 +1743,10 @@ static bool undo_read(bufinfo_T *bi, uint8_t *buffer, size_t size)
 /// @param len can be zero to allocate an empty line.
 ///
 /// @returns a pointer to allocated memory or NULL in case of an error.
-static uint8_t *undo_read_string(bufinfo_T *bi, size_t len)
+static char *undo_read_string(bufinfo_T *bi, size_t len)
 {
-  uint8_t *ptr = xmallocz(len);
-  if (len > 0 && !undo_read(bi, ptr, len)) {
+  char *ptr = xmallocz(len);
+  if (len > 0 && !undo_read(bi, (uint8_t *)ptr, len)) {
     xfree(ptr);
     return NULL;
   }
@@ -2238,7 +2238,7 @@ target_zero:
 /// @param do_buf_event If `true`, send buffer updates.
 static void u_undoredo(int undo, bool do_buf_event)
 {
-  char_u **newarray = NULL;
+  char **newarray = NULL;
   linenr_T newlnum = MAXLNUM;
   u_entry_T *nuep;
   u_entry_T *newlist = NULL;
@@ -2316,13 +2316,13 @@ static void u_undoredo(int undo, bool do_buf_event)
 
     // delete the lines between top and bot and save them in newarray
     if (oldsize > 0) {
-      newarray = xmalloc(sizeof(char_u *) * (size_t)oldsize);
+      newarray = xmalloc(sizeof(char *) * (size_t)oldsize);
       // delete backwards, it goes faster in most cases
       long i;
       linenr_T lnum;
       for (lnum = bot - 1, i = oldsize; --i >= 0; lnum--) {
         // what can we do when we run out of memory?
-        newarray[i] = (char_u *)u_save_line(lnum);
+        newarray[i] = u_save_line(lnum);
         // remember we deleted the last line in the buffer, and a
         // dummy empty line will be inserted
         if (curbuf->b_ml.ml_line_count == 1) {
@@ -2348,7 +2348,7 @@ static void u_undoredo(int undo, bool do_buf_event)
         }
         xfree(uep->ue_array[i]);
       }
-      xfree((char_u *)uep->ue_array);
+      xfree(uep->ue_array);
     }
 
     // Adjust marks
@@ -2378,7 +2378,7 @@ static void u_undoredo(int undo, bool do_buf_event)
     u_newcount += newsize;
     u_oldcount += oldsize;
     uep->ue_size = oldsize;
-    uep->ue_array = (char **)newarray;
+    uep->ue_array = newarray;
     uep->ue_bot = top + newsize + 1;
 
     // insert this entry in front of the new entry list
@@ -2565,11 +2565,11 @@ static void u_undo_end(bool did_undo, bool absolute, bool quiet)
     uhp = curbuf->b_u_newhead;
   }
 
-  char_u msgbuf[80];
+  char msgbuf[80];
   if (uhp == NULL) {
     *msgbuf = NUL;
   } else {
-    undo_fmt_time((char *)msgbuf, sizeof(msgbuf), uhp->uh_time);
+    undo_fmt_time(msgbuf, sizeof(msgbuf), uhp->uh_time);
   }
 
   {
@@ -2935,7 +2935,7 @@ static void u_freeentries(buf_T *buf, u_header_T *uhp, u_header_T **uhpp)
 #ifdef U_DEBUG
   uhp->uh_magic = 0;
 #endif
-  xfree((char_u *)uhp);
+  xfree(uhp);
   buf->b_u_numhead--;
 }
 
@@ -2945,11 +2945,11 @@ static void u_freeentry(u_entry_T *uep, long n)
   while (n > 0) {
     xfree(uep->ue_array[--n]);
   }
-  xfree((char_u *)uep->ue_array);
+  xfree(uep->ue_array);
 #ifdef U_DEBUG
   uep->ue_magic = 0;
 #endif
-  xfree((char_u *)uep);
+  xfree(uep);
 }
 
 /// invalidate the undo buffer; called when storage has already been released

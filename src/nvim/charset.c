@@ -146,19 +146,19 @@ int buf_init_chartab(buf_T *buf, int global)
   // options Each option is a list of characters, character numbers or
   // ranges, separated by commas, e.g.: "200-210,x,#-178,-"
   for (i = global ? 0 : 3; i <= 3; i++) {
-    const char_u *p;
+    const char *p;
     if (i == 0) {
       // first round: 'isident'
-      p = (char_u *)p_isi;
+      p = p_isi;
     } else if (i == 1) {
       // second round: 'isprint'
-      p = (char_u *)p_isp;
+      p = p_isp;
     } else if (i == 2) {
       // third round: 'isfname'
-      p = (char_u *)p_isf;
+      p = p_isf;
     } else {  // i == 3
       // fourth round: 'iskeyword'
-      p = (char_u *)buf->b_p_isk;
+      p = buf->b_p_isk;
     }
 
     while (*p) {
@@ -254,8 +254,8 @@ int buf_init_chartab(buf_T *buf, int global)
         c++;
       }
 
-      c = *p;
-      p = (char_u *)skip_to_option_part((char *)p);
+      c = (uint8_t)(*p);
+      p = skip_to_option_part(p);
 
       if ((c == ',') && (*p == NUL)) {
         // Trailing comma is not allowed.
@@ -540,9 +540,9 @@ static char_u transchar_charbuf[11];
 /// @param[in]  c  Character to translate.
 ///
 /// @return translated character into a static buffer.
-char_u *transchar(int c)
+char *transchar(int c)
 {
-  return transchar_buf(curbuf, c);
+  return (char *)transchar_buf(curbuf, c);
 }
 
 char_u *transchar_buf(const buf_T *buf, int c)
@@ -584,7 +584,7 @@ char_u *transchar_byte(const int c)
     transchar_nonprint(curbuf, transchar_charbuf, c);
     return transchar_charbuf;
   }
-  return transchar(c);
+  return (char_u *)transchar(c);
 }
 
 /// Convert non-printable characters to 2..4 printable ones

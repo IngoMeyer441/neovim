@@ -3843,21 +3843,21 @@ A jump table for the options with a short description can be found at |Q_op|.
 			The third character is optional.
 
 	  tab:xy	The 'x' is always used, then 'y' as many times as will
-			fit.  Thus "tab:>-" displays:
+			fit.  Thus "tab:>-" displays: >
 				>
 				>-
 				>--
 				etc.
-
+<
 	  tab:xyz	The 'z' is always used, then 'x' is prepended, and
 			then 'y' is used as many times as will fit.  Thus
-			"tab:<->" displays:
+			"tab:<->" displays: >
 				>
 				<>
 				<->
 				<-->
 				etc.
-
+<
 			When "tab:" is omitted, a tab is shown as ^I.
 							*lcs-space*
 	  space:c	Character to show for a space.  When omitted, spaces
@@ -3869,22 +3869,25 @@ A jump table for the options with a short description can be found at |Q_op|.
 			setting, except for single spaces.  When omitted, the
 			"space" setting is used.  For example,
 			`:set listchars=multispace:---+` shows ten consecutive
-			spaces as:
-				---+---+-- ~
+			spaces as: >
+				---+---+--
+<
 							*lcs-lead*
 	  lead:c	Character to show for leading spaces.  When omitted,
 			leading spaces are blank.  Overrides the "space" and
 			"multispace" settings for leading spaces.  You can
 			combine it with "tab:", for example: >
 				:set listchars+=tab:>-,lead:.
-<							*lcs-leadmultispace*
+<
+							*lcs-leadmultispace*
 	  leadmultispace:c...
 			Like the |lcs-multispace| value, but for leading
 			spaces only.  Also overrides |lcs-lead| for leading
 			multiple spaces.
 			`:set listchars=leadmultispace:---+` shows ten
-			consecutive leading spaces as:
-				---+---+--XXX ~
+			consecutive leading spaces as: >
+				---+---+--XXX
+<
 			Where "XXX" denotes the first non-blank characters in
 			the line.
 							*lcs-trail*
@@ -6017,12 +6020,20 @@ A jump table for the options with a short description can be found at |Q_op|.
 	%s	sign column for currently drawn line
 	%C	fold column for currently drawn line
 
-	To draw the sign and fold columns, they must be included in
-	'statuscolumn'.
+	NOTE: To draw the sign and fold columns, their items must be included in
+	'statuscolumn'. Even when they are not included, the status column width
+	will adapt to the 'signcolumn' and 'foldcolumn' width.
 
-	The |v:lnum|   variable holds the line number to be drawn.
-	The |v:relnum| variable holds the relative line number to be drawn.
-	The |v:wrap|   variable holds true for the wrapped part of a line.
+	The |v:lnum|    variable holds the line number to be drawn.
+	The |v:relnum|  variable holds the relative line number to be drawn.
+	The |v:virtnum| variable is negative when drawing virtual lines, zero
+		      when drawing the actual buffer line, and positive when
+		      drawing the wrapped part of a buffer line.
+
+	NOTE: The %@ click execute function item is supported as well but the
+	specified function will be the same for each row in the same column.
+	It cannot be switched out through a dynamic 'statuscolumn' format, the
+	handler should be written with this in mind.
 
 	Examples: >vim
 		" Relative number with bar separator and click handlers:
@@ -6032,7 +6043,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		:let &stc='%=%{v:relnum?v:relnum:v:lnum} '
 
 		" Line numbers in hexadecimal for non wrapped part of lines:
-		:let &stc='%=%{v:wrap?"":printf("%x",v:lnum)} '
+		:let &stc='%=%{v:virtnum>0?"":printf("%x",v:lnum)} '
 
 		" Human readable line numbers with thousands separator:
 		:let &stc='%{substitute(v:lnum,"\\d\\zs\\ze\\'
@@ -7123,6 +7134,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 	A list of words that change how |cmdline-completion| is done.
 	The following values are supported:
+	  fuzzy		Use |fuzzy-matching| to find completion matches. When
+			this value is specified, wildcard expansion will not
+			be used for completion.  The matches will be sorted by
+			the "best match" rather than alphabetically sorted.
+			This will find more matches than the wildcard
+			expansion. Currently fuzzy matching based completion
+			is not supported for file and directory names and
+			instead wildcard expansion is used.
 	  pum		Display the completion matches using the popup menu
 			in the same style as the |ins-completion-menu|.
 	  tagfile	When using CTRL-D to list matching tags, the kind of

@@ -36,6 +36,7 @@
 #include "nvim/buffer.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand.h"
 #include "nvim/cursor_shape.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/diff.h"
@@ -81,6 +82,7 @@
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
 #include "nvim/screen.h"
+#include "nvim/search.h"
 #include "nvim/sign_defs.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
@@ -379,12 +381,12 @@ void set_init_1(bool clean_arg)
   // enc_locale() will try to find the encoding of the current locale.
   // This will be used when 'default' is used as encoding specifier
   // in 'fileencodings'
-  char_u *p = enc_locale();
+  char *p = enc_locale();
   if (p == NULL) {
     // use utf-8 as 'default' if locale encoding can't be detected.
-    p = (char_u *)xmemdupz(S_LEN("utf-8"));
+    p = xmemdupz(S_LEN("utf-8"));
   }
-  fenc_default = (char *)p;
+  fenc_default = p;
 
 #ifdef HAVE_WORKING_LIBINTL
   // GNU gettext 0.10.37 supports this feature: set the codeset used for
@@ -674,23 +676,25 @@ void set_helplang_default(const char *lang)
     return;
   }
   int idx = findoption("hlg");
-  if (idx >= 0 && !(options[idx].flags & P_WAS_SET)) {
-    if (options[idx].flags & P_ALLOCED) {
-      free_string_option(p_hlg);
-    }
-    p_hlg = xmemdupz(lang, lang_len);
-    // zh_CN becomes "cn", zh_TW becomes "tw".
-    if (STRNICMP(p_hlg, "zh_", 3) == 0 && strlen(p_hlg) >= 5) {
-      p_hlg[0] = (char)TOLOWER_ASC(p_hlg[3]);
-      p_hlg[1] = (char)TOLOWER_ASC(p_hlg[4]);
-    } else if (strlen(p_hlg) >= 1 && *p_hlg == 'C') {
-      // any C like setting, such as C.UTF-8, becomes "en"
-      p_hlg[0] = 'e';
-      p_hlg[1] = 'n';
-    }
-    p_hlg[2] = NUL;
-    options[idx].flags |= P_ALLOCED;
+  if (idx < 0 || (options[idx].flags & P_WAS_SET)) {
+    return;
   }
+
+  if (options[idx].flags & P_ALLOCED) {
+    free_string_option(p_hlg);
+  }
+  p_hlg = xmemdupz(lang, lang_len);
+  // zh_CN becomes "cn", zh_TW becomes "tw".
+  if (STRNICMP(p_hlg, "zh_", 3) == 0 && strlen(p_hlg) >= 5) {
+    p_hlg[0] = (char)TOLOWER_ASC(p_hlg[3]);
+    p_hlg[1] = (char)TOLOWER_ASC(p_hlg[4]);
+  } else if (strlen(p_hlg) >= 1 && *p_hlg == 'C') {
+    // any C like setting, such as C.UTF-8, becomes "en"
+    p_hlg[0] = 'e';
+    p_hlg[1] = 'n';
+  }
+  p_hlg[2] = NUL;
+  options[idx].flags |= P_ALLOCED;
 }
 
 /// 'title' and 'icon' only default to true if they have not been set or reset
@@ -995,14 +999,14 @@ static int do_set_string(int opt_idx, int opt_flags, char **argp, int nextchar, 
         // 'whichwrap'
         if (flags & P_ONECOMMA) {
           if (*s != ',' && *(s + 1) == ','
-              && vim_strchr(s + 2, *s) != NULL) {
+              && vim_strchr(s + 2, (uint8_t)(*s)) != NULL) {
             // Remove the duplicated value and the next comma.
             STRMOVE(s, s + 2);
             continue;
           }
         } else {
           if ((!(flags & P_COMMA) || *s != ',')
-              && vim_strchr(s + 1, *s) != NULL) {
+              && vim_strchr(s + 1, (uint8_t)(*s)) != NULL) {
             STRMOVE(s, s + 1);
             continue;
           }
@@ -1102,7 +1106,7 @@ int do_set(char *arg, int opt_flags)
     char *errmsg = NULL;
     char *startarg = arg;             // remember for error message
 
-    if (strncmp(arg, "all", 3) == 0 && !isalpha(arg[3])
+    if (strncmp(arg, "all", 3) == 0 && !ASCII_ISALPHA(arg[3])
         && !(opt_flags & OPT_MODELINE)) {
       // ":set all"  show all options.
       // ":set all&" set all options to their default value.
@@ -1206,7 +1210,7 @@ int do_set(char *arg, int opt_flags)
         if (options[opt_idx].var == NULL) {         // hidden option: skip
           // Only give an error message when requesting the value of
           // a hidden option, ignore setting it.
-          if (vim_strchr("=:!&<", nextchar) == NULL
+          if (vim_strchr("=:!&<", (uint8_t)nextchar) == NULL
               && (!(options[opt_idx].flags & P_BOOL)
                   || nextchar == '?')) {
             errmsg = e_unsupportedoption;
@@ -1260,7 +1264,7 @@ int do_set(char *arg, int opt_flags)
         goto skip;
       }
 
-      if (vim_strchr("?=:!&<", nextchar) != NULL) {
+      if (vim_strchr("?=:!&<", (uint8_t)nextchar) != NULL) {
         arg += len;
         if (nextchar == '&' && arg[1] == 'v' && arg[2] == 'i') {
           if (arg[3] == 'm') {  // "opt&vim": set to Vim default
@@ -1269,7 +1273,7 @@ int do_set(char *arg, int opt_flags)
             arg += 2;
           }
         }
-        if (vim_strchr("?!&<", nextchar) != NULL
+        if (vim_strchr("?!&<", (uint8_t)nextchar) != NULL
             && arg[1] != NUL && !ascii_iswhite(arg[1])) {
           errmsg = e_trailing;
           goto skip;
@@ -1282,7 +1286,7 @@ int do_set(char *arg, int opt_flags)
       //
       if (nextchar == '?'
           || (prefix == 1
-              && vim_strchr("=:&<", nextchar) == NULL
+              && vim_strchr("=:&<", (uint8_t)nextchar) == NULL
               && !(flags & P_BOOL))) {
         // print value
         if (did_show) {
@@ -1355,7 +1359,7 @@ int do_set(char *arg, int opt_flags)
 
           errmsg = set_bool_option(opt_idx, (char_u *)varp, (int)value, opt_flags);
         } else {  // Numeric or string.
-          if (vim_strchr("=:&<", nextchar) == NULL
+          if (vim_strchr("=:&<", (uint8_t)nextchar) == NULL
               || prefix != 1) {
             errmsg = e_invarg;
             goto skip;
@@ -1386,7 +1390,7 @@ int do_set(char *arg, int opt_flags)
                            || *arg == '^'
                            || (*arg != NUL && (!arg[1] || ascii_iswhite(arg[1]))
                                && !ascii_isdigit(*arg)))) {
-              value = string_to_key((char_u *)arg);
+              value = string_to_key(arg);
               if (value == 0 && (long *)varp != &p_wcm) {
                 errmsg = e_invarg;
                 goto skip;
@@ -1516,15 +1520,15 @@ void did_set_option(int opt_idx, int opt_flags, int new_value, int value_checked
 
 /// Convert a key name or string into a key value.
 /// Used for 'wildchar' and 'cedit' options.
-int string_to_key(char_u *arg)
+int string_to_key(char *arg)
 {
   if (*arg == '<') {
-    return find_key_option((char *)arg + 1, true);
+    return find_key_option(arg + 1, true);
   }
   if (*arg == '^') {
-    return CTRL_CHR(arg[1]);
+    return CTRL_CHR((uint8_t)arg[1]);
   }
-  return *arg;
+  return (uint8_t)(*arg);
 }
 
 // When changing 'title', 'titlestring', 'icon' or 'iconstring', call
@@ -1597,9 +1601,9 @@ void set_options_bin(int oldval, int newval, int opt_flags)
 /// number, return -1.
 int get_shada_parameter(int type)
 {
-  char_u *p = find_shada_parameter(type);
+  char *p = find_shada_parameter(type);
   if (p != NULL && ascii_isdigit(*p)) {
-    return atoi((char *)p);
+    return atoi(p);
   }
   return -1;
 }
@@ -1607,11 +1611,11 @@ int get_shada_parameter(int type)
 /// Find the parameter represented by the given character (eg ''', ':', '"', or
 /// '/') in the 'shada' option and return a pointer to the string after it.
 /// Return NULL if the parameter is not specified in the string.
-char_u *find_shada_parameter(int type)
+char *find_shada_parameter(int type)
 {
   for (char *p = p_shada; *p; p++) {
     if (*p == type) {
-      return (char_u *)p + 1;
+      return p + 1;
     }
     if (*p == 'n') {                // 'n' is always the last one
       break;
@@ -1650,7 +1654,7 @@ static char *option_expand(int opt_idx, char *val)
   // names.
   // For 'spellsuggest' expand after "file:".
   expand_env_esc(val, NameBuff, MAXPATHL,
-                 (char_u **)options[opt_idx].var == &p_tags, false,
+                 (char **)options[opt_idx].var == &p_tags, false,
                  (char_u **)options[opt_idx].var == (char_u **)&p_sps ? "file:" :
                  NULL);
   if (strcmp(NameBuff, val) == 0) {   // they are the same
@@ -1769,9 +1773,9 @@ void redraw_titles(void)
 bool valid_name(const char *val, const char *allowed)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  for (const char_u *s = (char_u *)val; *s != NUL; s++) {
+  for (const char *s = val; *s != NUL; s++) {
     if (!ASCII_ISALNUM(*s)
-        && vim_strchr(allowed, *s) == NULL) {
+        && vim_strchr(allowed, (uint8_t)(*s)) == NULL) {
       return false;
     }
   }
@@ -1970,7 +1974,7 @@ static char *set_bool_option(const int opt_idx, char_u *const varp, const int va
              || (opt_flags & OPT_GLOBAL) || opt_flags == 0)
             && !bufIsChanged(bp) && bp->b_ml.ml_mfp != NULL) {
           u_compute_hash(bp, hash);
-          u_read_undo(NULL, hash, (char_u *)bp->b_fname);
+          u_read_undo(NULL, hash, bp->b_fname);
         }
       }
     }
@@ -3086,10 +3090,10 @@ bool is_string_option(const char *name)
 // Translate a string like "t_xx", "<t_xx>" or "<S-Tab>" to a key number.
 // When "has_lt" is true there is a '<' before "*arg_arg".
 // Returns 0 when the key is not recognized.
-int find_key_option_len(const char_u *arg_arg, size_t len, bool has_lt)
+int find_key_option_len(const char *arg_arg, size_t len, bool has_lt)
 {
   int key = 0;
-  const char *arg = (char *)arg_arg;
+  const char *arg = arg_arg;
 
   // Don't use get_special_key_code() for t_xx, we don't want it to call
   // add_termcap_entry().
@@ -3109,7 +3113,7 @@ int find_key_option_len(const char_u *arg_arg, size_t len, bool has_lt)
 
 static int find_key_option(const char *arg, bool has_lt)
 {
-  return find_key_option_len((char_u *)arg, strlen(arg), has_lt);
+  return find_key_option_len(arg, strlen(arg), has_lt);
 }
 
 /// if 'all' == 0: show changed options
@@ -3427,7 +3431,7 @@ int makefoldset(FILE *fd)
 
 static int put_setstring(FILE *fd, char *cmd, char *name, char **valuep, uint64_t flags)
 {
-  char_u *buf = NULL;
+  char *buf = NULL;
   char_u *part = NULL;
 
   if (fprintf(fd, "%s %s=", cmd, name) < 0) {
@@ -3440,7 +3444,7 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char **valuep, uint64_
     if (valuep == &p_pt) {
       char_u *s = (char_u *)(*valuep);
       while (*s != NUL) {
-        if (put_escstr(fd, (char_u *)str2special((const char **)&s, false, false), 2) == FAIL) {
+        if (put_escstr(fd, (char *)str2special((const char **)&s, false, false), 2) == FAIL) {
           return FAIL;
         }
       }
@@ -3449,7 +3453,7 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char **valuep, uint64_
 
       // replace home directory in the whole option value into "buf"
       buf = xmalloc(size);
-      home_replace(NULL, *valuep, (char *)buf, size, false);
+      home_replace(NULL, *valuep, buf, size, false);
 
       // If the option value is longer than MAXPATHL, we need to append
       // each comma separated part of the option separately, so that it
@@ -3462,7 +3466,7 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char **valuep, uint64_
         if (put_eol(fd) == FAIL) {
           goto fail;
         }
-        char *p = (char *)buf;
+        char *p = buf;
         while (*p != NUL) {
           // for each comma separated option part, append value to
           // the option, :set rtp+=value
@@ -3470,7 +3474,7 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char **valuep, uint64_
             goto fail;
           }
           (void)copy_option_part(&p, (char *)part, size, ",");
-          if (put_escstr(fd, part, 2) == FAIL || put_eol(fd) == FAIL) {
+          if (put_escstr(fd, (char *)part, 2) == FAIL || put_eol(fd) == FAIL) {
             goto fail;
           }
         }
@@ -3483,7 +3487,7 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char **valuep, uint64_
         return FAIL;
       }
       xfree(buf);
-    } else if (put_escstr(fd, (char_u *)(*valuep), 2) == FAIL) {
+    } else if (put_escstr(fd, *valuep, 2) == FAIL) {
       return FAIL;
     }
   }
@@ -4030,12 +4034,12 @@ static char_u *get_varp(vimoption_T *p)
 }
 
 /// Get the value of 'equalprg', either the buffer-local one or the global one.
-char_u *get_equalprg(void)
+char *get_equalprg(void)
 {
   if (*curbuf->b_p_ep == NUL) {
     return p_ep;
   }
-  return (char_u *)curbuf->b_p_ep;
+  return curbuf->b_p_ep;
 }
 
 /// Copy options from one window to another.
@@ -4221,7 +4225,7 @@ static void init_buf_opt_idx(void)
 void buf_copy_options(buf_T *buf, int flags)
 {
   int should_copy = true;
-  char_u *save_p_isk = NULL;           // init for GCC
+  char *save_p_isk = NULL;           // init for GCC
   int did_isk = false;
 
   // Skip this when the option defaults have not been set yet.  Happens when
@@ -4254,7 +4258,7 @@ void buf_copy_options(buf_T *buf, int flags)
       // (jumping back to a help file with CTRL-T or CTRL-O)
       bool dont_do_help = ((flags & BCO_NOHELP) && buf->b_help) || buf->b_p_initialized;
       if (dont_do_help) {               // don't free b_p_isk
-        save_p_isk = (char_u *)buf->b_p_isk;
+        save_p_isk = buf->b_p_isk;
         buf->b_p_isk = NULL;
       }
       // Always free the allocated strings.  If not already initialized,
@@ -4449,7 +4453,7 @@ void buf_copy_options(buf_T *buf, int flags)
       // Don't touch these at all when BCO_NOHELP is used and going from
       // or to a help buffer.
       if (dont_do_help) {
-        buf->b_p_isk = (char *)save_p_isk;
+        buf->b_p_isk = save_p_isk;
         if (p_vts && p_vts != empty_option && !buf->b_p_vts_array) {
           (void)tabstop_set(p_vts, &buf->b_p_vts_array);
         } else {
@@ -4696,12 +4700,55 @@ void set_context_in_set_cmd(expand_T *xp, char *arg, int opt_flags)
   }
 }
 
-int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char ***file)
+/// Returns true if "str" either matches "regmatch" or fuzzy matches "pat".
+///
+/// If "test_only" is true and "fuzzy" is false and if "str" matches the regular
+/// expression "regmatch", then returns true.  Otherwise returns false.
+///
+/// If "test_only" is false and "fuzzy" is false and if "str" matches the
+/// regular expression "regmatch", then stores the match in matches[idx] and
+/// returns true.
+///
+/// If "test_only" is true and "fuzzy" is true and if "str" fuzzy matches
+/// "fuzzystr", then returns true. Otherwise returns false.
+///
+/// If "test_only" is false and "fuzzy" is true and if "str" fuzzy matches
+/// "fuzzystr", then stores the match details in fuzmatch[idx] and returns true.
+static bool match_str(char *const str, regmatch_T *const regmatch, char **const matches,
+                      const int idx, const bool test_only, const bool fuzzy,
+                      const char *const fuzzystr, fuzmatch_str_T *const fuzmatch)
+{
+  if (!fuzzy) {
+    if (vim_regexec(regmatch, str, (colnr_T)0)) {
+      if (!test_only) {
+        matches[idx] = xstrdup(str);
+      }
+      return true;
+    }
+  } else {
+    const int score = fuzzy_match_str(str, fuzzystr);
+    if (score != 0) {
+      if (!test_only) {
+        fuzmatch[idx].idx = idx;
+        fuzmatch[idx].str = xstrdup(str);
+        fuzmatch[idx].score = score;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+int ExpandSettings(expand_T *xp, regmatch_T *regmatch, char *fuzzystr, int *numMatches,
+                   char ***matches, const bool can_fuzzy)
 {
   int num_normal = 0;  // Nr of matching non-term-code settings
   int count = 0;
   static char *(names[]) = { "all" };
   int ic = regmatch->rm_ic;  // remember the ignore-case flag
+
+  fuzmatch_str_T *fuzmatch = NULL;
+  const bool fuzzy = can_fuzzy && cmdline_fuzzy_complete(fuzzystr);
 
   // do this loop twice:
   // loop == 0: count the number of matching options
@@ -4712,11 +4759,12 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char ***fi
     if (xp->xp_context != EXPAND_BOOL_SETTINGS) {
       for (match = 0; match < (int)ARRAY_SIZE(names);
            match++) {
-        if (vim_regexec(regmatch, names[match], (colnr_T)0)) {
+        if (match_str(names[match], regmatch, *matches,
+                      count, (loop == 0), fuzzy, fuzzystr, fuzmatch)) {
           if (loop == 0) {
             num_normal++;
           } else {
-            (*file)[count++] = xstrdup(names[match]);
+            count++;
           }
         }
       }
@@ -4731,33 +4779,45 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, int *num_file, char ***fi
           && !(options[opt_idx].flags & P_BOOL)) {
         continue;
       }
-      match = false;
-      if (vim_regexec(regmatch, str, (colnr_T)0)
-          || (options[opt_idx].shortname != NULL
-              && vim_regexec(regmatch,
-                             options[opt_idx].shortname,
-                             (colnr_T)0))) {
-        match = true;
-      }
 
-      if (match) {
+      if (match_str(str, regmatch, *matches, count, (loop == 0),
+                    fuzzy, fuzzystr, fuzmatch)) {
         if (loop == 0) {
           num_normal++;
         } else {
-          (*file)[count++] = xstrdup(str);
+          count++;
+        }
+      } else if (!fuzzy && options[opt_idx].shortname != NULL
+                 && vim_regexec(regmatch, options[opt_idx].shortname, (colnr_T)0)) {
+        // Compare against the abbreviated option name (for regular
+        // expression match). Fuzzy matching (previous if) already
+        // matches against both the expanded and abbreviated names.
+        if (loop == 0) {
+          num_normal++;
+        } else {
+          (*matches)[count++] = xstrdup(str);
         }
       }
     }
 
     if (loop == 0) {
       if (num_normal > 0) {
-        *num_file = num_normal;
+        *numMatches = num_normal;
       } else {
         return OK;
       }
-      *file = xmalloc((size_t)(*num_file) * sizeof(char *));
+      if (!fuzzy) {
+        *matches = xmalloc((size_t)(*numMatches) * sizeof(char *));
+      } else {
+        fuzmatch = xmalloc((size_t)(*numMatches) * sizeof(fuzmatch_str_T));
+      }
     }
   }
+
+  if (fuzzy) {
+    fuzzymatches_to_strmatches(fuzmatch, matches, count, false);
+  }
+
   return OK;
 }
 
@@ -4783,7 +4843,7 @@ void ExpandOldSetting(int *num_file, char ***file)
 
   // A backslash is required before some characters.  This is the reverse of
   // what happens in do_set().
-  char_u *buf = (char_u *)vim_strsave_escaped(var, (char *)escape_chars);
+  char *buf = vim_strsave_escaped(var, escape_chars);
 
 #ifdef BACKSLASH_IN_FILENAME
   // For MS-Windows et al. we don't double backslashes at the start and
@@ -4799,7 +4859,7 @@ void ExpandOldSetting(int *num_file, char ***file)
   }
 #endif
 
-  *file[0] = (char *)buf;
+  *file[0] = buf;
   *num_file = 1;
 }
 
@@ -4817,7 +4877,7 @@ static void option_value2string(vimoption_T *opp, int scope)
     if (wc_use_keyname((char_u *)varp, &wc)) {
       xstrlcpy(NameBuff, (char *)get_special_key_name((int)wc, 0), sizeof(NameBuff));
     } else if (wc != 0) {
-      xstrlcpy(NameBuff, (char *)transchar((int)wc), sizeof(NameBuff));
+      xstrlcpy(NameBuff, transchar((int)wc), sizeof(NameBuff));
     } else {
       snprintf(NameBuff,
                sizeof(NameBuff),
@@ -5035,10 +5095,11 @@ bool option_was_set(const char *name)
 void reset_option_was_set(const char *name)
 {
   const int idx = findoption(name);
-
-  if (idx >= 0) {
-    options[idx].flags &= ~P_WAS_SET;
+  if (idx < 0) {
+    return;
   }
+
+  options[idx].flags &= ~P_WAS_SET;
 }
 
 /// fill_breakat_flags() -- called when 'breakat' changes value.
@@ -5199,16 +5260,16 @@ unsigned int get_ve_flags(void)
 ///
 /// @param win  If not NULL, the window to get the local option from; global
 ///             otherwise.
-char_u *get_showbreak_value(win_T *const win)
+char *get_showbreak_value(win_T *const win)
   FUNC_ATTR_WARN_UNUSED_RESULT
 {
   if (win->w_p_sbr == NULL || *win->w_p_sbr == NUL) {
-    return (char_u *)p_sbr;
+    return p_sbr;
   }
   if (strcmp(win->w_p_sbr, "NONE") == 0) {
-    return (char_u *)empty_option;
+    return empty_option;
   }
-  return (char_u *)win->w_p_sbr;
+  return win->w_p_sbr;
 }
 
 /// Return the current end-of-line type: EOL_DOS, EOL_UNIX or EOL_MAC.
@@ -5327,9 +5388,9 @@ size_t copy_option_part(char **option, char *buf, size_t maxlen, char *sep_chars
   if (*p == '.') {
     buf[len++] = *p++;
   }
-  while (*p != NUL && vim_strchr(sep_chars, *p) == NULL) {
+  while (*p != NUL && vim_strchr(sep_chars, (uint8_t)(*p)) == NULL) {
     // Skip backslash before a separator character and space.
-    if (p[0] == '\\' && vim_strchr(sep_chars, p[1]) != NULL) {
+    if (p[0] == '\\' && vim_strchr(sep_chars, (uint8_t)p[1]) != NULL) {
       p++;
     }
     if (len < maxlen - 1) {

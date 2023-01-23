@@ -494,6 +494,9 @@ EXTERN int v_dying INIT(= 0);
 EXTERN bool stdin_isatty INIT(= true);
 // is stdout a terminal?
 EXTERN bool stdout_isatty INIT(= true);
+// is stderr a terminal?
+EXTERN bool stderr_isatty INIT(= true);
+
 /// filedesc set by embedder for reading first buffer like `cmd | nvim -`
 EXTERN int stdin_fd INIT(= -1);
 
@@ -771,7 +774,7 @@ EXTERN bool g_tag_at_cursor INIT(= false);  // whether the tag command comes
 
 EXTERN int replace_offset INIT(= 0);        // offset for replace_push()
 
-EXTERN char_u *escape_chars INIT(= (char_u *)" \t\\\"|");  // need backslash in cmd line
+EXTERN char *escape_chars INIT(= " \t\\\"|");  // need backslash in cmd line
 
 EXTERN int keep_help_flag INIT(= false);  // doing :ta from help file
 
@@ -803,8 +806,8 @@ enum {
 extern char *default_vim_dir;
 extern char *default_vimruntime_dir;
 extern char *default_lib_dir;
-extern char_u *compiled_user;
-extern char_u *compiled_sys;
+extern char *compiled_user;
+extern char *compiled_sys;
 #endif
 
 // When a window has a local directory, the absolute path of the global
@@ -822,7 +825,7 @@ EXTERN int cmdwin_type INIT(= 0);    ///< type of cmdline window or 0
 EXTERN int cmdwin_result INIT(= 0);  ///< result of cmdline window or 0
 EXTERN int cmdwin_level INIT(= 0);   ///< cmdline recursion level
 
-EXTERN char_u no_lines_msg[] INIT(= N_("--No lines in buffer--"));
+EXTERN char no_lines_msg[] INIT(= N_("--No lines in buffer--"));
 
 // When ":global" is used to number of substitutions and changed lines is
 // accumulated until it's finished.
@@ -999,7 +1002,6 @@ EXTERN char e_fnametoolong[] INIT(= N_("E856: Filename too long"));
 EXTERN char e_float_as_string[] INIT(= N_("E806: using Float as a String"));
 EXTERN char e_cannot_edit_other_buf[] INIT(= N_("E788: Not allowed to edit another buffer now"));
 
-EXTERN char e_autocmd_err[] INIT(= N_("E5500: autocmd has thrown an exception: %s"));
 EXTERN char e_cmdmap_err[] INIT(= N_("E5520: <Cmd> mapping must end with <CR>"));
 EXTERN char e_cmdmap_repeated[]
 INIT(= N_("E5521: <Cmd> mapping must end with <CR> before second <Cmd>"));

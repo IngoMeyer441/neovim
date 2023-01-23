@@ -629,6 +629,7 @@ func Test_WinScrolled_diff()
         \ }, event)
 
   call StopVimInTerminal(buf)
+  call delete('XscrollEvent')
 endfunc
 
 func Test_WinClosed()
@@ -2918,7 +2919,7 @@ func Test_autocmd_CmdWinEnter()
   call term_sendkeys(buf, "q:")
   call term_wait(buf)
   call term_sendkeys(buf, ":echo b:dummy_var\<cr>")
-  call WaitForAssert({-> assert_match('^This is a dummy', term_getline(buf, 6))}, 1000)
+  call WaitForAssert({-> assert_match('^This is a dummy', term_getline(buf, 6))}, 2000)
   call term_sendkeys(buf, ":echo &buftype\<cr>")
   call WaitForAssert({-> assert_notmatch('^nofile', term_getline(buf, 6))}, 1000)
   call term_sendkeys(buf, ":echo winnr\<cr>")

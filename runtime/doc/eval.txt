@@ -2295,13 +2295,15 @@ v:version	Vim version number: major version times 100 plus minor
 			:if has("nvim-0.2.1")
 <
 
-				*v:vim_did_enter* *vim_did_enter-variable*
-v:vim_did_enter	0 during startup, 1 just before |VimEnter|.
+						*v:virtnum* *virtnum-variable*
+v:virtnum	Virtual line number for the 'statuscolumn' expression.
+	        Negative when drawing the status column for virtual lines, zero
+		when drawing an actual buffer line, and positive when drawing
+		the wrapped part of a buffer line.
 		Read-only.
 
-						*v:wrap* *wrap-variable*
-v:wrap		Boolean indicating whether 'statuscolumn' is being evaluated
-		for the wrapped part of a line.
+				*v:vim_did_enter* *vim_did_enter-variable*
+v:vim_did_enter	0 during startup, 1 just before |VimEnter|.
 		Read-only.
 
 					*v:warningmsg* *warningmsg-variable*
@@ -2679,6 +2681,8 @@ text...
 
 			[depth] is relevant when locking a |List| or
 			|Dictionary|.  It specifies how deep the locking goes:
+				0	Lock the variable {name} but not its
+					value.
 				1	Lock the |List| or |Dictionary| itself,
 					cannot add or remove items, but can
 					still change their values.
@@ -2692,7 +2696,14 @@ text...
 					|Dictionary|, one level deeper.
 			The default [depth] is 2, thus when {name} is a |List|
 			or |Dictionary| the values cannot be changed.
-								*E743*
+
+			Example with [depth] 0: >
+				let mylist = [1, 2, 3]
+				lockvar 0 mylist
+				let mylist[0] = 77   	" OK
+				call add(mylist, 4]  	" OK
+				let mylist = [7, 8, 9]  " Error!
+<								*E743*
 			For unlimited depth use [!] and omit [depth].
 			However, there is a maximum depth of 100 to catch
 			loops.

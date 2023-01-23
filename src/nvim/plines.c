@@ -51,7 +51,7 @@ int plines_win(win_T *wp, linenr_T lnum, bool winheight)
 /// @return Number of filler lines above lnum
 int win_get_fill(win_T *wp, linenr_T lnum)
 {
-  int virt_lines = decor_virt_lines(wp, lnum, NULL);
+  int virt_lines = decor_virt_lines(wp, lnum, NULL, kNone);
 
   // be quick when there are no filler lines
   if (diffopt_filler()) {
@@ -440,7 +440,7 @@ int win_lbr_chartabsize(chartabsize_T *cts, int *headp)
   // Set *headp to the size of what we add.
   // Do not use 'showbreak' at the NUL after the text.
   added = 0;
-  char *const sbr = c == NUL ? empty_option : (char *)get_showbreak_value(wp);
+  char *const sbr = c == NUL ? empty_option : get_showbreak_value(wp);
   if ((*sbr != NUL || wp->w_p_bri) && wp->w_p_wrap && vcol != 0) {
     colnr_T sbrlen = 0;
     int numberwidth = win_col_off(wp);

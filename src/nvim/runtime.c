@@ -104,7 +104,7 @@ estack_T *estack_push(etype_T type, char *name, linenr_T lnum)
 void estack_push_ufunc(ufunc_T *ufunc, linenr_T lnum)
 {
   estack_T *entry = estack_push(ETYPE_UFUNC,
-                                ufunc->uf_name_exp != NULL ? (char *)ufunc->uf_name_exp : ufunc->uf_name,
+                                ufunc->uf_name_exp != NULL ? ufunc->uf_name_exp : ufunc->uf_name,
                                 lnum);
   if (entry != NULL) {
     entry->es_info.ufunc = ufunc;
@@ -1175,12 +1175,11 @@ void ex_packadd(exarg_T *eap)
 
 /// Expand color scheme, compiler or filetype names.
 /// Search from 'runtimepath':
-///   'runtimepath'/{dirnames}/{pat}.vim
-/// When "flags" has DIP_START: search also from 'start' of 'packpath':
-///   'packpath'/pack/ * /start/ * /{dirnames}/{pat}.vim
-/// When "flags" has DIP_OPT: search also from 'opt' of 'packpath':
-///   'packpath'/pack/ * /opt/ * /{dirnames}/{pat}.vim
-/// When "flags" has DIP_LUA: search also performed for .lua files
+///   'runtimepath'/{dirnames}/{pat}.(vim|lua)
+/// When "flags" has DIP_START: search also from "start" of 'packpath':
+///   'packpath'/pack/*/start/*/{dirnames}/{pat}.(vim|lua)
+/// When "flags" has DIP_OPT: search also from "opt" of 'packpath':
+///   'packpath'/pack/*/opt/*/{dirnames}/{pat}.(vim|lua)
 /// "dirnames" is an array with one or more directory names.
 int ExpandRTDir(char *pat, int flags, int *num_file, char ***file, char *dirnames[])
 {
@@ -1197,10 +1196,8 @@ int ExpandRTDir(char *pat, int flags, int *num_file, char ***file, char *dirname
     char *s = xmalloc(size);
     snprintf(s, size, "%s/%s*.vim", dirnames[i], pat);
     globpath(p_rtp, s, &ga, 0);
-    if (flags & DIP_LUA) {
-      snprintf(s, size, "%s/%s*.lua", dirnames[i], pat);
-      globpath(p_rtp, s, &ga, 0);
-    }
+    snprintf(s, size, "%s/%s*.lua", dirnames[i], pat);
+    globpath(p_rtp, s, &ga, 0);
     xfree(s);
   }
 
@@ -1210,10 +1207,8 @@ int ExpandRTDir(char *pat, int flags, int *num_file, char ***file, char *dirname
       char *s = xmalloc(size);
       snprintf(s, size, "pack/*/start/*/%s/%s*.vim", dirnames[i], pat);  // NOLINT
       globpath(p_pp, s, &ga, 0);
-      if (flags & DIP_LUA) {
-        snprintf(s, size, "pack/*/start/*/%s/%s*.lua", dirnames[i], pat);  // NOLINT
-        globpath(p_pp, s, &ga, 0);
-      }
+      snprintf(s, size, "pack/*/start/*/%s/%s*.lua", dirnames[i], pat);  // NOLINT
+      globpath(p_pp, s, &ga, 0);
       xfree(s);
     }
 
@@ -1222,10 +1217,8 @@ int ExpandRTDir(char *pat, int flags, int *num_file, char ***file, char *dirname
       char *s = xmalloc(size);
       snprintf(s, size, "start/*/%s/%s*.vim", dirnames[i], pat);  // NOLINT
       globpath(p_pp, s, &ga, 0);
-      if (flags & DIP_LUA) {
-        snprintf(s, size, "start/*/%s/%s*.lua", dirnames[i], pat);  // NOLINT
-        globpath(p_pp, s, &ga, 0);
-      }
+      snprintf(s, size, "start/*/%s/%s*.lua", dirnames[i], pat);  // NOLINT
+      globpath(p_pp, s, &ga, 0);
       xfree(s);
     }
   }
@@ -1236,10 +1229,8 @@ int ExpandRTDir(char *pat, int flags, int *num_file, char ***file, char *dirname
       char *s = xmalloc(size);
       snprintf(s, size, "pack/*/opt/*/%s/%s*.vim", dirnames[i], pat);  // NOLINT
       globpath(p_pp, s, &ga, 0);
-      if (flags & DIP_LUA) {
-        snprintf(s, size, "pack/*/opt/*/%s/%s*.lua", dirnames[i], pat);  // NOLINT
-        globpath(p_pp, s, &ga, 0);
-      }
+      snprintf(s, size, "pack/*/opt/*/%s/%s*.lua", dirnames[i], pat);  // NOLINT
+      globpath(p_pp, s, &ga, 0);
       xfree(s);
     }
 
@@ -1248,10 +1239,8 @@ int ExpandRTDir(char *pat, int flags, int *num_file, char ***file, char *dirname
       char *s = xmalloc(size);
       snprintf(s, size, "opt/*/%s/%s*.vim", dirnames[i], pat);  // NOLINT
       globpath(p_pp, s, &ga, 0);
-      if (flags & DIP_LUA) {
-        snprintf(s, size, "opt/*/%s/%s*.lua", dirnames[i], pat);  // NOLINT
-        globpath(p_pp, s, &ga, 0);
-      }
+      snprintf(s, size, "opt/*/%s/%s*.lua", dirnames[i], pat);  // NOLINT
+      globpath(p_pp, s, &ga, 0);
       xfree(s);
     }
   }
@@ -1261,8 +1250,7 @@ int ExpandRTDir(char *pat, int flags, int *num_file, char ***file, char *dirname
     char *s = match;
     char *e = s + strlen(s);
     if (e - s > 4 && (STRNICMP(e - 4, ".vim", 4) == 0
-                      || ((flags & DIP_LUA)
-                          && STRNICMP(e - 4, ".lua", 4) == 0))) {
+                      || STRNICMP(e - 4, ".lua", 4) == 0)) {
       e -= 4;
       for (s = e; s > match; MB_PTR_BACK(match, s)) {
         if (vim_ispathsep(*s)) {
@@ -2160,12 +2148,17 @@ scriptitem_T *get_current_script_id(char **fnamep, sctx_T *ret_sctx)
 /// ":scriptnames"
 void ex_scriptnames(exarg_T *eap)
 {
-  if (eap->addr_count > 0) {
+  if (eap->addr_count > 0 || *eap->arg != NUL) {
     // :script {scriptId}: edit the script
-    if (eap->line2 < 1 || eap->line2 > script_items.ga_len) {
+    if (eap->addr_count > 0 && !SCRIPT_ID_VALID(eap->line2)) {
       emsg(_(e_invarg));
     } else {
-      eap->arg = SCRIPT_ITEM(eap->line2).sn_name;
+      if (eap->addr_count > 0) {
+        eap->arg = SCRIPT_ITEM(eap->line2).sn_name;
+      } else {
+        expand_env(eap->arg, NameBuff, MAXPATHL);
+        eap->arg = NameBuff;
+      }
       do_exedit(eap, NULL);
     }
     return;

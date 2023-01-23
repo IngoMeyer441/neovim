@@ -1019,7 +1019,7 @@ static int add_llist_tags(char *tag, int num_matches, char **matches)
     // Get the line number or the search pattern used to locate
     // the tag.
     lnum = 0;
-    if (isdigit(*tagp.command)) {
+    if (isdigit((uint8_t)(*tagp.command))) {
       // Line number is used to locate the tag
       lnum = atol(tagp.command);
     } else {
@@ -1199,7 +1199,7 @@ static void prepare_pats(pat_T *pats, int has_re)
     } else {
       for (pats->headlen = 0; pats->head[pats->headlen] != NUL; pats->headlen++) {
         if (vim_strchr(magic_isset() ? ".[~*\\$" : "\\$",
-                       pats->head[pats->headlen]) != NULL) {
+                       (uint8_t)pats->head[pats->headlen]) != NULL) {
           break;
         }
       }
@@ -2078,10 +2078,10 @@ static void findtags_add_match(findtags_state_T *st, tagptrs_T *tagpp, findtags_
     // the part that matters for comparing, more bytes may
     // follow after it.  E.g. help tags store the priority
     // after the NUL.
-    *hash = hash_hash((char_u *)mfp);
+    *hash = hash_hash(mfp);
     hi = hash_lookup(&st->ht_match[mtt], (const char *)mfp, strlen(mfp), *hash);
     if (HASHITEM_EMPTY(hi)) {
-      hash_add_item(&st->ht_match[mtt], hi, (char_u *)mfp, *hash);
+      hash_add_item(&st->ht_match[mtt], hi, mfp, *hash);
       GA_APPEND(char *, &st->ga_match[mtt], mfp);
       st->match_count++;
     } else {
@@ -2563,7 +2563,7 @@ int get_tagfname(tagname_T *tnp, int first, char *buf)
   if (first) {
     // Init.  We make a copy of 'tags', because autocommands may change
     // the value without notifying us.
-    tnp->tn_tags = xstrdup((*curbuf->b_p_tags != NUL) ? curbuf->b_p_tags : (char *)p_tags);
+    tnp->tn_tags = xstrdup((*curbuf->b_p_tags != NUL) ? curbuf->b_p_tags : p_tags);
     tnp->tn_np = tnp->tn_tags;
   }
 
@@ -2573,7 +2573,7 @@ int get_tagfname(tagname_T *tnp, int first, char *buf)
   // tnp->tn_did_filefind_init == true: find next file in this part.
   for (;;) {
     if (tnp->tn_did_filefind_init) {
-      fname = (char *)vim_findfile(tnp->tn_search_ctx);
+      fname = vim_findfile(tnp->tn_search_ctx);
       if (fname != NULL) {
         break;
       }
@@ -2593,7 +2593,7 @@ int get_tagfname(tagname_T *tnp, int first, char *buf)
       buf[0] = NUL;
       (void)copy_option_part(&tnp->tn_np, buf, MAXPATHL - 1, " ,");
 
-      r_ptr = (char *)vim_findfile_stopdir(buf);
+      r_ptr = vim_findfile_stopdir(buf);
       // move the filename one char forward and truncate the
       // filepath with a NUL
       filename = path_tail(buf);

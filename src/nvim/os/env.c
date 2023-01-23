@@ -543,7 +543,7 @@ void free_homedir(void)
 /// @see {expand_env}
 char *expand_env_save(char *src)
 {
-  return (char *)expand_env_save_opt(src, false);
+  return expand_env_save_opt(src, false);
 }
 
 /// Similar to expand_env_save() but when "one" is `true` handle the string as
@@ -551,10 +551,10 @@ char *expand_env_save(char *src)
 /// @param src String containing environment variables to expand
 /// @param one Should treat as only one file name
 /// @see {expand_env}
-char_u *expand_env_save_opt(char *src, bool one)
+char *expand_env_save_opt(char *src, bool one)
 {
-  char_u *p = xmalloc(MAXPATHL);
-  expand_env_esc(src, (char *)p, MAXPATHL, false, one, NULL);
+  char *p = xmalloc(MAXPATHL);
+  expand_env_esc(src, p, MAXPATHL, false, one, NULL);
   return p;
 }
 
@@ -656,7 +656,7 @@ void expand_env_esc(char *restrict srcp, char *restrict dst, int dstlen, bool es
 #endif
       } else if (src[1] == NUL  // home directory
                  || vim_ispathsep(src[1])
-                 || vim_strchr(" ,\t\n", src[1]) != NULL) {
+                 || vim_strchr(" ,\t\n", (uint8_t)src[1]) != NULL) {
         var = homedir;
         tail = src + 1;
       } else {  // user directory
@@ -689,7 +689,7 @@ void expand_env_esc(char *restrict srcp, char *restrict dst, int dstlen, bool es
 #else
         // cannot expand user's home directory, so don't try
         var = NULL;
-        tail = (char_u *)"";  // for gcc
+        tail = "";  // for gcc
 #endif  // UNIX
       }
 
@@ -697,7 +697,7 @@ void expand_env_esc(char *restrict srcp, char *restrict dst, int dstlen, bool es
       // If 'shellslash' is set change backslashes to forward slashes.
       // Can't use slash_adjust(), p_ssl may be set temporarily.
       if (p_ssl && var != NULL && vim_strchr(var, '\\') != NULL) {
-        char_u *p = xstrdup(var);
+        char *p = xstrdup(var);
 
         if (mustfree) {
           xfree(var);
@@ -1198,7 +1198,7 @@ bool os_setenv_append_path(const char *fname)
 // No prescribed maximum on unix.
 # define MAX_ENVPATHLEN INT_MAX
 #endif
-  if (!path_is_absolute((char_u *)fname)) {
+  if (!path_is_absolute(fname)) {
     internal_error("os_setenv_append_path()");
     return false;
   }

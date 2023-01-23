@@ -412,7 +412,7 @@ int find_help_tags(const char *arg, int *num_matches, char ***matches, bool keep
     // And also "\_$" and "\_^".
     if (arg[0] == '\\'
         && ((arg[1] != NUL && arg[2] == NUL)
-            || (vim_strchr("%_z@", arg[1]) != NULL
+            || (vim_strchr("%_z@", (uint8_t)arg[1]) != NULL
                 && arg[2] != NUL))) {
       vim_snprintf(d, IOSIZE, "/\\\\%s", arg + 1);
       // Check for "/\\_$", should be "/\\_\$"
@@ -471,7 +471,7 @@ int find_help_tags(const char *arg, int *num_matches, char ***matches, bool keep
         // Insert '-' before and after "CTRL-X" when applicable.
         if (*s < ' '
             || (*s == '^' && s[1]
-                && (ASCII_ISALPHA(s[1]) || vim_strchr("?@[\\]^", s[1]) != NULL))) {
+                && (ASCII_ISALPHA(s[1]) || vim_strchr("?@[\\]^", (uint8_t)s[1]) != NULL))) {
           if (d > IObuff && d[-1] != '_' && d[-1] != '\\') {
             *d++ = '_';                 // prepend a '_' to make x_CTRL-x
           }
@@ -555,7 +555,7 @@ int find_help_tags(const char *arg, int *num_matches, char ***matches, bool keep
     // Sort the matches found on the heuristic number that is after the
     // tag name.
     qsort((void *)(*matches), (size_t)(*num_matches),
-          sizeof(char_u *), help_compare);
+          sizeof(char *), help_compare);
     // Delete more than TAG_MANY to reduce the size of the listing.
     while (*num_matches > TAG_MANY) {
       xfree((*matches)[--*num_matches]);
@@ -799,7 +799,7 @@ void fix_help_buffer(void)
                   // The text is utf-8 when a byte
                   // above 127 is found and no
                   // illegal byte sequence is found.
-                  if ((char_u)(*s) >= 0x80 && this_utf != kFalse) {
+                  if ((uint8_t)(*s) >= 0x80 && this_utf != kFalse) {
                     this_utf = kTrue;
                     const int l = utf_ptr2len(s);
                     if (l == 1) {
@@ -923,7 +923,7 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
 
   // If using the "++t" argument or generating tags for "$VIMRUNTIME/doc"
   // add the "help-tags" tag.
-  ga_init(&ga, (int)sizeof(char_u *), 100);
+  ga_init(&ga, (int)sizeof(char *), 100);
   if (add_help_tags
       || path_full_compare("$VIMRUNTIME/doc", dir, false, true) == kEqualFiles) {
     size_t s_len = 18 + strlen(tagfname);
@@ -948,7 +948,7 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
         // Detect utf-8 file by a non-ASCII char in the first line.
         TriState this_utf8 = kNone;
         for (s = IObuff; *s != NUL; s++) {
-          if ((char_u)(*s) >= 0x80) {
+          if ((uint8_t)(*s) >= 0x80) {
             this_utf8 = kTrue;
             const int l = utf_ptr2len(s);
             if (l == 1) {
@@ -974,12 +974,12 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
       }
       if (in_example) {
         // skip over example; a non-white in the first column ends it
-        if (vim_strchr(" \t\n\r", IObuff[0])) {
+        if (vim_strchr(" \t\n\r", (uint8_t)IObuff[0])) {
           continue;
         }
         in_example = false;
       }
-      p1 = vim_strchr((char *)IObuff, '*');       // find first '*'
+      p1 = vim_strchr(IObuff, '*');       // find first '*'
       while (p1 != NULL) {
         p2 = strchr((const char *)p1 + 1, '*');  // Find second '*'.
         if (p2 != NULL && p2 > p1 + 1) {         // Skip "*" and "**".
@@ -994,7 +994,7 @@ static void helptags_one(char *dir, const char *ext, const char *tagfname, bool 
           // followed by a white character or end-of-line.
           if (s == p2
               && (p1 == IObuff || p1[-1] == ' ' || p1[-1] == '\t')
-              && (vim_strchr(" \t\n\r", s[1]) != NULL
+              && (vim_strchr(" \t\n\r", (uint8_t)s[1]) != NULL
                   || s[1] == '\0')) {
             *p2 = '\0';
             p1++;

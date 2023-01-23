@@ -598,7 +598,7 @@ static char *ins_compl_infercase_gettext(const char *str, int char_len, int comp
   // Allocate wide character array for the completion and fill it.
   int *const wca = xmalloc((size_t)char_len * sizeof(*wca));
   {
-    const char_u *p = (char_u *)str;
+    const char *p = str;
     for (int i = 0; i < char_len; i++) {
       wca[i] = mb_ptr2char_adv(&p);
     }
@@ -606,7 +606,7 @@ static char *ins_compl_infercase_gettext(const char *str, int char_len, int comp
 
   // Rule 1: Were any chars converted to lower?
   {
-    const char_u *p = (char_u *)compl_orig_text;
+    const char *p = compl_orig_text;
     for (int i = 0; i < min_len; i++) {
       const int c = mb_ptr2char_adv(&p);
       if (mb_islower(c)) {
@@ -625,7 +625,7 @@ static char *ins_compl_infercase_gettext(const char *str, int char_len, int comp
   // Rule 2: No lower case, 2nd consecutive letter converted to
   // upper case.
   if (!has_lower) {
-    const char_u *p = (char_u *)compl_orig_text;
+    const char *p = compl_orig_text;
     for (int i = 0; i < min_len; i++) {
       const int c = mb_ptr2char_adv(&p);
       if (was_letter && mb_isupper(c) && mb_islower(wca[i])) {
@@ -641,7 +641,7 @@ static char *ins_compl_infercase_gettext(const char *str, int char_len, int comp
 
   // Copy the original case of the part we typed.
   {
-    const char_u *p = (char_u *)compl_orig_text;
+    const char *p = compl_orig_text;
     for (int i = 0; i < min_len; i++) {
       const int c = mb_ptr2char_adv(&p);
       if (mb_islower(c)) {
@@ -2857,7 +2857,7 @@ static int process_next_cpt_value(ins_compl_next_state_T *st, int *compl_type_ar
     // Remember the first match so that the loop stops when we
     // wrap and come back there a second time.
     st->set_match_pos = true;
-  } else if (vim_strchr("buwU", *st->e_cpt) != NULL
+  } else if (vim_strchr("buwU", (uint8_t)(*st->e_cpt)) != NULL
              && (st->ins_buf = ins_compl_next_buf(st->ins_buf, *st->e_cpt)) != curbuf) {
     // Scan a buffer, but not the current one.
     if (st->ins_buf->b_ml.ml_mfp != NULL) {  // loaded buffer
@@ -2951,7 +2951,7 @@ static void get_next_dict_tsr_completion(int compl_type, char *dict, int dict_f)
   } else {
     ins_compl_dictionaries(dict != NULL ? dict
                            : (compl_type == CTRL_X_THESAURUS
-                              ? (*curbuf->b_p_tsr == NUL ? (char *)p_tsr : curbuf->b_p_tsr)
+                              ? (*curbuf->b_p_tsr == NUL ? p_tsr : curbuf->b_p_tsr)
                               : (*curbuf->b_p_dict ==
                                  NUL ? p_dict : curbuf->b_p_dict)),
                            compl_pattern,
@@ -2997,7 +2997,7 @@ static void get_next_filename_completion(void)
 #ifdef BACKSLASH_IN_FILENAME
   if (curbuf->b_p_csl[0] != NUL) {
     for (int i = 0; i < num_matches; i++) {
-      char_u *ptr = matches[i];
+      char *ptr = matches[i];
       while (*ptr != NUL) {
         if (curbuf->b_p_csl[0] == 's' && *ptr == '\\') {
           *ptr = '/';
@@ -3161,7 +3161,7 @@ static int get_next_default_completion(ins_compl_next_state_T *st, pos_T *start_
                                               compl_direction, compl_pattern);
     } else {
       found_new_match = searchit(NULL, st->ins_buf, st->cur_match_pos,
-                                 NULL, compl_direction, (char_u *)compl_pattern, 1L,
+                                 NULL, compl_direction, compl_pattern, 1L,
                                  SEARCH_KEEP + SEARCH_NFMSG, RE_LAST, NULL);
     }
     msg_silent--;

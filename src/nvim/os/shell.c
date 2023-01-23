@@ -221,7 +221,7 @@ int os_expand_wildcards(int num_pat, char **pat, int *num_file, char ***file, in
     // "command" below.
     len++;                              // add space
     for (j = 0; pat[i][j] != NUL; j++) {
-      if (vim_strchr(SHELL_SPECIAL, pat[i][j]) != NULL) {
+      if (vim_strchr(SHELL_SPECIAL, (uint8_t)pat[i][j]) != NULL) {
         len++;                  // may add a backslash
       }
       len++;
@@ -304,14 +304,14 @@ int os_expand_wildcards(int num_pat, char **pat, int *num_file, char ***file, in
           // backslash inside backticks, before a special character
           // and before a backtick.
           if (intick
-              || vim_strchr(SHELL_SPECIAL, pat[i][j + 1]) != NULL
+              || vim_strchr(SHELL_SPECIAL, (uint8_t)pat[i][j + 1]) != NULL
               || pat[i][j + 1] == '`') {
             *p++ = '\\';
           }
           j++;
         } else if (!intick
                    && ((flags & EW_KEEPDOLLAR) == 0 || pat[i][j] != '$')
-                   && vim_strchr(SHELL_SPECIAL, pat[i][j]) != NULL) {
+                   && vim_strchr(SHELL_SPECIAL, (uint8_t)pat[i][j]) != NULL) {
           // Put a backslash before a special character, but not
           // when inside ``. And not for $var when EW_KEEPDOLLAR is
           // set.
@@ -570,7 +570,7 @@ notfound:
 char **shell_build_argv(const char *cmd, const char *extra_args)
   FUNC_ATTR_NONNULL_RET
 {
-  size_t argc = tokenize(p_sh, NULL) + (cmd ? tokenize((char *)p_shcf, NULL) : 0);
+  size_t argc = tokenize(p_sh, NULL) + (cmd ? tokenize(p_shcf, NULL) : 0);
   char **rv = xmalloc((argc + 4) * sizeof(*rv));
 
   // Split 'shell'
@@ -581,7 +581,7 @@ char **shell_build_argv(const char *cmd, const char *extra_args)
   }
 
   if (cmd) {
-    i += tokenize((char *)p_shcf, rv + i);        // Split 'shellcmdflag'
+    i += tokenize(p_shcf, rv + i);        // Split 'shellcmdflag'
     rv[i++] = shell_xescape_xquote(cmd);  // Copy (and escape) `cmd`.
   }
 
@@ -1332,7 +1332,7 @@ static char *shell_xescape_xquote(const char *cmd)
 
   const char *ecmd = cmd;
   if (*p_sxe != NUL && strcmp(p_sxq, "(") == 0) {
-    ecmd = vim_strsave_escaped_ext(cmd, (char *)p_sxe, '^', false);
+    ecmd = vim_strsave_escaped_ext(cmd, p_sxe, '^', false);
   }
   size_t ncmd_size = strlen(ecmd) + strlen(p_sxq) * 2 + 1;
   char *ncmd = xmalloc(ncmd_size);

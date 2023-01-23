@@ -151,11 +151,11 @@ void free_buff(buffheader_T *buf)
 /// K_SPECIAL in the returned string is escaped.
 ///
 /// @param dozero  count == zero is not an error
-static char_u *get_buffcont(buffheader_T *buffer, int dozero)
+static char *get_buffcont(buffheader_T *buffer, int dozero)
 {
   size_t count = 0;
-  char_u *p = NULL;
-  char_u *p2;
+  char *p = NULL;
+  char *p2;
 
   // compute the total length of the string
   for (const buffblock_T *bp = buffer->bh_first.b_next;
@@ -168,7 +168,7 @@ static char_u *get_buffcont(buffheader_T *buffer, int dozero)
     p2 = p;
     for (const buffblock_T *bp = buffer->bh_first.b_next;
          bp != NULL; bp = bp->b_next) {
-      for (const char_u *str = (char_u *)bp->b_str; *str;) {
+      for (const char *str = bp->b_str; *str;) {
         *p2++ = *str++;
       }
     }
@@ -185,7 +185,7 @@ char_u *get_recorded(void)
   char *p;
   size_t len;
 
-  p = (char *)get_buffcont(&recordbuff, true);
+  p = get_buffcont(&recordbuff, true);
   free_buff(&recordbuff);
 
   // Remove the characters that were added the last time, these must be the
@@ -207,7 +207,7 @@ char_u *get_recorded(void)
 
 /// Return the contents of the redo buffer as a single string.
 /// K_SPECIAL in the returned string is escaped.
-char_u *get_inserted(void)
+char *get_inserted(void)
 {
   return get_buffcont(&redobuff, false);
 }
@@ -475,7 +475,7 @@ void saveRedobuff(save_redo_T *save_redo)
   old_redobuff.bh_first.b_next = NULL;
 
   // Make a copy, so that ":normal ." in a function works.
-  char *const s = (char *)get_buffcont(&save_redo->sr_redobuff, false);
+  char *const s = get_buffcont(&save_redo->sr_redobuff, false);
   if (s == NULL) {
     return;
   }
@@ -538,7 +538,7 @@ void AppendToRedobuffLit(const char *str, int len)
 
     // Handle a special or multibyte character.
     // Composing chars separately are handled separately.
-    const int c = mb_cptr2char_adv((const char_u **)&s);
+    const int c = mb_cptr2char_adv(&s);
     if (c < ' ' || c == DEL || (*s == NUL && (c == '0' || c == '^'))) {
       add_char_buff(&redobuff, Ctrl_V);
     }
@@ -599,7 +599,7 @@ void stuffReadbuffSpec(const char *s)
       stuffReadbuffLen(s, 3);
       s += 3;
     } else {
-      int c = mb_cptr2char_adv((const char_u **)&s);
+      int c = mb_cptr2char_adv(&s);
       if (c == CAR || c == NL || c == ESC) {
         c = ' ';
       }
@@ -640,7 +640,7 @@ void stuffescaped(const char *arg, bool literally)
 
     // stuff a single special character
     if (*arg != NUL) {
-      const int c = mb_cptr2char_adv((const char_u **)&arg);
+      const int c = mb_cptr2char_adv(&arg);
       if (literally && ((c < ' ' && c != TAB) || c == DEL)) {
         stuffcharReadbuff(Ctrl_V);
       }
@@ -886,7 +886,7 @@ int ins_typebuf(char *str, int noremap, int offset, bool nottyped, bool silent)
     // often.
     int newoff = MAXMAPLEN + 4;
     int extra = addlen + newoff + 4 * (MAXMAPLEN + 4);
-    if (typebuf.tb_len > 2147483674 - extra) {
+    if (typebuf.tb_len > INT_MAX - extra) {
       // string is getting too long for 32 bit int
       emsg(_(e_toocompl));          // also calls flush_buffers
       setcursor();
@@ -2993,16 +2993,16 @@ char *getcmdkeycmd(int promptc, void *cookie, int indent, bool do_concat)
       ga_concat(&line_ga, "<SNR>");
     } else {
       if (cmod != 0) {
-        ga_append(&line_ga, (char)K_SPECIAL);
-        ga_append(&line_ga, (char)KS_MODIFIER);
-        ga_append(&line_ga, (char)cmod);
+        ga_append(&line_ga, K_SPECIAL);
+        ga_append(&line_ga, KS_MODIFIER);
+        ga_append(&line_ga, (uint8_t)cmod);
       }
       if (IS_SPECIAL(c1)) {
-        ga_append(&line_ga, (char)K_SPECIAL);
-        ga_append(&line_ga, (char)K_SECOND(c1));
-        ga_append(&line_ga, (char)K_THIRD(c1));
+        ga_append(&line_ga, K_SPECIAL);
+        ga_append(&line_ga, (uint8_t)K_SECOND(c1));
+        ga_append(&line_ga, (uint8_t)K_THIRD(c1));
       } else {
-        ga_append(&line_ga, (char)c1);
+        ga_append(&line_ga, (uint8_t)c1);
       }
     }
 
@@ -3038,7 +3038,7 @@ bool map_execute_lua(void)
     } else if (c1 == '\r' || c1 == '\n') {
       c1 = NUL;  // end the line
     } else {
-      ga_append(&line_ga, (char)c1);
+      ga_append(&line_ga, (uint8_t)c1);
     }
   }
 

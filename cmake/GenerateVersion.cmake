@@ -7,7 +7,7 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE
   RESULT_VARIABLE RES)
 
-if(RES AND NOT RES EQUAL 0)
+if(RES)
   message(STATUS "Using NVIM_VERSION: ${NVIM_VERSION}")
   file(WRITE "${OUTPUT}" "")
   return()
@@ -33,4 +33,7 @@ endif()
 if(NOT "${NVIM_VERSION_HASH}" STREQUAL "${CURRENT_VERSION_HASH}")
   message(STATUS "Using NVIM_VERSION: ${NVIM_VERSION}")
   file(WRITE "${OUTPUT}" "${NVIM_VERSION_STRING}")
+  if(WIN32)
+    configure_file("${OUTPUT}" "${OUTPUT}" NEWLINE_STYLE UNIX)
+  endif()
 endif()
