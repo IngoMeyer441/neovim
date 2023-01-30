@@ -22,24 +22,19 @@ find_package(TreeSitter REQUIRED)
 target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${TreeSitter_INCLUDE_DIRS})
 target_link_libraries(main_lib INTERFACE ${TreeSitter_LIBRARIES})
 
-find_package(UNIBILIUM 2.0 REQUIRED)
-target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${UNIBILIUM_INCLUDE_DIRS})
-target_link_libraries(main_lib INTERFACE ${UNIBILIUM_LIBRARIES})
+find_package(unibilium 2.0 REQUIRED)
+target_link_libraries(main_lib INTERFACE unibilium)
 
 find_package(LibTermkey 0.22 REQUIRED)
 target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LIBTERMKEY_INCLUDE_DIRS})
 target_link_libraries(main_lib INTERFACE ${LIBTERMKEY_LIBRARIES})
 
-find_package(LIBVTERM 0.3 REQUIRED)
-target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LIBVTERM_INCLUDE_DIRS})
-target_link_libraries(main_lib INTERFACE ${LIBVTERM_LIBRARIES})
+find_package(libvterm 0.3 REQUIRED)
+target_link_libraries(main_lib INTERFACE libvterm)
 
-if(Iconv_FOUND)
-  target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${Iconv_INCLUDE_DIRS})
-  if(Iconv_LIBRARIES)
-    target_link_libraries(main_lib INTERFACE ${Iconv_LIBRARIES})
-  endif()
-endif()
+find_package(Iconv REQUIRED)
+target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${Iconv_INCLUDE_DIRS})
+target_link_libraries(main_lib INTERFACE ${Iconv_LIBRARIES})
 
 option(ENABLE_LIBINTL "enable libintl" ON)
 if(ENABLE_LIBINTL)
@@ -65,12 +60,6 @@ else()
   target_link_libraries(main_lib INTERFACE ${LUAJIT_LIBRARIES})
 endif()
 
-# Determine platform's threading library. Set CMAKE_THREAD_PREFER_PTHREAD
-# explicitly to indicate a strong preference for pthread.
-set(CMAKE_THREAD_PREFER_PTHREAD ON)
-find_package(Threads REQUIRED)
-target_link_libraries(main_lib INTERFACE ${CMAKE_THREAD_LIBS_INIT})
-
 option(ENABLE_IWYU "Run include-what-you-use with the compiler." OFF)
 if(ENABLE_IWYU)
   find_program(IWYU_PRG NAMES include-what-you-use iwyu)
@@ -95,6 +84,8 @@ if(MSVC)
   # Disable warnings that give too many false positives.
   target_compile_options(main_lib INTERFACE -wd4311 -wd4146)
   target_compile_definitions(main_lib INTERFACE _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+
+  target_sources(main_lib INTERFACE ${CMAKE_CURRENT_LIST_DIR}/os/nvim.manifest)
 else()
   target_compile_options(main_lib INTERFACE -Wall -Wextra -pedantic -Wno-unused-parameter
     -Wstrict-prototypes -std=gnu99 -Wshadow -Wconversion
@@ -180,24 +171,6 @@ if(CI_BUILD)
       target_compile_options(main_lib INTERFACE -funsigned-char)
     endif()
   endif()
-endif()
-
-list(APPEND CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
-list(APPEND CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
-check_c_source_compiles("
-#include <unibilium.h>
-
-int
-main(void)
-{
-  unibi_str_from_var(unibi_var_from_str(\"\"));
-  return unibi_num_from_var(unibi_var_from_num(0));
-}
-" UNIBI_HAS_VAR_FROM)
-list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
-list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
-if(UNIBI_HAS_VAR_FROM)
-  target_compile_definitions(main_lib INTERFACE NVIM_UNIBI_HAS_VAR_FROM)
 endif()
 
 list(APPEND CMAKE_REQUIRED_INCLUDES "${MSGPACK_INCLUDE_DIRS}")
@@ -570,11 +543,11 @@ add_custom_command(OUTPUT ${GENERATED_UNICODE_TABLES}
 add_custom_command(
   OUTPUT ${GENERATED_API_DISPATCH} ${GENERATED_FUNCS_METADATA}
          ${API_METADATA} ${LUA_API_C_BINDINGS}
-  COMMAND ${LUA_PRG} ${API_DISPATCH_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}
-                     ${GENERATED_API_DISPATCH}
-                     ${GENERATED_FUNCS_METADATA} ${API_METADATA}
-                     ${LUA_API_C_BINDINGS}
-                     ${API_HEADERS}
+  COMMAND ${LUA_GEN_PRG} ${API_DISPATCH_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}
+                         ${GENERATED_API_DISPATCH}
+                         ${GENERATED_FUNCS_METADATA} ${API_METADATA}
+                         ${LUA_API_C_BINDINGS}
+                         ${API_HEADERS}
   DEPENDS
     ${API_HEADERS}
     ${MSGPACK_RPC_HEADERS}
@@ -619,12 +592,12 @@ add_custom_command(
          ${GENERATED_UI_EVENTS_REMOTE}
          ${GENERATED_UI_EVENTS_METADATA}
          ${GENERATED_UI_EVENTS_CLIENT}
-  COMMAND ${LUA_PRG} ${API_UI_EVENTS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}
-                     ${CMAKE_CURRENT_LIST_DIR}/api/ui_events.in.h
-                     ${GENERATED_UI_EVENTS_CALL}
-                     ${GENERATED_UI_EVENTS_REMOTE}
-                     ${GENERATED_UI_EVENTS_METADATA}
-                     ${GENERATED_UI_EVENTS_CLIENT}
+  COMMAND ${LUA_GEN_PRG} ${API_UI_EVENTS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}
+                         ${CMAKE_CURRENT_LIST_DIR}/api/ui_events.in.h
+                         ${GENERATED_UI_EVENTS_CALL}
+                         ${GENERATED_UI_EVENTS_REMOTE}
+                         ${GENERATED_UI_EVENTS_METADATA}
+                         ${GENERATED_UI_EVENTS_CLIENT}
   DEPENDS
     ${API_UI_EVENTS_GENERATOR}
     ${GENERATOR_C_GRAMMAR}
@@ -690,8 +663,6 @@ foreach(hfile ${NVIM_GENERATED_FOR_HEADERS})
     message(FATAL_ERROR "File included in both NVIM_GENERATED_FOR_HEADERS and NVIM_GENERATED_FOR_SOURCES")
   endif()
 endforeach()
-
-# Our dependencies come first.
 
 if (CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
   target_link_libraries(main_lib INTERFACE pthread c++abi)

@@ -118,9 +118,7 @@ struct bw_info {
   int bw_conv_error;             // set for conversion error
   linenr_T bw_conv_error_lnum;   // first line with error or zero
   linenr_T bw_start_lnum;        // line number at start of buffer
-#ifdef HAVE_ICONV
   iconv_t bw_iconv_fd;           // descriptor for iconv() or -1
-#endif
 };
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -248,11 +246,9 @@ int readfile(char *fname, char *sfname, linenr_T from, linenr_T lines_to_skip,
   char *fenc_next = NULL;        // next item in 'fencs' or NULL
   bool advance_fenc = false;
   long real_size = 0;
-#ifdef HAVE_ICONV
   iconv_t iconv_fd = (iconv_t)-1;       // descriptor for iconv() or -1
   bool did_iconv = false;               // true when iconv() failed and trying
                                         // 'charconvert' next
-#endif
   bool converted = false;                // true if conversion done
   bool notconverted = false;             // true if conversion wanted but it wasn't possible
   char conv_rest[CONV_RESTLEN];
@@ -779,13 +775,11 @@ retry:
     }
   }
 
-#ifdef HAVE_ICONV
   if (iconv_fd != (iconv_t)-1) {
     // aborted conversion with iconv(), close the descriptor
     iconv_close(iconv_fd);
     iconv_fd = (iconv_t)-1;
   }
-#endif
 
   if (advance_fenc) {
     // Try the next entry in 'fileencodings'.
@@ -838,25 +832,17 @@ retry:
       fio_flags = get_fio_flags(fenc);
     }
 
-#ifdef HAVE_ICONV
     // Try using iconv() if we can't convert internally.
     if (fio_flags == 0
         && !did_iconv) {
       iconv_fd = (iconv_t)my_iconv_open("utf-8", fenc);
     }
-#endif
 
     // Use the 'charconvert' expression when conversion is required
     // and we can't do it internally or with iconv().
     if (fio_flags == 0 && !read_stdin && !read_buffer && *p_ccv != NUL
-        && !read_fifo
-#ifdef HAVE_ICONV
-        && iconv_fd == (iconv_t)-1
-#endif
-        ) {
-#ifdef HAVE_ICONV
+        && !read_fifo && iconv_fd == (iconv_t)-1) {
       did_iconv = false;
-#endif
       // Skip conversion when it's already done (retry for wrong
       // "fileformat").
       if (tmpname == NULL) {
@@ -874,11 +860,7 @@ retry:
         }
       }
     } else {
-      if (fio_flags == 0
-#ifdef HAVE_ICONV
-          && iconv_fd == (iconv_t)-1
-#endif
-          ) {
+      if (fio_flags == 0 && iconv_fd == (iconv_t)-1) {
         // Conversion wanted but we can't.
         // Try the next conversion in 'fileencodings'
         advance_fenc = true;
@@ -961,12 +943,9 @@ retry:
         // ucs-4 to utf-8: 4 bytes become up to 6 bytes, size must be
         // multiple of 4
         real_size = (int)size;
-#ifdef HAVE_ICONV
         if (iconv_fd != (iconv_t)-1) {
           size = size / ICONV_MULT;
-        } else {
-#endif
-        if (fio_flags & FIO_LATIN1) {
+        } else if (fio_flags & FIO_LATIN1) {
           size = size / 2;
         } else if (fio_flags & (FIO_UCS2 | FIO_UTF16)) {
           size = (size * 2 / 3) & ~1;
@@ -975,9 +954,7 @@ retry:
         } else if (fio_flags == FIO_UCSBOM) {
           size = size / ICONV_MULT;  // worst case
         }
-#ifdef HAVE_ICONV
-      }
-#endif
+
         if (conv_restlen > 0) {
           // Insert unconverted bytes from previous line.
           memmove(ptr, conv_rest, (size_t)conv_restlen);  // -V614
@@ -991,13 +968,11 @@ retry:
           if (read_buf_lnum > from) {
             size = 0;
           } else {
-            int n, ni;
-            long tlen;
-
-            tlen = 0;
+            int ni;
+            long tlen = 0;
             for (;;) {
               p = (char_u *)ml_get(read_buf_lnum) + read_buf_col;
-              n = (int)strlen((char *)p);
+              int n = (int)strlen((char *)p);
               if ((int)tlen + n + 1 > size) {
                 // Filled up to "size", append partial line.
                 // Change NL to NUL to reverse the effect done
@@ -1049,11 +1024,7 @@ retry:
             // not be converted.  Truncated file?
 
             // When we did a conversion report an error.
-            if (fio_flags != 0
-#ifdef HAVE_ICONV
-                || iconv_fd != (iconv_t)-1
-#endif
-                ) {
+            if (fio_flags != 0 || iconv_fd != (iconv_t)-1) {
               if (can_retry) {
                 goto rewind_retry;
               }
@@ -1074,23 +1045,17 @@ retry:
               // character if we were converting; if we weren't,
               // leave the UTF8 checking code to do it, as it
               // works slightly differently.
-              if (bad_char_behavior != BAD_KEEP && (fio_flags != 0
-#ifdef HAVE_ICONV
-                                                    || iconv_fd != (iconv_t)-1
-#endif
-                                                    )) {  // NOLINT(whitespace/parens)
+              if (bad_char_behavior != BAD_KEEP && (fio_flags != 0 || iconv_fd != (iconv_t)-1)) {
                 while (conv_restlen > 0) {
                   *(--ptr) = (char)bad_char_behavior;
                   conv_restlen--;
                 }
               }
               fio_flags = 0;  // don't convert this
-#ifdef HAVE_ICONV
               if (iconv_fd != (iconv_t)-1) {
                 iconv_close(iconv_fd);
                 iconv_fd = (iconv_t)-1;
               }
-#endif
             }
           }
         }
@@ -1155,7 +1120,6 @@ retry:
         break;
       }
 
-#ifdef HAVE_ICONV
       if (iconv_fd != (iconv_t)-1) {
         // Attempt conversion of the read bytes to 'encoding' using iconv().
         const char *fromp = ptr;
@@ -1202,7 +1166,6 @@ retry:
         memmove(line_start, buffer, (size_t)linerest);
         size = (top - ptr);
       }
-#endif
 
       if (fio_flags != 0) {
         unsigned int u8c;
@@ -1420,12 +1383,12 @@ retry:
               if (can_retry && !incomplete_tail) {
                 break;
               }
-#ifdef HAVE_ICONV
+
               // When we did a conversion report an error.
               if (iconv_fd != (iconv_t)-1 && conv_error == 0) {
                 conv_error = readfile_linenr(linecnt, ptr, (char *)p);
               }
-#endif
+
               // Remember the first linenr with an illegal byte
               if (conv_error == 0 && illegal_byte == 0) {
                 illegal_byte = readfile_linenr(linecnt, ptr, (char *)p);
@@ -1448,17 +1411,13 @@ retry:
           // Detected a UTF-8 error.
 rewind_retry:
           // Retry reading with another conversion.
-#ifdef HAVE_ICONV
           if (*p_ccv != NUL && iconv_fd != (iconv_t)-1) {
             // iconv() failed, try 'charconvert'
             did_iconv = true;
           } else {
-#endif
-          // use next item from 'fileencodings'
-          advance_fenc = true;
-#ifdef HAVE_ICONV
-        }
-#endif
+            // use next item from 'fileencodings'
+            advance_fenc = true;
+          }
           file_rewind = true;
           goto retry;
         }
@@ -1683,11 +1642,9 @@ failed:
   if (fenc_alloced) {
     xfree(fenc);
   }
-#ifdef HAVE_ICONV
   if (iconv_fd != (iconv_t)-1) {
     iconv_close(iconv_fd);
   }
-#endif
 
   if (!read_buffer && !read_stdin) {
     close(fd);  // errors are ignored
@@ -2167,7 +2124,6 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
   bool errmsg_allocated = false;
   char *buffer;
   char smallbuf[SMBUFSIZE];
-  char *backup_ext;
   int bufsize;
   long perm;                                // file permissions
   int retval = OK;
@@ -2233,9 +2189,7 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
   write_info.bw_conv_error = false;
   write_info.bw_conv_error_lnum = 0;
   write_info.bw_restlen = 0;
-#ifdef HAVE_ICONV
   write_info.bw_iconv_fd = (iconv_t)-1;
-#endif
 
   // After writing a file changedtick changes but we don't want to display
   // the line.
@@ -2598,8 +2552,6 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
     if ((bkc & BKC_YES) || append) {       // "yes"
       backup_copy = true;
     } else if ((bkc & BKC_AUTO)) {          // "auto"
-      int i;
-
       // Don't rename the file when:
       // - it's a hard link
       // - it's a symbolic link
@@ -2614,7 +2566,7 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
         // First find a file name that doesn't exist yet (use some
         // arbitrary numbers).
         STRCPY(IObuff, fname);
-        for (i = 4913;; i += 123) {
+        for (int i = 4913;; i += 123) {
           char *tail = path_tail(IObuff);
           size_t size = (size_t)(tail - IObuff);
           snprintf(tail, IOSIZE - size, "%d", i);
@@ -2667,18 +2619,10 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
     }
 
     // make sure we have a valid backup extension to use
-    if (*p_bex == NUL) {
-      backup_ext = ".bak";
-    } else {
-      backup_ext = p_bex;
-    }
+    char *backup_ext = *p_bex == NUL ? ".bak" : p_bex;
 
     if (backup_copy) {
-      char *wp;
       int some_error = false;
-      char *dirp;
-      char *rootname;
-      char *p;
 
       // Try to make the backup in each directory in the 'bdir' option.
       //
@@ -2690,11 +2634,11 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
       //
       // For these reasons, the existing writable file must be truncated
       // and reused. Creation of a backup COPY will be attempted.
-      dirp = p_bdir;
+      char *dirp = p_bdir;
       while (*dirp) {
         // Isolate one directory name, using an entry in 'bdir'.
         size_t dir_len = copy_option_part(&dirp, IObuff, IOSIZE, ",");
-        p = IObuff + dir_len;
+        char *p  = IObuff + dir_len;
         bool trailing_pathseps = after_pathsep(IObuff, p) && p[-1] == p[-2];
         if (trailing_pathseps) {
           IObuff[dir_len - 2] = NUL;
@@ -2717,7 +2661,7 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
           }
         }
 
-        rootname = get_file_in_dir(fname, IObuff);
+        char *rootname = get_file_in_dir(fname, IObuff);
         if (rootname == NULL) {
           some_error = true;                // out of memory
           goto nobackup;
@@ -2753,7 +2697,7 @@ int buf_write(buf_T *buf, char *fname, char *sfname, linenr_T start, linenr_T en
               // delete an existing one, and try to use another name instead.
               // Change one character, just before the extension.
               //
-              wp = backup + strlen(backup) - 1 - strlen(backup_ext);
+              char *wp = backup + strlen(backup) - 1 - strlen(backup_ext);
               if (wp < backup) {                // empty file name ???
                 wp = backup;
               }
@@ -2824,10 +2768,6 @@ nobackup:
       }
       SET_ERRMSG(NULL);
     } else {
-      char *dirp;
-      char *p;
-      char *rootname;
-
       // Make a backup by renaming the original file.
 
       // If 'cpoptions' includes the "W" flag, we don't want to
@@ -2841,11 +2781,11 @@ nobackup:
       // Form the backup file name - change path/fo.o.h to
       // path/fo.o.h.bak Try all directories in 'backupdir', first one
       // that works is used.
-      dirp = p_bdir;
+      char *dirp = p_bdir;
       while (*dirp) {
         // Isolate one directory name and make the backup file name.
         size_t dir_len = copy_option_part(&dirp, IObuff, IOSIZE, ",");
-        p = IObuff + dir_len;
+        char *p = IObuff + dir_len;
         bool trailing_pathseps = after_pathsep(IObuff, p) && p[-1] == p[-2];
         if (trailing_pathseps) {
           IObuff[dir_len - 2] = NUL;
@@ -2869,7 +2809,7 @@ nobackup:
         }
 
         if (backup == NULL) {
-          rootname = get_file_in_dir(fname, IObuff);
+          char *rootname = get_file_in_dir(fname, IObuff);
           if (rootname == NULL) {
             backup = NULL;
           } else {
@@ -2996,7 +2936,6 @@ nobackup:
   }
 
   if (converted && wb_flags == 0) {
-#ifdef HAVE_ICONV
     // Use iconv() conversion when conversion is needed and it's not done
     // internally.
     write_info.bw_iconv_fd = (iconv_t)my_iconv_open(fenc, "utf-8");
@@ -3009,28 +2948,21 @@ nobackup:
       }
       write_info.bw_first = true;
     } else {
-#endif
-
-    // When the file needs to be converted with 'charconvert' after
-    // writing, write to a temp file instead and let the conversion
-    // overwrite the original file.
-    if (*p_ccv != NUL) {
-      wfname = vim_tempname();
-      if (wfname == NULL) {  // Can't write without a tempfile!
-        SET_ERRMSG(_("E214: Can't find temp file for writing"));
-        goto restore_backup;
+      // When the file needs to be converted with 'charconvert' after
+      // writing, write to a temp file instead and let the conversion
+      // overwrite the original file.
+      if (*p_ccv != NUL) {
+        wfname = vim_tempname();
+        if (wfname == NULL) {  // Can't write without a tempfile!
+          SET_ERRMSG(_("E214: Can't find temp file for writing"));
+          goto restore_backup;
+        }
       }
     }
   }
 
-#ifdef HAVE_ICONV
-}
-#endif
-
   if (converted && wb_flags == 0
-#ifdef HAVE_ICONV
       && write_info.bw_iconv_fd == (iconv_t)-1
-#endif
       && wfname == fname) {
     if (!forceit) {
       SET_ERRMSG(_("E213: Cannot convert (add ! to write without conversion)"));
@@ -3551,12 +3483,10 @@ nofail:
   }
   xfree(fenc_tofree);
   xfree(write_info.bw_conv_buf);
-#ifdef HAVE_ICONV
   if (write_info.bw_iconv_fd != (iconv_t)-1) {
     iconv_close(write_info.bw_iconv_fd);
     write_info.bw_iconv_fd = (iconv_t)-1;
   }
-#endif
 #ifdef HAVE_ACL
   os_free_acl(acl);
 #endif
@@ -3743,9 +3673,7 @@ static bool msg_add_fileformat(int eol_type)
 /// Append line and character count to IObuff.
 void msg_add_lines(int insert_space, long lnum, off_T nchars)
 {
-  char *p;
-
-  p = IObuff + strlen(IObuff);
+  char *p = IObuff + strlen(IObuff);
 
   if (insert_space) {
     *p++ = ' ';
@@ -3801,7 +3729,7 @@ static bool time_differs(const FileInfo *file_info, long mtime, long mtime_ns) F
          || file_info->stat.st_mtim.tv_sec - mtime > 1
          || mtime - file_info->stat.st_mtim.tv_sec > 1;
 #else
-         || (long)file_info->stat.st_mtim.tv_sec != mtime;
+         || file_info->stat.st_mtim.tv_sec != mtime;
 #endif
 }
 
@@ -3811,46 +3739,35 @@ static bool time_differs(const FileInfo *file_info, long mtime, long mtime_ns) F
 /// @return  FAIL for failure, OK otherwise.
 static int buf_write_bytes(struct bw_info *ip)
 {
-  int wlen;
-  char *buf = ip->bw_buf;        // data to write
-  int len = ip->bw_len;                 // length of data
+  char *buf = ip->bw_buf;    // data to write
+  int len = ip->bw_len;      // length of data
 #ifdef HAS_BW_FLAGS
-  int flags = ip->bw_flags;             // extra flags
+  int flags = ip->bw_flags;  // extra flags
 #endif
 
   // Skip conversion when writing the BOM.
   if (!(flags & FIO_NOCONVERT)) {
-    char *p;
-    unsigned c;
-    int n;
-
     if (flags & FIO_UTF8) {
       // Convert latin1 in the buffer to UTF-8 in the file.
-      p = ip->bw_conv_buf;              // translate to buffer
-      for (wlen = 0; wlen < len; wlen++) {
+      char *p = ip->bw_conv_buf;              // translate to buffer
+      for (int wlen = 0; wlen < len; wlen++) {
         p += utf_char2bytes((uint8_t)buf[wlen], p);
       }
       buf = ip->bw_conv_buf;
       len = (int)(p - ip->bw_conv_buf);
     } else if (flags & (FIO_UCS4 | FIO_UTF16 | FIO_UCS2 | FIO_LATIN1)) {
+      unsigned c;
+      int n = 0;
       // Convert UTF-8 bytes in the buffer to UCS-2, UCS-4, UTF-16 or
       // Latin1 chars in the file.
-      if (flags & FIO_LATIN1) {
-        p = buf;                // translate in-place (can only get shorter)
-      } else {
-        p = ip->bw_conv_buf;            // translate to buffer
-      }
-      for (wlen = 0; wlen < len; wlen += n) {
+      // translate in-place (can only get shorter) or to buffer
+      char *p = flags & FIO_LATIN1 ? buf : ip->bw_conv_buf;
+      for (int wlen = 0; wlen < len; wlen += n) {
         if (wlen == 0 && ip->bw_restlen != 0) {
-          int l;
-
           // Use remainder of previous call.  Append the start of
           // buf[] to get a full sequence.  Might still be too
           // short!
-          l = CONV_RESTLEN - ip->bw_restlen;
-          if (l > len) {
-            l = len;
-          }
+          int l = MIN(len, CONV_RESTLEN - ip->bw_restlen);
           memmove(ip->bw_rest + ip->bw_restlen, buf, (size_t)l);
           n = utf_ptr2len_len((char *)ip->bw_rest, ip->bw_restlen + l);
           if (n > ip->bw_restlen + len) {
@@ -3914,22 +3831,18 @@ static int buf_write_bytes(struct bw_info *ip)
       }
     }
 
-#ifdef HAVE_ICONV
     if (ip->bw_iconv_fd != (iconv_t)-1) {
       const char *from;
       size_t fromlen;
-      char *to;
       size_t tolen;
 
       // Convert with iconv().
       if (ip->bw_restlen > 0) {
-        char *fp;
-
         // Need to concatenate the remainder of the previous call and
         // the bytes of the current call.  Use the end of the
         // conversion buffer for this.
         fromlen = (size_t)len + (size_t)ip->bw_restlen;
-        fp = ip->bw_conv_buf + ip->bw_conv_buflen - fromlen;
+        char *fp = ip->bw_conv_buf + ip->bw_conv_buflen - fromlen;
         memmove(fp, ip->bw_rest, (size_t)ip->bw_restlen);
         memmove(fp + ip->bw_restlen, buf, (size_t)len);
         from = fp;
@@ -3939,7 +3852,7 @@ static int buf_write_bytes(struct bw_info *ip)
         fromlen = (size_t)len;
         tolen = ip->bw_conv_buflen;
       }
-      to = ip->bw_conv_buf;
+      char *to = ip->bw_conv_buf;
 
       if (ip->bw_first) {
         size_t save_len = tolen;
@@ -3973,14 +3886,13 @@ static int buf_write_bytes(struct bw_info *ip)
       buf = ip->bw_conv_buf;
       len = (int)(to - ip->bw_conv_buf);
     }
-#endif
   }
 
   if (ip->bw_fd < 0) {
     // Only checking conversion, which is OK if we get here.
     return OK;
   }
-  wlen = (int)write_eintr(ip->bw_fd, buf, (size_t)len);
+  int wlen = (int)write_eintr(ip->bw_fd, buf, (size_t)len);
   return (wlen < len) ? FAIL : OK;
 }
 
@@ -3995,7 +3907,6 @@ static bool ucs2bytes(unsigned c, char **pp, int flags) FUNC_ATTR_NONNULL_ALL
 {
   char_u *p = (char_u *)(*pp);
   bool error = false;
-  int cc;
 
   if (flags & FIO_UCS4) {
     if (flags & FIO_ENDIAN_L) {
@@ -4018,7 +3929,7 @@ static bool ucs2bytes(unsigned c, char **pp, int flags) FUNC_ATTR_NONNULL_ALL
         if (c >= 0x100000) {
           error = true;
         }
-        cc = (int)(((c >> 10) & 0x3ff) + 0xd800);
+        int cc = (int)(((c >> 10) & 0x3ff) + 0xd800);
         if (flags & FIO_ENDIAN_L) {
           *p++ = (uint8_t)cc;
           *p++ = (uint8_t)(cc >> 8);
@@ -4061,7 +3972,6 @@ static bool need_conversion(const char *fenc)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
   int same_encoding;
-  int enc_flags;
   int fenc_flags;
 
   if (*fenc == NUL || strcmp(p_enc, fenc) == 0) {
@@ -4070,7 +3980,7 @@ static bool need_conversion(const char *fenc)
   } else {
     // Ignore difference between "ansi" and "latin1", "ucs-4" and
     // "ucs-4be", etc.
-    enc_flags = get_fio_flags(p_enc);
+    int enc_flags = get_fio_flags(p_enc);
     fenc_flags = get_fio_flags(fenc);
     same_encoding = (enc_flags != 0 && fenc_flags == enc_flags);
   }
@@ -4091,12 +4001,10 @@ static bool need_conversion(const char *fenc)
 /// @param name string to check for encoding
 static int get_fio_flags(const char *name)
 {
-  int prop;
-
   if (*name == NUL) {
     name = p_enc;
   }
-  prop = enc_canon_props(name);
+  int prop = enc_canon_props(name);
   if (prop & ENC_UNICODE) {
     if (prop & ENC_2BYTE) {
       if (prop & ENC_ENDIAN_L) {
@@ -4176,10 +4084,7 @@ static char *check_for_bom(const char *p_in, long size, int *lenp, int flags)
 /// @return  the length of the BOM (zero when no BOM).
 static int make_bom(char_u *buf, char *name)
 {
-  int flags;
-  char *p;
-
-  flags = get_fio_flags(name);
+  int flags = get_fio_flags(name);
 
   // Can't put a BOM in a non-Unicode file.
   if (flags == FIO_LATIN1 || flags == 0) {
@@ -4192,7 +4097,7 @@ static int make_bom(char_u *buf, char *name)
     buf[2] = 0xbf;
     return 3;
   }
-  p = (char *)buf;
+  char *p = (char *)buf;
   (void)ucs2bytes(0xfeff, &p, flags);
   return (int)((char_u *)p - buf);
 }
@@ -4208,8 +4113,6 @@ static int make_bom(char_u *buf, char *name)
 /// name.
 void shorten_buf_fname(buf_T *buf, char *dirname, int force)
 {
-  char *p;
-
   if (buf->b_fname != NULL
       && !bt_nofilename(buf)
       && !path_with_url(buf->b_fname)
@@ -4219,7 +4122,7 @@ void shorten_buf_fname(buf_T *buf, char *dirname, int force)
     if (buf->b_sfname != buf->b_ffname) {
       XFREE_CLEAR(buf->b_sfname);
     }
-    p = path_shorten_fname(buf->b_ffname, dirname);
+    char *p = path_shorten_fname(buf->b_ffname, dirname);
     if (p != NULL) {
       buf->b_sfname = xstrdup(p);
       buf->b_fname = buf->b_sfname;
@@ -4516,10 +4419,7 @@ int vim_rename(const char *from, const char *to)
 {
   int fd_in;
   int fd_out;
-  int n;
   char *errmsg = NULL;
-  char *buffer;
-  long perm;
 #ifdef HAVE_ACL
   vim_acl_T acl;                // ACL from original file
 #endif
@@ -4561,7 +4461,7 @@ int vim_rename(const char *from, const char *to)
       return -1;
     }
     STRCPY(tempname, from);
-    for (n = 123; n < 99999; n++) {
+    for (int n = 123; n < 99999; n++) {
       char *tail = path_tail(tempname);
       snprintf(tail, (size_t)((MAXPATHL + 1) - (tail - tempname - 1)), "%d", n);
 
@@ -4595,7 +4495,7 @@ int vim_rename(const char *from, const char *to)
   }
 
   // Rename() failed, try copying the file.
-  perm = os_getperm(from);
+  long perm = os_getperm(from);
 #ifdef HAVE_ACL
   // For systems that support ACL: get the ACL from the original file.
   acl = os_get_acl(from);
@@ -4621,7 +4521,7 @@ int vim_rename(const char *from, const char *to)
 
   // Avoid xmalloc() here as vim_rename() is called by buf_write() when nvim
   // is `preserve_exit()`ing.
-  buffer = try_malloc(BUFSIZE);
+  char *buffer = try_malloc(BUFSIZE);
   if (buffer == NULL) {
     close(fd_out);
     close(fd_in);
@@ -4631,6 +4531,7 @@ int vim_rename(const char *from, const char *to)
     return -1;
   }
 
+  int n;
   while ((n = (int)read_eintr(fd_in, buffer, BUFSIZE)) > 0) {
     if (write_eintr(fd_out, buffer, (size_t)n) != n) {
       errmsg = _("E208: Error writing to \"%s\"");
@@ -4674,8 +4575,6 @@ static int already_warned = false;
 /// @return       true if some message was written (screen should be redrawn and cursor positioned).
 int check_timestamps(int focus)
 {
-  int didit = 0;
-
   // Don't check timestamps while system() or another low-level function may
   // cause us to lose and gain focus.
   if (no_check_timestamps > 0) {
@@ -4689,6 +4588,8 @@ int check_timestamps(int focus)
     need_check_timestamps = true;
     return false;
   }
+
+  int didit = 0;
 
   if (!stuff_empty() || global_busy || !typebuf_typed()
       || autocmd_busy || curbuf->b_ro_locked > 0
@@ -4733,13 +4634,11 @@ static int move_lines(buf_T *frombuf, buf_T *tobuf)
 {
   buf_T *tbuf = curbuf;
   int retval = OK;
-  linenr_T lnum;
-  char *p;
 
   // Copy the lines in "frombuf" to "tobuf".
   curbuf = tobuf;
-  for (lnum = 1; lnum <= frombuf->b_ml.ml_line_count; lnum++) {
-    p = xstrdup(ml_get_buf(frombuf, lnum, false));
+  for (linenr_T lnum = 1; lnum <= frombuf->b_ml.ml_line_count; lnum++) {
+    char *p = xstrdup(ml_get_buf(frombuf, lnum, false));
     if (ml_append(lnum - 1, p, 0, false) == FAIL) {
       xfree(p);
       retval = FAIL;
@@ -4751,7 +4650,7 @@ static int move_lines(buf_T *frombuf, buf_T *tobuf)
   // Delete all the lines in "frombuf".
   if (retval != FAIL) {
     curbuf = frombuf;
-    for (lnum = curbuf->b_ml.ml_line_count; lnum > 0; lnum--) {
+    for (linenr_T lnum = curbuf->b_ml.ml_line_count; lnum > 0; lnum--) {
       if (ml_delete(lnum, false) == FAIL) {
         // Oops!  We could try putting back the saved lines, but that
         // might fail again...
@@ -4775,7 +4674,6 @@ int buf_check_timestamp(buf_T *buf)
   FUNC_ATTR_NONNULL_ALL
 {
   int retval = 0;
-  char *path;
   char *mesg = NULL;
   char *mesg2 = "";
   bool helpmesg = false;
@@ -4790,8 +4688,6 @@ int buf_check_timestamp(buf_T *buf)
   uint64_t orig_size = buf->b_orig_size;
   int orig_mode = buf->b_orig_mode;
   static bool busy = false;
-  char *s;
-  char *reason;
 
   bufref_T bufref;
   set_bufref(&bufref, buf);
@@ -4839,6 +4735,7 @@ int buf_check_timestamp(buf_T *buf)
       // was set, the global option value otherwise.
       reload = RELOAD_NORMAL;
     } else {
+      char *reason;
       if (!file_info_ok) {
         reason = "deleted";
       } else if (bufIsChanged(buf)) {
@@ -4865,7 +4762,7 @@ int buf_check_timestamp(buf_T *buf)
         if (!bufref_valid(&bufref)) {
           emsg(_("E246: FileChangedShell autocommand deleted buffer"));
         }
-        s = get_vim_var_str(VV_FCS_CHOICE);
+        char *s = get_vim_var_str(VV_FCS_CHOICE);
         if (strcmp(s, "reload") == 0 && *reason != 'd') {
           reload = RELOAD_NORMAL;
         } else if (strcmp(s, "edit") == 0) {
@@ -4918,7 +4815,7 @@ int buf_check_timestamp(buf_T *buf)
   }
 
   if (mesg != NULL) {
-    path = home_replace_save(buf, buf->b_fname);
+    char *path = home_replace_save(buf, buf->b_fname);
     if (!helpmesg) {
       mesg2 = "";
     }
@@ -5001,8 +4898,6 @@ int buf_check_timestamp(buf_T *buf)
 void buf_reload(buf_T *buf, int orig_mode, bool reload_options)
 {
   exarg_T ea;
-  pos_T old_cursor;
-  linenr_T old_topline;
   int old_ro = buf->b_p_ro;
   buf_T *savebuf;
   bufref_T bufref;
@@ -5022,8 +4917,8 @@ void buf_reload(buf_T *buf, int orig_mode, bool reload_options)
     prep_exarg(&ea, buf);
   }
 
-  old_cursor = curwin->w_cursor;
-  old_topline = curwin->w_topline;
+  pos_T old_cursor = curwin->w_cursor;
+  linenr_T old_topline = curwin->w_topline;
 
   if (p_ur < 0 || curbuf->b_ml.ml_line_count <= p_ur) {
     // Save all the text, so that the reload can be undone.
@@ -5509,24 +5404,19 @@ bool match_file_pat(char *pattern, regprog_T **prog, char *fname, char *sfname, 
 bool match_file_list(char *list, char *sfname, char *ffname)
   FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ARG(1, 3)
 {
-  char buf[100];
-  char *tail;
-  char *regpat;
-  char allow_dirs;
-  bool match;
-  char *p;
-
-  tail = path_tail(sfname);
+  char *tail = path_tail(sfname);
 
   // try all patterns in 'wildignore'
-  p = list;
+  char *p = list;
   while (*p) {
+    char buf[100];
     copy_option_part(&p, buf, ARRAY_SIZE(buf), ",");
-    regpat = file_pat_to_reg_pat(buf, NULL, &allow_dirs, false);
+    char allow_dirs;
+    char *regpat = file_pat_to_reg_pat(buf, NULL, &allow_dirs, false);
     if (regpat == NULL) {
       break;
     }
-    match = match_file_pat(regpat, NULL, ffname, sfname, tail, (int)allow_dirs);
+    bool match = match_file_pat(regpat, NULL, ffname, sfname, tail, (int)allow_dirs);
     xfree(regpat);
     if (match) {
       return true;
@@ -5549,15 +5439,10 @@ bool match_file_list(char *list, char *sfname, char *ffname)
 char *file_pat_to_reg_pat(const char *pat, const char *pat_end, char *allow_dirs, int no_bslash)
   FUNC_ATTR_NONNULL_ARG(1)
 {
-  const char *endp;
-  char *reg_pat;
-  const char *p;
-  int nested = 0;
-  bool add_dollar = true;
-
   if (allow_dirs != NULL) {
     *allow_dirs = false;
   }
+
   if (pat_end == NULL) {
     pat_end = pat + strlen(pat);
   }
@@ -5568,7 +5453,7 @@ char *file_pat_to_reg_pat(const char *pat, const char *pat_end, char *allow_dirs
 
   size_t size = 2;  // '^' at start, '$' at end.
 
-  for (p = pat; p < pat_end; p++) {
+  for (const char *p = pat; p < pat_end; p++) {
     switch (*p) {
     case '*':
     case '.':
@@ -5589,7 +5474,7 @@ char *file_pat_to_reg_pat(const char *pat, const char *pat_end, char *allow_dirs
       break;
     }
   }
-  reg_pat = xmalloc(size + 1);
+  char *reg_pat = xmalloc(size + 1);
 
   size_t i = 0;
 
@@ -5600,14 +5485,16 @@ char *file_pat_to_reg_pat(const char *pat, const char *pat_end, char *allow_dirs
   } else {
     reg_pat[i++] = '^';
   }
-  endp = pat_end - 1;
+  const char *endp = pat_end - 1;
+  bool add_dollar = true;
   if (endp >= pat && *endp == '*') {
     while (endp - pat > 0 && *endp == '*') {
       endp--;
     }
     add_dollar = false;
   }
-  for (p = pat; *p && nested >= 0 && p <= endp; p++) {
+  int nested = 0;
+  for (const char *p = pat; *p && nested >= 0 && p <= endp; p++) {
     switch (*p) {
     case '*':
       reg_pat[i++] = '.';

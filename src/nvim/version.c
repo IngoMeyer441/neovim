@@ -29,6 +29,7 @@
 #include "nvim/highlight_defs.h"
 #include "nvim/lua/executor.h"
 #include "nvim/mbyte.h"
+#include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option_defs.h"
 #include "nvim/os/os_defs.h"
@@ -61,12 +62,6 @@ static char *features[] = {
   "+acl",
 #else
   "-acl",
-#endif
-
-#if defined(HAVE_ICONV)
-  "+iconv",
-#else
-  "-iconv",
 #endif
 
   "+tui",
@@ -2790,24 +2785,18 @@ void maybe_intro_message(void)
 /// @param colon true for ":intro"
 void intro_message(int colon)
 {
-  int i;
-  long row;
-  long blanklines;
-  int sponsor;
-  char *p;
   static char *(lines[]) = {
     N_(NVIM_VERSION_LONG),
     "",
     N_("Nvim is open source and freely distributable"),
-    N_("https://neovim.io/#chat"),
+    "https://neovim.io/#chat",
     "",
     N_("type  :help nvim<Enter>       if you are new! "),
     N_("type  :checkhealth<Enter>     to optimize Nvim"),
     N_("type  :q<Enter>               to exit         "),
     N_("type  :help<Enter>            for help        "),
     "",
-    N_("type  :help news<Enter> to see changes in")
-    " v" STR(NVIM_VERSION_MAJOR) "." STR(NVIM_VERSION_MINOR),
+    N_("type  :help news<Enter> to see changes in v%s.%s"),
     "",
     N_("Help poor children in Uganda!"),
     N_("type  :help iccf<Enter>       for information "),
@@ -2817,7 +2806,7 @@ void intro_message(int colon)
   size_t lines_size = ARRAY_SIZE(lines);
   assert(lines_size <= LONG_MAX);
 
-  blanklines = Rows - ((long)lines_size - 1L);
+  long blanklines = Rows - ((long)lines_size - 1L);
 
   // Don't overwrite a statusline.  Depends on 'cmdheight'.
   if (p_ls > 1) {
@@ -2830,17 +2819,27 @@ void intro_message(int colon)
 
   // Show the sponsor and register message one out of four times, the Uganda
   // message two out of four times.
-  sponsor = (int)time(NULL);
+  int sponsor = (int)time(NULL);
   sponsor = ((sponsor & 2) == 0) - ((sponsor & 4) == 0);
 
   // start displaying the message lines after half of the blank lines
-  row = blanklines / 2;
+  long row = blanklines / 2;
 
   if (((row >= 2) && (Columns >= 50)) || colon) {
-    for (i = 0; i < (int)ARRAY_SIZE(lines); i++) {
-      p = lines[i];
+    for (int i = 0; i < (int)ARRAY_SIZE(lines); i++) {
+      char *p = lines[i];
+      char *mesg = NULL;
+      int mesg_size = 0;
 
-      if (sponsor != 0) {
+      if (strstr(p, "news") != NULL) {
+        p = _(p);
+        mesg_size = snprintf(NULL, 0, p,
+                             STR(NVIM_VERSION_MAJOR), STR(NVIM_VERSION_MINOR));
+        assert(mesg_size > 0);
+        mesg = xmallocz((size_t)mesg_size);
+        snprintf(mesg, (size_t)mesg_size + 1, p,
+                 STR(NVIM_VERSION_MAJOR), STR(NVIM_VERSION_MINOR));
+      } else if (sponsor != 0) {
         if (strstr(p, "children") != NULL) {
           p = sponsor < 0
               ? N_("Sponsor Vim development!")
@@ -2849,15 +2848,25 @@ void intro_message(int colon)
           p = sponsor < 0
               ? N_("type  :help sponsor<Enter>    for information ")
               : N_("type  :help register<Enter>   for information ");
-        } else if (strstr(p, "Orphans") != NULL) {
-          p = N_("menu  Help->Sponsor/Register  for information    ");
         }
       }
 
-      if (*p != NUL) {
-        do_intro_line(row, _(p), 0);
+      if (mesg == NULL) {
+        if (*p != NUL) {
+          mesg = _(p);
+        } else {
+          mesg = "";
+        }
+      }
+
+      if (*mesg != NUL) {
+        do_intro_line(row, mesg, 0);
       }
       row++;
+
+      if (mesg_size > 0) {
+        XFREE_CLEAR(mesg);
+      }
     }
   }
 

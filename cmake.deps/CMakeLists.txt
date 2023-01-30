@@ -12,11 +12,19 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" "${PROJECT_SOURCE_DI
 include(CheckCCompilerFlag)
 include(Util)
 
+set(DEPS_CMAKE_ARGS
+  -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+  -DCMAKE_GENERATOR=${CMAKE_GENERATOR}
+  -DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
+
+set(DEPS_CMAKE_CACHE_ARGS -DCMAKE_OSX_ARCHITECTURES:STRING=${CMAKE_OSX_ARCHITECTURES})
+
 set_default_buildtype()
 
 get_property(isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(NOT isMultiConfig)
-  set(BUILD_TYPE_STRING -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
+  list(APPEND DEPS_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 endif()
 
 set(DEFAULT_MAKE_CFLAGS CFLAGS+=-g)
@@ -36,6 +44,8 @@ if(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
 else()
   set(DEPS_INSTALL_DIR "${CMAKE_BINARY_DIR}/usr" CACHE PATH "Dependencies install directory.")
 endif()
+
+list(APPEND DEPS_CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DEPS_INSTALL_DIR})
 
 set(DEPS_BIN_DIR "${DEPS_INSTALL_DIR}/bin" CACHE PATH "Dependencies binary install directory.")
 set(DEPS_LIB_DIR "${DEPS_INSTALL_DIR}/lib" CACHE PATH "Dependencies library install directory.")
@@ -75,14 +85,6 @@ endif()
 
 if(UNIX)
   find_program(MAKE_PRG NAMES gmake make)
-  if(MAKE_PRG)
-    execute_process(
-      COMMAND "${MAKE_PRG}" --version
-      OUTPUT_VARIABLE MAKE_VERSION_INFO)
-    if(NOT "${OUTPUT_VARIABLE}" MATCHES ".*GNU.*")
-      unset(MAKE_PRG)
-    endif()
-  endif()
   if(NOT MAKE_PRG)
     message(FATAL_ERROR "GNU Make is required to build the dependencies.")
   else()
@@ -151,8 +153,8 @@ set(LUA_SHA256 2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333)
 set(LUAROCKS_URL https://github.com/luarocks/luarocks/archive/v3.8.0.tar.gz)
 set(LUAROCKS_SHA256 ab6612ca9ab87c6984871d2712d05525775e8b50172701a0a1cabddf76de2be7)
 
-set(UNIBILIUM_URL https://github.com/neovim/unibilium/archive/92d929f.tar.gz)
-set(UNIBILIUM_SHA256 29815283c654277ef77a3adcc8840db79ddbb20a0f0b0c8f648bd8cd49a02e4b)
+set(UNIBILIUM_URL https://github.com/neovim/unibilium/archive/d72c3598e7ac5d1ebf86ee268b8b4ed95c0fa628.tar.gz)
+set(UNIBILIUM_SHA256 9c4747c862ab5e3076dcf8fa8f0ea7a6b50f20ec5905618b9536655596797487)
 
 set(LIBTERMKEY_URL https://www.leonerd.org.uk/code/libtermkey/libtermkey-0.22.tar.gz)
 set(LIBTERMKEY_SHA256 6945bd3c4aaa83da83d80a045c5563da4edd7d0374c62c0d35aec09eb3014600)

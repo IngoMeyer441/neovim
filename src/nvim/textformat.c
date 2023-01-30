@@ -530,9 +530,6 @@ static bool same_leader(linenr_T lnum, int leader1_len, char *leader1_flags, int
     return leader2_len == 0;
   }
 
-  char *lnum_line = NULL;
-  int line_len = 0;
-
   // If first leader has 'f' flag, the lines can be joined only if the
   // second line does not have a leader.
   // If first leader has 'e' flag, the lines can never be joined.
@@ -547,10 +544,7 @@ static bool same_leader(linenr_T lnum, int leader1_len, char *leader1_flags, int
         return false;
       }
       if (*p == COM_START) {
-        if (lnum_line == NULL) {
-          lnum_line = ml_get(lnum);
-          line_len = (int)strlen(lnum_line);
-        }
+        int line_len = (int)strlen(ml_get(lnum));
         if (line_len <= leader1_len) {
           return false;
         }
@@ -742,22 +736,24 @@ void check_auto_format(bool end_insert)
   int c = ' ';
   int cc;
 
-  if (did_add_space) {
-    cc = gchar_cursor();
-    if (!WHITECHAR(cc)) {
-      // Somehow the space was removed already.
+  if (!did_add_space) {
+    return;
+  }
+
+  cc = gchar_cursor();
+  if (!WHITECHAR(cc)) {
+    // Somehow the space was removed already.
+    did_add_space = false;
+  } else {
+    if (!end_insert) {
+      inc_cursor();
+      c = gchar_cursor();
+      dec_cursor();
+    }
+    if (c != NUL) {
+      // The space is no longer at the end of the line, delete it.
+      del_char(false);
       did_add_space = false;
-    } else {
-      if (!end_insert) {
-        inc_cursor();
-        c = gchar_cursor();
-        dec_cursor();
-      }
-      if (c != NUL) {
-        // The space is no longer at the end of the line, delete it.
-        del_char(false);
-        did_add_space = false;
-      }
     }
   }
 }
