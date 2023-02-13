@@ -318,6 +318,10 @@ void screen_resize(int width, int height)
   resizing_autocmd = false;
   redraw_all_later(UPD_CLEAR);
 
+  if (State != MODE_ASKMORE && State != MODE_EXTERNCMD && State != MODE_CONFIRM) {
+    screenclear();
+  }
+
   if (starting != NO_SCREEN) {
     maketitle();
 
@@ -1620,8 +1624,6 @@ static void win_update(win_T *wp, DecorProviders *providers)
           && !(dollar_vcol >= 0 && mod_bot == mod_top + 1)
           && row >= top_end) {
         int old_rows = 0;
-        int new_rows = 0;
-        int xtra_rows;
         linenr_T l;
         int i;
 
@@ -1656,6 +1658,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
           bot_start = 0;
           bot_scroll_start = 0;
         } else {
+          int new_rows = 0;
           // Able to count old number of rows: Count new window
           // rows, and may insert/delete lines
           long j = idx;
@@ -1674,7 +1677,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
               break;
             }
           }
-          xtra_rows = new_rows - old_rows;
+          int xtra_rows = new_rows - old_rows;
           if (xtra_rows < 0) {
             // May scroll text up.  If there is not enough
             // remaining text or scrolling fails, must redraw the
