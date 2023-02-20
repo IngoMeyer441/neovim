@@ -93,6 +93,7 @@ void ui_client_attach(int width, int height, char *term)
     PUT_C(opts, "stdout_tty", BOOLEAN_OBJ(stdout_isatty));
     if (ui_client_forward_stdin) {
       PUT_C(opts, "stdin_fd", INTEGER_OBJ(UI_CLIENT_STDIN_FD));
+      ui_client_forward_stdin = false;  // stdin shouldn't be forwarded again #22292
     }
   }
   ADD_C(args, DICTIONARY_OBJ(opts));
@@ -113,7 +114,7 @@ void ui_client_run(bool remote_ui)
   ui_client_is_remote = remote_ui;
   int width, height;
   char *term;
-  tui = tui_start(&width, &height, &term);
+  tui_start(&tui, &width, &height, &term);
 
   ui_client_attach(width, height, term);
 
