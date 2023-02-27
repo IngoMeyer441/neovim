@@ -254,7 +254,7 @@ void nvim_ui_detach(uint64_t channel_id, Error *err)
   remote_ui_disconnect(channel_id);
 }
 
-// TODO(bfredl): use me to detach a specifc ui from the server
+// TODO(bfredl): use me to detach a specific ui from the server
 void remote_ui_stop(UI *ui)
 {}
 
@@ -382,7 +382,7 @@ static void ui_set_option(UI *ui, bool init, String name, Object value, Error *e
       });
       bool boolval = value.data.boolean;
       if (!init && i == kUILinegrid && boolval != ui->ui_ext[i]) {
-        // There shouldn't be a reason for an UI to do this ever
+        // There shouldn't be a reason for a UI to do this ever
         // so explicitly don't support this.
         api_set_error(err, kErrorTypeValidation, "ext_linegrid option cannot be changed");
       }

@@ -44,10 +44,16 @@ static char e_string_required_for_argument_nr[]
   = N_("E1174: String required for argument %d");
 static char e_non_empty_string_required_for_argument_nr[]
   = N_("E1175: Non-empty string required for argument %d");
+static char e_dict_required_for_argument_nr[]
+  = N_("E1206: Dictionary required for argument %d");
 static char e_number_required_for_argument_nr[]
   = N_("E1210: Number required for argument %d");
 static char e_string_or_list_required_for_argument_nr[]
   = N_("E1222: String or List required for argument %d");
+static char e_list_or_blob_required_for_argument_nr[]
+  = N_("E1226: List or Blob required for argument %d");
+static char e_string_or_function_required_for_argument_nr[]
+  = N_("E1256: String or function required for argument %d");
 
 bool tv_in_free_unref_items = false;
 
@@ -647,55 +653,54 @@ tv_list_copy_error:
   return NULL;
 }
 
-/// Flatten "list" in place to depth "maxdepth".
+/// Flatten up to "maxitems" in "list", starting at "first" to depth "maxdepth".
+/// When "first" is NULL use the first item.
 /// Does nothing if "maxdepth" is 0.
 ///
 /// @param[in,out] list   List to flatten
 /// @param[in] maxdepth   Maximum depth that will be flattened
 ///
 /// @return OK or FAIL
-int tv_list_flatten(list_T *list, long maxdepth)
-  FUNC_ATTR_NONNULL_ARG(1) FUNC_ATTR_WARN_UNUSED_RESULT
+void tv_list_flatten(list_T *list, listitem_T *first, long maxitems, long maxdepth)
+  FUNC_ATTR_NONNULL_ARG(1)
 {
   listitem_T *item;
-  listitem_T *to_free;
-  int n;
+  int done = 0;
   if (maxdepth == 0) {
-    return OK;
+    return;
   }
 
-  n = 0;
-  item = list->lv_first;
-  while (item != NULL) {
+  if (first == NULL) {
+    item = list->lv_first;
+  } else {
+    item = first;
+  }
+
+  while (item != NULL && done < maxitems) {
+    listitem_T *next = item->li_next;
+
     fast_breakcheck();
     if (got_int) {
-      return FAIL;
+      return;
     }
     if (item->li_tv.v_type == VAR_LIST) {
-      listitem_T *next = item->li_next;
+      list_T *itemlist = item->li_tv.vval.v_list;
 
       tv_list_drop_items(list, item, item);
-      tv_list_extend(list, item->li_tv.vval.v_list, next);
+      tv_list_extend(list, itemlist, next);
+
+      if (maxdepth > 0) {
+        tv_list_flatten(list,
+                        item->li_prev == NULL ? list->lv_first : item->li_prev->li_next,
+                        itemlist->lv_len, maxdepth - 1);
+      }
       tv_clear(&item->li_tv);
-      to_free = item;
-
-      if (item->li_prev == NULL) {
-        item = list->lv_first;
-      } else {
-        item = item->li_prev->li_next;
-      }
-      xfree(to_free);
-
-      if (++n >= maxdepth) {
-        n = 0;
-        item = next;
-      }
-    } else {
-      n = 0;
-      item = item->li_next;
+      xfree(item);
     }
+
+    done++;
+    item = next;
   }
-  return OK;
 }
 
 /// Extend first list with the second
@@ -3906,12 +3911,56 @@ int tv_check_for_opt_number_arg(const typval_T *const args, const int idx)
           || tv_check_for_number_arg(args, idx) != FAIL) ? OK : FAIL;
 }
 
+/// Give an error and return FAIL unless "args[idx]" is a dict.
+int tv_check_for_dict_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_DICT) {
+    semsg(_(e_dict_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Check for an optional dict argument at "idx"
+int tv_check_for_opt_dict_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  return (args[idx].v_type == VAR_UNKNOWN
+          || tv_check_for_dict_arg(args, idx) != FAIL) ? OK : FAIL;
+}
+
 /// Give an error and return FAIL unless "args[idx]" is a string or a list.
 int tv_check_for_string_or_list_arg(const typval_T *const args, const int idx)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
 {
   if (args[idx].v_type != VAR_STRING && args[idx].v_type != VAR_LIST) {
     semsg(_(e_string_or_list_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a string
+/// or a function reference.
+int tv_check_for_string_or_func_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_PARTIAL
+      && args[idx].v_type != VAR_FUNC
+      && args[idx].v_type != VAR_STRING) {
+    semsg(_(e_string_or_function_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a list or a blob.
+int tv_check_for_list_or_blob_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_LIST && args[idx].v_type != VAR_BLOB) {
+    semsg(_(e_list_or_blob_required_for_argument_nr), idx + 1);
     return FAIL;
   }
   return OK;

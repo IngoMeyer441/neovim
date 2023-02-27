@@ -120,6 +120,7 @@ return {
     expand={args={1, 3}, base=1},
     expandcmd={args={1, 2}, base=1},
     extend={args={2, 3}, base=1},
+    extendnew={args={2, 3}, base=1},
     feedkeys={args={1, 2}, base=1},
     file_readable={args=1, base=1, func='f_filereadable'},  -- obsolete
     filereadable={args=1, base=1, fast=true},
@@ -128,6 +129,7 @@ return {
     finddir={args={1, 3}, base=1},
     findfile={args={1, 3}, base=1},
     flatten={args={1, 2}, base=1},
+    flattennew={args={1, 2}, base=1},
     float2nr={args=1, base=1},
     floor={args=1, base=1, float_func="floor"},
     fmod={args=2, base=1},
@@ -212,6 +214,7 @@ return {
     iconv={args=3, base=1, fast=true},
     indent={args=1, base=1},
     index={args={2, 4}, base=1},
+    indexof={args={2, 3}, base=1},
     input={args={1, 3}, base=1},
     inputdialog={args={1, 3}, base=1},
     inputlist={args=1, base=1},
