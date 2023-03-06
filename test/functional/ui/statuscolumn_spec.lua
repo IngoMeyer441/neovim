@@ -375,6 +375,28 @@ describe('statuscolumn', function()
       {1:wrapped 1 9}aaaaaaaa                                  |
                                                            |
     ]])
+    -- Also test virt_lines at the end of buffer
+    exec_lua([[
+      local ns = vim.api.nvim_create_namespace("ns")
+      vim.api.nvim_buf_set_extmark(0, ns, 15, 0, { virt_lines = {{{"END", ""}}} })
+    ]])
+    feed('Gzz')
+    screen:expect([[
+      {1:buffer  0 13}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 13}aaaaaaaaa                                |
+      {1:buffer  0 14}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 14}aaaaaaaaa                                |
+      {1:buffer  0 15}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 15}aaaaaaaaa                                |
+      {4:buffer  0 16}{5:^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
+      {4:wrapped 1 16}{5:aaaaaaaaa                                }|
+      {1:virtual-1 16}END                                      |
+      {0:~                                                    }|
+      {0:~                                                    }|
+      {0:~                                                    }|
+      {0:~                                                    }|
+                                                           |
+    ]])
   end)
 
   it("works with 'statuscolumn' clicks", function()
@@ -476,6 +498,26 @@ describe('statuscolumn', function()
       ~                                                    |
       ~                                                    |
                                                            |
+    ]])
+  end)
+
+  it('works with cmdwin', function()
+    feed(':set stc=%l<CR>q:k$')
+    screen:expect([[
+      7 aaaaa                                              |
+      8 aaaaa                                              |
+      9 aaaaa                                              |
+      10aaaaa                                              |
+      [No Name] [+]                                        |
+      :1set stc=%^l                                         |
+      :2                                                   |
+      ~                                                    |
+      ~                                                    |
+      ~                                                    |
+      ~                                                    |
+      ~                                                    |
+      [Command Line]                                       |
+      :                                                    |
     ]])
   end)
 end)

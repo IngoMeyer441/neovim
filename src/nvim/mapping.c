@@ -323,7 +323,7 @@ static void set_maparg_rhs(const char *const orig_rhs, const size_t orig_rhs_len
     mapargs->orig_rhs_len = 0;
     // stores <lua>ref_no<cr> in map_str
     mapargs->rhs_len = (size_t)vim_snprintf(S_LEN(tmp_buf), "%c%c%c%d\r", K_SPECIAL,
-                                            (char_u)KS_EXTRA, KE_LUA, rhs_lua);
+                                            KS_EXTRA, KE_LUA, rhs_lua);
     mapargs->rhs = xstrdup(tmp_buf);
   }
 }
@@ -1162,8 +1162,9 @@ static bool expand_buffer = false;
 /// @param cpo_flags  Value of various flags present in &cpo
 ///
 /// @return  NULL when there is a problem.
-static char *translate_mapping(char_u *str, int cpo_flags)
+static char *translate_mapping(char *str_in, int cpo_flags)
 {
+  uint8_t *str = (uint8_t *)str_in;
   garray_T ga;
   ga_init(&ga, 1, 40);
 
@@ -1346,7 +1347,7 @@ int ExpandMappings(char *pat, regmatch_T *regmatch, int *numMatches, char ***mat
         continue;
       }
 
-      char *p = translate_mapping((char_u *)mp->m_keys, CPO_TO_CPO_FLAGS);
+      char *p = translate_mapping(mp->m_keys, CPO_TO_CPO_FLAGS);
       if (p == NULL) {
         continue;
       }
@@ -1879,7 +1880,7 @@ int makemap(FILE *fd, buf_T *buf)
 // return FAIL for failure, OK otherwise
 int put_escstr(FILE *fd, char *strstart, int what)
 {
-  char_u *str = (char_u *)strstart;
+  uint8_t *str = (uint8_t *)strstart;
   int c;
 
   // :map xx <Nop>
@@ -1956,7 +1957,7 @@ int put_escstr(FILE *fd, char *strstart, int what)
       }
     } else if (c < ' ' || c > '~' || c == '|'
                || (what == 0 && c == ' ')
-               || (what == 1 && str == (char_u *)strstart && c == ' ')
+               || (what == 1 && str == (uint8_t *)strstart && c == ' ')
                || (what != 2 && c == '<')) {
       if (putc(Ctrl_V, fd) < 0) {
         return FAIL;
@@ -2383,7 +2384,7 @@ int langmap_adjust_mb(int c)
 void langmap_init(void)
 {
   for (int i = 0; i < 256; i++) {
-    langmap_mapchar[i] = (char_u)i;      // we init with a one-to-one map
+    langmap_mapchar[i] = (uint8_t)i;      // we init with a one-to-one map
   }
   ga_init(&langmap_mapga, sizeof(langmap_entry_T), 8);
 }
@@ -2447,7 +2448,7 @@ void langmap_set(void)
         langmap_set_entry(from, to);
       } else {
         assert(to <= UCHAR_MAX);
-        langmap_mapchar[from & 255] = (char_u)to;
+        langmap_mapchar[from & 255] = (uint8_t)to;
       }
 
       // Advance to next pair
