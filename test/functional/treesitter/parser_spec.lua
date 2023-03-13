@@ -7,7 +7,6 @@ local exec_lua = helpers.exec_lua
 local pcall_err = helpers.pcall_err
 local feed = helpers.feed
 local is_os = helpers.is_os
-local skip = helpers.skip
 
 before_each(clear)
 
@@ -128,7 +127,9 @@ void ui_refresh(void)
   it('does not get parser for empty filetype', function()
     insert(test_text);
 
-    eq(".../language.lua:0: '' is not a valid filetype",
+    eq('.../treesitter.lua:0: There is no parser available for buffer 1 and one'
+         .. ' could not be created because lang could not be determined. Either'
+         .. ' pass lang or set the buffer filetype',
       pcall_err(exec_lua, 'vim.treesitter.get_parser(0)'))
 
     -- Must provide language for buffers with an empty filetype
@@ -194,7 +195,7 @@ void ui_refresh(void)
     local manyruns = q(100)
 
     -- First run should be at least 400x slower than an 100 subsequent runs.
-    local factor = is_os('win') and 300 or 400
+    local factor = is_os('win') and 200 or 400
     assert(factor * manyruns < firstrun, ('firstrun: %f ms, manyruns: %f ms'):format(firstrun / 1e6, manyruns / 1e6))
   end)
 
@@ -275,13 +276,13 @@ void ui_refresh(void)
     eq('void', res2)
   end)
 
-  it('support getting text where start of node is past EOF', function()
+  it('support getting text where start of node is one past EOF', function()
     local text = [[
 def run
   a = <<~E
 end]]
     insert(text)
-    local result = exec_lua([[
+    eq('', exec_lua[[
       local fake_node = {}
       function fake_node:start()
         return 3, 0, 23
@@ -289,12 +290,14 @@ end]]
       function fake_node:end_()
         return 3, 0, 23
       end
-      function fake_node:range()
+      function fake_node:range(bytes)
+        if bytes then
+          return 3, 0, 23, 3, 0, 23
+        end
         return 3, 0, 3, 0
       end
-      return vim.treesitter.get_node_text(fake_node, 0) == nil
+      return vim.treesitter.get_node_text(fake_node, 0)
     ]])
-    eq(true, result)
   end)
 
   it('support getting empty text if node range is zero width', function()
@@ -737,7 +740,6 @@ int x = INT_MAX;
       end)
 
       it("should not inject bad languages", function()
-        skip(is_os('win'))
         exec_lua([=[
         vim.treesitter.add_directive("inject-bad!", function(match, _, _, pred, metadata)
           metadata.language = "{"
@@ -886,18 +888,20 @@ int x = INT_MAX;
   it("can fold via foldexpr", function()
     insert(test_text)
 
-    local levels = exec_lua([[
-      vim.opt.filetype = 'c'
-      vim.treesitter.get_parser(0, "c")
-      local res = {}
-      for i = 1, vim.api.nvim_buf_line_count(0) do
-        res[i] = vim.treesitter.foldexpr(i)
-      end
-      return res
-    ]])
+    local function get_fold_levels()
+      return exec_lua([[
+        local res = {}
+        for i = 1, vim.api.nvim_buf_line_count(0) do
+          res[i] = vim.treesitter.foldexpr(i)
+        end
+        return res
+      ]])
+    end
+
+    exec_lua([[vim.treesitter.get_parser(0, "c")]])
 
     eq({
-     [1] = '>1',
+      [1] = '>1',
       [2] = '1',
       [3] = '1',
       [4] = '1',
@@ -915,6 +919,33 @@ int x = INT_MAX;
       [16] = '3',
       [17] = '3',
       [18] = '2',
-      [19] = '1' }, levels)
+      [19] = '1' }, get_fold_levels())
+
+    helpers.command('1,2d')
+    helpers.poke_eventloop()
+
+    exec_lua([[vim.treesitter.get_parser():parse()]])
+
+    helpers.poke_eventloop()
+    helpers.sleep(100)
+
+    eq({
+      [1] = '0',
+      [2] = '0',
+      [3] = '>1',
+      [4] = '1',
+      [5] = '1',
+      [6] = '0',
+      [7] = '0',
+      [8] = '>1',
+      [9] = '1',
+      [10] = '1',
+      [11] = '1',
+      [12] = '1',
+      [13] = '>2',
+      [14] = '2',
+      [15] = '2',
+      [16] = '1',
+      [17] = '0' }, get_fold_levels())
   end)
 end)

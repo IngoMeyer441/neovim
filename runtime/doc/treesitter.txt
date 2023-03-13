@@ -441,7 +441,53 @@ individual query pattern manually by setting its `"priority"` metadata
 attribute: >
 
     (super_important_node) @ImportantHighlight (#set! "priority" 105)
+
+==============================================================================
+TREESITTER LANGUAGE INJECTIONS                *treesitter-language-injections*
 <
+
+Note the following information is adapted from:
+  https://tree-sitter.github.io/tree-sitter/syntax-highlighting#language-injection
+
+Some source files contain code written in multiple different languages.
+Examples include:
+
+    • HTML files, which can contain JavaScript inside of `<script>` tags and
+      CSS inside of `<style>` tags
+    • ERB files, which contain Ruby inside of `<%` `%>` tags, and HTML outside of
+      those tags
+    • PHP files, which can contain HTML between the `<php` tags
+    • JavaScript files, which contain regular expression syntax within regex
+      literals
+    • Ruby, which can contain snippets of code inside of heredoc literals,
+      where the heredoc delimiter often indicates the language
+    • Lua, which can contain snippets of Vimscript inside |vim.cmd()| calls.
+    • Vimscript, which can contain snippets of Lua inside |:lua-heredoc|
+      blocks.
+
+All of these examples can be modeled in terms of a parent syntax tree and one
+or more injected syntax trees, which reside inside of certain nodes in the
+parent tree. The language injection query allows you to specify these
+“injections” using the following captures:
+
+    • `@injection.content` - indicates that the captured node should have its
+      contents re-parsed using another language.
+    • `@injection.language` - indicates that the captured node’s text may
+      contain the name of a language that should be used to re-parse the
+      `@injection.content`.
+
+The language injection behavior can also be configured by some properties
+associated with patterns:
+
+    • `injection.language` - can be used to hard-code the name of a specific
+    language.
+    • `injection.combined` - indicates that all of the matching nodes in the
+    tree should have their content parsed as one nested document.
+    • `injection.include-children` - indicates that the `@injection.content`
+    node's entire text should be re-parsed, including the text of its child
+    nodes. By default, child nodes' text will be excluded from the injected
+    document.
+
 ==============================================================================
 VIM.TREESITTER                                                *lua-treesitter*
 
@@ -743,14 +789,12 @@ get_node_text({node}, {source}, {opts})
       • {source}  (integer|string) Buffer or string from which the {node} is
                   extracted
       • {opts}    (table|nil) Optional parameters.
-                  • concat: (boolean) Concatenate result in a string (default
-                    true)
                   • metadata (table) Metadata of a specific capture. This
                     would be set to `metadata[capture_id]` when using
                     |vim.treesitter.add_directive()|.
 
     Return: ~
-        (string[]|string|nil)
+        (string)
 
 get_query({lang}, {query_name})                   *vim.treesitter.get_query()*
     Returns the runtime query {query_name} for {lang}.
@@ -775,6 +819,19 @@ get_query_files({lang}, {query_name}, {is_included})
     Return: ~
         string[] query_files List of files to load for given query and
         language
+
+get_range({node}, {source}, {metadata})           *vim.treesitter.get_range()*
+    Get the range of a |TSNode|. Can also supply {source} and {metadata} to
+    get the range with directives applied.
+
+    Parameters: ~
+      • {node}      |TSNode|
+      • {source}    integer|string|nil Buffer or string from which the {node}
+                    is extracted
+      • {metadata}  TSMetadata|nil
+
+    Return: ~
+        (table)
 
 list_directives()                           *vim.treesitter.list_directives()*
     Lists the currently available directives to use in queries.
@@ -841,7 +898,8 @@ Query:iter_captures({self}, {node}, {source}, {start}, {stop})
       • {self}
 
     Return: ~
-        (fun(): integer, TSNode, TSMetadata ): capture id, capture node, metadata
+        (fun(): integer, TSNode, TSMetadata): capture id, capture node,
+        metadata
 
                                                         *Query:iter_matches()*
 Query:iter_matches({self}, {node}, {source}, {start}, {stop})
@@ -991,6 +1049,9 @@ LanguageTree:included_regions({self})        *LanguageTree:included_regions()*
     Parameters: ~
       • {self}
 
+    Return: ~
+        integer[][]
+
 LanguageTree:invalidate({self}, {reload})          *LanguageTree:invalidate()*
     Invalidates this parser and all its children
 
@@ -998,11 +1059,16 @@ LanguageTree:invalidate({self}, {reload})          *LanguageTree:invalidate()*
       • {reload}  (boolean|nil)
       • {self}
 
-LanguageTree:is_valid({self})                        *LanguageTree:is_valid()*
+                                                     *LanguageTree:is_valid()*
+LanguageTree:is_valid({self}, {exclude_children})
     Determines whether this tree is valid. If the tree is invalid, call `parse()` . This will return the updated tree.
 
     Parameters: ~
+      • {exclude_children}  (boolean|nil)
       • {self}
+
+    Return: ~
+        (boolean)
 
 LanguageTree:lang({self})                                *LanguageTree:lang()*
     Gets the language of this tree node.
@@ -1045,7 +1111,6 @@ LanguageTree:parse({self})                              *LanguageTree:parse()*
 
     Return: ~
         TSTree[]
-        (table|nil) Change list
 
 LanguageTree:register_cbs({self}, {cbs})         *LanguageTree:register_cbs()*
     Registers callbacks for the |LanguageTree|.

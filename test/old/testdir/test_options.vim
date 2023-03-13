@@ -49,6 +49,7 @@ endfunc
 
 " Test for getting the value of 'pastetoggle'
 func Test_pastetoggle()
+  throw "Skipped: 'pastetoggle' is removed from Nvim"
   " character with K_SPECIAL byte
   let &pastetoggle = '…'
   call assert_equal('…', &pastetoggle)
@@ -890,8 +891,9 @@ func Test_debug_option()
   exe "normal \<C-c>"
   call assert_equal('Beep!', Screenline(&lines))
   call assert_equal('line    4:', Screenline(&lines - 1))
-  " only match the final colon in the line that shows the source
-  call assert_match(':$', Screenline(&lines - 2))
+  " also check a line above, with a certain window width the colon is there
+  call assert_match('Test_debug_option:$',
+        \ Screenline(&lines - 3) .. Screenline(&lines - 2))
   set debug&
 endfunc
 

@@ -150,6 +150,10 @@ static const char *highlight_init_both[] = {
   "default link QuickFixLine Search",
   "default link CursorLineSign SignColumn",
   "default link CursorLineFold FoldColumn",
+  "default link PmenuKind Pmenu",
+  "default link PmenuKindSel PmenuSel",
+  "default link PmenuExtra Pmenu",
+  "default link PmenuExtraSel PmenuSel",
   "default link Substitute Search",
   "default link Whitespace NonText",
   "default link MsgSeparator StatusLine",
@@ -270,16 +274,22 @@ static const char *highlight_init_both[] = {
   "default link @tag Tag",
 
   // LSP semantic tokens
-  "default link @class Structure",
-  "default link @struct Structure",
-  "default link @enum Type",
-  "default link @enumMember Constant",
-  "default link @event Identifier",
-  "default link @interface Identifier",
-  "default link @modifier Identifier",
-  "default link @regexp SpecialChar",
-  "default link @typeParameter Type",
-  "default link @decorator Identifier",
+  "default link @lsp.type.class Structure",
+  "default link @lsp.type.decorator Function",
+  "default link @lsp.type.enum Structure",
+  "default link @lsp.type.enumMember Constant",
+  "default link @lsp.type.function Function",
+  "default link @lsp.type.interface Structure",
+  "default link @lsp.type.macro Macro",
+  "default link @lsp.type.method Function",
+  "default link @lsp.type.namespace Structure",
+  "default link @lsp.type.parameter Identifier",
+  "default link @lsp.type.property Identifier",
+  "default link @lsp.type.struct Structure",
+  "default link @lsp.type.type Type",
+  "default link @lsp.type.typeParameter TypeDef",
+  "default link @lsp.type.variable Identifier",
+
   NULL
 };
 

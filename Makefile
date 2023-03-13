@@ -113,17 +113,17 @@ build/.ran-deps-cmake::
 
 # TODO: cmake 3.2+ add_custom_target() has a USES_TERMINAL flag.
 oldtest: | nvim build/runtime/doc/tags
-	+$(SINGLE_MAKE) -C src/nvim/testdir clean
+	+$(SINGLE_MAKE) -C test/old/testdir clean
 ifeq ($(strip $(TEST_FILE)),)
-	+$(SINGLE_MAKE) -C src/nvim/testdir NVIM_PRG=$(NVIM_PRG) $(MAKEOVERRIDES)
+	+$(SINGLE_MAKE) -C test/old/testdir NVIM_PRG=$(NVIM_PRG) $(MAKEOVERRIDES)
 else
 	@# Handle TEST_FILE=test_foo{,.res,.vim}.
-	+$(SINGLE_MAKE) -C src/nvim/testdir NVIM_PRG=$(NVIM_PRG) SCRIPTS= $(MAKEOVERRIDES) $(patsubst %.vim,%,$(patsubst %.res,%,$(TEST_FILE)))
+	+$(SINGLE_MAKE) -C test/old/testdir NVIM_PRG=$(NVIM_PRG) SCRIPTS= $(MAKEOVERRIDES) $(patsubst %.vim,%,$(patsubst %.res,%,$(TEST_FILE)))
 endif
 # Build oldtest by specifying the relative .vim filename.
 .PHONY: phony_force
-src/nvim/testdir/%.vim: phony_force
-	+$(SINGLE_MAKE) -C src/nvim/testdir NVIM_PRG=$(NVIM_PRG) SCRIPTS= $(MAKEOVERRIDES) $(patsubst src/nvim/testdir/%.vim,%,$@)
+test/old/testdir/%.vim: phony_force
+	+$(SINGLE_MAKE) -C test/old/testdir NVIM_PRG=$(NVIM_PRG) SCRIPTS= $(MAKEOVERRIDES) $(patsubst test/old/testdir/%.vim,%,$@)
 
 functionaltest-lua: | nvim
 	$(BUILD_TOOL) -C build $@
@@ -137,13 +137,14 @@ generated-sources benchmark uninstall $(FORMAT) $(LINT) $(TEST): | build/.ran-cm
 test: $(TEST)
 
 iwyu: build/.ran-cmake
-	cmake --workflow --fresh --preset iwyu > build/iwyu.log
+	cmake --preset iwyu
+	cmake --build --preset iwyu > build/iwyu.log
 	iwyu-fix-includes --only_re="src/nvim" --ignore_re="src/nvim/(auto|map.h|eval/encode.c)" --safe_headers < build/iwyu.log
 	cmake -B build -U ENABLE_IWYU
 
 clean:
 	+test -d build && $(BUILD_TOOL) -C build clean || true
-	$(MAKE) -C src/nvim/testdir clean
+	$(MAKE) -C test/old/testdir clean
 	$(MAKE) -C runtime/indent clean
 
 distclean:

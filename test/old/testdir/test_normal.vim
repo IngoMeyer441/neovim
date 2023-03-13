@@ -921,7 +921,7 @@ func Test_normal14_page()
   set nostartofline
   exe "norm! $\<c-b>"
   call assert_equal('92', getline('.'))
-  call assert_equal([0, 92, 2, 0, 2147483647], getcurpos())
+  call assert_equal([0, 92, 2, 0, v:maxcol], getcurpos())
   " cleanup
   set startofline
   bw!
@@ -966,7 +966,7 @@ func Test_normal15_z_scroll_vert()
   norm! >>$ztzb
   call assert_equal('	30', getline('.'))
   call assert_equal(30, winsaveview()['topline']+winheight(0)-1)
-  call assert_equal([0, 30, 3, 0, 2147483647], getcurpos())
+  call assert_equal([0, 30, 3, 0, v:maxcol], getcurpos())
 
   " Test for z-
   1
@@ -2540,8 +2540,11 @@ func Test_normal33_g_cmd2()
   norm! g'a
   call assert_equal('>', a[-1:])
   call assert_equal(1, line('.'))
+  let v:errmsg = ''
   call assert_nobeep("normal! g`\<Esc>")
+  call assert_equal('', v:errmsg)
   call assert_nobeep("normal! g'\<Esc>")
+  call assert_equal('', v:errmsg)
 
   " Test for g; and g,
   norm! g;
@@ -2914,7 +2917,7 @@ func Test_normal36_g_cmd5()
   call assert_equal([0, 14, 1, 0, 1], getcurpos())
   " count > buffer content
   norm! 120go
-  call assert_equal([0, 14, 1, 0, 2147483647], getcurpos())
+  call assert_equal([0, 14, 1, 0, v:maxcol], getcurpos())
   " clean up
   bw!
 endfunc
@@ -3094,7 +3097,7 @@ func Test_normal42_halfpage()
   set nostartofline
   exe "norm! $\<c-u>"
   call assert_equal('95', getline('.'))
-  call assert_equal([0, 95, 2, 0, 2147483647], getcurpos())
+  call assert_equal([0, 95, 2, 0, v:maxcol], getcurpos())
   " cleanup
   set startofline
   bw!

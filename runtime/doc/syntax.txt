@@ -5268,12 +5268,24 @@ NonText		'@' at the end of the window, characters from 'showbreak'
 Normal		Normal text.
 							*hl-NormalFloat*
 NormalFloat	Normal text in floating windows.
+							*hl-FloatBorder*
+FloatBorder	Border of floating windows.
+							*hl-FloatTitle*
+FloatTitle	Title of floating windows.
 							*hl-NormalNC*
 NormalNC	Normal text in non-current windows.
 							*hl-Pmenu*
 Pmenu		Popup menu: Normal item.
 							*hl-PmenuSel*
 PmenuSel	Popup menu: Selected item.
+							*hl-PmenuKind*
+PmenuKind	Popup menu: Normal item "kind".
+							*hl-PmenuKindSel*
+PmenuKindSel	Popup menu: Selected item "kind".
+							*hl-PmenuExtra*
+PmenuExtra	Popup menu: Normal item "extra text".
+							*hl-PmenuExtraSel*
+PmenuExtraSel	Popup menu: Selected item "extra text".
 							*hl-PmenuSbar*
 PmenuSbar	Popup menu: Scrollbar.
 							*hl-PmenuThumb*

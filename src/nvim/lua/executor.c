@@ -165,17 +165,6 @@ static int nlua_pcall(lua_State *lstate, int nargs, int nresults)
   return status;
 }
 
-/// Gets the version of the current Nvim build.
-///
-/// @param  lstate  Lua interpreter state.
-static int nlua_nvim_version(lua_State *const lstate) FUNC_ATTR_NONNULL_ALL
-{
-  Dictionary version = version_dict();
-  nlua_push_Dictionary(lstate, version, true);
-  api_free_dictionary(version);
-  return 1;
-}
-
 static void nlua_luv_error_event(void **argv)
 {
   char *error = (char *)argv[0];
@@ -738,10 +727,6 @@ static bool nlua_state_init(lua_State *const lstate) FUNC_ATTR_NONNULL_ALL
 
   // vim.types, vim.type_idx, vim.val_idx
   nlua_init_types(lstate);
-
-  // neovim version
-  lua_pushcfunction(lstate, &nlua_nvim_version);
-  lua_setfield(lstate, -2, "version");
 
   // schedule
   lua_pushcfunction(lstate, &nlua_schedule);
@@ -1638,12 +1623,12 @@ void ex_lua(exarg_T *const eap)
   }
   // When =expr is used transform it to print(vim.inspect(expr))
   if (code[0] == '=') {
-    len += sizeof("vim.pretty_print()") - sizeof("=");
+    len += sizeof("vim.print()") - sizeof("=");
     // code_buf needs to be 1 char larger then len for null byte in the end.
     // lua nlua_typval_exec doesn't expect null terminated string so len
     // needs to end before null byte.
     char *code_buf = xmallocz(len);
-    vim_snprintf(code_buf, len + 1, "vim.pretty_print(%s)", code + 1);
+    vim_snprintf(code_buf, len + 1, "vim.print(%s)", code + 1);
     xfree(code);
     code = code_buf;
   }
@@ -1872,6 +1857,12 @@ int nlua_expand_pat(expand_T *xp, char *pat, int *num_results, char ***results)
   lua_getfield(lstate, -1, "_expand_pat");
   luaL_checktype(lstate, -1, LUA_TFUNCTION);
 
+  // ex expansion prepends a ^, but don't worry, it is not a regex
+  if (pat[0] != '^') {
+    return FAIL;
+  }
+  pat++;
+
   // [ vim, vim._expand_pat, buf ]
   lua_pushlstring(lstate, (const char *)pat, strlen(pat));
 
@@ -2070,10 +2061,15 @@ void nlua_set_sctx(sctx_T *current)
     break;
   }
   char *source_path = fix_fname(info->source + 1);
-  get_current_script_id(&source_path, current);
-  xfree(source_path);
-  current->sc_lnum = info->currentline;
+  int sid = find_script_by_name(source_path);
+  if (sid > 0) {
+    xfree(source_path);
+  } else {
+    new_script_item(source_path, &sid);
+  }
+  current->sc_sid = sid;
   current->sc_seq = -1;
+  current->sc_lnum = info->currentline;
 
 cleanup:
   xfree(info);

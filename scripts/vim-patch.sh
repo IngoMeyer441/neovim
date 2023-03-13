@@ -226,6 +226,10 @@ preprocess_patch() {
   local na_vimrcexample='vimrc_example\.vim'
   2>/dev/null $nvim --cmd 'set dir=/tmp' +'g@^diff --git a/runtime/\<\%('${na_vimrcexample}'\)\>@norm! d/\v(^diff)|%$' +w +q "$file"
 
+  # Rename src/testdir/ paths to test/old/testdir/
+  LC_ALL=C sed -e 's/\( [ab]\)\/src\/testdir/\1\/test\/old\/testdir/g' \
+    "$file" > "$file".tmp && mv "$file".tmp "$file"
+
   # Rename src/ paths to src/nvim/
   LC_ALL=C sed -e 's/\( [ab]\/src\)/\1\/nvim/g' \
     "$file" > "$file".tmp && mv "$file".tmp "$file"
@@ -594,6 +598,7 @@ _set_missing_vimpatches() {
   # Massage arguments for git-log.
   declare -A git_log_replacements=(
     [^\(.*/\)?src/nvim/\(.*\)]="\${BASH_REMATCH[1]}src/\${BASH_REMATCH[2]}"
+    [^\(.*/\)?test/old/\(.*\)]="\${BASH_REMATCH[1]}src/\${BASH_REMATCH[2]}"
     [^\(.*/\)?\.vim-src/\(.*\)]="\${BASH_REMATCH[2]}"
   )
   local i j

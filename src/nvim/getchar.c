@@ -2073,39 +2073,6 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
     }
   }
 
-  // Check for match with 'pastetoggle'
-  if (*p_pt != NUL && mp == NULL && (State & (MODE_INSERT | MODE_NORMAL))) {
-    bool match = typebuf_match_len((uint8_t *)p_pt, &mlen);
-    if (match) {
-      // write chars to script file(s)
-      if (mlen > typebuf.tb_maplen) {
-        gotchars(typebuf.tb_buf + typebuf.tb_off + typebuf.tb_maplen,
-                 (size_t)(mlen - typebuf.tb_maplen));
-      }
-
-      del_typebuf(mlen, 0);  // remove the chars
-      set_option_value_give_err("paste", !p_paste, NULL, 0);
-      if (!(State & MODE_INSERT)) {
-        msg_col = 0;
-        msg_row = Rows - 1;
-        msg_clr_eos();  // clear ruler
-      }
-      status_redraw_all();
-      redraw_statuslines();
-      showmode();
-      setcursor();
-      *keylenp = keylen;
-      return map_result_retry;
-    }
-    // Need more chars for partly match.
-    if (mlen == typebuf.tb_len) {
-      keylen = KEYLEN_PART_KEY;
-    } else if (max_mlen < mlen) {
-      // no match, may have to check for termcode at next character
-      max_mlen = mlen + 1;
-    }
-  }
-
   if ((mp == NULL || max_mlen > mp_match_len) && keylen != KEYLEN_PART_MAP) {
     // When no matching mapping found or found a non-matching mapping that
     // matches at least what the matching mapping matched:
@@ -2116,13 +2083,6 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
               || (typebuf.tb_buf[typebuf.tb_off + 1] == KS_MODIFIER && typebuf.tb_len < 4))) {
         // Incomplete modifier sequence: cannot decide whether to simplify yet.
         keylen = KEYLEN_PART_KEY;
-      } else if (keylen == KEYLEN_PART_KEY && !*timedout) {
-        // If 'pastetoggle' matched partially, don't simplify.
-        // When the last characters were not typed, don't wait for a typed character to
-        // complete 'pastetoggle'.
-        if (typebuf.tb_len == typebuf.tb_maplen) {
-          keylen = 0;
-        }
       } else {
         // Try to include the modifier into the key.
         keylen = check_simplify_modifier(max_mlen + 1);
@@ -2345,7 +2305,7 @@ void check_end_reg_executing(bool advance)
 /// K_SPECIAL may be escaped, need to get two more bytes then.
 static int vgetorpeek(bool advance)
 {
-  int c, c1;
+  int c;
   bool timedout = false;  // waited for more than 'timeoutlen'
                           // for mapping to complete or
                           // 'ttimeoutlen' for complete key code
@@ -2639,7 +2599,7 @@ static int vgetorpeek(bool advance)
         // input from the user), show the partially matched characters
         // to the user with showcmd.
         int showcmd_idx = 0;
-        c1 = 0;
+        bool showing_partial = false;
         if (typebuf.tb_len > 0 && advance && !exmode_active) {
           if (((State & (MODE_NORMAL | MODE_INSERT)) || State == MODE_LANGMAP)
               && State != MODE_HITRETURN) {
@@ -2648,7 +2608,7 @@ static int vgetorpeek(bool advance)
                 && ptr2cells((char *)typebuf.tb_buf + typebuf.tb_off + typebuf.tb_len - 1) == 1) {
               edit_putchar(typebuf.tb_buf[typebuf.tb_off + typebuf.tb_len - 1], false);
               setcursor();  // put cursor back where it belongs
-              c1 = 1;
+              showing_partial = true;
             }
             // need to use the col and row from above here
             old_wcol = curwin->w_wcol;
@@ -2666,12 +2626,15 @@ static int vgetorpeek(bool advance)
             curwin->w_wrow = old_wrow;
           }
 
-          // this looks nice when typing a dead character map
-          if ((State & MODE_CMDLINE) && cmdline_star == 0) {
+          // This looks nice when typing a dead character map.
+          // There is no actual command line for get_number().
+          if ((State & MODE_CMDLINE)
+              && get_cmdline_info()->cmdbuff != NULL
+              && cmdline_star == 0) {
             char *p = (char *)typebuf.tb_buf + typebuf.tb_off + typebuf.tb_len - 1;
             if (ptr2cells(p) == 1 && (uint8_t)(*p) < 128) {
               putcmdline(*p, false);
-              c1 = 1;
+              showing_partial = true;
             }
           }
         }
@@ -2704,11 +2667,12 @@ static int vgetorpeek(bool advance)
         if (showcmd_idx != 0) {
           pop_showcmd();
         }
-        if (c1 == 1) {
+        if (showing_partial == 1) {
           if (State & MODE_INSERT) {
             edit_unputchar();
           }
-          if (State & MODE_CMDLINE) {
+          if ((State & MODE_CMDLINE)
+              && get_cmdline_info()->cmdbuff != NULL) {
             unputcmdline();
           } else {
             setcursor();  // put cursor back where it belongs
@@ -2917,18 +2881,6 @@ int fix_input_buffer(uint8_t *buf, int len)
   }
   *p = NUL;  // add trailing NUL
   return len;
-}
-
-static bool typebuf_match_len(const uint8_t *str, int *mlen)
-{
-  int i;
-  for (i = 0; i < typebuf.tb_len && str[i]; i++) {
-    if (str[i] != typebuf.tb_buf[typebuf.tb_off + i]) {
-      break;
-    }
-  }
-  *mlen = i;
-  return str[i] == NUL;  // matched the whole string
 }
 
 /// Get command argument for <Cmd> key

@@ -19,7 +19,6 @@ env:
   ASAN_OPTIONS: detect_leaks=1:check_initialization_order=1:handle_abort=1:handle_sigill=1:log_path=${{ github.workspace }}/build/log/asan:intercept_tls_get_addr=0
   BIN_DIR: ${{ github.workspace }}/bin
   BUILD_DIR: ${{ github.workspace }}/build
-  DEPS_BUILD_DIR: ${{ github.workspace }}/nvim-deps
   INSTALL_PREFIX: ${{ github.workspace }}/nvim-install
   LOG_DIR: ${{ github.workspace }}/build/log
   NVIM_LOG_FILE: ${{ github.workspace }}/build/.nvimlog
@@ -72,8 +71,8 @@ jobs:
 
       - name: Build third-party deps
         run: |
-          cmake -S cmake.deps -B $DEPS_BUILD_DIR -G Ninja
-          cmake --build $DEPS_BUILD_DIR
+          cmake -S cmake.deps -B .deps -G Ninja
+          cmake --build .deps
 
       - if: success() || failure() && steps.abort_job.outputs.status == 'success'
         name: configure
@@ -193,8 +192,8 @@ jobs:
 
       - name: Build third-party deps
         run: |
-          cmake -S cmake.deps -B $DEPS_BUILD_DIR -G Ninja ${{ matrix.deps_flags }}
-          cmake --build $DEPS_BUILD_DIR
+          cmake -S cmake.deps -B .deps -G Ninja ${{ matrix.deps_flags }}
+          cmake --build .deps
 
       - name: Build
         run: |
@@ -241,17 +240,9 @@ jobs:
           fi
 
           # Check that all runtime files were installed
-          for file in $(git -C runtime ls-files '*.vim' '*.ps' '*.dict' '*.py' '*.tutor'); do
+          for file in $(git -C runtime ls-files '*.vim' '*.ps' '*.dict' '*.py' '*.tutor' '*.awk' '*.sh' '*.bat'); do
             if ! test -e "$INSTALL_PREFIX/share/nvim/runtime/$file"; then
-              printf "%s%s" 'It appears that %s is not installed.' "$file"
-              exit 1
-            fi
-          done
-
-          # Check that some runtime files are installed and are executables
-          for file in $(git -C runtime ls-files '*.awk' '*.sh' '*.bat'); do
-            if ! test -x "$INSTALL_PREFIX/share/nvim/runtime/$file"; then
-              printf "%s%s" 'It appears that %s is not installed or is not executable.' "$file"
+              printf "It appears that %s is not installed." "$file"
               exit 1
             fi
           done
@@ -281,8 +272,8 @@ jobs:
 
       - name: Build third-party deps
         run: |
-          cmake -S cmake.deps -B $DEPS_BUILD_DIR -G "Ninja Multi-Config"
-          cmake --build $DEPS_BUILD_DIR
+          cmake -S cmake.deps -B .deps -G "Ninja Multi-Config"
+          cmake --build .deps
 
       - name: Configure
         run: cmake -B build -G "Ninja Multi-Config" -D CMAKE_C_COMPILER=gcc
@@ -297,7 +288,7 @@ jobs:
         run: cmake --build build --config MinSizeRel
 
   windows:
-    runs-on: windows-2019
+    runs-on: windows-2022
     timeout-minutes: 45
     name: windows
     steps:
@@ -317,8 +308,8 @@ jobs:
 
       - name: Build deps
         run: |
-          cmake -S cmake.deps -B $env:DEPS_BUILD_DIR -G Ninja -D CMAKE_BUILD_TYPE='RelWithDebInfo'
-          cmake --build $env:DEPS_BUILD_DIR
+          cmake -S cmake.deps -B .deps -G Ninja -D CMAKE_BUILD_TYPE='RelWithDebInfo'
+          cmake --build .deps
 
       - name: Build
         run: |
@@ -337,9 +328,6 @@ jobs:
           python -m pip install pynvim
           # Sanity check
           python -c "import pynvim; print(str(pynvim))"
-
-          gem.cmd install --pre neovim
-          Get-Command -CommandType Application neovim-ruby-host.bat
 
           node --version
           npm.cmd --version
@@ -360,11 +348,59 @@ jobs:
         run: cmake --build build --target functionaltest
 
       - if: success() || failure() && steps.abort_job.outputs.status == 'success'
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          pacboy: >-
+            make:p gcc:p
+          release: false
+
+      - if: success() || failure() && steps.abort_job.outputs.status == 'success'
         name: Run oldtest
+        shell: msys2 {0}
         run: |
-          # Add MSYS to path, required for e.g. `find` used in test scripts.
-          # But would break functionaltest, where its `more` would be used then.
-          $OldPath = $env:PATH
-          $env:PATH = "C:\msys64\usr\bin;$env:PATH"
-          & "C:\msys64\mingw64\bin\mingw32-make.exe" -C $(Convert-Path src\nvim\testdir) VERBOSE=1
-          $env:PATH = $OldPath
+          cd test/old/testdir
+          mingw32-make VERBOSE=1
+
+  with-external-deps:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo add-apt-repository ppa:neovim-ppa/stable
+          ./.github/scripts/install_deps.sh
+          sudo apt-get install -y \
+            libluajit-5.1-dev \
+            libmsgpack-dev \
+            libtermkey-dev \
+            libtree-sitter-dev \
+            libunibilium-dev \
+            libuv1-dev \
+            lua-filesystem \
+            lua-lpeg \
+            lua-mpack \
+            luajit
+            # libvterm-dev \
+            # lua-luv-dev
+
+            # Remove comments from packages once we start using these external
+            # dependencies.
+
+      - uses: ./.github/actions/cache
+
+      - name: Build third-party deps
+        run: |
+          # Ideally all dependencies should external for this job, but some
+          # dependencies don't have the required version available. We use the
+          # bundled versions for these with the hopes of being able to remove them
+          # later on.
+          cmake -S cmake.deps -B .deps -G Ninja -D USE_BUNDLED=OFF -D USE_BUNDLED_LUV=ON -D USE_BUNDLED_LIBVTERM=ON
+          cmake --build .deps
+
+      - name: Build
+        run: |
+          cmake -B build -G Ninja
+          cmake --build build

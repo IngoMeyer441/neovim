@@ -92,6 +92,7 @@
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
+#include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/tag.h"
 #include "nvim/terminal.h"
@@ -2176,6 +2177,10 @@ static char *set_bool_option(const int opt_idx, char *const varp, const int valu
     if (curwin->w_p_spell) {
       errmsg = did_set_spelllang(curwin);
     }
+  } else if ((int *)varp == &curwin->w_p_nu && *curwin->w_p_stc != NUL) {
+    // When 'statuscolumn' is set and 'number' is changed:
+    curwin->w_nrwidth_line_count = 0;    // make sure width is reset
+    curwin->w_statuscol_line_count = 0;  // make sure width is re-estimated
   }
 
   if ((int *)varp == &curwin->w_p_arab) {
@@ -2247,8 +2252,10 @@ static char *set_bool_option(const int opt_idx, char *const varp, const int valu
     ui_call_option_set(cstr_as_string(options[opt_idx].fullname),
                        BOOLEAN_OBJ(*varp));
   }
-
-  comp_col();                       // in case 'ruler' or 'showcmd' changed
+  if ((int *)varp == &p_ru || (int *)varp == &p_sc) {
+    // in case 'ruler' or 'showcmd' changed
+    comp_col();
+  }
   if (curwin->w_curswant != MAXCOL
       && (options[opt_idx].flags & (P_CURSWANT | P_RALL)) != 0) {
     curwin->w_set_curswant = true;
@@ -2911,11 +2918,7 @@ getoption_T get_option_value(const char *name, long *numval, char **stringval, u
       return gov_hidden_string;
     }
     if (stringval != NULL) {
-      if ((char **)varp == &p_pt) {  // 'pastetoggle'
-        *stringval = str2special_save(*(char **)(varp), false, false);
-      } else {
-        *stringval = xstrdup(*(char **)(varp));
-      }
+      *stringval = xstrdup(*(char **)(varp));
     }
     return gov_string;
   }
@@ -3525,17 +3528,7 @@ static int put_setstring(FILE *fd, char *cmd, char *name, char **valuep, uint64_
   char_u *part = NULL;
 
   if (*valuep != NULL) {
-    // Output 'pastetoggle' as key names.  For other
-    // options some characters have to be escaped with
-    // CTRL-V or backslash
-    if (valuep == &p_pt) {
-      char_u *s = (char_u *)(*valuep);
-      while (*s != NUL) {
-        if (put_escstr(fd, (char *)str2special((const char **)&s, false, false), 2) == FAIL) {
-          return FAIL;
-        }
-      }
-    } else if ((flags & P_EXPAND) != 0) {
+    if ((flags & P_EXPAND) != 0) {
       size_t size = (size_t)strlen(*valuep) + 1;
 
       // replace home directory in the whole option value into "buf"
@@ -4983,9 +4976,6 @@ static void option_value2string(vimoption_T *opp, int scope)
       NameBuff[0] = NUL;
     } else if (opp->flags & P_EXPAND) {
       home_replace(NULL, varp, NameBuff, MAXPATHL, false);
-      // Translate 'pastetoggle' into special key names.
-    } else if ((char **)opp->var == &p_pt) {
-      str2specialbuf((const char *)p_pt, NameBuff, MAXPATHL);
     } else {
       xstrlcpy(NameBuff, varp, MAXPATHL);
     }

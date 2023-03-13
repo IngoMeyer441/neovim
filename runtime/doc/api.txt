@@ -356,6 +356,7 @@ In-process Lua plugins can receive buffer updates in the form of Lua
 callbacks. These callbacks are called frequently in various contexts;
 |textlock| prevents changing buffer contents and window layout (use
 |vim.schedule()| to defer such operations to the main loop instead).
+Moving the cursor is allowed, but it is restored afterwards.
 
 |nvim_buf_attach()| will take keyword args for the callbacks. "on_lines" will
 receive parameters ("lines", {buf}, {changedtick}, {firstline}, {lastline},
@@ -450,6 +451,10 @@ Buffer text can be highlighted by typical mechanisms (syntax highlighting,
 'winhighlight' can be used as usual to override groups locally. Floats inherit
 options from the current window; specify `style=minimal` in |nvim_open_win()|
 to disable various visual features such as the 'number' column.
+
+Other highlight groups specific to floating windows:
+- |hl-FloatBorder| for window's border
+- |hl-FloatTitle| for window's title
 
 Currently, floating windows don't support some widgets like scrollbar.
 

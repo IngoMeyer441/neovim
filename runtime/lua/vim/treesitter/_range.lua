@@ -2,8 +2,21 @@ local api = vim.api
 
 local M = {}
 
----@alias Range4 {[1]: integer, [2]: integer, [3]: integer, [4]: integer}
----@alias Range6 {[1]: integer, [2]: integer, [3]: integer, [4]: integer, [5]: integer, [6]: integer}
+---@class Range4
+---@field [1] integer start row
+---@field [2] integer start column
+---@field [3] integer end row
+---@field [4] integer end column
+
+---@class Range6
+---@field [1] integer start row
+---@field [2] integer start column
+---@field [3] integer start bytes
+---@field [4] integer end row
+---@field [5] integer end column
+---@field [6] integer end bytes
+
+---@alias Range Range4|Range6
 
 ---@private
 ---@param a_row integer
@@ -54,15 +67,32 @@ M.cmp_pos = {
 setmetatable(M.cmp_pos, { __call = cmp_pos })
 
 ---@private
----@param r1 Range4|Range6
----@param r2 Range4|Range6
+---Check if a variable is a valid range object
+---@param r any
+---@return boolean
+function M.validate(r)
+  if type(r) ~= 'table' or #r ~= 6 and #r ~= 4 then
+    return false
+  end
+
+  for _, e in
+    ipairs(r --[[@as any[] ]])
+  do
+    if type(e) ~= 'number' then
+      return false
+    end
+  end
+
+  return true
+end
+
+---@private
+---@param r1 Range
+---@param r2 Range
 ---@return boolean
 function M.intercepts(r1, r2)
-  local off_1 = #r1 == 6 and 1 or 0
-  local off_2 = #r1 == 6 and 1 or 0
-
-  local srow_1, scol_1, erow_1, ecol_1 = r1[1], r1[2], r1[3 + off_1], r1[4 + off_1]
-  local srow_2, scol_2, erow_2, ecol_2 = r2[1], r2[2], r2[3 + off_2], r2[4 + off_2]
+  local srow_1, scol_1, erow_1, ecol_1 = M.unpack4(r1)
+  local srow_2, scol_2, erow_2, ecol_2 = M.unpack4(r2)
 
   -- r1 is above r2
   if M.cmp_pos.le(erow_1, ecol_1, srow_2, scol_2) then
@@ -78,15 +108,27 @@ function M.intercepts(r1, r2)
 end
 
 ---@private
----@param r1 Range4|Range6
----@param r2 Range4|Range6
+---@param r Range
+---@return integer, integer, integer, integer
+function M.unpack4(r)
+  local off_1 = #r == 6 and 1 or 0
+  return r[1], r[2], r[3 + off_1], r[4 + off_1]
+end
+
+---@private
+---@param r Range6
+---@return integer, integer, integer, integer, integer, integer
+function M.unpack6(r)
+  return r[1], r[2], r[3], r[4], r[5], r[6]
+end
+
+---@private
+---@param r1 Range
+---@param r2 Range
 ---@return boolean whether r1 contains r2
 function M.contains(r1, r2)
-  local off_1 = #r1 == 6 and 1 or 0
-  local off_2 = #r1 == 6 and 1 or 0
-
-  local srow_1, scol_1, erow_1, ecol_1 = r1[1], r1[2], r1[3 + off_1], r1[4 + off_1]
-  local srow_2, scol_2, erow_2, ecol_2 = r2[1], r2[2], r2[3 + off_2], r2[4 + off_2]
+  local srow_1, scol_1, erow_1, ecol_1 = M.unpack4(r1)
+  local srow_2, scol_2, erow_2, ecol_2 = M.unpack4(r2)
 
   -- start doesn't fit
   if M.cmp_pos.gt(srow_1, scol_1, srow_2, scol_2) then
@@ -103,9 +145,13 @@ end
 
 ---@private
 ---@param source integer|string
----@param range Range4
+---@param range Range
 ---@return Range6
 function M.add_bytes(source, range)
+  if type(range) == 'table' and #range == 6 then
+    return range --[[@as Range6]]
+  end
+
   local start_row, start_col, end_row, end_col = range[1], range[2], range[3], range[4]
   local start_byte = 0
   local end_byte = 0

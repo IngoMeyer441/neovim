@@ -2832,6 +2832,24 @@ describe('API', function()
         type = "boolean",
         was_set = true
       }, meths.get_option_info'showcmd')
+
+      meths.set_option_value('showcmd', true, {})
+
+      eq({
+        allows_duplicates = true,
+        commalist = false,
+        default = true,
+        flaglist = false,
+        global_local = false,
+        last_set_chan = 1,
+        last_set_linenr = 0,
+        last_set_sid = -9,
+        name = "showcmd",
+        scope = "global",
+        shortname = "sc",
+        type = "boolean",
+        was_set = true
+      }, meths.get_option_info'showcmd')
     end)
   end)
 
@@ -4024,7 +4042,7 @@ describe('API', function()
     it('splits arguments correctly for Lua callback', function()
       meths.exec_lua([[
         local function FooFunc(opts)
-          vim.pretty_print(opts.fargs)
+          vim.print(opts.fargs)
         end
 
         vim.api.nvim_create_user_command("Foo", FooFunc, { nargs = '+' })

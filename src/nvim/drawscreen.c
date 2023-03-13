@@ -92,6 +92,7 @@
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/screen.h"
+#include "nvim/state.h"
 #include "nvim/statusline.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
@@ -727,34 +728,47 @@ static void win_redr_border(win_T *wp)
 /// Show current cursor info in ruler and various other places
 ///
 /// @param always  if false, only show ruler if position has changed.
-void show_cursor_info(bool always)
+void show_cursor_info_later(bool force)
 {
-  if (!always && !redrawing()) {
-    return;
+  int state = get_real_state();
+  int empty_line = (State & MODE_INSERT) == 0
+                   && *ml_get_buf(curwin->w_buffer, curwin->w_cursor.lnum, false) == NUL;
+
+  // Only draw when something changed.
+  validate_virtcol_win(curwin);
+  if (force
+      || curwin->w_cursor.lnum != curwin->w_stl_cursor.lnum
+      || curwin->w_cursor.col != curwin->w_stl_cursor.col
+      || curwin->w_virtcol != curwin->w_stl_virtcol
+      || curwin->w_cursor.coladd != curwin->w_stl_cursor.coladd
+      || curwin->w_topline != curwin->w_stl_topline
+      || curwin->w_buffer->b_ml.ml_line_count != curwin->w_stl_line_count
+      || curwin->w_topfill != curwin->w_stl_topfill
+      || empty_line != curwin->w_stl_empty
+      || state != curwin->w_stl_state) {
+    if ((curwin->w_status_height || global_stl_height())) {
+      curwin->w_redr_status = true;
+    } else {
+      redraw_cmdline = true;
+    }
+
+    if (*p_wbr != NUL || *curwin->w_p_wbr != NUL) {
+      curwin->w_redr_status = true;
+    }
+
+    if ((p_icon && (stl_syntax & STL_IN_ICON))
+        || (p_title && (stl_syntax & STL_IN_TITLE))) {
+      need_maketitle = true;
+    }
   }
 
-  win_check_ns_hl(curwin);
-  if ((*p_stl != NUL || *curwin->w_p_stl != NUL)
-      && (curwin->w_status_height || global_stl_height())) {
-    redraw_custom_statusline(curwin);
-  } else {
-    win_redr_ruler(curwin, always);
-  }
-  if (*p_wbr != NUL || *curwin->w_p_wbr != NUL) {
-    win_redr_winbar(curwin);
-  }
-
-  if (need_maketitle
-      || (p_icon && (stl_syntax & STL_IN_ICON))
-      || (p_title && (stl_syntax & STL_IN_TITLE))) {
-    maketitle();
-  }
-
-  win_check_ns_hl(NULL);
-  // Redraw the tab pages line if needed.
-  if (redraw_tabline) {
-    draw_tabline();
-  }
+  curwin->w_stl_cursor = curwin->w_cursor;
+  curwin->w_stl_virtcol = curwin->w_virtcol;
+  curwin->w_stl_empty = (char)empty_line;
+  curwin->w_stl_topline = curwin->w_topline;
+  curwin->w_stl_line_count = curwin->w_buffer->b_ml.ml_line_count;
+  curwin->w_stl_topfill = curwin->w_topfill;
+  curwin->w_stl_state = state;
 }
 
 static void redraw_win_signcol(win_T *wp)
@@ -2110,7 +2124,7 @@ void status_redraw_all(void)
   bool is_stl_global = global_stl_height() != 0;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if ((!is_stl_global && wp->w_status_height) || (is_stl_global && wp == curwin)
+    if ((!is_stl_global && wp->w_status_height) || wp == curwin
         || wp->w_winbar_height) {
       wp->w_redr_status = true;
       redraw_later(wp, UPD_VALID);

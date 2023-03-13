@@ -49,6 +49,7 @@
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
+#include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/tag.h"
 #include "nvim/ui.h"
@@ -1199,6 +1200,7 @@ static void did_set_statusline(win_T *win, char **varp, char **gvarp, char **err
     ru_wid = 0;
   } else if (varp == &win->w_p_stc) {
     win->w_nrwidth_line_count = 0;
+    win->w_statuscol_line_count = 0;
   }
   char *s = *varp;
   if (varp == &p_ruf && *s == '%') {
@@ -1301,22 +1303,6 @@ static void did_set_foldcolumn(char **varp, char **errmsg)
 {
   if (**varp == NUL || check_opt_strings(*varp, p_fdc_values, false) != OK) {
     *errmsg = e_invarg;
-  }
-}
-
-static void did_set_pastetoggle(void)
-{
-  // 'pastetoggle': translate key codes like in a mapping
-  if (*p_pt) {
-    char *p = NULL;
-    (void)replace_termcodes(p_pt,
-                            strlen(p_pt),
-                            &p, REPTERM_FROM_PART | REPTERM_DO_LT, NULL,
-                            CPO_TO_CPO_FLAGS);
-    if (p != NULL) {
-      free_string_option(p_pt);
-      p_pt = p;
-    }
   }
 }
 
@@ -1776,8 +1762,6 @@ static char *did_set_string_option_for(buf_T *buf, win_T *win, int opt_idx, char
     did_set_opt_strings(*varp, p_sloc_values, false, &errmsg);
   } else if (gvarp == &win->w_allbuf_opt.wo_fdc) {      // 'foldcolumn'
     did_set_foldcolumn(varp, &errmsg);
-  } else if (varp == &p_pt) {                           // 'pastetoggle'
-    did_set_pastetoggle();
   } else if (varp == &p_bs) {                           // 'backspace'
     did_set_backspace(&errmsg);
   } else if (varp == &p_bo) {

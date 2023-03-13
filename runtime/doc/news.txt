@@ -45,15 +45,28 @@ The following changes may require adaptations in user config or plugins.
     - `printheader`
     - `printmbcharset`
 
-• libiconv is now a required build dependency.
+• 'paste' option is now deprecated and 'pastetoggle' is removed. |paste| works
+  automatically in GUI and terminal (TUI) Nvim.  Just Paste It.™
+
+• libiconv and intl are now required build dependencies.
 
 • Unsaved changes are now preserved rather than discarded when |channel-stdio|
   is closed.
+
+• Changes to |vim.treesitter.get_node_text()|:
+  - It now returns `string`, as opposed to `string|string[]|nil`.
+  - The `concat` option has been removed as it was not consistently applied.
+  - Invalid ranges now cause an error instead of returning `nil`.
+
+• Renamed vim.pretty_print to vim.print. |deprecated|
 
 ==============================================================================
 NEW FEATURES                                                    *news-features*
 
 The following new APIs or features were added.
+
+• Added |vim.version| for parsing and comparing version strings conforming to
+  the semver specification, see |lua-version|.
 
 • A new environment variable named NVIM_APPNAME enables configuring the
   directories where Neovim should find its configuration and state files. See
@@ -87,7 +100,7 @@ The following new APIs or features were added.
   `semanticTokensProvider` from the LSP client's {server_capabilities} in the
   `LspAttach` callback.
 
-  See |lsp-semantic_tokens| for more information.
+  See |lsp-semantic-highlight| for more information.
 
 • |vim.treesitter.inspect_tree()| and |:InspectTree| opens a split window
   showing a text representation of the nodes in a language tree for the current
@@ -159,6 +172,8 @@ The following new APIs or features were added.
 
 • |:highlight| now supports an additional attribute "altfont".
 
+• |:Man| manpage viewer supports manpage names containing spaces.
+
 • Treesitter captures can now be transformed by directives. This will allow
   more complicated dynamic language injections.
 
@@ -189,6 +204,12 @@ The following new APIs or features were added.
   disabled by default and can be enabled by setting the
   `workspace.didChangeWatchedFiles.dynamicRegistration=true` capability.
 
+• Added an omnifunc implementation for lua, |vim.lua_omnifunc()|
+
+• Treesitter injection queries now use the format described at
+  https://tree-sitter.github.io/tree-sitter/syntax-highlighting#language-injection .
+  Support for the previous format will be removed in a future release.
+
 ==============================================================================
 CHANGED FEATURES                                                 *news-changes*
 
@@ -207,6 +228,9 @@ The following changes to existing APIs or features add new behavior.
 
 • API calls now show more information about where an exception happened.
 
+• The `win_viewport` UI event now contains information about virtual lines,
+  meaning that smooth scrolling can now be implemented more consistenlty.
+
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
 
@@ -221,7 +245,10 @@ The following deprecated functions or APIs were removed.
   changes need to be contributed there first.)
   See https://github.com/neovim/neovim/pull/20674.
 
-- 'hkmap', 'hkmapp' and 'aleph' options were removed. Use 'keymap' option instead.
+• 'hkmap', 'hkmapp' and 'aleph' options were removed. Use 'keymap' option instead.
+
+• |LanguageTree:parse()| no longer returns changed regions. Please use the
+  `on_changedtree` callbacks instead.
 
 ==============================================================================
 DEPRECATIONS                                                *news-deprecations*
