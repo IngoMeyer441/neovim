@@ -2015,7 +2015,7 @@ describe('float window', function()
 
     it('terminates border on edge of viewport when window extends past viewport', function()
       local buf = meths.create_buf(false, false)
-      meths.open_win(buf, false, {relative='editor', width=40, height=7, row=0, col=0, border="single"})
+      meths.open_win(buf, false, {relative='editor', width=40, height=7, row=0, col=0, border="single", zindex=201})
       if multigrid then
         screen:expect{grid=[[
         ## grid 1
@@ -2046,7 +2046,7 @@ describe('float window', function()
           {5:│}{2:~                                       }{5:│}|
           {5:└────────────────────────────────────────┘}|
         ]], float_pos={
-          [4] = { { id = 1001 }, "NW", 1, 0, 0, true }
+          [4] = { { id = 1001 }, "NW", 1, 0, 0, true, 201 }
         }, win_viewport={
           [2] = {win = {id = 1000}, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
           [4] = {win = {id = 1001}, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
@@ -2058,8 +2058,8 @@ describe('float window', function()
           {5:│}{2:~                                     }{5:│}|
           {5:│}{2:~                                     }{5:│}|
           {5:│}{2:~                                     }{5:│}|
+          {5:│}{2:~                                     }{5:│}|
           {5:└──────────────────────────────────────┘}|
-                                                  |
         ]]}
       end
     end)
@@ -2180,6 +2180,98 @@ describe('float window', function()
           {0:~    }{13: acc            }{0:                   }|
           {0:~                                       }|
           {3:-- }{8:match 1 of 4}                         |
+        ]]}
+      end
+    end)
+
+    it('show ruler of current floating window', function()
+      command 'set ruler'
+      local buf = meths.create_buf(false, false)
+      meths.buf_set_lines(buf, 0, -1, true, {'aaa aab ',
+                                             'abb acc '})
+      meths.open_win(buf, true, {relative='editor', width=9, height=3, row=0, col=5})
+      feed 'gg'
+
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [3:----------------------------------------]|
+        ## grid 2
+                                                  |
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+        ## grid 3
+                                1,1           All |
+        ## grid 5
+          {1:^aaa aab  }|
+          {1:abb acc  }|
+          {2:~        }|
+        ]], float_pos={
+          [5] = {{id = 1002}, "NW", 1, 0, 5, true, 50};
+        }, win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+          [5] = {win = {id = 1002}, topline = 0, botline = 3, curline = 0, curcol = 0, linecount = 2, sum_scroll_delta = 0};
+        }}
+      else
+        screen:expect{grid=[[
+               {1:^aaa aab  }                          |
+          {0:~    }{1:abb acc  }{0:                          }|
+          {0:~    }{2:~        }{0:                          }|
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+                                1,1           All |
+        ]]}
+      end
+
+      feed 'w'
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [3:----------------------------------------]|
+        ## grid 2
+                                                  |
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+        ## grid 3
+                                1,5           All |
+        ## grid 5
+          {1:aaa ^aab  }|
+          {1:abb acc  }|
+          {2:~        }|
+        ]], float_pos={
+          [5] = {{id = 1002}, "NW", 1, 0, 5, true, 50};
+        }, win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+          [5] = {win = {id = 1002}, topline = 0, botline = 3, curline = 0, curcol = 4, linecount = 2, sum_scroll_delta = 0};
+        }}
+      else
+        screen:expect{grid=[[
+               {1:aaa ^aab  }                          |
+          {0:~    }{1:abb acc  }{0:                          }|
+          {0:~    }{2:~        }{0:                          }|
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+                                1,5           All |
         ]]}
       end
     end)
@@ -3631,9 +3723,9 @@ describe('float window', function()
         ]], float_pos=expected_pos}
       else
         screen:expect([[
-                    {1:very           }               |
-          {0:~         }{1:^float          }{0:               }|
-                                                  |
+                    {1:such           }               |
+          {0:~         }{1:very           }{0:               }|
+                    ^                              |
         ]])
       end
 

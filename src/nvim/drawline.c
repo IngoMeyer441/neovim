@@ -21,6 +21,7 @@
 #include "nvim/decoration_provider.h"
 #include "nvim/diff.h"
 #include "nvim/drawline.h"
+#include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/extmark_defs.h"
 #include "nvim/fold.h"
@@ -40,7 +41,6 @@
 #include "nvim/plines.h"
 #include "nvim/pos.h"
 #include "nvim/quickfix.h"
-#include "nvim/screen.h"
 #include "nvim/sign.h"
 #include "nvim/spell.h"
 #include "nvim/state.h"
@@ -384,6 +384,70 @@ static void handle_foldcolumn(win_T *wp, winlinevars_T *wlv)
   }
 }
 
+/// Fills the foldcolumn at "p" for window "wp".
+/// Only to be called when 'foldcolumn' > 0.
+///
+/// @param[out] p  Char array to write into
+/// @param lnum    Absolute current line number
+/// @param closed  Whether it is in 'foldcolumn' mode
+///
+/// Assume monocell characters
+/// @return number of chars added to \param p
+size_t fill_foldcolumn(char *p, win_T *wp, foldinfo_T foldinfo, linenr_T lnum)
+{
+  int i = 0;
+  int level;
+  int first_level;
+  int fdc = compute_foldcolumn(wp, 0);    // available cell width
+  size_t char_counter = 0;
+  int symbol = 0;
+  int len = 0;
+  bool closed = foldinfo.fi_lines > 0;
+  // Init to all spaces.
+  memset(p, ' ', MAX_MCO * (size_t)fdc + 1);
+
+  level = foldinfo.fi_level;
+
+  // If the column is too narrow, we start at the lowest level that
+  // fits and use numbers to indicate the depth.
+  first_level = level - fdc - closed + 1;
+  if (first_level < 1) {
+    first_level = 1;
+  }
+
+  for (i = 0; i < MIN(fdc, level); i++) {
+    if (foldinfo.fi_lnum == lnum
+        && first_level + i >= foldinfo.fi_low_level) {
+      symbol = wp->w_p_fcs_chars.foldopen;
+    } else if (first_level == 1) {
+      symbol = wp->w_p_fcs_chars.foldsep;
+    } else if (first_level + i <= 9) {
+      symbol = '0' + first_level + i;
+    } else {
+      symbol = '>';
+    }
+
+    len = utf_char2bytes(symbol, &p[char_counter]);
+    char_counter += (size_t)len;
+    if (first_level + i >= level) {
+      i++;
+      break;
+    }
+  }
+
+  if (closed) {
+    if (symbol != 0) {
+      // rollback previous write
+      char_counter -= (size_t)len;
+      memset(&p[char_counter], ' ', (size_t)len);
+    }
+    len = utf_char2bytes(wp->w_p_fcs_chars.foldclosed, &p[char_counter]);
+    char_counter += (size_t)len;
+  }
+
+  return MAX(char_counter + (size_t)(fdc - i), (size_t)fdc);
+}
+
 /// Get information needed to display the sign in line "wlv->lnum" in window "wp".
 /// If "nrcol" is true, the sign is going to be displayed in the number column.
 /// Otherwise the sign is going to be displayed in the sign column.
@@ -467,6 +531,21 @@ static int get_sign_attrs(buf_T *buf, winlinevars_T *wlv, int *sign_num_attrp, i
   *sign_cul_attrp = cul_attrs.attr_id;
 
   return num_signs;
+}
+
+/// Returns width of the signcolumn that should be used for the whole window
+///
+/// @param wp window we want signcolumn width from
+/// @return max width of signcolumn (cell unit)
+///
+/// @note Returns a constant for now but hopefully we can improve neovim so that
+///       the returned value width adapts to the maximum number of marks to draw
+///       for the window
+/// TODO(teto)
+int win_signcol_width(win_T *wp)
+{
+  // 2 is vim default value
+  return 2;
 }
 
 static inline void get_line_number_str(win_T *wp, linenr_T lnum, char *buf, size_t buf_len)
@@ -553,7 +632,7 @@ static void handle_lnum_col(win_T *wp, winlinevars_T *wlv, int num_signs, int si
           }
         }
         if (wp->w_p_rl) {                       // reverse line numbers
-          // like rl_mirror(), but keep the space at the end
+          // like rl_mirror_ascii(), but keep the space at the end
           char *p2 = skipwhite(wlv->extra);
           p2 = skiptowhite(p2) - 1;
           for (char *p1 = skipwhite(wlv->extra); p1 < p2; p1++, p2--) {
@@ -1017,7 +1096,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
       }
     }
 
-    has_decor = decor_redraw_line(buf, lnum - 1, &decor_state);
+    has_decor = decor_redraw_line(wp, lnum - 1, &decor_state);
 
     decor_providers_invoke_line(wp, providers, lnum - 1, &has_decor, provider_err);
 
@@ -1540,7 +1619,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
         wlv.draw_state = WL_LINE;
         if (has_decor && wlv.row == startrow + wlv.filler_lines) {
           // hide virt_text on text hidden by 'nowrap'
-          decor_redraw_col(wp->w_buffer, wlv.vcol, wlv.off, true, &decor_state);
+          decor_redraw_col(wp, wlv.vcol, wlv.off, true, &decor_state);
         }
         win_line_continue(&wlv);  // use wlv.saved_ values
       }
@@ -1799,7 +1878,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
         // Non-BMP character : display as ? or fullwidth ?.
         transchar_hex(wlv.extra, mb_c);
         if (wp->w_p_rl) {  // reverse
-          rl_mirror(wlv.extra);
+          rl_mirror_ascii(wlv.extra);
         }
 
         wlv.p_extra = wlv.extra;
@@ -1932,7 +2011,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
         if (has_decor && v > 0) {
           bool selected = (area_active || (area_highlighting && noinvcur
                                            && wlv.vcol == wp->w_virtcol));
-          int extmark_attr = decor_redraw_col(wp->w_buffer, (colnr_T)v - 1, wlv.off,
+          int extmark_attr = decor_redraw_col(wp, (colnr_T)v - 1, wlv.off,
                                               selected, &decor_state);
           if (extmark_attr != 0) {
             if (!attr_pri) {
@@ -2297,7 +2376,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
             wlv.n_extra = byte2cells(c) - 1;
           }
           if ((dy_flags & DY_UHEX) && wp->w_p_rl) {
-            rl_mirror(wlv.p_extra);                 // reverse "<12>"
+            rl_mirror_ascii(wlv.p_extra);                 // reverse "<12>"
           }
           wlv.c_extra = NUL;
           wlv.c_final = NUL;
@@ -2536,7 +2615,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
                       ? 1 : 0);
 
       if (has_decor) {
-        has_virttext = decor_redraw_eol(wp->w_buffer, &decor_state, &wlv.line_attr,
+        has_virttext = decor_redraw_eol(wp, &decor_state, &wlv.line_attr,
                                         wlv.col + eol_skip);
       }
 
