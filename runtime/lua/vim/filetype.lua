@@ -265,6 +265,7 @@ local extension = {
   end,
   cql = 'cqlang',
   crm = 'crm',
+  cr = 'crystal',
   csx = 'cs',
   cs = 'cs',
   csc = 'csc',
@@ -349,6 +350,7 @@ local extension = {
   yaws = 'erlang',
   erb = 'eruby',
   rhtml = 'eruby',
+  esdl = 'esdl',
   ec = 'esqlc',
   EC = 'esqlc',
   strl = 'esterel',
@@ -591,6 +593,7 @@ local extension = {
   lte = 'latte',
   ld = 'ld',
   ldif = 'ldif',
+  lean = 'lean',
   journal = 'ledger',
   ldg = 'ledger',
   ledger = 'ledger',
@@ -906,6 +909,7 @@ local extension = {
   builder = 'ruby',
   rake = 'ruby',
   rs = 'rust',
+  sage = 'sage',
   sas = 'sas',
   sass = 'sass',
   sa = 'sather',
@@ -1099,11 +1103,12 @@ local extension = {
   wrl = 'vrml',
   vroom = 'vroom',
   vue = 'vue',
-  wat = 'wast',
   wast = 'wast',
+  wat = 'wat',
   wdl = 'wdl',
   wm = 'webmacro',
   wbt = 'winbatch',
+  wit = 'wit',
   wml = 'wml',
   wsml = 'wsml',
   ad = 'xdefaults',
@@ -1541,6 +1546,8 @@ local filename = {
   NEWS = function(path, bufnr)
     return require('vim.filetype.detect').news(bufnr)
   end,
+  ['env.nu'] = 'nu',
+  ['config.nu'] = 'nu',
   ['.ocamlinit'] = 'ocaml',
   ['.octaverc'] = 'octave',
   octaverc = 'octave',
@@ -2629,6 +2636,26 @@ function M.match(args)
       return ft
     end
   end
+end
+
+--- Get the default option value for a {filetype}.
+---
+--- The returned value is what would be set in a new buffer after 'filetype'
+--- is set, meaning it should respect all FileType autocmds and ftplugin files.
+---
+--- Example:
+--- <pre>lua
+---   vim.filetype.get_option('vim', 'commentstring')
+--- </pre>
+---
+--- Note: this uses |nvim_get_option_value()| but caches the result.
+--- This means |ftplugin| and |FileType| autocommands are only
+--- triggered once and may not reflect later changes.
+--- @param filetype string Filetype
+--- @param option string Option name
+--- @return string|boolean|integer: Option value
+function M.get_option(filetype, option)
+  return require('vim.filetype.options').get_option(filetype, option)
 end
 
 return M

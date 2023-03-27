@@ -923,31 +923,23 @@ nvim_get_current_win()                                *nvim_get_current_win()*
     Return: ~
         Window handle
 
-nvim_get_hl_by_id({hl_id}, {rgb})                        *nvim_get_hl_by_id()*
-    Gets a highlight definition by id. |hlID()|
+nvim_get_hl({ns_id}, {*opts})                                  *nvim_get_hl()*
+    Gets all or specific highlight groups in a namespace.
 
     Parameters: ~
-      • {hl_id}  Highlight id as returned by |hlID()|
-      • {rgb}    Export RGB colors
+      • {ns_id}  Get highlight groups for namespace ns_id
+                 |nvim_get_namespaces()|. Use 0 to get global highlight groups
+                 |:highlight|.
+      • {opts}   Options dict:
+                 • name: (string) Get a highlight definition by name.
+                 • id: (integer) Get a highlight definition by id.
+                 • link: (boolean, default true) Show linked group name
+                   instead of effective definition |:hi-link|.
 
     Return: ~
-        Highlight definition map
-
-    See also: ~
-      • nvim_get_hl_by_name
-
-nvim_get_hl_by_name({name}, {rgb})                     *nvim_get_hl_by_name()*
-    Gets a highlight definition by name.
-
-    Parameters: ~
-      • {name}  Highlight group name
-      • {rgb}   Export RGB colors
-
-    Return: ~
-        Highlight definition map
-
-    See also: ~
-      • nvim_get_hl_by_id
+        Highlight groups as a map from group name to a highlight definition
+        map as in |nvim_set_hl()|, or only a single highlight definition map
+        if requested by name or id.
 
 nvim_get_hl_id_by_name({name})                      *nvim_get_hl_id_by_name()*
     Gets a highlight group by name
@@ -1557,11 +1549,11 @@ nvim_command({command})                                       *nvim_command()*
 
     On execution error: fails with VimL error, updates v:errmsg.
 
-    Prefer using |nvim_cmd()| or |nvim_exec()| over this. To evaluate multiple
-    lines of Vim script or an Ex command directly, use |nvim_exec()|. To
-    construct an Ex command using a structured format and then execute it, use
-    |nvim_cmd()|. To modify an Ex command before evaluating it, use
-    |nvim_parse_cmd()| in conjunction with |nvim_cmd()|.
+    Prefer using |nvim_cmd()| or |nvim_exec2()| over this. To evaluate
+    multiple lines of Vim script or an Ex command directly, use
+    |nvim_exec2()|. To construct an Ex command using a structured format and
+    then execute it, use |nvim_cmd()|. To modify an Ex command before
+    evaluating it, use |nvim_parse_cmd()| in conjunction with |nvim_cmd()|.
 
     Parameters: ~
       • {command}  Ex command string
@@ -1578,7 +1570,7 @@ nvim_eval({expr})                                                *nvim_eval()*
     Return: ~
         Evaluation result or expanded object
 
-nvim_exec({src}, {output})                                       *nvim_exec()*
+nvim_exec2({src}, {*opts})                                      *nvim_exec2()*
     Executes Vimscript (multiline block of Ex commands), like anonymous
     |:source|.
 
@@ -1588,12 +1580,14 @@ nvim_exec({src}, {output})                                       *nvim_exec()*
     On execution error: fails with VimL error, updates v:errmsg.
 
     Parameters: ~
-      • {src}     Vimscript code
-      • {output}  Capture and return all (non-error, non-shell |:!|) output
+      • {src}   Vimscript code
+      • {opts}  Optional parameters.
+                • output: (boolean, default false) Whether to capture and
+                  return all (non-error, non-shell |:!|) output.
 
     Return: ~
-        Output (non-error, non-shell |:!|) if `output` is true, else empty
-        string.
+        Dictionary containing information about execution, with these keys:
+        • output: (string|nil) Output if `opts.output` is true.
 
     See also: ~
       • |execute()|
@@ -1746,7 +1740,7 @@ nvim_cmd({*cmd}, {*opts})                                         *nvim_cmd()*
         empty string.
 
     See also: ~
-      • |nvim_exec()|
+      • |nvim_exec2()|
       • |nvim_command()|
 
                                                   *nvim_create_user_command()*
@@ -1969,6 +1963,10 @@ nvim_get_option_value({name}, {*opts})               *nvim_get_option_value()*
                 • win: |window-ID|. Used for getting window local options.
                 • buf: Buffer number. Used for getting buffer local options.
                   Implies {scope} is "local".
+                • filetype: |filetype|. Used to get the default option for a
+                  specific filetype. Cannot be used with any other option.
+                  Note: this will trigger |ftplugin| and all |FileType|
+                  autocommands for the corresponding filetype.
 
     Return: ~
         Option value

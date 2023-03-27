@@ -70,7 +70,7 @@ local LanguageTree = {}
 
 LanguageTree.__index = LanguageTree
 
---- @private
+--- @package
 ---
 --- |LanguageTree| contains a tree of parsers: the root treesitter parser for {lang} and any
 --- "injected" language parsers, which themselves may inject other languages, recursively.
@@ -99,8 +99,8 @@ function LanguageTree.new(source, lang, opts)
     _regions = {},
     _trees = {},
     _opts = opts,
-    _injection_query = injections[lang] and query.parse_query(lang, injections[lang])
-      or query.get_query(lang, 'injections'),
+    _injection_query = injections[lang] and query.parse(lang, injections[lang])
+      or query.get(lang, 'injections'),
     _valid = false,
     _parser = vim._create_ts_parser(lang),
     _callbacks = {
@@ -482,7 +482,7 @@ end
 ---@param metadata TSMetadata
 ---@return Range6[]
 local function get_node_ranges(node, source, metadata, include_children)
-  local range = query.get_range(node, source, metadata)
+  local range = vim.treesitter.get_range(node, source, metadata)
 
   if include_children then
     return { range }
@@ -562,7 +562,7 @@ function LanguageTree:_get_injection(match, metadata)
 
     -- Lang should override any other language tag
     if name == 'injection.language' then
-      lang = query.get_node_text(node, self._source, { metadata = metadata[id] })
+      lang = vim.treesitter.get_node_text(node, self._source, { metadata = metadata[id] })
     elseif name == 'injection.content' then
       ranges = get_node_ranges(node, self._source, metadata[id], include_children)
     end
@@ -609,11 +609,11 @@ function LanguageTree:_get_injection_deprecated(match, metadata)
 
     -- Lang should override any other language tag
     if name == 'language' and not lang then
-      lang = query.get_node_text(node, self._source, { metadata = metadata[id] })
+      lang = vim.treesitter.get_node_text(node, self._source, { metadata = metadata[id] })
     elseif name == 'combined' then
       combined = true
     elseif name == 'content' and #ranges == 0 then
-      ranges[#ranges + 1] = query.get_range(node, self._source, metadata[id])
+      ranges[#ranges + 1] = vim.treesitter.get_range(node, self._source, metadata[id])
       -- Ignore any tags that start with "_"
       -- Allows for other tags to be used in matches
     elseif string.sub(name, 1, 1) ~= '_' then
@@ -622,7 +622,7 @@ function LanguageTree:_get_injection_deprecated(match, metadata)
       end
 
       if #ranges == 0 then
-        ranges[#ranges + 1] = query.get_range(node, self._source, metadata[id])
+        ranges[#ranges + 1] = vim.treesitter.get_range(node, self._source, metadata[id])
       end
     end
   end
@@ -700,7 +700,7 @@ function LanguageTree:_do_callback(cb_name, ...)
   end
 end
 
----@private
+---@package
 function LanguageTree:_edit(
   start_byte,
   end_byte_old,
@@ -776,7 +776,7 @@ function LanguageTree:_edit(
   end)
 end
 
----@private
+---@package
 ---@param bufnr integer
 ---@param changed_tick integer
 ---@param start_row integer
@@ -822,7 +822,6 @@ function LanguageTree:_on_bytes(
   -- Edit trees together BEFORE emitting a bytes callback.
   ---@private
   self:for_each_child(function(child)
-    ---@diagnostic disable-next-line:invisible
     child:_edit(
       start_byte,
       start_byte + old_byte,
@@ -852,12 +851,12 @@ function LanguageTree:_on_bytes(
   )
 end
 
----@private
+---@package
 function LanguageTree:_on_reload()
   self:invalidate(true)
 end
 
----@private
+---@package
 function LanguageTree:_on_detach(...)
   self:invalidate(true)
   self:_do_callback('detach', ...)

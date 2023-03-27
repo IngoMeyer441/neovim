@@ -102,6 +102,7 @@ return {
     "scope";
     "win";
     "buf";
+    "filetype";
   }};
   { 'highlight', {
     "bold";
@@ -143,6 +144,11 @@ return {
     "reverse";
     "altfont";
     "nocombine";
+  }};
+  { 'get_highlight', {
+    "id";
+    "name";
+    "link";
   }};
   -- Autocmds
   { 'clear_autocmds', {
@@ -225,5 +231,8 @@ return {
   }};
   { 'echo_opts', {
     "verbose";
+  }};
+  { 'exec_opts', {
+    "output";
   }};
 }

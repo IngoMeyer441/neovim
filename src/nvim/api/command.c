@@ -307,7 +307,7 @@ end:
 ///
 /// On execution error: fails with VimL error, updates v:errmsg.
 ///
-/// @see |nvim_exec()|
+/// @see |nvim_exec2()|
 /// @see |nvim_command()|
 ///
 /// @param cmd       Command to execute. Must be a Dictionary that can contain the same values as
@@ -697,8 +697,7 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
     capture_ga = &capture_local;
   }
 
-  TRY_WRAP({
-    try_start();
+  TRY_WRAP(err, {
     if (output) {
       msg_silent++;
       msg_col = 0;  // prevent leading spaces
@@ -714,8 +713,6 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
       // Put msg_col back where it was, since nothing should have been written.
       msg_col = save_msg_col;
     }
-
-    try_end(err);
   });
 
   if (ERROR_SET(err)) {
