@@ -941,6 +941,10 @@ nvim_get_hl({ns_id}, {*opts})                                  *nvim_get_hl()*
         map as in |nvim_set_hl()|, or only a single highlight definition map
         if requested by name or id.
 
+    Note:
+        When the `link` attribute is defined in the highlight definition map,
+        other attributes will not be taking effect (see |:hi-link|).
+
 nvim_get_hl_id_by_name({name})                      *nvim_get_hl_id_by_name()*
     Gets a highlight group by name
 
@@ -1387,6 +1391,10 @@ nvim_set_hl({ns_id}, {name}, {*val})                           *nvim_set_hl()*
         which act as aliases to the corresponding foreground and background
         values of the Normal group. If the Normal group has not been defined,
         using these values results in an error.
+
+    Note:
+        If `link` is used in combination with other attributes; only the
+        `link` will take effect (see |:hi-link|).
 
     Parameters: ~
       • {ns_id}  Namespace id for this highlight |nvim_create_namespace()|.
@@ -1912,7 +1920,7 @@ nvim_get_all_options_info()                      *nvim_get_all_options_info()*
     Gets the option information for all options.
 
     The dictionary has the full option names as keys and option metadata
-    dictionaries as detailed at |nvim_get_option_info()|.
+    dictionaries as detailed at |nvim_get_option_info2()|.
 
     Return: ~
         dictionary of all options
@@ -1926,8 +1934,8 @@ nvim_get_option({name})                                    *nvim_get_option()*
     Return: ~
         Option value (global)
 
-nvim_get_option_info({name})                          *nvim_get_option_info()*
-    Gets the option information for one option
+nvim_get_option_info2({name}, {*opts})               *nvim_get_option_info2()*
+    Gets the option information for one option from arbitrary buffer or window
 
     Resulting dictionary has keys:
     • name: Name of the option (like 'filetype')
@@ -1943,8 +1951,19 @@ nvim_get_option_info({name})                          *nvim_get_option_info()*
     • commalist: List of comma separated values
     • flaglist: List of single char flags
 
+    When {scope} is not provided, the last set information applies to the
+    local value in the current buffer or window if it is available, otherwise
+    the global value information is returned. This behavior can be disabled by
+    explicitly specifying {scope} in the {opts} table.
+
     Parameters: ~
       • {name}  Option name
+      • {opts}  Optional parameters
+                • scope: One of "global" or "local". Analogous to |:setglobal|
+                  and |:setlocal|, respectively.
+                • win: |window-ID|. Used for getting window local options.
+                • buf: Buffer number. Used for getting buffer local options.
+                  Implies {scope} is "local".
 
     Return: ~
         Option Information
@@ -2527,6 +2546,8 @@ nvim_buf_get_extmark_by_id({buffer}, {ns_id}, {id}, {opts})
       • {id}      Extmark id
       • {opts}    Optional parameters. Keys:
                   • details: Whether to include the details dict
+                  • hl_name: Whether to include highlight group name instead
+                    of id, true if omitted
 
     Return: ~
         0-indexed (row, col) tuple or empty list () if extmark id was absent
@@ -2563,7 +2584,8 @@ nvim_buf_get_extmarks({buffer}, {ns_id}, {start}, {end}, {opts})
 
     Parameters: ~
       • {buffer}  Buffer handle, or 0 for current buffer
-      • {ns_id}   Namespace id from |nvim_create_namespace()|
+      • {ns_id}   Namespace id from |nvim_create_namespace()| or -1 for all
+                  namespaces
       • {start}   Start of range: a 0-indexed (row, col) or valid extmark id
                   (whose position defines the bound). |api-indexing|
       • {end}     End of range (inclusive): a 0-indexed (row, col) or valid
@@ -2571,7 +2593,11 @@ nvim_buf_get_extmarks({buffer}, {ns_id}, {start}, {end}, {opts})
                   |api-indexing|
       • {opts}    Optional parameters. Keys:
                   • limit: Maximum number of marks to return
-                  • details Whether to include the details dict
+                  • details: Whether to include the details dict
+                  • hl_name: Whether to include highlight group name instead
+                    of id, true if omitted
+                  • type: Filter marks by type: "highlight", "sign",
+                    "virt_text" and "virt_lines"
 
     Return: ~
         List of [extmark_id, row, col] tuples in "traversal order".

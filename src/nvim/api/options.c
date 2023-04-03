@@ -111,15 +111,15 @@ static buf_T *do_ft_buf(char *filetype, aco_save_T *aco, Error *err)
 
   // Set curwin/curbuf to buf and save a few things.
   aucmd_prepbuf(aco, ftbuf);
-  set_option_value("bufhidden", 0L, "hide", OPT_LOCAL);
-  set_option_value("buftype", 0L, "nofile", OPT_LOCAL);
-  set_option_value("swapfile", 0L, NULL, OPT_LOCAL);
-  set_option_value("modeline", 0L, NULL, OPT_LOCAL);  // 'nomodeline'
-
-  ftbuf->b_p_ft = xstrdup(filetype);
 
   TRY_WRAP(err, {
-    apply_autocmds(EVENT_FILETYPE, ftbuf->b_p_ft, ftbuf->b_fname, true, ftbuf);
+    set_option_value("bufhidden", 0L, "hide", OPT_LOCAL);
+    set_option_value("buftype", 0L, "nofile", OPT_LOCAL);
+    set_option_value("swapfile", 0L, NULL, OPT_LOCAL);
+    set_option_value("modeline", 0L, NULL, OPT_LOCAL);  // 'nomodeline'
+
+    ftbuf->b_p_ft = xstrdup(filetype);
+    do_filetype_autocmd(ftbuf, false);
   });
 
   return ftbuf;
@@ -283,7 +283,7 @@ void nvim_set_option_value(uint64_t channel_id, String name, Object value, Dict(
 /// Gets the option information for all options.
 ///
 /// The dictionary has the full option names as keys and option metadata
-/// dictionaries as detailed at |nvim_get_option_info()|.
+/// dictionaries as detailed at |nvim_get_option_info2()|.
 ///
 /// @return dictionary of all options
 Dictionary nvim_get_all_options_info(Error *err)
@@ -292,7 +292,7 @@ Dictionary nvim_get_all_options_info(Error *err)
   return get_all_vimoptions();
 }
 
-/// Gets the option information for one option
+/// Gets the option information for one option from arbitrary buffer or window
 ///
 /// Resulting dictionary has keys:
 ///     - name: Name of the option (like 'filetype')
@@ -311,15 +311,36 @@ Dictionary nvim_get_all_options_info(Error *err)
 ///     - commalist: List of comma separated values
 ///     - flaglist: List of single char flags
 ///
+/// When {scope} is not provided, the last set information applies to the local
+/// value in the current buffer or window if it is available, otherwise the
+/// global value information is returned. This behavior can be disabled by
+/// explicitly specifying {scope} in the {opts} table.
 ///
-/// @param          name Option name
+/// @param name      Option name
+/// @param opts      Optional parameters
+///                  - scope: One of "global" or "local". Analogous to
+///                  |:setglobal| and |:setlocal|, respectively.
+///                  - win: |window-ID|. Used for getting window local options.
+///                  - buf: Buffer number. Used for getting buffer local options.
+///                         Implies {scope} is "local".
 /// @param[out] err Error details, if any
 /// @return         Option Information
-Dictionary nvim_get_option_info(String name, Error *err)
-  FUNC_API_SINCE(7)
+Dictionary nvim_get_option_info2(String name, Dict(option) *opts, Error *err)
+  FUNC_API_SINCE(11)
 {
-  return get_vimoption(name, err);
+  int scope = 0;
+  int opt_type = SREQ_GLOBAL;
+  void *from = NULL;
+  if (!validate_option_value_args(opts, &scope, &opt_type, &from, NULL, err)) {
+    return (Dictionary)ARRAY_DICT_INIT;
+  }
+
+  buf_T *buf = (opt_type == SREQ_BUF) ? (buf_T *)from : curbuf;
+  win_T *win = (opt_type == SREQ_WIN) ? (win_T *)from : curwin;
+
+  return get_vimoption(name, scope, buf, win, err);
 }
+
 /// Sets the global value of an option.
 ///
 /// @param channel_id

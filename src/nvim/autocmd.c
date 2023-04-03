@@ -1495,7 +1495,9 @@ void aucmd_restbuf(aco_save_T *aco)
       }
     }
 win_found:
-
+    // May need to stop Insert mode if we were in a prompt buffer.
+    leaving_window(curwin);
+    // Remove the window.
     win_remove(curwin, NULL);
     pmap_del(handle_T)(&window_handles, curwin->handle);
     if (curwin->w_grid_alloc.chars != NULL) {
@@ -2757,4 +2759,33 @@ void do_autocmd_focusgained(bool gained)
   }
 
   recursive = false;
+}
+
+void do_filetype_autocmd(buf_T *buf, bool force)
+{
+  static int ft_recursive = 0;
+
+  if (ft_recursive > 0 && !force) {
+    return;  // disallow recursion
+  }
+
+  char **varp = &buf->b_p_ft;
+  int secure_save = secure;
+
+  // Reset the secure flag, since the value of 'filetype' has
+  // been checked to be safe.
+  secure = 0;
+
+  ft_recursive++;
+  did_filetype = true;
+  // Only pass true for "force" when it is true or
+  // used recursively, to avoid endless recurrence.
+  apply_autocmds(EVENT_FILETYPE, buf->b_p_ft, buf->b_fname, force || ft_recursive == 1, buf);
+  ft_recursive--;
+
+  // Just in case the old "buf" is now invalid
+  if (varp != &(buf->b_p_ft)) {
+    varp = NULL;
+  }
+  secure = secure_save;
 }

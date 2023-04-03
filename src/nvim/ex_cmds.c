@@ -149,7 +149,7 @@ void do_ascii(const exarg_T *const eap)
     char buf1[20];
     if (vim_isprintc_strict(c) && (c < ' ' || c > '~')) {
       char buf3[7];
-      transchar_nonprint(curbuf, (char_u *)buf3, c);
+      transchar_nonprint(curbuf, buf3, c);
       vim_snprintf(buf1, sizeof(buf1), "  <%s>", (char *)buf3);
     } else {
       buf1[0] = NUL;
@@ -4742,7 +4742,7 @@ void ex_oldfiles(exarg_T *eap)
     }
     nr++;
     const char *fname = tv_get_string(TV_LIST_ITEM_TV(li));
-    if (!message_filtered((char *)fname)) {
+    if (!message_filtered(fname)) {
       msg_outnum(nr);
       msg_puts(": ");
       msg_outtrans((char *)tv_get_string(TV_LIST_ITEM_TV(li)));

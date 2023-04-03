@@ -1635,8 +1635,8 @@ defaulttable({create})                                    *vim.defaulttable()*
 <
 
     Parameters: ~
-      • {create}  (function|nil) The function called to create a missing
-                  value.
+      • {create}  function?(key:any):any The function called to create a
+                  missing value.
 
     Return: ~
         (table) Empty table with metamethod
@@ -2065,7 +2065,7 @@ find({modname}, {opts})                                    *vim.loader.find()*
           for `modname="*"`
 
 reset({path})                                             *vim.loader.reset()*
-    Resets the topmods cache for the path, or all the paths if path is nil.
+    Resets the cache for the path, or all the paths if path is nil.
 
     Parameters: ~
       • {path}  string? path to reset
@@ -2502,7 +2502,7 @@ find({names}, {opts})                                          *vim.fs.find()*
         (table) Normalized paths |vim.fs.normalize()| of all matching files or
         directories
 
-normalize({path})                                         *vim.fs.normalize()*
+normalize({path}, {opts})                                 *vim.fs.normalize()*
     Normalize a path to a standard format. A tilde (~) character at the
     beginning of the path is expanded to the user's home directory and any
     backslash (\) characters are converted to forward slashes (/). Environment
@@ -2522,6 +2522,9 @@ normalize({path})                                         *vim.fs.normalize()*
 
     Parameters: ~
       • {path}  (string) Path to normalize
+      • {opts}  (table|nil) Options:
+                • expand_env: boolean Expand environment variables (default:
+                  true)
 
     Return: ~
         (string) Normalized path
