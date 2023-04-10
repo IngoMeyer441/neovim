@@ -117,7 +117,7 @@ static inline void normal_state_init(NormalState *s)
 // n_*(): functions called to handle Normal mode commands.
 // v_*(): functions called to handle Visual mode commands.
 
-static char *e_noident = N_("E349: No identifier under cursor");
+static const char *e_noident = N_("E349: No identifier under cursor");
 
 /// Function to be called for a Normal or Visual mode command.
 /// The argument is a cmdarg_T.
@@ -668,7 +668,7 @@ static void normal_redraw_mode_message(NormalState *s)
     keep_msg = kmsg;
 
     kmsg = xstrdup(keep_msg);
-    msg_attr((const char *)kmsg, keep_msg_attr);
+    msg_attr(kmsg, keep_msg_attr);
     xfree(kmsg);
   }
   setcursor();
@@ -1336,7 +1336,7 @@ static void normal_redraw(NormalState *s)
     // check for duplicates.  Never put this message in
     // history.
     msg_hist_off = true;
-    msg_attr((const char *)p, keep_msg_attr);
+    msg_attr(p, keep_msg_attr);
     msg_hist_off = false;
     xfree(p);
   }
@@ -3512,7 +3512,7 @@ static void nv_ident(cmdarg_T *cap)
     ptr = xstrnsave(ptr, n);
     if (kp_ex) {
       // Escape the argument properly for an Ex command
-      p = vim_strsave_fnameescape((const char *)ptr, VSE_NONE);
+      p = vim_strsave_fnameescape(ptr, VSE_NONE);
     } else {
       // Escape the argument properly for a shell command
       p = vim_strsave_shellescape(ptr, true, true);
@@ -5334,7 +5334,7 @@ static void nv_g_dollar_cmd(cmdarg_T *cap)
     coladvance((colnr_T)i);
 
     // if the character doesn't fit move one back
-    if (curwin->w_cursor.col > 0 && utf_ptr2cells((const char *)get_cursor_pos_ptr()) > 1) {
+    if (curwin->w_cursor.col > 0 && utf_ptr2cells(get_cursor_pos_ptr()) > 1) {
       colnr_T vcol;
 
       getvvcol(curwin, &curwin->w_cursor, NULL, NULL, &vcol);

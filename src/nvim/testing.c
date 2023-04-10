@@ -34,13 +34,13 @@
 # include "testing.c.generated.h"
 #endif
 
-static char e_assert_fails_second_arg[]
+static const char e_assert_fails_second_arg[]
   = N_("E856: assert_fails() second argument must be a string or a list with one or two strings");
-static char e_assert_fails_fourth_argument[]
+static const char e_assert_fails_fourth_argument[]
   = N_("E1115: assert_fails() fourth argument must be a number");
-static char e_assert_fails_fifth_argument[]
+static const char e_assert_fails_fifth_argument[]
   = N_("E1116: assert_fails() fifth argument must be a string");
-static char e_calling_test_garbagecollect_now_while_v_testing_is_not_set[]
+static const char e_calling_test_garbagecollect_now_while_v_testing_is_not_set[]
   = N_("E1142: Calling test_garbagecollect_now() while v:testing is not set");
 
 /// Prepare "gap" for an assert error and add the sourcing position.
@@ -185,16 +185,14 @@ static void fill_assert_error(garray_T *gap, typval_T *opt_msg_tv, char *exp_str
       int todo = (int)exp_d->dv_hashtab.ht_used;
       for (const hashitem_T *hi = exp_d->dv_hashtab.ht_array; todo > 0; hi++) {
         if (!HASHITEM_EMPTY(hi)) {
-          dictitem_T *item2 = tv_dict_find(got_d, (const char *)hi->hi_key, -1);
+          dictitem_T *item2 = tv_dict_find(got_d, hi->hi_key, -1);
           if (item2 == NULL
               || !tv_equal(&TV_DICT_HI2DI(hi)->di_tv, &item2->di_tv, false, false)) {
             // item of exp_d not present in got_d or values differ.
             const size_t key_len = strlen(hi->hi_key);
-            tv_dict_add_tv(exp_tv->vval.v_dict, (const char *)hi->hi_key, key_len,
-                           &TV_DICT_HI2DI(hi)->di_tv);
+            tv_dict_add_tv(exp_tv->vval.v_dict, hi->hi_key, key_len, &TV_DICT_HI2DI(hi)->di_tv);
             if (item2 != NULL) {
-              tv_dict_add_tv(got_tv->vval.v_dict, (const char *)hi->hi_key, key_len,
-                             &item2->di_tv);
+              tv_dict_add_tv(got_tv->vval.v_dict, hi->hi_key, key_len, &item2->di_tv);
             }
           } else {
             omitted++;
@@ -207,12 +205,11 @@ static void fill_assert_error(garray_T *gap, typval_T *opt_msg_tv, char *exp_str
       todo = (int)got_d->dv_hashtab.ht_used;
       for (const hashitem_T *hi = got_d->dv_hashtab.ht_array; todo > 0; hi++) {
         if (!HASHITEM_EMPTY(hi)) {
-          dictitem_T *item2 = tv_dict_find(exp_d, (const char *)hi->hi_key, -1);
+          dictitem_T *item2 = tv_dict_find(exp_d, hi->hi_key, -1);
           if (item2 == NULL) {
             // item of got_d not present in exp_d
             const size_t key_len = strlen(hi->hi_key);
-            tv_dict_add_tv(got_tv->vval.v_dict, (const char *)hi->hi_key, key_len,
-                           &TV_DICT_HI2DI(hi)->di_tv);
+            tv_dict_add_tv(got_tv->vval.v_dict, hi->hi_key, key_len, &TV_DICT_HI2DI(hi)->di_tv);
           }
           todo--;
         }
@@ -507,7 +504,7 @@ void f_assert_fails(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   garray_T ga;
   int save_trylevel = trylevel;
   const int called_emsg_before = called_emsg;
-  char *wrong_arg_msg = NULL;
+  const char *wrong_arg_msg = NULL;
 
   // trylevel must be zero for a ":throw" command to be considered failed
   trylevel = 0;

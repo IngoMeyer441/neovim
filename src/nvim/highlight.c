@@ -11,6 +11,7 @@
 #include "klib/kvec.h"
 #include "lauxlib.h"
 #include "nvim/api/private/defs.h"
+#include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
 #include "nvim/api/ui.h"
@@ -303,7 +304,7 @@ int hl_get_ui_attr(int ns_id, int idx, int final_id, bool optional)
   bool available = false;
 
   if (final_id > 0) {
-    int syn_attr = syn_ns_id2attr(ns_id, final_id, optional);
+    int syn_attr = syn_ns_id2attr(ns_id, final_id, &optional);
     if (syn_attr > 0) {
       attrs = syn_attr2entry(syn_attr);
       available = true;

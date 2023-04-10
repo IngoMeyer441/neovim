@@ -32,7 +32,7 @@
 --- a plugin that does any kind of analysis on a tree should use a timer to throttle too frequent
 --- updates.
 
-local a = vim.api
+local api = vim.api
 local query = require('vim.treesitter.query')
 local language = require('vim.treesitter.language')
 local Range = require('vim.treesitter._range')
@@ -57,7 +57,10 @@ local Range = require('vim.treesitter._range')
 ---@field private _injection_query Query Queries defining injected languages
 ---@field private _opts table Options
 ---@field private _parser TSParser Parser for language
----@field private _regions Range6[][] List of regions this tree should manage and parse
+---@field private _has_regions boolean
+---@field private _regions Range6[][]?
+---List of regions this tree should manage and parse. If nil then regions are
+---taken from _trees. This is mostly a short-lived cache for included_regions()
 ---@field private _lang string Language name
 ---@field private _source (integer|string) Buffer or string to parse
 ---@field private _trees TSTree[] Reference to parsed tree (one for each language)
@@ -91,7 +94,6 @@ function LanguageTree.new(source, lang, opts)
     _source = source,
     _lang = lang,
     _children = {},
-    _regions = {},
     _trees = {},
     _opts = opts,
     _injection_query = injections[lang] and query.parse(lang, injections[lang])
@@ -140,16 +142,16 @@ function LanguageTree:_log(...)
   local prefix =
     string.format('%s:%d: [%s:%d] ', info.name, info.currentline, self:lang(), nregions)
 
-  a.nvim_out_write(prefix)
+  api.nvim_out_write(prefix)
   for _, x in ipairs(args) do
     if type(x) == 'string' then
-      a.nvim_out_write(x)
+      api.nvim_out_write(x)
     else
-      a.nvim_out_write(vim.inspect(x, { newline = ' ', indent = '' }))
+      api.nvim_out_write(vim.inspect(x, { newline = ' ', indent = '' }))
     end
-    a.nvim_out_write(' ')
+    api.nvim_out_write(' ')
   end
-  a.nvim_out_write('\n')
+  api.nvim_out_write('\n')
 end
 
 --- Invalidates this parser and all its children
@@ -237,27 +239,21 @@ function LanguageTree:parse()
 
   --- At least 1 region is invalid
   if not self:is_valid(true) then
-    local function _parsetree(index)
-      local parse_time, tree, tree_changes =
-        tcall(self._parser.parse, self._parser, self._trees[index], self._source)
+    -- If there are no ranges, set to an empty list
+    -- so the included ranges in the parser are cleared.
+    for i, ranges in ipairs(self:included_regions()) do
+      if not self._valid or not self._valid[i] then
+        self._parser:set_included_ranges(ranges)
+        local parse_time, tree, tree_changes =
+          tcall(self._parser.parse, self._parser, self._trees[i], self._source)
 
-      self:_do_callback('changedtree', tree_changes, tree)
-      self._trees[index] = tree
-      vim.list_extend(changes, tree_changes)
+        self:_do_callback('changedtree', tree_changes, tree)
+        self._trees[i] = tree
+        vim.list_extend(changes, tree_changes)
 
-      total_parse_time = total_parse_time + parse_time
-      regions_parsed = regions_parsed + 1
-    end
-
-    if #self._regions > 0 then
-      for i, ranges in ipairs(self._regions) do
-        if not self._valid or not self._valid[i] then
-          self._parser:set_included_ranges(ranges)
-          _parsetree(i)
-        end
+        total_parse_time = total_parse_time + parse_time
+        regions_parsed = regions_parsed + 1
       end
-    else
-      _parsetree(1)
     end
   end
 
@@ -403,7 +399,7 @@ function LanguageTree:_iter_regions(fn)
 
   local all_valid = true
 
-  for i, region in ipairs(self._regions) do
+  for i, region in ipairs(self:included_regions()) do
     if self._valid[i] == nil then
       self._valid[i] = true
     end
@@ -445,6 +441,8 @@ end
 ---@private
 ---@param new_regions Range6[][] List of regions this tree should manage and parse.
 function LanguageTree:set_included_regions(new_regions)
+  self._has_regions = true
+
   -- Transform the tables from 4 element long to 6 element long (with byte offset)
   for _, region in ipairs(new_regions) do
     for i, range in ipairs(region) do
@@ -454,7 +452,7 @@ function LanguageTree:set_included_regions(new_regions)
     end
   end
 
-  if #self._regions ~= #new_regions then
+  if #self:included_regions() ~= #new_regions then
     self._trees = {}
     self:invalidate()
   else
@@ -462,13 +460,29 @@ function LanguageTree:set_included_regions(new_regions)
       return vim.deep_equal(new_regions[i], region)
     end)
   end
+
   self._regions = new_regions
 end
 
 ---Gets the set of included regions
 ---@return integer[][]
 function LanguageTree:included_regions()
-  return self._regions
+  if self._regions then
+    return self._regions
+  end
+
+  if not self._has_regions or #self._trees == 0 then
+    -- treesitter.c will default empty ranges to { -1, -1, -1, -1, -1, -1}
+    return { {} }
+  end
+
+  local regions = {} ---@type Range6[][]
+  for i, _ in ipairs(self._trees) do
+    regions[i] = self._trees[i]:included_ranges(true)
+  end
+
+  self._regions = regions
+  return regions
 end
 
 ---@private
@@ -721,6 +735,8 @@ function LanguageTree:_edit(
     )
   end
 
+  self._regions = nil
+
   local changed_range = {
     start_row,
     start_col,
@@ -730,41 +746,15 @@ function LanguageTree:_edit(
     end_byte_old,
   }
 
-  local new_range = {
-    start_row,
-    start_col,
-    start_byte,
-    end_row_new,
-    end_col_new,
-    end_byte_new,
-  }
-
-  if #self._regions == 0 then
-    self._valid = false
-  end
-
   -- Validate regions after editing the tree
   self:_iter_regions(function(_, region)
-    for i, r in ipairs(region) do
+    if #region == 0 then
+      -- empty region, use the full source
+      return false
+    end
+    for _, r in ipairs(region) do
       if Range.intercepts(r, changed_range) then
         return false
-      end
-
-      -- Range after change. Adjust
-      if Range.cmp_pos.gt(r[1], r[2], changed_range[4], changed_range[5]) then
-        local byte_offset = new_range[6] - changed_range[6]
-        local row_offset = new_range[4] - changed_range[4]
-
-        -- Update the range to avoid invalidation in set_included_regions()
-        -- which will compare the regions against the parsed injection regions
-        region[i] = {
-          r[1] + row_offset,
-          r[2],
-          r[3] + byte_offset,
-          r[4] + row_offset,
-          r[5],
-          r[6] + byte_offset,
-        }
       end
     end
     return true

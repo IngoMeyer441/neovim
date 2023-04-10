@@ -65,20 +65,20 @@ describe('float window', function()
   it('closed immediately by autocmd #11383', function()
     eq('Window was closed immediately',
       pcall_err(exec_lua, [[
-        local a = vim.api
+        local api = vim.api
         local function crashes(contents)
-          local buf = a.nvim_create_buf(false, true)
-          local floatwin = a.nvim_open_win(buf, true, {
+          local buf = api.nvim_create_buf(false, true)
+          local floatwin = api.nvim_open_win(buf, true, {
             relative = 'cursor';
             style = 'minimal';
             row = 0; col = 0;
             height = #contents;
             width = 10;
           })
-          a.nvim_buf_set_lines(buf, 0, -1, true, contents)
+          api.nvim_buf_set_lines(buf, 0, -1, true, contents)
           local winnr = vim.fn.win_id2win(floatwin)
-          a.nvim_command('wincmd p')
-          a.nvim_command('autocmd CursorMoved * ++once '..winnr..'wincmd c')
+          api.nvim_command('wincmd p')
+          api.nvim_command('autocmd CursorMoved * ++once '..winnr..'wincmd c')
           return buf, floatwin
         end
         crashes{'foo'}
@@ -4933,6 +4933,53 @@ describe('float window', function()
           ]])
         end
       end)
+    end)
+
+    it("can use Normal as background", function()
+      local buf = meths.create_buf(false,false)
+      meths.buf_set_lines(buf,0,-1,true,{"here", "float"})
+      local win = meths.open_win(buf, false, {relative='editor', width=20, height=2, row=2, col=5})
+      meths.set_option_value('winhl', 'Normal:Normal', {win=win})
+
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [2:----------------------------------------]|
+          [3:----------------------------------------]|
+        ## grid 2
+          ^                                        |
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+          {0:~                                       }|
+        ## grid 3
+                                                  |
+        ## grid 5
+          here                |
+          float               |
+        ]], float_pos={
+          [5] = {{id = 1002}, "NW", 1, 2, 5, true, 50};
+        }, win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+          [5] = {win = {id = 1002}, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 2, sum_scroll_delta = 0};
+        }}
+      else
+        screen:expect{grid=[[
+          ^                                        |
+          {0:~                                       }|
+          {0:~    }here                {0:               }|
+          {0:~    }float               {0:               }|
+          {0:~                                       }|
+          {0:~                                       }|
+                                                  |
+        ]]}
+      end
     end)
 
     describe("handles :wincmd", function()

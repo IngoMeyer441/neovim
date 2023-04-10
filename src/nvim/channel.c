@@ -81,7 +81,7 @@ bool channel_close(uint64_t id, ChannelPart part, const char **error)
       // allow double close, even though we can't say what parts was valid.
       return true;
     }
-    *error = (const char *)e_invchan;
+    *error = e_invchan;
     return false;
   }
 
@@ -91,19 +91,19 @@ bool channel_close(uint64_t id, ChannelPart part, const char **error)
     if (chan->is_rpc) {
       rpc_close(chan);
     } else if (part == kChannelPartRpc) {
-      *error = (const char *)e_invstream;
+      *error = e_invstream;
       return false;
     }
   } else if ((part == kChannelPartStdin || part == kChannelPartStdout)
              && chan->is_rpc) {
-    *error = (const char *)e_invstreamrpc;
+    *error = e_invstreamrpc;
     return false;
   }
 
   switch (chan->streamtype) {
   case kChannelStreamSocket:
     if (!close_main) {
-      *error = (const char *)e_invstream;
+      *error = e_invstream;
       return false;
     }
     stream_may_close(&chan->stream.socket);
@@ -134,14 +134,14 @@ bool channel_close(uint64_t id, ChannelPart part, const char **error)
       stream_may_close(&chan->stream.stdio.out);
     }
     if (part == kChannelPartStderr) {
-      *error = (const char *)e_invstream;
+      *error = e_invstream;
       return false;
     }
     break;
 
   case kChannelStreamStderr:
     if (part != kChannelPartAll && part != kChannelPartStderr) {
-      *error = (const char *)e_invstream;
+      *error = e_invstream;
       return false;
     }
     if (!chan->stream.err.closed) {
@@ -156,7 +156,7 @@ bool channel_close(uint64_t id, ChannelPart part, const char **error)
 
   case kChannelStreamInternal:
     if (!close_main) {
-      *error = (const char *)e_invstream;
+      *error = e_invstream;
       return false;
     }
     if (chan->term) {
@@ -831,13 +831,12 @@ static void term_close(void *data)
   multiqueue_put(chan->events, term_delayed_free, 1, data);
 }
 
-void channel_info_changed(Channel *chan, bool new)
+void channel_info_changed(Channel *chan, bool new_chan)
 {
-  event_T event = new ? EVENT_CHANOPEN : EVENT_CHANINFO;
+  event_T event = new_chan ? EVENT_CHANOPEN : EVENT_CHANINFO;
   if (has_event(event)) {
     channel_incref(chan);
-    multiqueue_put(main_loop.events, set_info_event,
-                   2, chan, event);
+    multiqueue_put(main_loop.events, set_info_event, 2, chan, event);
   }
 }
 

@@ -624,7 +624,7 @@ int u_savecommon(buf_T *buf, linenr_T top, linenr_T bot, linenr_T newbot, int re
 // extra fields for uhp
 #define UHP_SAVE_NR            1
 
-static char e_not_open[] = N_("E828: Cannot open undo file for writing: %s");
+static const char e_not_open[] = N_("E828: Cannot open undo file for writing: %s");
 
 /// Compute the hash for a buffer text into hash[UNDO_HASH_SIZE].
 ///
@@ -1179,7 +1179,7 @@ void u_write_undo(const char *const name, const bool forceit, buf_T *const buf, 
   // allow the user to access the undo file.
   int perm = 0600;
   if (buf->b_ffname != NULL) {
-    perm = os_getperm((const char *)buf->b_ffname);
+    perm = os_getperm(buf->b_ffname);
     if (perm < 0) {
       perm = 0600;
     }

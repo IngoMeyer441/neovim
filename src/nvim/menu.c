@@ -50,8 +50,8 @@
 /// The character for each menu mode
 static char *menu_mode_chars[] = { "n", "v", "s", "o", "i", "c", "tl", "t" };
 
-static char e_notsubmenu[] = N_("E327: Part of menu-item path is not sub-menu");
-static char e_nomenu[] = N_("E329: No menu \"%s\"");
+static const char e_notsubmenu[] = N_("E327: Part of menu-item path is not sub-menu");
+static const char e_nomenu[] = N_("E329: No menu \"%s\"");
 
 // Return true if "name" is a window toolbar menu name.
 static bool menu_is_winbar(const char *const name)
@@ -1343,7 +1343,7 @@ static char *menu_text(const char *str, int *mnemonic, char **actext)
 bool menu_is_menubar(const char *const name)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL
 {
-  return !menu_is_popup((char *)name)
+  return !menu_is_popup(name)
          && !menu_is_toolbar(name)
          && !menu_is_winbar(name)
          && *name != MNU_HIDDEN_CHAR;

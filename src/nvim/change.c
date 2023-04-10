@@ -399,13 +399,13 @@ void changed_bytes(linenr_T lnum, colnr_T col)
 /// insert/delete bytes at column
 ///
 /// Like changed_bytes() but also adjust extmark for "new" bytes.
-void inserted_bytes(linenr_T lnum, colnr_T col, int old, int new)
+void inserted_bytes(linenr_T lnum, colnr_T start_col, int old_col, int new_col)
 {
   if (curbuf_splice_pending == 0) {
-    extmark_splice_cols(curbuf, (int)lnum - 1, col, old, new, kExtmarkUndo);
+    extmark_splice_cols(curbuf, (int)lnum - 1, start_col, old_col, new_col, kExtmarkUndo);
   }
 
-  changed_bytes(lnum, col);
+  changed_bytes(lnum, start_col);
 }
 
 /// Appended "count" lines below line "lnum" in the current buffer.
@@ -1311,7 +1311,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
           }
 
           // find start of middle part
-          (void)copy_option_part(&p, (char *)lead_middle, COM_MAX_LEN, ",");
+          (void)copy_option_part(&p, lead_middle, COM_MAX_LEN, ",");
           require_blank = false;
         }
 
@@ -1322,7 +1322,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
           }
           p++;
         }
-        (void)copy_option_part(&p, (char *)lead_middle, COM_MAX_LEN, ",");
+        (void)copy_option_part(&p, lead_middle, COM_MAX_LEN, ",");
 
         while (*p && p[-1] != ':') {  // find end of end flags
           // Check whether we allow automatic ending of comments
@@ -1331,7 +1331,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
           }
           p++;
         }
-        size_t n = copy_option_part(&p, (char *)lead_end, COM_MAX_LEN, ",");
+        size_t n = copy_option_part(&p, lead_end, COM_MAX_LEN, ",");
 
         if (end_comment_pending == -1) {  // we can set it now
           end_comment_pending = (unsigned char)lead_end[n - 1];
@@ -1352,7 +1352,7 @@ int open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
         // Doing "o" on a start of comment inserts the middle leader.
         if (lead_len > 0) {
           if (current_flag == COM_START) {
-            lead_repl = (char *)lead_middle;
+            lead_repl = lead_middle;
             lead_repl_len = (int)strlen(lead_middle);
           }
 

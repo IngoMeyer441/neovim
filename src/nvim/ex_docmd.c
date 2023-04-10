@@ -85,15 +85,15 @@
 #include "nvim/vim.h"
 #include "nvim/window.h"
 
-static char e_ambiguous_use_of_user_defined_command[]
+static const char e_ambiguous_use_of_user_defined_command[]
   = N_("E464: Ambiguous use of user-defined command");
-static char e_not_an_editor_command[]
+static const char e_not_an_editor_command[]
   = N_("E492: Not an editor command");
-static char e_no_source_file_name_to_substitute_for_sfile[]
+static const char e_no_source_file_name_to_substitute_for_sfile[]
   = N_("E498: no :source file name to substitute for \"<sfile>\"");
-static char e_no_call_stack_to_substitute_for_stack[]
+static const char e_no_call_stack_to_substitute_for_stack[]
   = N_("E489: no call stack to substitute for \"<stack>\"");
-static char e_no_script_file_name_to_substitute_for_script[]
+static const char e_no_script_file_name_to_substitute_for_script[]
   = N_("E1274: No script file name to substitute for \"<script>\"");
 
 static int quitmore = 0;
@@ -4452,7 +4452,7 @@ static void ex_highlight(exarg_T *eap)
   if (*eap->arg == NUL && eap->cmd[2] == '!') {
     msg(_("Greetings, Vim user!"));
   }
-  do_highlight((const char *)eap->arg, eap->forceit, false);
+  do_highlight(eap->arg, eap->forceit, false);
 }
 
 /// Call this function if we thought we were going to exit, but we won't
@@ -5211,7 +5211,7 @@ void do_exedit(exarg_T *eap, win_T *old_curwin)
         int ms = msg_scroll;
 
         if (eap->nextcmd != NULL) {
-          stuffReadbuff((const char *)eap->nextcmd);
+          stuffReadbuff(eap->nextcmd);
           eap->nextcmd = NULL;
         }
 

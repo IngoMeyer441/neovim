@@ -1443,8 +1443,8 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
       // Store the current buffer number as a string variable
       vim_snprintf(buf_tmp, sizeof(buf_tmp), "%d", curbuf->b_fnum);
       set_internal_string_var("g:actual_curbuf", buf_tmp);
-      vim_snprintf((char *)win_tmp, sizeof(win_tmp), "%d", curwin->handle);
-      set_internal_string_var("g:actual_curwin", (char *)win_tmp);
+      vim_snprintf(win_tmp, sizeof(win_tmp), "%d", curwin->handle);
+      set_internal_string_var("g:actual_curwin", win_tmp);
 
       buf_T *const save_curbuf = curbuf;
       win_T *const save_curwin = curwin;
@@ -1482,7 +1482,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
       // If the output of the expression needs to be evaluated
       // replace the %{} block with the result of evaluation
       if (reevaluate && str != NULL && *str != 0
-          && strchr((const char *)str, '%') != NULL
+          && strchr(str, '%') != NULL
           && evaldepth < MAX_STL_EVAL_DEPTH) {
         size_t parsed_usefmt = (size_t)(block_start - usefmt);
         size_t str_length = strlen(str);
@@ -1512,7 +1512,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
 
     case STL_LINE:
       // Overload %l with v:lnum for 'statuscolumn'
-      if (opt_name != NULL && strcmp(opt_name, "statuscolumn") == 0) {
+      if (stcp != NULL) {
         if (wp->w_p_nu && !get_vim_var_nr(VV_VIRTNUM)) {
           num = (int)get_vim_var_nr(VV_LNUM);
         }
@@ -1617,7 +1617,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
     case STL_ROFLAG:
     case STL_ROFLAG_ALT:
       // Overload %r with v:relnum for 'statuscolumn'
-      if (opt_name != NULL && strcmp(opt_name, "statuscolumn") == 0) {
+      if (stcp != NULL) {
         if (wp->w_p_rnu && !get_vim_var_nr(VV_VIRTNUM)) {
           num = (int)get_vim_var_nr(VV_RELNUM);
         }
@@ -1652,7 +1652,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
       char *p;
       if (fold) {
         size_t n = fill_foldcolumn(out_p, wp, stcp->foldinfo, (linenr_T)get_vim_var_nr(VV_LNUM));
-        stl_items[curitem].minwid = win_hl_attr(wp, stcp->use_cul ? HLF_CLF : HLF_FC);
+        stl_items[curitem].minwid = -((stcp->use_cul ? HLF_CLF : HLF_FC) + 1);
         p = out_p;
         p[n] = NUL;
       }
@@ -1668,9 +1668,8 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
         } else if (!fold) {
           SignTextAttrs *sattr = virtnum ? NULL : sign_get_attr(i, stcp->sattrs, wp->w_scwidth);
           p = sattr && sattr->text ? sattr->text : "  ";
-          stl_items[curitem].minwid = sattr ? stcp->sign_cul_attr ? stcp->sign_cul_attr
-                                                                  : sattr->hl_attr_id
-                                            : win_hl_attr(wp, stcp->use_cul ? HLF_CLS : HLF_SC);
+          stl_items[curitem].minwid = -(sattr ? stcp->sign_cul_id ? stcp->sign_cul_id
+                                        : sattr->hl_id : (stcp->use_cul ? HLF_CLS : HLF_SC) + 1);
         }
         stl_items[curitem].type = Highlight;
         stl_items[curitem].start = out_p + strlen(buf_tmp);

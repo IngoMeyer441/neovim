@@ -939,10 +939,10 @@ void do_autocmd(exarg_T *eap, char *arg_in, int forceit)
   xfree(envpat);
 }
 
-void do_all_autocmd_events(char *pat, bool once, int nested, char *cmd, bool delete, int group)
+void do_all_autocmd_events(char *pat, bool once, int nested, char *cmd, bool del, int group)
 {
   FOR_ALL_AUEVENTS(event) {
-    if (do_autocmd_event(event, pat, once, nested, cmd, delete, group)
+    if (do_autocmd_event(event, pat, once, nested, cmd, del, group)
         == FAIL) {
       return;
     }
@@ -956,12 +956,12 @@ void do_all_autocmd_events(char *pat, bool once, int nested, char *cmd, bool del
 // If *cmd == NUL: show entries.
 // If forceit == true: delete entries.
 // If group is not AUGROUP_ALL: only use this group.
-int do_autocmd_event(event_T event, char *pat, bool once, int nested, char *cmd, bool delete,
+int do_autocmd_event(event_T event, char *pat, bool once, int nested, char *cmd, bool del,
                      int group)
   FUNC_ATTR_NONNULL_ALL
 {
   // Cannot be used to show all patterns. See au_show_for_event or au_show_for_all_events
-  assert(*pat != NUL || delete);
+  assert(*pat != NUL || del);
 
   AutoPat *ap;
   AutoPat **prev_ap;
@@ -978,7 +978,7 @@ int do_autocmd_event(event_T event, char *pat, bool once, int nested, char *cmd,
   }
 
   // Delete all aupat for an event.
-  if (*pat == NUL && delete) {
+  if (*pat == NUL && del) {
     aupat_del_for_event_and_group(event, findgroup);
     return OK;
   }
@@ -999,7 +999,7 @@ int do_autocmd_event(event_T event, char *pat, bool once, int nested, char *cmd,
       patlen = (int)strlen(buflocal_pat);
     }
 
-    if (delete) {
+    if (del) {
       assert(*pat != NUL);
 
       // Find AutoPat entries with this pattern.
@@ -1421,6 +1421,8 @@ void aucmd_prepbuf(aco_save_T *aco, buf_T *buf)
   aco->save_curwin_handle = curwin->handle;
   aco->save_curbuf = curbuf;
   aco->save_prevwin_handle = prevwin == NULL ? 0 : prevwin->handle;
+  aco->save_State = State;
+
   if (win != NULL) {
     // There is a window for "buf" in the current tab page, make it the
     // curwin.  This is preferred, it has the least side effects (esp. if
@@ -1497,6 +1499,10 @@ void aucmd_restbuf(aco_save_T *aco)
 win_found:
     // May need to stop Insert mode if we were in a prompt buffer.
     leaving_window(curwin);
+    // Do not stop Insert mode when already in Insert mode before.
+    if (aco->save_State & MODE_INSERT) {
+      stop_insert_mode = false;
+    }
     // Remove the window.
     win_remove(curwin, NULL);
     pmap_del(handle_T)(&window_handles, curwin->handle);
@@ -2499,7 +2505,7 @@ bool aupat_is_buflocal(char *pat, int patlen)
 
 int aupat_get_buflocal_nr(char *pat, int patlen)
 {
-  assert(aupat_is_buflocal((char *)pat, patlen));
+  assert(aupat_is_buflocal(pat, patlen));
 
   // "<buffer>"
   if (patlen == 8) {

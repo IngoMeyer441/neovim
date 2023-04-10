@@ -44,11 +44,11 @@
 
 garray_T ucmds = { 0, 0, sizeof(ucmd_T), 4, NULL };
 
-static char e_complete_used_without_allowing_arguments[]
+static const char e_complete_used_without_allowing_arguments[]
   = N_("E1208: -complete used without allowing arguments");
-static char e_no_such_user_defined_command_str[]
+static const char e_no_such_user_defined_command_str[]
   = N_("E184: No such user-defined command: %s");
-static char e_no_such_user_defined_command_in_current_buffer_str[]
+static const char e_no_such_user_defined_command_in_current_buffer_str[]
   = N_("E1237: No such user-defined command in current buffer: %s");
 
 /// List of names for completion for ":command" with the EXPAND_ flag.
@@ -234,7 +234,7 @@ const char *set_context_in_user_cmd(expand_T *xp, const char *arg_in)
   // Check for attributes
   while (*arg == '-') {
     arg++;  // Skip "-".
-    p = (const char *)skiptowhite(arg);
+    p = skiptowhite(arg);
     if (*p == NUL) {
       // Cursor is still in the attribute.
       p = strchr(arg, '=');
@@ -262,11 +262,11 @@ const char *set_context_in_user_cmd(expand_T *xp, const char *arg_in)
       }
       return NULL;
     }
-    arg = (const char *)skipwhite(p);
+    arg = skipwhite(p);
   }
 
   // After the attributes comes the new command name.
-  p = (const char *)skiptowhite(arg);
+  p = skiptowhite(arg);
   if (*p == NUL) {
     xp->xp_context = EXPAND_USER_COMMANDS;
     xp->xp_pattern = (char *)arg;
@@ -274,7 +274,7 @@ const char *set_context_in_user_cmd(expand_T *xp, const char *arg_in)
   }
 
   // And finally comes a normal command.
-  return (const char *)skipwhite(p);
+  return skipwhite(p);
 }
 
 /// Set the completion context for the argument of a user defined command.
@@ -292,7 +292,7 @@ const char *set_context_in_user_cmdarg(const char *cmd FUNC_ATTR_UNUSED, const c
   }
 
   if (context == EXPAND_MENUS) {
-    return (const char *)set_context_in_menu_cmd(xp, cmd, (char *)arg, forceit);
+    return set_context_in_menu_cmd(xp, cmd, (char *)arg, forceit);
   }
   if (context == EXPAND_COMMANDS) {
     return arg;
@@ -861,7 +861,7 @@ char *uc_validate_name(char *name)
 ///
 /// @return  OK if the command is created, FAIL otherwise.
 int uc_add_command(char *name, size_t name_len, const char *rep, uint32_t argt, int64_t def,
-                   int flags, int compl, char *compl_arg, LuaRef compl_luaref,
+                   int flags, int context, char *compl_arg, LuaRef compl_luaref,
                    LuaRef preview_luaref, cmd_addr_T addr_type, LuaRef luaref, bool force)
   FUNC_ATTR_NONNULL_ARG(1, 3)
 {
@@ -944,7 +944,7 @@ int uc_add_command(char *name, size_t name_len, const char *rep, uint32_t argt, 
   cmd->uc_rep = rep_buf;
   cmd->uc_argt = argt;
   cmd->uc_def = def;
-  cmd->uc_compl = compl;
+  cmd->uc_compl = context;
   cmd->uc_script_ctx = current_sctx;
   cmd->uc_script_ctx.sc_lnum += SOURCING_LNUM;
   nlua_set_sctx(&cmd->uc_script_ctx);
@@ -974,7 +974,7 @@ void ex_command(exarg_T *eap)
   uint32_t argt = 0;
   long def = -1;
   int flags = 0;
-  int compl = EXPAND_NOTHING;
+  int context = EXPAND_NOTHING;
   char *compl_arg = NULL;
   cmd_addr_T addr_type_arg = ADDR_NONE;
   int has_attr = (eap->arg[0] == '-');
@@ -986,7 +986,7 @@ void ex_command(exarg_T *eap)
   while (*p == '-') {
     p++;
     end = skiptowhite(p);
-    if (uc_scan_attr(p, (size_t)(end - p), &argt, &def, &flags, &compl, &compl_arg,
+    if (uc_scan_attr(p, (size_t)(end - p), &argt, &def, &flags, &context, &compl_arg,
                      &addr_type_arg) == FAIL) {
       goto theend;
     }
@@ -1011,10 +1011,10 @@ void ex_command(exarg_T *eap)
     emsg(_("E183: User defined commands must start with an uppercase letter"));
   } else if (name_len <= 4 && strncmp(name, "Next", name_len) == 0) {
     emsg(_("E841: Reserved name, cannot be used for user defined command"));
-  } else if (compl > 0 && (argt & EX_EXTRA) == 0) {
+  } else if (context > 0 && (argt & EX_EXTRA) == 0) {
     emsg(_(e_complete_used_without_allowing_arguments));
   } else {
-    uc_add_command(name, name_len, p, argt, def, flags, compl, compl_arg, LUA_NOREF, LUA_NOREF,
+    uc_add_command(name, name_len, p, argt, def, flags, context, compl_arg, LUA_NOREF, LUA_NOREF,
                    addr_type_arg, LUA_NOREF, eap->forceit);
 
     return;  // success

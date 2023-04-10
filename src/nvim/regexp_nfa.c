@@ -244,10 +244,10 @@ static int nfa_classcodes[] = {
   NFA_UPPER, NFA_NUPPER
 };
 
-static char e_nul_found[] = N_("E865: (NFA) Regexp end encountered prematurely");
-static char e_misplaced[] = N_("E866: (NFA regexp) Misplaced %c");
-static char e_ill_char_class[] = N_("E877: (NFA regexp) Invalid character class: %" PRId64);
-static char e_value_too_large[] = N_("E951: \\% value too large");
+static const char e_nul_found[] = N_("E865: (NFA) Regexp end encountered prematurely");
+static const char e_misplaced[] = N_("E866: (NFA regexp) Misplaced %c");
+static const char e_ill_char_class[] = N_("E877: (NFA regexp) Invalid character class: %" PRId64);
+static const char e_value_too_large[] = N_("E951: \\% value too large");
 
 // Since the out pointers in the list are always
 // uninitialized, we use the pointers themselves
@@ -1918,7 +1918,7 @@ static int nfa_regatom(void)
   case Magic('|'):
   case Magic('&'):
   case Magic(')'):
-    semsg(_(e_misplaced), (int64_t)no_Magic(c));  // -V1037
+    semsg(_(e_misplaced), (char)no_Magic(c));  // -V1037
     return FAIL;
 
   case Magic('='):
@@ -1928,7 +1928,7 @@ static int nfa_regatom(void)
   case Magic('*'):
   case Magic('{'):
     // these should follow an atom, not form an atom
-    semsg(_(e_misplaced), (int64_t)no_Magic(c));
+    semsg(_(e_misplaced), (char)no_Magic(c));
     return FAIL;
 
   case Magic('~'): {
@@ -3274,7 +3274,7 @@ static void nfa_set_code(int c)
 }
 
 static FILE *log_fd;
-static uint8_t e_log_open_failed[] =
+static const uint8_t e_log_open_failed[] =
   N_("Could not open temporary log file for writing, displaying on stderr... ");
 
 // Print the postfix notation of the current regexp.
@@ -5252,9 +5252,9 @@ static regsubs_T *addstate_here(nfa_list_T *l, nfa_state_T *state, regsubs_T *su
 }
 
 // Check character class "class" against current character c.
-static int check_char_class(int class, int c)
+static int check_char_class(int cls, int c)
 {
-  switch (class) {
+  switch (cls) {
   case NFA_CLASS_ALNUM:
     if (c >= 1 && c < 128 && isalnum(c)) {
       return OK;
@@ -5353,7 +5353,7 @@ static int check_char_class(int class, int c)
 
   default:
     // should not be here :P
-    siemsg(_(e_ill_char_class), (int64_t)class);
+    siemsg(_(e_ill_char_class), (int64_t)cls);
     return FAIL;
   }
   return FAIL;

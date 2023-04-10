@@ -96,7 +96,7 @@ typedef enum {
   WEE_TRIGGER_LEAVE_AUTOCMDS = 0x10,
 } wee_flags_T;
 
-static char e_cannot_split_window_when_closing_buffer[]
+static const char e_cannot_split_window_when_closing_buffer[]
   = N_("E1159: Cannot split a window when closing the buffer");
 
 static char *m_onlyone = N_("Already only one window");
@@ -899,7 +899,7 @@ void win_check_anchored_floats(win_T *win)
 /// Return the number of fold columns to display
 int win_fdccol_count(win_T *wp)
 {
-  const char *fdc = (const char *)wp->w_p_fdc;
+  const char *fdc = wp->w_p_fdc;
 
   // auto:<NUM>
   if (strncmp(fdc, "auto", 4) == 0) {
@@ -7422,7 +7422,7 @@ static int int_cmp(const void *a, const void *b)
 /// Handle setting 'colorcolumn' or 'textwidth' in window "wp".
 ///
 /// @return error message, NULL if it's OK.
-char *check_colorcolumn(win_T *wp)
+const char *check_colorcolumn(win_T *wp)
 {
   if (wp->w_buffer == NULL) {
     return NULL;      // buffer was closed

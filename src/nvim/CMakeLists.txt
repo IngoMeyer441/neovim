@@ -21,7 +21,7 @@ find_package(Iconv REQUIRED)
 find_package(Libtermkey 0.22 REQUIRED)
 find_package(Libvterm 0.3 REQUIRED)
 find_package(Msgpack 1.0.0 REQUIRED)
-find_package(Treesitter REQUIRED)
+find_package(Treesitter 0.20.8 REQUIRED)
 find_package(Unibilium 2.0 REQUIRED)
 
 target_link_libraries(main_lib INTERFACE
@@ -146,11 +146,7 @@ if(HAS_DIAG_COLOR_FLAG)
   endif()
 endif()
 
-if($ENV{CI})
-    option(CI_BUILD "CI, extra flags will be set" ON)
-else()
-    option(CI_BUILD "CI, extra flags will be set" OFF)
-endif()
+option(CI_BUILD "CI, extra flags will be set" OFF)
 if(CI_BUILD)
   message(STATUS "CI build enabled")
   if(MSVC)
@@ -255,7 +251,6 @@ set(GENERATED_UI_EVENTS_METADATA ${GENERATED_DIR}/api/private/ui_events_metadata
 set(GENERATED_EX_CMDS_ENUM ${GENERATED_INCLUDES_DIR}/ex_cmds_enum.generated.h)
 set(GENERATED_EX_CMDS_DEFS ${GENERATED_DIR}/ex_cmds_defs.generated.h)
 set(GENERATED_FUNCS ${GENERATED_DIR}/funcs.generated.h)
-set(GENERATED_KEYSETS ${GENERATED_DIR}/keysets.generated.h)
 set(GENERATED_KEYSETS_DEFS ${GENERATED_DIR}/keysets_defs.generated.h)
 set(GENERATED_EVENTS_ENUM ${GENERATED_INCLUDES_DIR}/auevents_enum.generated.h)
 set(GENERATED_EVENTS_NAMES_MAP ${GENERATED_DIR}/auevents_name_map.generated.h)
@@ -263,7 +258,6 @@ set(GENERATED_OPTIONS ${GENERATED_DIR}/options.generated.h)
 set(EX_CMDS_GENERATOR ${GENERATOR_DIR}/gen_ex_cmds.lua)
 set(FUNCS_GENERATOR ${GENERATOR_DIR}/gen_eval.lua)
 set(EVENTS_GENERATOR ${GENERATOR_DIR}/gen_events.lua)
-set(KEYSETS_GENERATOR ${GENERATOR_DIR}/gen_keysets.lua)
 set(OPTIONS_GENERATOR ${GENERATOR_DIR}/gen_options.lua)
 set(UNICODE_TABLES_GENERATOR ${GENERATOR_DIR}/gen_unicode_tables.lua)
 set(UNICODE_DIR ${PROJECT_SOURCE_DIR}/src/unicode)
@@ -433,7 +427,6 @@ foreach(sfile ${NVIM_SOURCES}
               ${GENERATED_API_DISPATCH}
               "${GENERATED_UI_EVENTS_CALL}"
               "${GENERATED_UI_EVENTS_REMOTE}"
-              "${GENERATED_KEYSETS}"
               "${GENERATED_UI_EVENTS_CLIENT}"
               )
   get_filename_component(full_d ${sfile} DIRECTORY)
@@ -485,11 +478,12 @@ add_custom_command(OUTPUT ${GENERATED_UNICODE_TABLES}
 
 add_custom_command(
   OUTPUT ${GENERATED_API_DISPATCH} ${GENERATED_FUNCS_METADATA}
-         ${API_METADATA} ${LUA_API_C_BINDINGS}
+         ${API_METADATA} ${LUA_API_C_BINDINGS} ${GENERATED_KEYSETS_DEFS}
   COMMAND ${LUA_GEN_PRG} ${API_DISPATCH_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}
                          ${GENERATED_API_DISPATCH}
                          ${GENERATED_FUNCS_METADATA} ${API_METADATA}
                          ${LUA_API_C_BINDINGS}
+                         ${GENERATED_KEYSETS_DEFS}
                          ${API_HEADERS}
   DEPENDS
     ${API_HEADERS}
@@ -560,7 +554,6 @@ list(APPEND NVIM_GENERATED_FOR_SOURCES
   "${GENERATED_API_DISPATCH}"
   "${GENERATED_EX_CMDS_DEFS}"
   "${GENERATED_EVENTS_NAMES_MAP}"
-  "${GENERATED_KEYSETS}"
   "${GENERATED_OPTIONS}"
   "${GENERATED_UNICODE_TABLES}"
   "${VIM_MODULE_FILE}"
@@ -588,12 +581,6 @@ add_custom_command(OUTPUT ${GENERATED_EVENTS_ENUM} ${GENERATED_EVENTS_NAMES_MAP}
   COMMAND ${LUA_PRG} ${EVENTS_GENERATOR}
       ${CMAKE_CURRENT_LIST_DIR} ${GENERATED_EVENTS_ENUM} ${GENERATED_EVENTS_NAMES_MAP}
   DEPENDS ${EVENTS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/auevents.lua
-)
-
-add_custom_command(OUTPUT ${GENERATED_KEYSETS} ${GENERATED_KEYSETS_DEFS}
-  COMMAND ${LUA_PRG} ${KEYSETS_GENERATOR}
-      ${CMAKE_CURRENT_LIST_DIR} ${LUA_SHARED_MODULE_SOURCE} ${GENERATED_KEYSETS} ${GENERATED_KEYSETS_DEFS}
-  DEPENDS ${KEYSETS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/api/keysets.lua ${GENERATOR_HASHY}
 )
 
 add_custom_command(OUTPUT ${GENERATED_OPTIONS}
@@ -794,7 +781,7 @@ target_compile_definitions(libnvim PRIVATE MAKE_LIB)
 target_link_libraries(libnvim PRIVATE main_lib PUBLIC libuv)
 
 if(ENABLE_ASAN_UBSAN)
-  message(STATUS "Enabling Clang address sanitizer and undefined behavior sanitizer for nvim.")
+  message(STATUS "Enabling address sanitizer and undefined behavior sanitizer for nvim.")
   if(CI_BUILD)
     # Try to recover from all sanitize issues so we get reports about all failures
     target_compile_options(nvim PRIVATE -fsanitize-recover=all)
@@ -808,7 +795,7 @@ if(ENABLE_ASAN_UBSAN)
     -fsanitize=undefined)
   target_link_libraries(nvim PRIVATE -fsanitize=address -fsanitize=undefined)
 elseif(ENABLE_MSAN)
-  message(STATUS "Enabling Clang memory sanitizer for nvim.")
+  message(STATUS "Enabling memory sanitizer for nvim.")
   target_compile_options(nvim PRIVATE
     -fsanitize=memory
     -fsanitize-memory-track-origins
@@ -816,7 +803,7 @@ elseif(ENABLE_MSAN)
     -fno-optimize-sibling-calls)
   target_link_libraries(nvim PRIVATE -fsanitize=memory -fsanitize-memory-track-origins)
 elseif(ENABLE_TSAN)
-  message(STATUS "Enabling Clang thread sanitizer for nvim.")
+  message(STATUS "Enabling thread sanitizer for nvim.")
   target_compile_options(nvim PRIVATE -fsanitize=thread -fPIE)
   target_link_libraries(nvim PRIVATE -fsanitize=thread)
 endif()
