@@ -990,6 +990,7 @@ func Test_matchstrpos()
   call assert_equal(['', -1, -1], matchstrpos('testing', 'ing', 8))
   call assert_equal(['ing', 1, 4, 7], matchstrpos(['vim', 'testing', 'execute'], 'ing'))
   call assert_equal(['', -1, -1, -1], matchstrpos(['vim', 'testing', 'execute'], 'img'))
+  call assert_equal(['', -1, -1], matchstrpos(v:_null_list, '\a'))
 endfunc
 
 func Test_nextnonblank_prevnonblank()
@@ -1284,6 +1285,7 @@ func Test_hlexists()
   syntax off
 endfunc
 
+" Test for the col() function
 func Test_col()
   new
   call setline(1, 'abcdef')
@@ -1435,6 +1437,8 @@ func Test_inputlist()
   call assert_equal(-2, c)
 
   call assert_fails('call inputlist("")', 'E686:')
+  " Nvim accepts null list as empty list
+  " call assert_fails('call inputlist(v:_null_list)', 'E686:')
 endfunc
 
 func Test_range_inputlist()
@@ -2005,6 +2009,22 @@ func Test_call()
   eval mydict.len->call([], mydict)->assert_equal(4)
   call assert_fails("call call('Mylen', [], 0)", 'E715:')
   call assert_fails('call foo', 'E107:')
+
+  " These once caused a crash.
+  " Nvim doesn't have null functions
+  " call call(test_null_function(), [])
+  " Nvim doesn't have null partials
+  " call call(test_null_partial(), [])
+  " Nvim doesn't have null functions
+  " call assert_fails('call test_null_function()()', 'E1192:')
+  " Nvim doesn't have null partials
+  " call assert_fails('call test_null_partial()()', 'E117:')
+
+  let lines =<< trim END
+      let Time = 'localtime'
+      call Time()
+  END
+  call CheckScriptFailure(lines, 'E1085:')
 endfunc
 
 func Test_char2nr()
@@ -2357,6 +2377,16 @@ func Test_garbagecollect_now_fails()
   let v:testing = 1
 endfunc
 
+" Test for echo highlighting
+func Test_echohl()
+  echohl Search
+  echo 'Vim'
+  call assert_equal('Vim', Screenline(&lines))
+  " TODO: How to check the highlight group used by echohl?
+  " ScreenAttrs() returns all zeros.
+  echohl None
+endfunc
+
 " Test for the eval() function
 func Test_eval()
   call assert_fails("call eval('5 a')", 'E488:')
@@ -2515,6 +2545,18 @@ func Test_glob()
   call assert_fails("call glob('*', 0, {})", 'E728:')
 endfunc
 
+" Test for browse()
+func Test_browse()
+  CheckFeature browse
+  call assert_fails('call browse([], "open", "x", "a.c")', 'E745:')
+endfunc
+
+" Test for browsedir()
+func Test_browsedir()
+  CheckFeature browse
+  call assert_fails('call browsedir("open", [])', 'E730:')
+endfunc
+
 func HasDefault(msg = 'msg')
   return a:msg
 endfunc
@@ -2535,7 +2577,7 @@ func Test_builtin_check()
   call assert_fails('let l:.trim = {x -> " " .. x}', 'E704:')
   let lines =<< trim END
     vim9script
-    var s:trim = (x) => " " .. x
+    var trim = (x) => " " .. x
   END
   call CheckScriptFailure(lines, 'E704:')
 

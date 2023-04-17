@@ -1307,6 +1307,7 @@ static void shada_read(ShaDaReadDef *const sd_reader, const int flags)
           .mark = cur_entry.data.filemark.mark,
           .fnum = (buf == NULL ? 0 : buf->b_fnum),
           .timestamp = cur_entry.timestamp,
+          .view = INIT_FMARKV,
           .additional_data = cur_entry.data.filemark.additional_data,
         },
       };
@@ -1388,6 +1389,7 @@ static void shada_read(ShaDaReadDef *const sd_reader, const int flags)
         .mark = cur_entry.data.filemark.mark,
         .fnum = 0,
         .timestamp = cur_entry.timestamp,
+        .view = INIT_FMARKV,
         .additional_data = cur_entry.data.filemark.additional_data,
       };
       if (cur_entry.type == kSDItemLocalMark) {
@@ -3040,7 +3042,7 @@ shada_write_file_nomerge: {}
       if (!os_isdir(fname)) {
         int ret;
         char *failed_dir;
-        if ((ret = os_mkdir_recurse(fname, 0700, &failed_dir)) != 0) {
+        if ((ret = os_mkdir_recurse(fname, 0700, &failed_dir, NULL)) != 0) {
           semsg(_(SERR "Failed to create directory %s "
                   "for writing ShaDa file: %s"),
                 failed_dir, os_strerror(ret));

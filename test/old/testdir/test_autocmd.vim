@@ -56,6 +56,9 @@ if has('timers')
   endfunc
 
   func Test_cursorhold_insert()
+    " depends on timing
+    let g:test_is_flaky = 1
+
     " Need to move the cursor.
     call feedkeys("ggG", "xt")
 
@@ -918,14 +921,13 @@ func Test_BufEnter()
   call assert_equal('++', g:val)
 
   " Also get BufEnter when editing a directory
-  call mkdir('Xdir')
-  split Xdir
+  call mkdir('Xbufenterdir', 'D')
+  split Xbufenterdir
   call assert_equal('+++', g:val)
 
   " On MS-Windows we can't edit the directory, make sure we wipe the right
   " buffer.
-  bwipe! Xdir
-  call delete('Xdir', 'd')
+  bwipe! Xbufenterdir
   au! BufEnter
 
   " Editing a "nofile" buffer doesn't read the file but does trigger BufEnter
@@ -2186,11 +2188,10 @@ func Test_BufWriteCmd()
   new
   file Xbufwritecmd
   set buftype=acwrite
-  call mkdir('Xbufwritecmd')
+  call mkdir('Xbufwritecmd', 'D')
   write
   " BufWriteCmd should be triggered even if a directory has the same name
   call assert_equal(1, g:written)
-  call delete('Xbufwritecmd', 'd')
   unlet g:written
   au! BufWriteCmd
   bwipe!
@@ -2947,16 +2948,15 @@ func Test_throw_in_BufWritePre()
 endfunc
 
 func Test_autocmd_in_try_block()
-  call mkdir('Xdir')
+  call mkdir('Xintrydir', 'R')
   au BufEnter * let g:fname = expand('%')
   try
-    edit Xdir/
+    edit Xintrydir/
   endtry
-  call assert_match('Xdir', g:fname)
+  call assert_match('Xintrydir', g:fname)
 
   unlet g:fname
   au! BufEnter
-  call delete('Xdir', 'rf')
 endfunc
 
 func Test_autocmd_CmdWinEnter()
@@ -3626,5 +3626,61 @@ func Test_autocmd_nested_setbufvar()
   %bwipe!
 endfunc
 
+func SetupVimTest_shm()
+  let g:bwe = []
+  let g:brp = []
+  set shortmess+=F
+  messages clear
+
+  let dirname='XVimTestSHM'
+  call mkdir(dirname, 'R')
+  call writefile(['test'], dirname .. '/1')
+  call writefile(['test'], dirname .. '/2')
+  call writefile(['test'], dirname .. '/3')
+
+  augroup test
+      autocmd!
+      autocmd BufWinEnter * call add(g:bwe, $'BufWinEnter: {expand('<amatch>')}')
+      autocmd BufReadPost * call add(g:brp,  $'BufReadPost: {expand('<amatch>')}')
+  augroup END
+
+  call setqflist([
+        \  {'filename': dirname .. '/1', 'lnum': 1, 'col': 1, 'text': 'test', 'vcol': 0},
+        \  {'filename': dirname .. '/2', 'lnum': 1, 'col': 1, 'text': 'test', 'vcol': 0},
+        \  {'filename': dirname .. '/3', 'lnum': 1, 'col': 1, 'text': 'test', 'vcol': 0}
+        \  ])
+  cdo! substitute/test/TEST
+
+  " clean up
+  noa enew!
+  set shortmess&vim
+  augroup test
+      autocmd!
+  augroup END
+  augroup! test
+endfunc
+
+func Test_autocmd_shortmess()
+  CheckNotMSWindows
+
+  call SetupVimTest_shm()
+  let output = execute(':mess')->split('\n')
+
+  let info = copy(output)->filter({idx, val -> val =~# '\d of 3'} )
+  let bytes = copy(output)->filter({idx, val -> val =~# 'bytes'} )
+
+  " We test the following here:
+  " BufReadPost should have been triggered 3 times, once per file
+  " BufWinEnter should have been triggered 3 times, once per file
+  " FileInfoMessage should have been shown 3 times, regardless of shm option
+  " "(x of 3)" message from :cnext has been shown 3 times
+
+  call assert_equal(3, g:brp->len())
+  call assert_equal(3, g:bwe->len())
+  call assert_equal(3, info->len())
+  call assert_equal(3, bytes->len())
+
+  delfunc SetupVimTest_shm
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

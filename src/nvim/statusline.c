@@ -985,7 +985,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
     };
     set_var(S_LEN("g:statusline_winid"), &tv, false);
 
-    usefmt = eval_to_string_safe(fmt + 2, NULL, use_sandbox);
+    usefmt = eval_to_string_safe(fmt + 2, use_sandbox);
     if (usefmt == NULL) {
       usefmt = fmt;
     }
@@ -1373,6 +1373,9 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
     // An invalid item was specified.
     // Continue processing on the next character of the format string.
     if (vim_strchr(STL_ALL, (uint8_t)(*fmt_p)) == NULL) {
+      if (*fmt_p == NUL) {  // can happen with "%0"
+        break;
+      }
       fmt_p++;
       continue;
     }
@@ -1457,7 +1460,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
       }
 
       // Note: The result stored in `t` is unused.
-      str = eval_to_string_safe(out_p, &t, use_sandbox);
+      str = eval_to_string_safe(out_p, use_sandbox);
 
       curwin = save_curwin;
       curbuf = save_curbuf;

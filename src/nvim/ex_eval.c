@@ -792,10 +792,15 @@ void report_discard_pending(int pending, void *value)
 void ex_eval(exarg_T *eap)
 {
   typval_T tv;
+  evalarg_T evalarg;
 
-  if (eval0(eap->arg, &tv, &eap->nextcmd, !eap->skip) == OK) {
+  fill_evalarg_from_eap(&evalarg, eap, eap->skip);
+
+  if (eval0(eap->arg, &tv, eap, &evalarg) == OK) {
     tv_clear(&tv);
   }
+
+  clear_evalarg(&evalarg, eap);
 }
 
 /// Handle ":if".
@@ -812,7 +817,7 @@ void ex_if(exarg_T *eap)
     int skip = CHECK_SKIP;
 
     bool error;
-    int result = eval_to_bool(eap->arg, &error, &eap->nextcmd, skip);
+    int result = eval_to_bool(eap->arg, &error, eap, skip);
 
     if (!skip && !error) {
       if (result) {
@@ -907,7 +912,7 @@ void ex_else(exarg_T *eap)
     if (skip && *eap->arg != '"' && ends_excmd(*eap->arg)) {
       semsg(_(e_invexpr2), eap->arg);
     } else {
-      result = eval_to_bool(eap->arg, &error, &eap->nextcmd, skip);
+      result = eval_to_bool(eap->arg, &error, eap, skip);
     }
 
     // When throwing error exceptions, we want to throw always the first
@@ -952,13 +957,12 @@ void ex_while(exarg_T *eap)
       eap->cmdidx == CMD_while ? CSF_WHILE : CSF_FOR;
 
     int skip = CHECK_SKIP;
-    if (eap->cmdidx == CMD_while) {
-      // ":while bool-expr"
-      result = eval_to_bool(eap->arg, &error, &eap->nextcmd, skip);
-    } else {
+    if (eap->cmdidx == CMD_while) {  // ":while bool-expr"
+      result = eval_to_bool(eap->arg, &error, eap, skip);
+    } else {  // ":for var in list-expr"
+      evalarg_T evalarg;
+      fill_evalarg_from_eap(&evalarg, eap, skip);
       void *fi;
-
-      // ":for var in list-expr"
       if ((cstack->cs_lflags & CSL_HAD_LOOP) != 0) {
         // Jumping here from a ":continue" or ":endfor": use the
         // previously evaluated list.
@@ -966,7 +970,7 @@ void ex_while(exarg_T *eap)
         error = false;
       } else {
         // Evaluate the argument and get the info in a structure.
-        fi = eval_for_line(eap->arg, &error, &eap->nextcmd, skip);
+        fi = eval_for_line(eap->arg, &error, eap, &evalarg);
         cstack->cs_forinfo[cstack->cs_idx] = fi;
       }
 
@@ -981,6 +985,7 @@ void ex_while(exarg_T *eap)
         free_for_info(fi);
         cstack->cs_forinfo[cstack->cs_idx] = NULL;
       }
+      clear_evalarg(&evalarg, eap);
     }
 
     // If this cstack entry was just initialised and is active, set the
@@ -1125,12 +1130,11 @@ void ex_endwhile(exarg_T *eap)
 /// Handle ":throw expr"
 void ex_throw(exarg_T *eap)
 {
-  const char *arg = eap->arg;
+  char *arg = eap->arg;
   char *value;
 
   if (*arg != NUL && *arg != '|' && *arg != '\n') {
-    value = eval_to_string_skip(arg, (const char **)&eap->nextcmd,
-                                (bool)eap->skip);
+    value = eval_to_string_skip(arg, eap, eap->skip);
   } else {
     emsg(_(e_argreq));
     value = NULL;
@@ -1962,7 +1966,7 @@ void rewind_conditionals(cstack_T *cstack, int idx, int cond_type, int *cond_lev
 /// Handle ":endfunction" when not after a ":function"
 void ex_endfunction(exarg_T *eap)
 {
-  emsg(_("E193: :endfunction not inside a function"));
+  semsg(_(e_str_not_inside_function), ":endfunction");
 }
 
 /// @return  true if the string "p" looks like a ":while" or ":for" command.

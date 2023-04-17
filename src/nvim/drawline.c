@@ -656,7 +656,15 @@ static void get_statuscol_str(win_T *wp, linenr_T lnum, int virtnum, statuscol_T
     wp->w_statuscol_line_count = wp->w_nrwidth_line_count;
     set_vim_var_nr(VV_VIRTNUM, 0);
     build_statuscol_str(wp, wp->w_nrwidth_line_count, 0, stcp);
-    stcp->width += stcp->truncate;
+    if (stcp->truncate > 0) {
+      // Add truncated width to avoid unnecessary redraws
+      int addwidth = MIN(stcp->truncate, MAX_NUMBERWIDTH - wp->w_nrwidth);
+      stcp->truncate = 0;
+      stcp->width += addwidth;
+      wp->w_nrwidth += addwidth;
+      wp->w_nrwidth_width = wp->w_nrwidth;
+      wp->w_valid &= ~VALID_WCOL;
+    }
   }
   set_vim_var_nr(VV_VIRTNUM, virtnum);
 
@@ -2668,7 +2676,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool nochange, 
           if (wp->w_p_cuc && VCOL_HLC == (long)wp->w_virtcol) {
             col_attr = cuc_attr;
           } else if (draw_color_col && VCOL_HLC == *color_cols) {
-            col_attr = mc_attr;
+            col_attr = hl_combine_attr(wlv.line_attr_lowprio, mc_attr);
           }
 
           col_attr = hl_combine_attr(col_attr, wlv.line_attr);

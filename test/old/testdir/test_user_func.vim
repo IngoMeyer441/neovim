@@ -5,6 +5,7 @@
 
 source check.vim
 source shared.vim
+source vim9.vim
 
 func Table(title, ...)
   let ret = a:title
@@ -500,5 +501,223 @@ func Test_func_range()
 
   bwipe!
 endfunc
+
+" Test for memory allocation failure when defining a new function
+func Test_funcdef_alloc_failure()
+  CheckFunction test_alloc_fail
+  new
+  let lines =<< trim END
+    func Xtestfunc()
+      return 321
+    endfunc
+  END
+  call setline(1, lines)
+  call test_alloc_fail(GetAllocId('get_func'), 0, 0)
+  call assert_fails('source', 'E342:')
+  call assert_false(exists('*Xtestfunc'))
+  call assert_fails('delfunc Xtestfunc', 'E117:')
+  %d _
+  let lines =<< trim END
+    def g:Xvim9func(): number
+      return 456
+    enddef
+  END
+  call setline(1, lines)
+  call test_alloc_fail(GetAllocId('get_func'), 0, 0)
+  call assert_fails('source', 'E342:')
+  call assert_false(exists('*Xvim9func'))
+  "call test_alloc_fail(GetAllocId('get_func'), 0, 0)
+  "call assert_fails('source', 'E342:')
+  "call assert_false(exists('*Xtestfunc'))
+  "call assert_fails('delfunc Xtestfunc', 'E117:')
+  bw!
+endfunc
+
+func AddDefer(arg1, ...)
+  call extend(g:deferred, [a:arg1])
+  if a:0 == 1
+    call extend(g:deferred, [a:1])
+  endif
+endfunc
+
+func WithDeferTwo()
+  call extend(g:deferred, ['in Two'])
+  for nr in range(3)
+    defer AddDefer('Two' .. nr)
+  endfor
+  call extend(g:deferred, ['end Two'])
+endfunc
+
+func WithDeferOne()
+  call extend(g:deferred, ['in One'])
+  call writefile(['text'], 'Xfuncdefer')
+  defer delete('Xfuncdefer')
+  defer AddDefer('One')
+  call WithDeferTwo()
+  call extend(g:deferred, ['end One'])
+endfunc
+
+func WithPartialDefer()
+  call extend(g:deferred, ['in Partial'])
+  let Part = funcref('AddDefer', ['arg1'])
+  defer Part("arg2")
+  call extend(g:deferred, ['end Partial'])
+endfunc
+
+func Test_defer()
+  let g:deferred = []
+  call WithDeferOne()
+
+  call assert_equal(['in One', 'in Two', 'end Two', 'Two2', 'Two1', 'Two0', 'end One', 'One'], g:deferred)
+  unlet g:deferred
+
+  call assert_equal('', glob('Xfuncdefer'))
+
+  call assert_fails('defer delete("Xfuncdefer")->Another()', 'E488:')
+  call assert_fails('defer delete("Xfuncdefer").member', 'E488:')
+
+  let g:deferred = []
+  call WithPartialDefer()
+  call assert_equal(['in Partial', 'end Partial', 'arg1', 'arg2'], g:deferred)
+  unlet g:deferred
+
+  let Part = funcref('AddDefer', ['arg1'], {})
+  call assert_fails('defer Part("arg2")', 'E1300:')
+endfunc
+
+func DeferLevelTwo()
+  call writefile(['text'], 'XDeleteTwo', 'D')
+  throw 'someerror'
+endfunc
+
+" def DeferLevelOne()
+func DeferLevelOne()
+  call writefile(['text'], 'XDeleteOne', 'D')
+  call g:DeferLevelTwo()
+" enddef
+endfunc
+
+func Test_defer_throw()
+  let caught = 'no'
+  try
+    call DeferLevelOne()
+  catch /someerror/
+    let caught = 'yes'
+  endtry
+  call assert_equal('yes', caught)
+  call assert_false(filereadable('XDeleteOne'))
+  call assert_false(filereadable('XDeleteTwo'))
+endfunc
+
+func Test_defer_quitall()
+  let lines =<< trim END
+      " vim9script
+      func DeferLevelTwo()
+        call writefile(['text'], 'XQuitallTwo', 'D')
+        qa!
+      endfunc
+
+      " def DeferLevelOne()
+      func DeferLevelOne()
+        call writefile(['text'], 'XQuitallOne', 'D')
+        call DeferLevelTwo()
+      " enddef
+      endfunc
+
+      " DeferLevelOne()
+      call DeferLevelOne()
+  END
+  call writefile(lines, 'XdeferQuitall', 'D')
+  let res = system(GetVimCommand() .. ' -X -S XdeferQuitall')
+  call assert_equal(0, v:shell_error)
+  call assert_false(filereadable('XQuitallOne'))
+  call assert_false(filereadable('XQuitallTwo'))
+endfunc
+
+func Test_defer_quitall_in_expr_func()
+  throw 'Skipped: Vim9 script is N/A'
+  let lines =<< trim END
+      def DefIndex(idx: number, val: string): bool
+        call writefile([idx .. ': ' .. val], 'Xentry' .. idx, 'D')
+        if val == 'b'
+          qa!
+        endif
+        return val == 'c'
+      enddef
+
+      def Test_defer_in_funcref()
+        assert_equal(2, indexof(['a', 'b', 'c'], funcref('g:DefIndex')))
+      enddef
+      call Test_defer_in_funcref()
+  END
+  call writefile(lines, 'XdeferQuitallExpr', 'D')
+  let res = system(GetVimCommand() .. ' -X -S XdeferQuitallExpr')
+  call assert_equal(0, v:shell_error)
+  call assert_false(filereadable('Xentry0'))
+  call assert_false(filereadable('Xentry1'))
+  call assert_false(filereadable('Xentry2'))
+endfunc
+
+func FuncIndex(idx, val)
+  call writefile([a:idx .. ': ' .. a:val], 'Xentry' .. a:idx, 'D')
+  return a:val == 'c'
+endfunc
+
+func Test_defer_wrong_arguments()
+  call assert_fails('defer delete()', 'E119:')
+  call assert_fails('defer FuncIndex(1)', 'E119:')
+  call assert_fails('defer delete(1, 2, 3)', 'E118:')
+  call assert_fails('defer FuncIndex(1, 2, 3)', 'E118:')
+
+  throw 'Skipped: Vim9 script is N/A'
+  let lines =<< trim END
+      def DeferFunc0()
+        defer delete()
+      enddef
+      defcompile
+  END
+  call v9.CheckScriptFailure(lines, 'E119:')
+  let lines =<< trim END
+      def DeferFunc3()
+        defer delete(1, 2, 3)
+      enddef
+      defcompile
+  END
+  call v9.CheckScriptFailure(lines, 'E118:')
+  let lines =<< trim END
+      def DeferFunc2()
+        defer delete(1, 2)
+      enddef
+      defcompile
+  END
+  call v9.CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected string but got number')
+
+  def g:FuncOneArg(arg: string)
+    echo arg
+  enddef
+
+  let lines =<< trim END
+      def DeferUserFunc0()
+        defer g:FuncOneArg()
+      enddef
+      defcompile
+  END
+  call v9.CheckScriptFailure(lines, 'E119:')
+  let lines =<< trim END
+      def DeferUserFunc2()
+        defer g:FuncOneArg(1, 2)
+      enddef
+      defcompile
+  END
+  call v9.CheckScriptFailure(lines, 'E118:')
+  let lines =<< trim END
+      def DeferUserFunc1()
+        defer g:FuncOneArg(1)
+      enddef
+      defcompile
+  END
+  call v9.CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected string but got number')
+endfunc
+
 
 " vim: shiftwidth=2 sts=2 expandtab

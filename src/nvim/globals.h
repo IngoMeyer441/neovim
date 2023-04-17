@@ -890,7 +890,7 @@ EXTERN const char e_invarg2[] INIT(= N_("E475: Invalid argument: %s"));
 EXTERN const char e_invargval[] INIT(= N_("E475: Invalid value for argument %s"));
 EXTERN const char e_invargNval[] INIT(= N_("E475: Invalid value for argument %s: %s"));
 EXTERN const char e_duparg2[] INIT(= N_("E983: Duplicate argument: %s"));
-EXTERN const char e_invexpr2[] INIT(= N_("E15: Invalid expression: %s"));
+EXTERN const char e_invexpr2[] INIT(= N_("E15: Invalid expression: \"%s\""));
 EXTERN const char e_invrange[] INIT(= N_("E16: Invalid range"));
 EXTERN const char e_invcmd[] INIT(= N_("E476: Invalid command"));
 EXTERN const char e_isadir2[] INIT(= N_("E17: \"%s\" is a directory"));
@@ -953,6 +953,7 @@ EXTERN const char e_dictreq[] INIT(= N_("E715: Dictionary required"));
 EXTERN const char e_blobidx[] INIT(= N_("E979: Blob index out of range: %" PRId64));
 EXTERN const char e_invalblob[] INIT(= N_("E978: Invalid operation for Blob"));
 EXTERN const char e_toomanyarg[] INIT(= N_("E118: Too many arguments for function: %s"));
+EXTERN const char e_toofewarg[] INIT(= N_("E119: Not enough arguments for function: %s"));
 EXTERN const char e_dictkey[] INIT(= N_("E716: Key not present in Dictionary: \"%s\""));
 EXTERN const char e_listreq[] INIT(= N_("E714: List required"));
 EXTERN const char e_listblobreq[] INIT(= N_("E897: List or Blob required"));
@@ -986,6 +987,8 @@ EXTERN const char e_maxmempat[] INIT(= N_("E363: pattern uses more memory than '
 EXTERN const char e_emptybuf[] INIT(= N_("E749: empty buffer"));
 EXTERN const char e_nobufnr[] INIT(= N_("E86: Buffer %" PRId64 " does not exist"));
 
+EXTERN const char e_str_not_inside_function[] INIT(= N_("E193: %s not inside a function"));
+
 EXTERN const char e_invalpat[] INIT(= N_("E682: Invalid search pattern or delimiter"));
 EXTERN const char e_bufloaded[] INIT(= N_("E139: File is loaded in another buffer"));
 EXTERN const char e_notset[] INIT(= N_("E764: Option '%s' is not set"));
@@ -998,7 +1001,9 @@ EXTERN const char e_listarg[] INIT(= N_("E686: Argument of %s must be a List"));
 EXTERN const char e_unsupportedoption[] INIT(= N_("E519: Option not supported"));
 EXTERN const char e_fnametoolong[] INIT(= N_("E856: Filename too long"));
 EXTERN const char e_float_as_string[] INIT(= N_("E806: using Float as a String"));
+EXTERN const char e_inval_string[] INIT(= N_("E908: using an invalid value as a String"));
 EXTERN const char e_cannot_edit_other_buf[] INIT(= N_("E788: Not allowed to edit another buffer now"));
+EXTERN const char e_not_callable_type_str[] INIT(= N_("E1085: Not a callable type: %s"));
 
 EXTERN const char e_cmdmap_err[] INIT(= N_("E5520: <Cmd> mapping must end with <CR>"));
 EXTERN const char e_cmdmap_repeated[]
@@ -1022,6 +1027,11 @@ EXTERN const char e_highlight_group_name_invalid_char[] INIT(= N_("E5248: Invali
 EXTERN const char e_highlight_group_name_too_long[] INIT(= N_("E1249: Highlight group name too long"));
 
 EXTERN const char e_invalid_line_number_nr[] INIT(= N_("E966: Invalid line number: %ld"));
+
+EXTERN char e_stray_closing_curly_str[]
+INIT(= N_("E1278: Stray '}' without a matching '{': %s"));
+EXTERN char e_missing_close_curly_str[]
+INIT(= N_("E1279: Missing '}': %s"));
 
 EXTERN const char e_undobang_cannot_redo_or_move_branch[]
 INIT(= N_("E5767: Cannot use :undo! to redo or move to a different undo branch"));

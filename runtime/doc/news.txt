@@ -15,8 +15,20 @@ BREAKING CHANGES                                                *news-breaking*
 
 The following changes may require adaptations in user config or plugins.
 
+• |vim.tbl_islist()| now checks whether a table is actually list-like (i.e.,
+  has integer keys without gaps and starting from 1). For the previous
+  behavior (only check for integer keys, allow gaps or not starting with 1),
+  use |vim.tbl_isarray()|.
+
 • "#" followed by a digit no longer stands for a function key at the start of
   the lhs of a mapping.
+
+• `:behave` was removed. if you used `:behave mswin`, the following is equivalent: >vim
+
+    set selection=exclusive
+    set selectmode=mouse,key
+    set mousemodel=popup
+    set keymodel=startsel,stopsel
 
 ==============================================================================
 ADDED FEATURES                                                     *news-added*
@@ -30,14 +42,19 @@ CHANGED FEATURES                                                 *news-changed*
 
 The following changes to existing APIs or features add new behavior.
 
-• ...
+• |vim.tbl_contains()| now works for general tables and allows specifying a
+  predicate function that is checked for each value. (Use |vim.list_contains()|
+  for checking list-like tables (integer keys without gaps) for literal values.)
+
+• |vim.region()| can use a string accepted by |getpos()| as position.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
 
 The following deprecated functions or APIs were removed.
 
-• ...
+• Vimball support is removed.
+  - :Vimuntar command removed.
 
 ==============================================================================
 DEPRECATIONS                                                *news-deprecations*
@@ -45,7 +62,11 @@ DEPRECATIONS                                                *news-deprecations*
 The following functions are now deprecated and will be removed in the next
 release.
 
-• ...
-
+• Checkhealth functions:
+  - |health#report_error|, |vim.health.report_error()|	Use Lua |vim.health.error()| instead.
+  - |health#report_info|, |vim.health.report_info()|	Use Lua |vim.health.info()| instead.
+  - |health#report_ok|, |vim.health.report_ok()|	Use Lua |vim.health.ok()| instead.
+  - |health#report_start|, |vim.health.report_start()|	Use Lua |vim.health.start()| instead.
+  - |health#report_warn|, |vim.health.report_warn()|	Use Lua |vim.health.warn()| instead.
 
  vim:tw=78:ts=8:sw=2:et:ft=help:norl:

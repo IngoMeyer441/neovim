@@ -1476,7 +1476,7 @@ end
 local function close_preview_window(winnr, bufnrs)
   vim.schedule(function()
     -- exit if we are in one of ignored buffers
-    if bufnrs and vim.tbl_contains(bufnrs, api.nvim_get_current_buf()) then
+    if bufnrs and vim.list_contains(bufnrs, api.nvim_get_current_buf()) then
       return
     end
 
@@ -2154,4 +2154,3 @@ M._get_line_byte_from_position = get_line_byte_from_position
 M.buf_versions = {}
 
 return M
--- vim:sw=2 ts=2 et
