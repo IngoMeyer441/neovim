@@ -160,7 +160,7 @@ foreach(CFGNAME ${CMAKE_CONFIGURATION_TYPES})
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CFGNAME} ${CMAKE_BINARY_DIR}/lib)
 endforeach()
 
-set(LUA_DEPENDENCIES lpeg mpack bit)
+set(LUA_DEPENDENCIES lpeg)
 if(NOT LUA_PRG)
   foreach(CURRENT_LUA_PRG luajit lua5.1 lua5.2 lua)
     unset(_CHECK_LUA_PRG CACHE)
@@ -259,9 +259,7 @@ add_glob_target(
   TOUCH_STRATEGY SINGLE)
 
 add_custom_target(lintcommit
-  COMMAND ${PROJECT_BINARY_DIR}/bin/nvim -u NONE -es -c [[lua require('scripts.lintcommit').main({trace=false})]]
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-  VERBATIM)
+  COMMAND $<TARGET_FILE:nvim> -u NONE -l ${PROJECT_SOURCE_DIR}/scripts/lintcommit.lua main)
 add_dependencies(lintcommit nvim)
 
 add_custom_target(lint)

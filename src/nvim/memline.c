@@ -121,6 +121,10 @@ struct pointer_block {
                                 // followed by empty space until end of page
 };
 
+// Value for pb_count_max.
+#define PB_COUNT_MAX(mfp) \
+  (uint16_t)((mfp->mf_page_size - offsetof(PTR_BL, pb_pointer)) / sizeof(PTR_EN))
+
 // A data block is a leaf in the tree.
 //
 // The text of the lines is at the end of the block. The text of the first line
@@ -243,6 +247,9 @@ typedef enum {
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "memline.c.generated.h"
 #endif
+
+static char e_warning_pointer_block_corrupted[]
+  = N_("E1364: Warning: Pointer block corrupted");
 
 #if __has_feature(address_sanitizer)
 # define ML_GET_ALLOC_LINES
@@ -762,7 +769,7 @@ void ml_recover(bool checkext)
     directly = false;
 
     // count the number of matching swap files
-    len = recover_names(fname, false, 0, NULL);
+    len = recover_names(fname, false, NULL, 0, NULL);
     if (len == 0) {                 // no swap files found
       semsg(_("E305: No swap file found for %s"), fname);
       goto theend;
@@ -772,7 +779,7 @@ void ml_recover(bool checkext)
       i = 1;
     } else {                          // several swap files found, choose
       // list the names of the swap files
-      (void)recover_names(fname, true, 0, NULL);
+      (void)recover_names(fname, true, NULL, 0, NULL);
       msg_putchar('\n');
       msg_puts(_("Enter number of swap file to use (0 to quit): "));
       i = get_number(false, NULL);
@@ -781,7 +788,7 @@ void ml_recover(bool checkext)
       }
     }
     // get the swap file name that will be used
-    (void)recover_names(fname, false, i, &fname_used);
+    (void)recover_names(fname, false, NULL, i, &fname_used);
   }
   if (fname_used == NULL) {
     goto theend;  // user chose invalid number.
@@ -986,6 +993,19 @@ void ml_recover(bool checkext)
     } else {          // there is a block
       pp = hp->bh_data;
       if (pp->pb_id == PTR_ID) {                // it is a pointer block
+        bool ptr_block_error = false;
+        if (pp->pb_count_max != PB_COUNT_MAX(mfp)) {
+          ptr_block_error = true;
+          pp->pb_count_max = PB_COUNT_MAX(mfp);
+        }
+        if (pp->pb_count > pp->pb_count_max) {
+          ptr_block_error = true;
+          pp->pb_count = pp->pb_count_max;
+        }
+        if (ptr_block_error) {
+          emsg(_(e_warning_pointer_block_corrupted));
+        }
+
         // check line count when using pointer block first time
         if (idx == 0 && line_count != 0) {
           for (int i = 0; i < (int)pp->pb_count; i++) {
@@ -1200,13 +1220,15 @@ theend:
 /// - list the swap files for "vim -r"
 /// - count the number of swap files when recovering
 /// - list the swap files when recovering
+/// - list the swap files for swapfilelist()
 /// - find the name of the n'th swap file when recovering
 ///
 /// @param fname  base for swap file name
-/// @param list  when true, list the swap file names
+/// @param do_list  when true, list the swap file names
+/// @param ret_list  when not NULL add file names to it
 /// @param nr  when non-zero, return nr'th swap file name
 /// @param fname_out  result when "nr" > 0
-int recover_names(char *fname, int list, int nr, char **fname_out)
+int recover_names(char *fname, bool do_list, list_T *ret_list, int nr, char **fname_out)
 {
   int num_names;
   char *(names[6]);
@@ -1230,7 +1252,7 @@ int recover_names(char *fname, int list, int nr, char **fname_out)
     fname_res = fname;
   }
 
-  if (list) {
+  if (do_list) {
     // use msg() to start the scrolling properly
     msg(_("Swap files found:"));
     msg_putchar('\n');
@@ -1306,9 +1328,11 @@ int recover_names(char *fname, int list, int nr, char **fname_out)
       }
     }
 
-    // remove swapfile name of the current buffer, it must be ignored
+    // Remove swapfile name of the current buffer, it must be ignored.
+    // But keep it for swapfilelist().
     if (curbuf->b_ml.ml_mfp != NULL
-        && (p = curbuf->b_ml.ml_mfp->mf_fname) != NULL) {
+        && (p = curbuf->b_ml.ml_mfp->mf_fname) != NULL
+        && ret_list == NULL) {
       for (int i = 0; i < num_files; i++) {
         // Do not expand wildcards, on Windows would try to expand
         // "%tmp%" in "%tmp%file"
@@ -1333,7 +1357,7 @@ int recover_names(char *fname, int list, int nr, char **fname_out)
         *fname_out = xstrdup(files[nr - 1 + num_files - file_count]);
         dirp = "";                        // stop searching
       }
-    } else if (list) {
+    } else if (do_list) {
       if (dir_name[0] == '.' && dir_name[1] == NUL) {
         if (fname == NULL) {
           msg_puts(_("   In current directory:\n"));
@@ -1359,6 +1383,11 @@ int recover_names(char *fname, int list, int nr, char **fname_out)
         msg_puts(_("      -- none --\n"));
       }
       ui_flush();
+    } else if (ret_list != NULL) {
+      for (int i = 0; i < num_files; i++) {
+        char *name = concat_fnames(dir_name, files[i], true);
+        tv_list_append_allocated_string(ret_list, name);
+      }
     } else {
       file_count += num_files;
     }
@@ -2743,8 +2772,7 @@ static bhdr_T *ml_new_ptr(memfile_T *mfp)
   PTR_BL *pp = hp->bh_data;
   pp->pb_id = PTR_ID;
   pp->pb_count = 0;
-  pp->pb_count_max
-    = (uint16_t)((mfp->mf_page_size - offsetof(PTR_BL, pb_pointer)) / sizeof(PTR_EN));
+  pp->pb_count_max = PB_COUNT_MAX(mfp);
 
   return hp;
 }

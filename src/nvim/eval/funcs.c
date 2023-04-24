@@ -44,6 +44,7 @@
 #include "nvim/eval/executor.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/eval/typval.h"
+#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
 #include "nvim/eval/window.h"
@@ -2264,7 +2265,8 @@ static void f_fnamemodify(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
 /// "foreground()" function
 static void f_foreground(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-{}
+{
+}
 
 static void f_funcref(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
@@ -2940,7 +2942,8 @@ static void f_gettagstack(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
 /// Dummy timer callback. Used by f_wait().
 static void dummy_timer_due_cb(TimeWatcher *tw, void *data)
-{}
+{
+}
 
 /// Dummy timer close callback. Used by f_wait().
 static void dummy_timer_close_cb(TimeWatcher *tw, void *data)
@@ -3850,8 +3853,7 @@ static void f_insert(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 }
 
 /// "interrupt()" function
-static void f_interrupt(typval_T *argvars FUNC_ATTR_UNUSED, typval_T *rettv FUNC_ATTR_UNUSED,
-                        EvalFuncData fptr FUNC_ATTR_UNUSED)
+static void f_interrupt(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   got_int = true;
 }
@@ -8521,6 +8523,13 @@ static void f_substitute(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     rettv->vval.v_string = do_string_sub((char *)str, (char *)pat,
                                          (char *)sub, expr, (char *)flg);
   }
+}
+
+/// "swapfilelist()" function
+static void f_swapfilelist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  tv_list_alloc_ret(rettv, kListLenUnknown);
+  recover_names(NULL, false, rettv->vval.v_list, 0, NULL);
 }
 
 /// "swapinfo(swap_filename)" function

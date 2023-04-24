@@ -1322,6 +1322,24 @@ function M.txt(bufnr)
   end
 end
 
+-- Determine if a .v file is Verilog, V, or Coq
+function M.v(bufnr)
+  if vim.fn.did_filetype() ~= 0 then
+    -- Filetype was already detected
+    return
+  end
+  for _, line in ipairs(getlines(bufnr, 1, 200)) do
+    if not line:find('^%s*/') then
+      if findany(line, { ';%s*$', ';%s*/' }) then
+        return 'verilog'
+      elseif findany(line, { '%.%s*$', '%.%s*%(%*' }) then
+        return 'coq'
+      end
+    end
+  end
+  return 'v'
+end
+
 -- WEB (*.web is also used for Winbatch: Guess, based on expecting "%" comment
 -- lines in a WEB file).
 function M.web(bufnr)
@@ -1550,8 +1568,15 @@ local patterns_text = {
   ['^SNNS pattern definition file'] = 'snnspat',
   ['^SNNS result file'] = 'snnsres',
   ['^%%.-[Vv]irata'] = { 'virata', { start_lnum = 1, end_lnum = 5 } },
-  ['[0-9:%.]* *execve%('] = 'strace',
-  ['^__libc_start_main'] = 'strace',
+  function(lines)
+    if
+      -- inaccurate fast match first, then use accurate slow match
+      (lines[1]:find('execve%(') and lines[1]:find('^[0-9:%.]* *execve%('))
+      or lines[1]:find('^__libc_start_main')
+    then
+      return 'strace'
+    end
+  end,
   -- VSE JCL
   ['^\\* $$ JOB\\>'] = { 'vsejcl', { vim_regex = true } },
   ['^// *JOB\\>'] = { 'vsejcl', { vim_regex = true } },

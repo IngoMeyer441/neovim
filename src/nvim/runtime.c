@@ -253,6 +253,7 @@ void ex_runtime(exarg_T *eap)
   int flags = eap->forceit ? DIP_ALL : 0;
   char *p = skiptowhite(arg);
   flags += get_runtime_cmd_flags(&arg, (size_t)(p - arg));
+  assert(arg != NULL);  // suppress clang false positive
   source_runtime(arg, flags);
 }
 
@@ -469,7 +470,8 @@ int do_in_cached_path(char *name, int flags, DoInRuntimepathCB callback, void *c
         }
 
         int ew_flags = ((flags & DIP_DIR) ? EW_DIR : EW_FILE)
-                       | (flags & DIP_DIRFILE) ? (EW_DIR|EW_FILE) : 0;
+                       | ((flags & DIP_DIRFILE) ? (EW_DIR|EW_FILE) : 0)
+                       | EW_NOBREAK;
 
         // Expand wildcards, invoke the callback for each match.
         char *(pat[]) = { buf };
@@ -669,7 +671,7 @@ static void expand_rtp_entry(RuntimeSearchPath *search_path, Map(String, handle_
   int num_files;
   char **files;
   char *(pat[]) = { entry };
-  if (gen_expand_wildcards(1, pat, &num_files, &files, EW_DIR) == OK) {
+  if (gen_expand_wildcards(1, pat, &num_files, &files, EW_DIR | EW_NOBREAK) == OK) {
     for (int i = 0; i < num_files; i++) {
       push_path(search_path, rtp_used, files[i], after);
     }

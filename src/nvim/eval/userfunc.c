@@ -536,6 +536,7 @@ int get_func_tv(const char *name, int len, typval_T *rettv, char **arg, evalarg_
                                 : funcexe->fe_partial->pt_argc),
                                argvars, &argcount);
 
+  assert(ret == OK || ret == FAIL);  // suppress clang false positive
   if (ret == OK) {
     int i = 0;
 
@@ -652,14 +653,20 @@ ufunc_T *find_func(const char *name)
 /// Copy the function name of "fp" to buffer "buf".
 /// "buf" must be able to hold the function name plus three bytes.
 /// Takes care of script-local function names.
-static void cat_func_name(char *buf, ufunc_T *fp)
+static void cat_func_name(char *buf, size_t buflen, ufunc_T *fp)
 {
-  if ((uint8_t)fp->uf_name[0] == K_SPECIAL) {
-    STRCPY(buf, "<SNR>");
-    STRCAT(buf, fp->uf_name + 3);
+  int len = -1;
+  size_t uflen = strlen(fp->uf_name);
+  assert(uflen > 0);
+
+  if ((uint8_t)fp->uf_name[0] == K_SPECIAL && uflen > 3) {
+    len = snprintf(buf, buflen, "<SNR>%s", fp->uf_name + 3);
   } else {
-    STRCPY(buf, fp->uf_name);
+    len = snprintf(buf, buflen, "%s", fp->uf_name);
   }
+
+  (void)len;  // Avoid unused warning on release builds
+  assert(len > 0);
 }
 
 /// Add a number variable "name" to dict "dp" with value "nr".
@@ -2850,7 +2857,7 @@ char *get_user_func_name(expand_T *xp, int idx)
       return fp->uf_name;  // Prevent overflow.
     }
 
-    cat_func_name(IObuff, fp);
+    cat_func_name(IObuff, IOSIZE, fp);
     if (xp->xp_context != EXPAND_USER_FUNC) {
       STRCAT(IObuff, "(");
       if (!fp->uf_varargs && GA_EMPTY(&fp->uf_args)) {
@@ -3206,7 +3213,7 @@ static int ex_defer_inner(char *name, char **arg, const partial_T *const partial
 }
 
 /// Return true if currently inside a function call.
-/// Give an error message and return FALSE when not.
+/// Give an error message and return false when not.
 bool can_add_defer(void)
 {
   if (get_current_funccal() == NULL) {
@@ -3241,12 +3248,24 @@ static void handle_defer_one(funccall_T *funccal)
 {
   for (int idx = funccal->fc_defer.ga_len - 1; idx >= 0; idx--) {
     defer_T *dr = ((defer_T *)funccal->fc_defer.ga_data) + idx;
+
+    if (dr->dr_name == NULL) {
+      // already being called, can happen if function does ":qa"
+      continue;
+    }
+
     funcexe_T funcexe = { .fe_evaluate = true };
+
     typval_T rettv;
     rettv.v_type = VAR_UNKNOWN;     // tv_clear() uses this
-    call_func(dr->dr_name, -1, &rettv, dr->dr_argcount, dr->dr_argvars, &funcexe);
+
+    char *name = dr->dr_name;
+    dr->dr_name = NULL;
+
+    call_func(name, -1, &rettv, dr->dr_argcount, dr->dr_argvars, &funcexe);
+
     tv_clear(&rettv);
-    xfree(dr->dr_name);
+    xfree(name);
     for (int i = dr->dr_argcount - 1; i >= 0; i--) {
       tv_clear(&dr->dr_argvars[i]);
     }
@@ -3257,8 +3276,14 @@ static void handle_defer_one(funccall_T *funccal)
 /// Called when exiting: call all defer functions.
 void invoke_all_defer(void)
 {
-  for (funccall_T *funccal = current_funccal; funccal != NULL; funccal = funccal->fc_caller) {
-    handle_defer_one(funccal);
+  for (funccall_T *fc = current_funccal; fc != NULL; fc = fc->fc_caller) {
+    handle_defer_one(fc);
+  }
+
+  for (funccal_entry_T *fce = funccal_stack; fce != NULL; fce = fce->next) {
+    for (funccall_T *fc = fce->top_funccal; fc != NULL; fc = fc->fc_caller) {
+      handle_defer_one(fc);
+    }
   }
 }
 

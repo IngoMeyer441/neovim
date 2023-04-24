@@ -1372,11 +1372,11 @@ describe('builtin popupmenu', function()
         U{n: qui            }{s: }eniam, quis nostrud                     |
         e{n: officia        }{s: }co laboris nisi ut aliquip ex           |
       {4:[No}{n: deserunt       }{s: }{4:                                        }|
-        L{n: mollit         }{s: }sit amet, consectetur                   |
-        a{n: anim           }{s: }sed do eiusmod tempor                   |
-        i{n: id             }{s: }re et dolore magna aliqua.              |
-        U{n: est            }{s: }eniam, quis nostrud                     |
-        e{n: laborum        }{c: }co laboris nisi ut aliquip ex           |
+      Est{n: mollit         }{s: }                                        |
+        L{n: anim           }{s: }sit amet, consectetur                   |
+        a{n: id             }{s: }sed do eiusmod tempor                   |
+        i{n: est            }{s: }re et dolore magna aliqua.              |
+        U{n: laborum        }{c: }eniam, quis nostrud                     |
       {3:[No}{s: Est            }{c: }{3:                                        }|
       {2:-- Keyword Local completion (^N^P) }{5:match 1 of 65}            |
     ]])
@@ -1390,11 +1390,11 @@ describe('builtin popupmenu', function()
         U{n: qui            }{s: }eniam, quis nostrud                     |
         e{n: officia        }{s: }co laboris nisi ut aliquip ex           |
       {4:[No}{n: deserunt       }{s: }{4:                                        }|
-        U{n: mollit         }{s: }eniam, quis nostrud                     |
-        e{n: anim           }{s: }co laboris nisi ut aliquip ex           |
-        e{n: id             }{s: }at. Duis aute irure dolor in            |
-        r{n: est            }{s: }oluptate velit esse cillum              |
-        d{n: laborum        }{c: }ulla pariatur. Excepteur sint           |
+        i{n: mollit         }{s: }re et dolore magna aliqua.              |
+        U{n: anim           }{s: }eniam, quis nostrud                     |
+        e{n: id             }{s: }co laboris nisi ut aliquip ex           |
+        e{n: est            }{s: }at. Duis aute irure dolor in            |
+        r{n: laborum        }{c: }oluptate velit esse cillum              |
       {3:[No}{s: Est            }{c: }{3:                                        }|
       {2:-- Keyword Local completion (^N^P) }{5:match 1 of 65}            |
     ]])
@@ -1408,11 +1408,11 @@ describe('builtin popupmenu', function()
         U{n: enim           }veniam, quis nostrud                     |
         e{n: exercitation   }mco laboris nisi ut aliquip ex           |
       {4:[No}{n: ex             }{4:                                         }|
-        U{n: ea             }veniam, quis nostrud                     |
-        e{n: esse           }mco laboris nisi ut aliquip ex           |
-        e{n: eu             }uat. Duis aute irure dolor in            |
-        r{s: est            }voluptate velit esse cillum              |
-        dolore eu fugiat nulla pariatur. Excepteur sint           |
+        i{n: ea             }ore et dolore magna aliqua.              |
+        U{n: esse           }veniam, quis nostrud                     |
+        e{n: eu             }mco laboris nisi ut aliquip ex           |
+        e{s: est            }uat. Duis aute irure dolor in            |
+        reprehenderit in voluptate velit esse cillum              |
       {3:[No Name] [+]                                               }|
       {2:-- Keyword Local completion (^N^P) }{5:match 1 of 65}            |
     ]])
@@ -1426,11 +1426,11 @@ describe('builtin popupmenu', function()
         U{n: enim           }veniam, quis nostrud                     |
         e{n: exercitation   }mco laboris nisi ut aliquip ex           |
       {4:[No}{n: ex             }{4:                                         }|
-        L{n: ea             } sit amet, consectetur                   |
-        a{n: esse           } sed do eiusmod tempor                   |
-        i{n: eu             }ore et dolore magna aliqua.              |
-        U{s: est            }veniam, quis nostrud                     |
-        exercitation ullamco laboris nisi ut aliquip ex           |
+      Est{n: ea             }                                         |
+        L{n: esse           } sit amet, consectetur                   |
+        a{n: eu             } sed do eiusmod tempor                   |
+        i{s: est            }ore et dolore magna aliqua.              |
+        Ut enim ad minim veniam, quis nostrud                     |
       {3:[No Name] [+]                                               }|
       {2:-- Keyword Local completion (^N^P) }{5:match 1 of 65}            |
     ]])
@@ -1444,11 +1444,11 @@ describe('builtin popupmenu', function()
         Ut enim ad minim veniam, quis nostrud                     |
         exercitation ullamco laboris nisi ut aliquip ex           |
       {4:[No Name] [+]                                               }|
+      Est es                                                      |
         Lorem ipsum dolor sit amet, consectetur                   |
         adipisicing elit, sed do eiusmod tempor                   |
         incididunt ut labore et dolore magna aliqua.              |
         Ut enim ad minim veniam, quis nostrud                     |
-        exercitation ullamco laboris nisi ut aliquip ex           |
       {3:[No Name] [+]                                               }|
       {2:-- Keyword Local completion (^N^P) }{5:match 1 of 65}            |
     ]])
@@ -1462,11 +1462,11 @@ describe('builtin popupmenu', function()
         Ut enim ad minim veniam, quis nostrud                     |
         exercitation ullamco laboris nisi ut aliquip ex           |
       {4:[No Name] [+]                                               }|
+        incididunt ut labore et dolore magna aliqua.              |
         Ut enim ad minim veniam, quis nostrud                     |
         exercitation ullamco laboris nisi ut aliquip ex           |
         ea commodo consequat. Duis aute irure dolor in            |
         reprehenderit in voluptate velit esse cillum              |
-        dolore eu fugiat nulla pariatur. Excepteur sint           |
       {3:[No Name] [+]                                               }|
       {2:-- Keyword Local completion (^N^P) }{5:match 1 of 65}            |
     ]])
@@ -1480,11 +1480,11 @@ describe('builtin popupmenu', function()
         U{n: enim           }veniam, quis nostrud                     |
         e{n: exercitation   }mco laboris nisi ut aliquip ex           |
       {4:[No}{n: ex             }{4:                                         }|
-        U{n: ea             }veniam, quis nostrud                     |
-        e{n: esse           }mco laboris nisi ut aliquip ex           |
-        e{n: eu             }uat. Duis aute irure dolor in            |
-        r{s: est            }voluptate velit esse cillum              |
-        dolore eu fugiat nulla pariatur. Excepteur sint           |
+        i{n: ea             }ore et dolore magna aliqua.              |
+        U{n: esse           }veniam, quis nostrud                     |
+        e{n: eu             }mco laboris nisi ut aliquip ex           |
+        e{s: est            }uat. Duis aute irure dolor in            |
+        reprehenderit in voluptate velit esse cillum              |
       {3:[No Name] [+]                                               }|
       {2:-- Keyword Local completion (^N^P) }{5:match 1 of 65}            |
     ]])
@@ -1498,11 +1498,11 @@ describe('builtin popupmenu', function()
         U{n: enim           }veniam, quis nostrud                     |
         e{n: exercitation   }mco laboris nisi ut aliquip ex           |
       {4:[No}{n: ex             }{4:                                         }|
-        U{n: ea             }veniam, quis nostrud                     |
-        e{n: esse           }mco laboris nisi ut aliquip ex           |
-        e{s: eu             }uat. Duis aute irure dolor in            |
-        r{n: est            }voluptate velit esse cillum              |
-        dolore eu fugiat nulla pariatur. Excepteur sint           |
+        i{n: ea             }ore et dolore magna aliqua.              |
+        U{n: esse           }veniam, quis nostrud                     |
+        e{s: eu             }mco laboris nisi ut aliquip ex           |
+        e{n: est            }uat. Duis aute irure dolor in            |
+        reprehenderit in voluptate velit esse cillum              |
       {3:[No Name] [+]                                               }|
       {2:-- Keyword Local completion (^N^P) }{5:match 22 of 65}           |
     ]])
@@ -1516,15 +1516,14 @@ describe('builtin popupmenu', function()
         U{n: enim           }veniam, quis nostrud                     |
         e{n: exercitation   }mco laboris nisi ut aliquip ex           |
       {4:[No}{n: ex             }{4:                                         }|
-        r{n: ea             }voluptate velit esse cillum              |
-        d{n: esse           }nulla pariatur. Excepteur sint           |
-        o{s: eu             }t non proident, sunt in culpa            |
-        q{n: est            }unt mollit anim id est                   |
-        laborum.                                                  |
+        e{n: ea             }uat. Duis aute irure dolor in            |
+        r{n: esse           }voluptate velit esse cillum              |
+        d{s: eu             }nulla pariatur. Excepteur sint           |
+        o{n: est            }t non proident, sunt in culpa            |
+        qui officia deserunt mollit anim id est                   |
       {3:[No Name] [+]                                               }|
       {2:-- Keyword Local completion (^N^P) }{5:match 22 of 65}           |
     ]])
-
 
     funcs.complete(4, {'ea', 'eeeeeeeeeeeeeeeeee', 'ei', 'eo', 'eu', 'ey', 'eå', 'eä', 'eö'})
     screen:expect([[
@@ -1535,11 +1534,11 @@ describe('builtin popupmenu', function()
         {n: eo                 }iam, quis nostrud                     |
         {n: eu                 } laboris nisi ut aliquip ex           |
       {4:[N}{n: ey                 }{4:                                      }|
-        {n: eå                 }uptate velit esse cillum              |
-        {n: eä                 }la pariatur. Excepteur sint           |
-        {n: eö                 }on proident, sunt in culpa            |
+        {n: eå                 }. Duis aute irure dolor in            |
+        {n: eä                 }uptate velit esse cillum              |
+        {n: eö                 }la pariatur. Excepteur sint           |
+        occaecat cupidatat non proident, sunt in culpa            |
         qui officia deserunt mollit anim id est                   |
-        laborum.                                                  |
       {3:[No Name] [+]                                               }|
       {2:-- Keyword Local completion (^N^P) }{5:match 1 of 9}             |
     ]])
@@ -1553,11 +1552,11 @@ describe('builtin popupmenu', function()
         {n: eo             } veniam, quis nostrud                     |
         {n: eu             }amco laboris nisi ut aliquip ex           |
       {4:[N}{n: ey             }{4:                                          }|
-        {n: eå             } voluptate velit esse cillum              |
-        {n: eä             } nulla pariatur. Excepteur sint           |
-        {n: eö             }at non proident, sunt in culpa            |
+        {n: eå             }quat. Duis aute irure dolor in            |
+        {n: eä             } voluptate velit esse cillum              |
+        {n: eö             } nulla pariatur. Excepteur sint           |
+        occaecat cupidatat non proident, sunt in culpa            |
         qui officia deserunt mollit anim id est                   |
-        laborum.                                                  |
       {3:[No Name] [+]                                               }|
       {2:-- INSERT --}                                                |
     ]])
@@ -1571,11 +1570,11 @@ describe('builtin popupmenu', function()
         {n: eo             } veniam, quis nostrud                     |
         {n: eu             }amco laboris nisi ut aliquip ex           |
       {4:[N}{n: ey             }{4:                                          }|
-        {n: eå             } voluptate velit esse cillum              |
-        {n: eä             } nulla pariatur. Excepteur sint           |
-        {n: eö             }at non proident, sunt in culpa            |
+        {n: eå             }quat. Duis aute irure dolor in            |
+        {n: eä             } voluptate velit esse cillum              |
+        {n: eö             } nulla pariatur. Excepteur sint           |
+        occaecat cupidatat non proident, sunt in culpa            |
         qui officia deserunt mollit anim id est                   |
-        laborum.                                                  |
       {3:[No Name] [+]                                               }|
       {2:-- INSERT --}                                                |
     ]])
@@ -1589,11 +1588,11 @@ describe('builtin popupmenu', function()
         Ut enim ad minim veniam, quis nostrud                     |
         exercitation ullamco laboris nisi ut aliquip ex           |
       {4:[No Name] [+]                                               }|
+        ea commodo consequat. Duis aute irure dolor in            |
         reprehenderit in voluptate velit esse cillum              |
         dolore eu fugiat nulla pariatur. Excepteur sint           |
         occaecat cupidatat non proident, sunt in culpa            |
         qui officia deserunt mollit anim id est                   |
-        laborum.                                                  |
       {3:[No Name] [+]                                               }|
       {2:-- INSERT --}                                                |
     ]])
@@ -1607,11 +1606,11 @@ describe('builtin popupmenu', function()
         Ut enim ad minim veniam, quis nostrud                     |
         exercitation ullamco laboris nisi ut aliquip ex           |
       {4:[No Name] [+]                                               }|
+        ea commodo consequat. Duis aute irure dolor in            |
         reprehenderit in voluptate velit esse cillum              |
         dolore eu fugiat nulla pariatur. Excepteur sint           |
         occaecat cupidatat non proident, sunt in culpa            |
         qui officia deserunt mollit anim id est                   |
-        laborum.                                                  |
       {3:[No Name] [+]                                               }|
       {2:-- INSERT --}                                                |
     ]])
@@ -3260,16 +3259,16 @@ describe('builtin popupmenu', function()
       :let g:menustr = 'bar'          |
     ]])
     eq('bar', meths.get_var('menustr'))
-    feed('<RightMouse><20,1>')
+    feed('<RightMouse><20,2>')
     screen:expect([[
       ^popup menu test                 |
       {1:~                               }|
+      {1:~                               }|
       {1:~                  }{n: foo }{1:        }|
       {1:~                  }{n: bar }{1:        }|
-      {1:~                  }{n: baz }{1:        }|
-      :let g:menustr = 'bar'          |
+      :let g:menustr = 'b{n: baz }        |
     ]])
-    feed('<LeftMouse><22,4>')
+    feed('<LeftMouse><22,5>')
     screen:expect([[
       ^popup menu test                 |
       {1:~                               }|
@@ -3676,7 +3675,7 @@ describe('builtin popupmenu with ui/ext_multigrid', function()
       {n: foo }|
       {n: bar }|
       {n: baz }|
-    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 2, 19, false, 100}}})
+    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 2, 19, false, 250}}})
     meths.input_mouse('left', 'press', '', 4, 2, 2)
     screen:expect({grid=[[
     ## grid 1
@@ -3717,7 +3716,7 @@ describe('builtin popupmenu with ui/ext_multigrid', function()
       {n: foo }|
       {n: bar }|
       {n: baz }|
-    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 1, 3, false, 100}}})
+    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 1, 3, false, 250}}})
     meths.input_mouse('right', 'drag', '', 2, 3, 6)
     screen:expect({grid=[[
     ## grid 1
@@ -3739,7 +3738,7 @@ describe('builtin popupmenu with ui/ext_multigrid', function()
       {n: foo }|
       {n: bar }|
       {s: baz }|
-    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 1, 3, false, 100}}})
+    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 1, 3, false, 250}}})
     meths.input_mouse('right', 'release', '', 2, 1, 6)
     screen:expect({grid=[[
     ## grid 1
@@ -3781,7 +3780,7 @@ describe('builtin popupmenu with ui/ext_multigrid', function()
       {n: foo }|
       {n: bar }|
       {n: baz }|
-    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 1, 3, false, 100}}})
+    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 1, 3, false, 250}}})
     eq(true, screen.options.mousemoveevent)
     meths.input_mouse('move', '', '', 2, 3, 6)
     screen:expect({grid=[[
@@ -3804,7 +3803,7 @@ describe('builtin popupmenu with ui/ext_multigrid', function()
       {n: foo }|
       {n: bar }|
       {s: baz }|
-    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 1, 3, false, 100}}})
+    ]], float_pos={[4] = {{id = -1}, 'NW', 2, 1, 3, false, 250}}})
     eq(true, screen.options.mousemoveevent)
     meths.input_mouse('left', 'press', '', 2, 2, 6)
     screen:expect({grid=[[

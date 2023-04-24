@@ -23,6 +23,7 @@
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/buffer_updates.h"
+#include "nvim/bufwrite.h"
 #include "nvim/change.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
@@ -933,6 +934,17 @@ void free_prev_shellcmd(void)
 
 #endif
 
+/// Check that "prevcmd" is not NULL.  If it is NULL then give an error message
+/// and return false.
+static int prevcmd_is_set(void)
+{
+  if (prevcmd == NULL) {
+    emsg(_(e_noprev));
+    return false;
+  }
+  return true;
+}
+
 /// Handle the ":!cmd" command.  Also for ":r !cmd" and ":w !cmd"
 /// Bangs in the argument are replaced with the previously entered command.
 /// Remember the argument.
@@ -974,8 +986,7 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
       len += strlen(newcmd);
     }
     if (ins_prevcmd) {
-      if (prevcmd == NULL) {
-        emsg(_(e_noprev));
+      if (!prevcmd_is_set()) {
         xfree(newcmd);
         return;
       }
@@ -1012,10 +1023,20 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
     }
   } while (trailarg != NULL);
 
-  xfree(prevcmd);
-  prevcmd = newcmd;
+  // Only set "prevcmd" if there is a command to run, otherwise keep te one
+  // we have.
+  if (strlen(newcmd) > 0) {
+    xfree(prevcmd);
+    prevcmd = newcmd;
+  } else {
+    free_newcmd = true;
+  }
 
   if (bangredo) {  // put cmd in redo buffer for ! command
+    if (!prevcmd_is_set()) {
+      goto theend;
+    }
+
     // If % or # appears in the command, it must have been escaped.
     // Reescape them, so that redoing them does not substitute them by the
     // buffername.
@@ -1028,6 +1049,9 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
   }
   // Add quotes around the command, for shells that need them.
   if (*p_shq != NUL) {
+    if (free_newcmd) {
+      xfree(newcmd);
+    }
     newcmd = xmalloc(strlen(prevcmd) + 2 * strlen(p_shq) + 1);
     STRCPY(newcmd, p_shq);
     STRCAT(newcmd, prevcmd);
@@ -1050,6 +1074,8 @@ void do_bang(int addr_count, exarg_T *eap, bool forceit, bool do_in, bool do_out
     do_filter(line1, line2, eap, newcmd, do_in, do_out);
     apply_autocmds(EVENT_SHELLFILTERPOST, NULL, NULL, false, curbuf);
   }
+
+theend:
   if (free_newcmd) {
     xfree(newcmd);
   }

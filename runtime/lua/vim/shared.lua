@@ -100,10 +100,9 @@ function vim.gsplit(s, sep, opts)
   local start = 1
   local done = false
 
-  -- For `trimempty`:
+  -- For `trimempty`: queue of collected segments, to be emitted at next pass.
+  local segs = {}
   local empty_start = true -- Only empty segments seen so far.
-  local empty_segs = 0 -- Empty segments found between non-empty segments.
-  local nonemptyseg = nil
 
   local function _pass(i, j, ...)
     if i then
@@ -118,14 +117,9 @@ function vim.gsplit(s, sep, opts)
   end
 
   return function()
-    if trimempty and empty_segs > 0 then
-      -- trimempty: Pop the collected empty segments.
-      empty_segs = empty_segs - 1
-      return ''
-    elseif trimempty and nonemptyseg then
-      local seg = nonemptyseg
-      nonemptyseg = nil
-      return seg
+    if trimempty and #segs > 0 then
+      -- trimempty: Pop the collected segments.
+      return table.remove(segs)
     elseif done or (s == '' and sep == '') then
       return nil
     elseif sep == '' then
@@ -138,21 +132,24 @@ function vim.gsplit(s, sep, opts)
     local seg = _pass(s:find(sep, start, plain))
 
     -- Trim empty segments from start/end.
-    if trimempty and seg == '' then
+    if trimempty and seg ~= '' then
+      empty_start = false
+    elseif trimempty and seg == '' then
       while not done and seg == '' do
-        empty_segs = empty_segs + 1
+        table.insert(segs, 1, '')
         seg = _pass(s:find(sep, start, plain))
       end
       if done and seg == '' then
         return nil
       elseif empty_start then
         empty_start = false
-        empty_segs = 0
+        segs = {}
         return seg
       end
-      nonemptyseg = seg ~= '' and seg or nil
-      seg = ''
-      empty_segs = empty_segs - 1
+      if seg ~= '' then
+        table.insert(segs, 1, seg)
+      end
+      return table.remove(segs)
     end
 
     return seg
@@ -882,6 +879,111 @@ function vim.defaulttable(create)
       return rawget(tbl, key)
     end,
   })
+end
+
+--- Create an Iter |lua-iter| object from a table or iterator.
+---
+--- The input value can be a table  or a function iterator (see |luaref-in|).
+---
+--- This function wraps the input value into an interface which allows chaining
+--- multiple pipeline stages in an efficient manner. Each pipeline stage
+--- receives as input the output values from the prior stage. The values used in
+--- the first stage of the pipeline depend on the type passed to this function:
+---
+--- - List tables pass only the value of each element
+--- - Non-list tables pass both the key and value of each element
+--- - Function iterators pass all of the values returned by their respective
+---   function
+---
+--- Examples:
+--- <pre>lua
+--- local it = vim.iter({ 1, 2, 3, 4, 5 })
+--- it:map(function(v)
+---   return v * 3
+--- end)
+--- it:rev()
+--- it:skip(2)
+--- it:totable()
+--- -- { 9, 6, 3 }
+---
+--- vim.iter(ipairs({ 1, 2, 3, 4, 5 })):map(function(i, v)
+---   if i > 2 then return v end
+--- end):totable()
+--- -- { 3, 4, 5 }
+---
+--- local it = vim.iter(vim.gsplit('1,2,3,4,5', ','))
+--- it:map(function(s) return tonumber(s) end)
+--- for i, d in it:enumerate() do
+---   print(string.format("Column %d is %d", i, d))
+--- end
+--- -- Column 1 is 1
+--- -- Column 2 is 2
+--- -- Column 3 is 3
+--- -- Column 4 is 4
+--- -- Column 5 is 5
+---
+--- vim.iter({ a = 1, b = 2, c = 3, z = 26 }):any(function(k, v)
+---   return k == 'z'
+--- end)
+--- -- true
+--- </pre>
+---
+---@see |lua-iter|
+---
+---@param src table|function Table or iterator.
+---@return Iter @|lua-iter|
+function vim.iter(src, ...)
+  local Iter = require('vim.iter')
+  return Iter.new(src, ...)
+end
+
+--- Collect an iterator into a table.
+---
+--- This is a convenience function that performs:
+--- <pre>lua
+--- vim.iter(f):totable()
+--- </pre>
+---
+---@param f function Iterator function
+---@return table
+function vim.totable(f, ...)
+  return vim.iter(f, ...):totable()
+end
+
+--- Filter a table or iterator.
+---
+--- This is a convenience function that performs:
+--- <pre>lua
+--- vim.iter(src):filter(f):totable()
+--- </pre>
+---
+---@see |Iter:filter()|
+---
+---@param f function(...):bool Filter function. Accepts the current iterator or table values as
+---                            arguments and returns true if those values should be kept in the
+---                            final table
+---@param src table|function Table or iterator function to filter
+---@return table
+function vim.filter(f, src, ...)
+  return vim.iter(src, ...):filter(f):totable()
+end
+
+--- Map and filter a table or iterator.
+---
+--- This is a convenience function that performs:
+--- <pre>lua
+--- vim.iter(src):map(f):totable()
+--- </pre>
+---
+---@see |Iter:map()|
+---
+---@param f function(...):?any Map function. Accepts the current iterator or table values as
+---                            arguments and returns one or more new values. Nil values are removed
+---                            from the final table.
+---@param src table|function Table or iterator function to filter
+---@return table
+function vim.map(f, src, ...)
+  return vim.iter(src, ...):map(f):totable()
 end
 
 return vim

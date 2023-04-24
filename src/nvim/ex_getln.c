@@ -2446,7 +2446,7 @@ static bool cmdpreview_may_show(CommandLineState *s)
 
   CpInfo cpinfo;
   bool icm_split = *p_icm == 's';  // inccommand=split
-  buf_T *cmdpreview_buf;
+  buf_T *cmdpreview_buf = NULL;
   win_T *cmdpreview_win = NULL;
 
   emsg_silent++;                 // Block error reporting as the command may be incomplete,
@@ -4096,6 +4096,10 @@ static char *get_cmdline_completion(void)
   }
 
   set_expand_context(p->xpc);
+  if (p->xpc->xp_context == EXPAND_UNSUCCESSFUL) {
+    return NULL;
+  }
+
   char *cmd_compl = get_user_cmd_complete(p->xpc, p->xpc->xp_context);
   if (cmd_compl != NULL) {
     return xstrdup(cmd_compl);

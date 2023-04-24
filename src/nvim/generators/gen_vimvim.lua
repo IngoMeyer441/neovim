@@ -1,17 +1,7 @@
-local mpack = require('mpack')
+local mpack = vim.mpack
 
-if arg[1] == '--help' then
-  print('Usage: lua genvimvim.lua src/nvim runtime/syntax/vim/generated.vim')
-  os.exit(0)
-end
-
-local nvimsrcdir = arg[1]
-local syntax_file = arg[2]
-local funcs_file = arg[3]
-
-package.path = nvimsrcdir .. '/?.lua;' .. package.path
-
-_G.vim = loadfile(nvimsrcdir..'/../../runtime/lua/vim/shared.lua')()
+local syntax_file = arg[1]
+local funcs_file = arg[2]
 
 local lld = {}
 local syn_fd = io.open(syntax_file, 'w')
@@ -35,6 +25,9 @@ local function cmd_kw(prev_cmd, cmd)
   else
     local shift = 1
     while cmd:sub(shift, shift) == prev_cmd:sub(shift, shift) do
+      shift = shift + 1
+    end
+    if cmd:sub(1, shift) == 'def' then
       shift = shift + 1
     end
     if shift >= #cmd then
@@ -66,6 +59,20 @@ for _, cmd_desc in ipairs(ex_cmds.cmds) do
   local cmd = cmd_desc.command
   if cmd:match('%w') and cmd ~= 'z' and not is_special_cased_cmd(cmd) then
     w(' ' .. cmd_kw(prev_cmd, cmd))
+  end
+  if cmd == 'delete' then
+    -- Add special abbreviations of :delete
+    w(' ' .. cmd_kw('d', 'dl'))
+    w(' ' .. cmd_kw('del', 'dell'))
+    w(' ' .. cmd_kw('dele', 'delel'))
+    w(' ' .. cmd_kw('delet', 'deletl'))
+    w(' ' .. cmd_kw('delete', 'deletel'))
+    w(' ' .. cmd_kw('d', 'dp'))
+    w(' ' .. cmd_kw('de', 'dep'))
+    w(' ' .. cmd_kw('del', 'delp'))
+    w(' ' .. cmd_kw('dele', 'delep'))
+    w(' ' .. cmd_kw('delet', 'deletp'))
+    w(' ' .. cmd_kw('delete', 'deletep'))
   end
   prev_cmd = cmd
 end
@@ -127,7 +134,7 @@ end
 w('\n\nsyn case match')
 local vimfun_start = 'syn keyword vimFuncName contained '
 w('\n\n' .. vimfun_start)
-local funcs = mpack.unpack(io.open(funcs_file, 'rb'):read("*all"))
+local funcs = mpack.decode(io.open(funcs_file, 'rb'):read("*all"))
 for _, name in ipairs(funcs) do
   if name then
     if lld.line_length > 850 then
