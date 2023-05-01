@@ -392,7 +392,7 @@ void ml_setname(buf_T *buf)
   // Try all directories in the 'directory' option.
   char *dirp = p_dir;
   bool found_existing_dir = false;
-  for (;;) {
+  while (true) {
     if (*dirp == NUL) {             // tried all directories, fail
       break;
     }
@@ -479,7 +479,7 @@ void ml_open_file(buf_T *buf)
   // Try all directories in 'directory' option.
   char *dirp = p_dir;
   bool found_existing_dir = false;
-  for (;;) {
+  while (true) {
     if (*dirp == NUL) {
       break;
     }
@@ -1070,11 +1070,12 @@ void ml_recover(bool checkext)
           ml_append(lnum++, _("???BLOCK MISSING"),
                     (colnr_T)0, true);
         } else {
-          // it is a data block
-          // Append all the lines in this block
+          // It is a data block.
+          // Append all the lines in this block.
           bool has_error = false;
-          // check length of block
-          // if wrong, use length in pointer block
+
+          // Check the length of the block.
+          // If wrong, use the length given in the pointer block.
           if (page_count * mfp->mf_page_size != dp->db_txt_end) {
             ml_append(lnum++,
                       _("??? from here until ???END lines" " may be messed up"),
@@ -1084,11 +1085,12 @@ void ml_recover(bool checkext)
             dp->db_txt_end = page_count * mfp->mf_page_size;
           }
 
-          // make sure there is a NUL at the end of the block
+          // Make sure there is a NUL at the end of the block so we
+          // don't go over the end when copying text.
           *((char *)dp + dp->db_txt_end - 1) = NUL;
 
-          // check number of lines in block
-          // if wrong, use count in data block
+          // Check the number of lines in the block.
+          // If wrong, use the count in the data block.
           if (line_count != dp->db_line_count) {
             ml_append(lnum++,
                       _("??? from here until ???END lines"
@@ -1098,13 +1100,27 @@ void ml_recover(bool checkext)
             has_error = true;
           }
 
+          bool did_questions = false;
           for (int i = 0; i < dp->db_line_count; i++) {
+            if ((char *)&(dp->db_index[i]) >= (char *)dp + dp->db_txt_start) {
+              // line count must be wrong
+              error++;
+              ml_append(lnum++, _("??? lines may be missing"), (colnr_T)0, true);
+              break;
+            }
+
             int txt_start = (dp->db_index[i] & DB_INDEX_MASK);
             if (txt_start <= (int)HEADER_SIZE
                 || txt_start >= (int)dp->db_txt_end) {
-              p = "???";
               error++;
+              // avoid lots of lines with "???"
+              if (did_questions) {
+                continue;
+              }
+              did_questions = true;
+              p = "???";
             } else {
+              did_questions = false;
               p = (char *)dp + txt_start;
             }
             ml_append(lnum++, p, (colnr_T)0, true);
@@ -2262,7 +2278,7 @@ static int ml_append_int(buf_T *buf, linenr_T lnum, char *line, colnr_T len, boo
       // allocate a new pointer block
       // move some of the pointer into the new block
       // prepare for updating the parent block
-      for (;;) {             // do this twice when splitting block 1
+      while (true) {          // do this twice when splitting block 1
         hp_new = ml_new_ptr(mfp);
         if (hp_new == NULL) {             // TODO(vim): try to fix tree
           return FAIL;
@@ -2857,7 +2873,7 @@ static bhdr_T *ml_find_line(buf_T *buf, linenr_T lnum, int action)
     buf->b_ml.ml_stack_top = 0;         // start at the root
   }
   // search downwards in the tree until a data block is found
-  for (;;) {
+  while (true) {
     if ((hp = mf_get(mfp, bnum, (unsigned)page_count)) == NULL) {
       goto error_noblock;
     }
@@ -3021,7 +3037,7 @@ int resolve_symlink(const char *fname, char *buf)
   // Put the result so far in tmp[], starting with the original name.
   xstrlcpy(tmp, fname, MAXPATHL);
 
-  for (;;) {
+  while (true) {
     // Limit symlink depth to 100, catch recursive loops.
     if (++depth == 100) {
       semsg(_("E773: Symlink loop for \"%s\""), fname);
@@ -3273,7 +3289,7 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
   // we try different names until we find one that does not exist yet
   char *fname = makeswapname(buf_fname, buf->b_ffname, buf, dir_name);
 
-  for (;;) {
+  while (true) {
     size_t n;
     if (fname == NULL) {        // must be out of memory
       break;

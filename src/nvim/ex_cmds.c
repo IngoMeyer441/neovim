@@ -1402,7 +1402,7 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
                                   : 0;
 
   if (itmp != NULL) {
-    len += is_pwsh  ? strlen(itmp) + sizeof("& { Get-Content " " | & " " }") - 1 + 6  // +6: #20530
+    len += is_pwsh ? strlen(itmp) + sizeof("& { Get-Content " " | & " " }") - 1 + 6  // +6: #20530
                     : strlen(itmp) + sizeof(" { " " < " " } ") - 1;
   }
   if (otmp != NULL) {
@@ -1427,7 +1427,7 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
     // redirecting input and/or output.
     if (itmp != NULL || otmp != NULL) {
       char *fmt = is_fish_shell ? "begin; %s; end"
-        :       "(%s)";
+        : "(%s)";
       vim_snprintf(buf, len, fmt, cmd);
     } else {
       xstrlcpy(buf, cmd, len);
@@ -2640,7 +2640,7 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
   // If the window options were changed may need to set the spell language.
   // Can only do this after the buffer has been properly setup.
   if (did_get_winopts && curwin->w_p_spell && *curwin->w_s->b_p_spl != NUL) {
-    (void)did_set_spelllang(curwin);
+    (void)parse_spelllang(curwin);
   }
 
   if (command == NULL) {
@@ -2782,7 +2782,7 @@ void ex_append(exarg_T *eap)
     State |= MODE_LANGMAP;
   }
 
-  for (;;) {
+  while (true) {
     msg_scroll = true;
     need_wait_return = false;
     if (curbuf->b_p_ai) {
@@ -3581,7 +3581,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
       // 3. substitute the string.
       // 4. if subflags.do_all is set, find next match
       // 5. break if there isn't another match in this line
-      for (;;) {
+      while (true) {
         SubResult current_match = {
           .start = { 0, 0 },
           .end   = { 0, 0 },

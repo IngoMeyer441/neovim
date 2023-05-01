@@ -706,7 +706,7 @@ static int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev,
         hash_end = 256;
       }
       for (int hash = hash_start; hash < hash_end && !got_int; hash++) {
-        mpp = is_abbrev ?  abbr_table :  &(map_table[hash]);
+        mpp = is_abbrev ? abbr_table : &(map_table[hash]);
         for (mp = *mpp; mp != NULL && !got_int; mp = *mpp) {
           if ((mp->m_mode & mode) == 0) {
             // skip entries with wrong mode
@@ -1112,7 +1112,7 @@ int map_to_exists_mode(const char *const rhs, const int mode, const bool abbr)
   bool exp_buffer = false;
 
   // Do it twice: once for global maps and once for local maps.
-  for (;;) {
+  while (true) {
     for (hash = 0; hash < 256; hash++) {
       if (abbr) {
         if (hash > 0) {  // There is only one abbr list.
@@ -1229,7 +1229,7 @@ char *set_context_in_map_cmd(expand_T *xp, char *cmd, char *arg, bool forceit, b
     expand_isabbrev = isabbrev;
     xp->xp_context = EXPAND_MAPPINGS;
     expand_buffer = false;
-    for (;;) {
+    while (true) {
       if (strncmp(arg, "<buffer>", 8) == 0) {
         expand_buffer = true;
         arg = skipwhite(arg + 8);
@@ -2204,8 +2204,7 @@ void f_mapset(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   const int mode = get_map_mode((char **)&which, 0);
   const bool is_abbr = tv_get_number(&argvars[1]) != 0;
 
-  if (argvars[2].v_type != VAR_DICT) {
-    emsg(_(e_dictreq));
+  if (tv_check_for_dict_arg(argvars, 2) == FAIL) {
     return;
   }
   dict_T *d = argvars[2].vval.v_dict;
@@ -2323,13 +2322,13 @@ static garray_T langmap_mapga = GA_EMPTY_INIT_VALUE;
 static void langmap_set_entry(int from, int to)
 {
   langmap_entry_T *entries = (langmap_entry_T *)(langmap_mapga.ga_data);
-  unsigned int a = 0;
+  unsigned a = 0;
   assert(langmap_mapga.ga_len >= 0);
-  unsigned int b = (unsigned int)langmap_mapga.ga_len;
+  unsigned b = (unsigned)langmap_mapga.ga_len;
 
   // Do a binary search for an existing entry.
   while (a != b) {
-    unsigned int i = (a + b) / 2;
+    unsigned i = (a + b) / 2;
     int d = entries[i].from - from;
 
     if (d == 0) {
@@ -2348,7 +2347,7 @@ static void langmap_set_entry(int from, int to)
   // insert new entry at position "a"
   entries = (langmap_entry_T *)(langmap_mapga.ga_data) + a;
   memmove(entries + 1, entries,
-          ((unsigned int)langmap_mapga.ga_len - a) * sizeof(langmap_entry_T));
+          ((unsigned)langmap_mapga.ga_len - a) * sizeof(langmap_entry_T));
   langmap_mapga.ga_len++;
   entries[0].from = from;
   entries[0].to = to;
@@ -2387,7 +2386,7 @@ void langmap_init(void)
 
 /// Called when langmap option is set; the language map can be
 /// changed at any time!
-void langmap_set(void)
+const char *did_set_langmap(optset_T *args)
 {
   char *p;
   char *p2;
@@ -2435,9 +2434,10 @@ void langmap_set(void)
         }
       }
       if (to == NUL) {
-        semsg(_("E357: 'langmap': Matching character missing for %s"),
-              transchar(from));
-        return;
+        snprintf(args->os_errbuf, args->os_errbuflen,
+                 _("E357: 'langmap': Matching character missing for %s"),
+                 transchar(from));
+        return args->os_errbuf;
       }
 
       if (from >= 256) {
@@ -2455,8 +2455,10 @@ void langmap_set(void)
           p = p2;
           if (p[0] != NUL) {
             if (p[0] != ',') {
-              semsg(_("E358: 'langmap': Extra characters after semicolon: %s"), p);
-              return;
+              snprintf(args->os_errbuf, args->os_errbuflen,
+                       _("E358: 'langmap': Extra characters after semicolon: %s"),
+                       p);
+              return args->os_errbuf;
             }
             p++;
           }
@@ -2465,6 +2467,8 @@ void langmap_set(void)
       }
     }
   }
+
+  return NULL;
 }
 
 static void do_exmap(exarg_T *eap, int isabbrev)

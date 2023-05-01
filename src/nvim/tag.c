@@ -210,20 +210,23 @@ static Callback tfu_cb;         // 'tagfunc' callback function
 /// Reads the 'tagfunc' option value and convert that to a callback value.
 /// Invoked when the 'tagfunc' option is set. The option value can be a name of
 /// a function (string), or function(<name>) or funcref(<name>) or a lambda.
-void set_tagfunc_option(const char **errmsg)
+const char *did_set_tagfunc(optset_T *args)
 {
+  buf_T *buf = (buf_T *)args->os_buf;
+
   callback_free(&tfu_cb);
-  callback_free(&curbuf->b_tfu_cb);
+  callback_free(&buf->b_tfu_cb);
 
-  if (*curbuf->b_p_tfu == NUL) {
-    return;
+  if (*buf->b_p_tfu == NUL) {
+    return NULL;
   }
 
-  if (option_set_callback_func(curbuf->b_p_tfu, &tfu_cb) == FAIL) {
-    *errmsg = e_invarg;
+  if (option_set_callback_func(buf->b_p_tfu, &tfu_cb) == FAIL) {
+    return e_invarg;
   }
 
-  callback_copy(&curbuf->b_tfu_cb, &tfu_cb);
+  callback_copy(&buf->b_tfu_cb, &tfu_cb);
+  return NULL;
 }
 
 #if defined(EXITFREE)
@@ -538,7 +541,7 @@ void do_tag(char *tag, int type, int count, int forceit, int verbose)
   }
 
   // Repeat searching for tags, when a file has not been found.
-  for (;;) {
+  while (true) {
     int other_name;
     char *name;
 
@@ -1260,9 +1263,9 @@ static int find_tagfunc_tags(char *pat, garray_T *ga, int *match_count, int flag
 
   vim_snprintf(flagString, sizeof(flagString),
                "%s%s%s",
-               g_tag_at_cursor      ? "c": "",
-               flags & TAG_INS_COMP ? "i": "",
-               flags & TAG_REGEXP   ? "r": "");
+               g_tag_at_cursor ? "c" : "",
+               flags & TAG_INS_COMP ? "i" : "",
+               flags & TAG_REGEXP ? "r" : "");
 
   save_pos = curwin->w_cursor;
   result = callback_call(&curbuf->b_tfu_cb, 3, args, &rettv);
@@ -2094,7 +2097,7 @@ static void findtags_get_all_tags(findtags_state_T *st, findtags_match_args_T *m
   CLEAR_FIELD(search_info);
 
   // Read and parse the lines in the file one by one
-  for (;;) {
+  while (true) {
     // check for CTRL-C typed, more often when jumping around
     if (st->state == TS_BINARY || st->state == TS_SKIP_BACK) {
       line_breakcheck();
@@ -2558,7 +2561,7 @@ int get_tagfname(tagname_T *tnp, int first, char *buf)
   // There are two states:
   // tnp->tn_did_filefind_init == false: setup for next part in 'tags'.
   // tnp->tn_did_filefind_init == true: find next file in this part.
-  for (;;) {
+  while (true) {
     if (tnp->tn_did_filefind_init) {
       fname = vim_findfile(tnp->tn_search_ctx);
       if (fname != NULL) {
@@ -3168,7 +3171,7 @@ static int find_extra(char **pp)
   char first_char = **pp;
 
   // Repeat for addresses separated with ';'
-  for (;;) {
+  while (true) {
     if (ascii_isdigit(*str)) {
       str = skipdigits(str + 1);
     } else if (*str == '/' || *str == '?') {

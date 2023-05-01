@@ -780,9 +780,10 @@ RuntimeSearchPath runtime_search_path_build(void)
   return search_path;
 }
 
-void runtime_search_path_invalidate(void)
+const char *did_set_runtimepackpath(optset_T *args)
 {
   runtime_search_path_valid = false;
+  return NULL;
 }
 
 void runtime_search_path_free(RuntimeSearchPath path)
@@ -2558,7 +2559,7 @@ static char *get_one_sourceline(struct source_cookie *sp)
 
   // Loop until there is a finished line (or end-of-file).
   sp->sourcing_lnum++;
-  for (;;) {
+  while (true) {
     // make room to read at least 120 (more) characters
     ga_grow(&ga, 120);
     buf = ga.ga_data;

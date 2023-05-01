@@ -678,9 +678,9 @@ int searchit(win_T *win, buf_T *buf, pos_T *pos, pos_T *end_pos, Direction dir, 
             // otherwise "/$" will get stuck on end of line.
             while (matchpos.lnum == 0
                    && (((options & SEARCH_END) && first_match)
-                       ?  (nmatched == 1
-                           && (int)endpos.col - 1
-                           < (int)start_pos.col + extra_col)
+                       ? (nmatched == 1
+                          && (int)endpos.col - 1
+                          < (int)start_pos.col + extra_col)
                        : ((int)matchpos.col
                           - (ptr[matchpos.col] == NUL)
                           < (int)start_pos.col + extra_col))) {
@@ -747,7 +747,7 @@ int searchit(win_T *win, buf_T *buf, pos_T *pos, pos_T *end_pos, Direction dir, 
             // When putting the new cursor at the end, compare
             // relative to the end of the match.
             match_ok = false;
-            for (;;) {
+            while (true) {
               // Remember a position that is before the start
               // position, we use it if it's the last match in
               // the line.  Always accept a position after
@@ -1079,7 +1079,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char *pat, long count, i
   }
 
   // Repeat the search when pattern followed by ';', e.g. "/foo/;?bar".
-  for (;;) {
+  while (true) {
     bool show_top_bot_msg = false;
 
     searchstr = pat;
@@ -1432,7 +1432,7 @@ int search_for_exact_line(buf_T *buf, pos_T *pos, Direction dir, char *pat)
   if (buf->b_ml.ml_line_count == 0) {
     return FAIL;
   }
-  for (;;) {
+  while (true) {
     pos->lnum += dir;
     if (pos->lnum < 1) {
       if (p_ws) {
@@ -1544,7 +1544,7 @@ int searchc(cmdarg_T *cap, int t_cmd)
   int len = (int)strlen(p);
 
   while (count--) {
-    for (;;) {
+    while (true) {
       if (dir > 0) {
         col += utfc_ptr2len(p + col);
         if (col >= len) {
@@ -1810,7 +1810,7 @@ pos_T *findmatchlimit(oparg_T *oap, int initc, int flags, int64_t maxtravel)
         if (linep[pos.col] == NUL && pos.col) {
           pos.col--;
         }
-        for (;;) {
+        while (true) {
           initc = utf_ptr2char(linep + pos.col);
           if (initc == NUL) {
             break;
@@ -2772,8 +2772,7 @@ void f_searchcount(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     dictitem_T *di;
     bool error = false;
 
-    if (argvars[0].v_type != VAR_DICT || argvars[0].vval.v_dict == NULL) {
-      emsg(_(e_dictreq));
+    if (tv_check_for_nonnull_dict_arg(argvars, 0) == FAIL) {
       return;
     }
     dict = argvars[0].vval.v_dict;
@@ -3046,6 +3045,10 @@ static int fuzzy_match_recursive(const char *fuzpat, const char *str, uint32_t s
         return 0;
       }
 
+      int recursiveScore = 0;
+      uint32_t recursiveMatches[MAX_FUZZY_MATCHES];
+      CLEAR_FIELD(recursiveMatches);
+
       // "Copy-on-Write" srcMatches into matches
       if (first_match && srcMatches != NULL) {
         memcpy(matches, srcMatches, (size_t)nextMatch * sizeof(srcMatches[0]));
@@ -3053,8 +3056,6 @@ static int fuzzy_match_recursive(const char *fuzpat, const char *str, uint32_t s
       }
 
       // Recursive call that "skips" this match
-      uint32_t recursiveMatches[MAX_FUZZY_MATCHES];
-      int recursiveScore = 0;
       const char *const next_char = str + utfc_ptr2len(str);
       if (fuzzy_match_recursive(fuzpat, next_char, strIdx + 1, &recursiveScore, strBegin, strLen,
                                 matches, recursiveMatches,
@@ -3348,8 +3349,7 @@ static void do_fuzzymatch(const typval_T *const argvars, typval_T *const rettv,
   bool matchseq = false;
   long max_matches = 0;
   if (argvars[2].v_type != VAR_UNKNOWN) {
-    if (argvars[2].v_type != VAR_DICT || argvars[2].vval.v_dict == NULL) {
-      emsg(_(e_dictreq));
+    if (tv_check_for_nonnull_dict_arg(argvars, 2) == FAIL) {
       return;
     }
 
@@ -3623,7 +3623,7 @@ void find_pattern_in_path(char *ptr, Direction dir, size_t len, bool whole, bool
   }
   line = get_line_and_copy(lnum, file_line);
 
-  for (;;) {
+  while (true) {
     if (incl_regmatch.regprog != NULL
         && vim_regexec(&incl_regmatch, line, (colnr_T)0)) {
       char *p_fname = (curr_fname == curbuf->b_fname)
@@ -4092,7 +4092,7 @@ exit_matched:
     }
     already = NULL;
   }
-  // End of big for (;;) loop.
+  // End of big while (true) loop.
 
   // Close any files that are still open.
   for (i = 0; i <= depth; i++) {
@@ -4145,7 +4145,7 @@ static void show_pat_in_path(char *line, int type, bool did_show, int action, FI
   if (got_int) {                // 'q' typed at "--more--" message
     return;
   }
-  for (;;) {
+  while (true) {
     char *p = line + strlen(line) - 1;
     if (fp != NULL) {
       // We used fgets(), so get rid of newline at end

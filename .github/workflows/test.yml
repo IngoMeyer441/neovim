@@ -33,39 +33,16 @@ jobs:
     if: (github.event_name == 'pull_request' && github.base_ref == 'master') || (github.event_name == 'push' && github.ref == 'refs/heads/master')
     runs-on: ubuntu-22.04
     timeout-minutes: 10
-    env:
-      CACHE_UNCRUSTIFY: ${{ github.workspace }}/.cache/uncrustify
-      UNCRUSTIFY_VERSION: uncrustify-0.76.0
     steps:
       - uses: actions/checkout@v3
 
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
       - name: Install dependencies
-        run: ./.github/scripts/install_deps.sh lua-check
-
-      - name: Cache uncrustify
-        id: cache-uncrustify
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.CACHE_UNCRUSTIFY }}
-          key: ${{ env.UNCRUSTIFY_VERSION }}
-
-      - name: Clone uncrustify
-        if: steps.cache-uncrustify.outputs.cache-hit != 'true'
-        uses: actions/checkout@v3
-        with:
-          repository: uncrustify/uncrustify
-          ref: ${{ env.UNCRUSTIFY_VERSION }}
-          path: uncrustify
-
-      - name: Install uncrustify
-        if: steps.cache-uncrustify.outputs.cache-hit != 'true'
         run: |
-          source_dir=uncrustify
-          build_dir=uncrustify/build
-          cmake -S $source_dir -B $build_dir -G Ninja -D CMAKE_BUILD_TYPE=Release
-          cmake --build $build_dir
-          mkdir -p .cache
-          cp $build_dir/uncrustify ${{ env.CACHE_UNCRUSTIFY }}
+          ./.github/scripts/install_deps.sh
+          brew install stylua uncrustify
 
       - uses: ./.github/actions/cache
 
@@ -75,7 +52,6 @@ jobs:
           cmake --build .deps
 
       - if: success() || failure() && steps.abort_job.outputs.status == 'success'
-        name: configure
         run: cmake -B build -G Ninja
 
       - if: "!cancelled()"
@@ -84,12 +60,8 @@ jobs:
         run: echo "status=${{ job.status }}" >> $GITHUB_OUTPUT
 
       - if: success() || failure() && steps.abort_job.outputs.status == 'success'
-        name: lintstylua
-        uses: JohnnyMorganz/stylua-action@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          version: latest
-          args: --check runtime/
+        name: stylua
+        run: cmake --build build --target lintlua-stylua
 
       - if: success() || failure() && steps.abort_job.outputs.status == 'success'
         name: luacheck
@@ -108,8 +80,7 @@ jobs:
 
       - if: success() || failure() && steps.abort_job.outputs.status == 'success'
         name: uncrustify
-        run: |
-          ${{ env.CACHE_UNCRUSTIFY }} -c ./src/uncrustify.cfg -q --replace --no-backup $(find ./src/nvim -name "*.[ch]")
+        run: cmake --build build --target lintc-uncrustify
 
       - if: success() || failure() && steps.abort_job.outputs.status == 'success'
         name: suggester / uncrustify
@@ -170,7 +141,7 @@ jobs:
         run: mkdir -p "$LOG_DIR"
 
       - name: Install dependencies
-        run: ./.github/scripts/install_deps.sh cpanminus
+        run: ./.github/scripts/install_deps.sh --test
 
       - name: Setup interpreter packages
         run: |
@@ -353,47 +324,3 @@ jobs:
         run: |
           cd test/old/testdir
           mingw32-make VERBOSE=1
-
-  with-external-deps:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Install dependencies
-        run: |
-          sudo add-apt-repository ppa:neovim-ppa/stable
-          ./.github/scripts/install_deps.sh
-          sudo apt-get install -y \
-            libluajit-5.1-dev \
-            libmsgpack-dev \
-            libtermkey-dev \
-            libunibilium-dev \
-            libuv1-dev \
-            lua-filesystem \
-            lua-lpeg \
-            luajit \
-            lua-luv-dev
-            # libtree-sitter-dev \
-            # libvterm-dev
-
-            # Remove comments from packages once we start using these external
-            # dependencies.
-
-      - uses: ./.github/actions/cache
-
-      - name: Build third-party deps
-        run: |
-          # Ideally all dependencies should external for this job, but some
-          # dependencies don't have the required version available. We use the
-          # bundled versions for these with the hopes of being able to remove them
-          # later on.
-          cmake -S cmake.deps -B .deps -G Ninja -D USE_BUNDLED=OFF \
-            -D USE_BUNDLED_LIBVTERM=ON \
-            -D USE_BUNDLED_TS=ON
-          cmake --build .deps
-
-      - name: Build
-        run: |
-          cmake --preset ci
-          cmake --build build

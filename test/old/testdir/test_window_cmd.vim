@@ -19,6 +19,24 @@ func Test_window_cmd_ls0_with_split()
   set ls&vim
 endfunc
 
+func Test_window_cmd_ls0_split_scrolling()
+  CheckRunVimInTerminal
+
+  let lines =<< trim END
+    set laststatus=0
+    call setline(1, range(1, 100))
+    normal! G
+  END
+  call writefile(lines, 'XTestLs0SplitScrolling', 'D')
+  let buf = RunVimInTerminal('-S XTestLs0SplitScrolling', #{rows: 10})
+
+  call term_sendkeys(buf, ":botright split\<CR>")
+  call WaitForAssert({-> assert_match('Bot$', term_getline(buf, 5))})
+  call assert_equal('100', term_getline(buf, 4))
+
+  call StopVimInTerminal(buf)
+endfunc
+
 func Test_window_cmd_cmdwin_with_vsp()
   let efmt = 'Expected 0 but got %d (in ls=%d, %s window)'
   for v in range(0, 2)
@@ -735,7 +753,7 @@ func Test_relative_cursor_position_in_one_line_window()
 
   only!
   bwipe!
-  call assert_fails('call winrestview(v:_null_dict)', 'E474:')
+  call assert_fails('call winrestview(v:_null_dict)', 'E1297:')
 endfunc
 
 func Test_relative_cursor_position_after_move_and_resize()
@@ -936,7 +954,7 @@ func Test_winrestview()
   call assert_equal(view, winsaveview())
 
   bwipe!
-  call assert_fails('call winrestview(v:_null_dict)', 'E474:')
+  call assert_fails('call winrestview(v:_null_dict)', 'E1297:')
 endfunc
 
 func Test_win_splitmove()
@@ -967,7 +985,7 @@ func Test_win_splitmove()
   call assert_equal(bufname(winbufnr(2)), 'b')
   call assert_equal(bufname(winbufnr(3)), 'a')
   call assert_equal(bufname(winbufnr(4)), 'd')
-  call assert_fails('call win_splitmove(winnr(), winnr("k"), v:_null_dict)', 'E474:')
+  call assert_fails('call win_splitmove(winnr(), winnr("k"), v:_null_dict)', 'E1297:')
   only | bd
 
   call assert_fails('call win_splitmove(winnr(), 123)', 'E957:')
