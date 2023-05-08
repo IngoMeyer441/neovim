@@ -670,6 +670,8 @@ void win_set_buf(Window window, Buffer buffer, bool noautocmd, Error *err)
 
   tabpage_T *tab = win_find_tabpage(win);
 
+  // no redrawing and don't set the window title
+  RedrawingDisabled++;
   if (noautocmd) {
     block_autocmds();
   }
@@ -699,6 +701,7 @@ void win_set_buf(Window window, Buffer buffer, bool noautocmd, Error *err)
   if (noautocmd) {
     unblock_autocmds();
   }
+  RedrawingDisabled--;
 }
 
 /// Create a new float.
@@ -1613,6 +1616,9 @@ static void win_init(win_T *newp, win_T *oldp, int flags)
                     ? NULL : xstrdup(oldp->w_prevdir);
 
   if (*p_spk != 'c') {
+    if (*p_spk == 't') {
+      newp->w_skipcol = oldp->w_skipcol;
+    }
     newp->w_botline = oldp->w_botline;
     newp->w_prev_height = oldp->w_height;
     newp->w_prev_winrow = oldp->w_winrow;
@@ -6602,13 +6608,13 @@ void win_set_inner_size(win_T *wp, bool valid_cursor)
         set_fraction(wp);
       }
     }
-    wp->w_skipcol = 0;
     wp->w_height_inner = height;
     win_comp_scroll(wp);
 
     // There is no point in adjusting the scroll position when exiting.  Some
     // values might be invalid.
     if (valid_cursor && !exiting && *p_spk == 'c') {
+      wp->w_skipcol = 0;
       scroll_to_fraction(wp, prev_height);
     }
     redraw_later(wp, UPD_SOME_VALID);

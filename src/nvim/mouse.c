@@ -223,7 +223,7 @@ static int get_fpos_of_mouse(pos_T *mpos)
   }
 
   // winpos and height may change in win_enter()!
-  if (winrow + wp->w_winbar_height >= wp->w_height) {  // In (or below) status line
+  if (winrow >= wp->w_height_inner) {  // In (or below) status line
     return IN_STATUS_LINE;
   }
 
@@ -231,7 +231,7 @@ static int get_fpos_of_mouse(pos_T *mpos)
     return MOUSE_WINBAR;
   }
 
-  if (wincol >= wp->w_width) {  // In vertical separator line
+  if (wincol >= wp->w_width_inner) {  // In vertical separator line
     return IN_SEP_LINE;
   }
 
@@ -557,10 +557,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, long count, bool fixindent)
         if (VIsual_active) {
           // set MOUSE_MAY_STOP_VIS if we are outside the selection
           // or the current window (might have false negative here)
-          if (mouse_row < curwin->w_winrow
-              || mouse_row > (curwin->w_winrow + curwin->w_height)) {
-            jump_flags = MOUSE_MAY_STOP_VIS;
-          } else if (m_pos_flag != IN_BUFFER) {
+          if (m_pos_flag != IN_BUFFER) {
             jump_flags = MOUSE_MAY_STOP_VIS;
           } else {
             if (VIsual_mode == 'V') {
@@ -1413,9 +1410,22 @@ bool mouse_comp_pos(win_T *win, int *rowp, int *colp, linenr_T *lnump)
       } else {
         row -= win_get_fill(win, lnum);
       }
-      count = plines_win_nofill(win, lnum, true);
+      count = plines_win_nofill(win, lnum, false);
     } else {
-      count = plines_win(win, lnum, true);
+      count = plines_win(win, lnum, false);
+    }
+
+    if (win->w_skipcol > 0 && lnum == win->w_topline) {
+      // Adjust for 'smoothscroll' clipping the top screen lines.
+      // A similar formula is used in curs_columns().
+      int width1 = win->w_width_inner - win_col_off(win);
+      int skip_lines = 0;
+      if (win->w_skipcol > width1) {
+        skip_lines = (win->w_skipcol - width1) / (width1 + win_col_off2(win)) + 1;
+      } else if (win->w_skipcol > 0) {
+        skip_lines = 1;
+      }
+      count -= skip_lines;
     }
 
     if (count > row) {
@@ -1439,8 +1449,11 @@ bool mouse_comp_pos(win_T *win, int *rowp, int *colp, linenr_T *lnump)
       col = off;
     }
     col += row * (win->w_width_inner - off);
-    // add skip column (for long wrapping line)
-    col += win->w_skipcol;
+
+    // Add skip column for the topline.
+    if (lnum == win->w_topline) {
+      col += win->w_skipcol;
+    }
   }
 
   if (!win->w_p_wrap) {
@@ -1651,8 +1664,6 @@ bool mouse_scroll_horiz(int dir)
     return false;
   }
 
-  curwin->w_leftcol = (colnr_T)leftcol;
-
   // When the line of the cursor is too short, move the cursor to the
   // longest visible line.
   if (!virtual_active()
@@ -1661,7 +1672,7 @@ bool mouse_scroll_horiz(int dir)
     curwin->w_cursor.col = 0;
   }
 
-  return leftcol_changed();
+  return set_leftcol(leftcol);
 }
 
 /// Adjusts the clicked column position when 'conceallevel' > 0

@@ -126,6 +126,9 @@ typedef struct {
 # include "ex_cmds.c.generated.h"
 #endif
 
+static const char e_non_numeric_argument_to_z[]
+  = N_("E144: Non-numeric argument to :z");
+
 /// ":ascii" and "ga" implementation
 void do_ascii(const exarg_T *const eap)
 {
@@ -346,10 +349,8 @@ static int linelen(int *has_tab)
        last > first && ascii_iswhite(last[-1]); last--) {}
   char save = *last;
   *last = NUL;
-  // Get line length.
-  len = linetabsize(line);
-  // Check for embedded TAB.
-  if (has_tab != NULL) {
+  len = linetabsize_str(line);  // Get line length.
+  if (has_tab != NULL) {        // Check for embedded TAB.
     *has_tab = vim_strchr(first, TAB) != NULL;
   }
   *last = save;
@@ -2954,7 +2955,7 @@ void ex_z(exarg_T *eap)
 
   if (*x != 0) {
     if (!ascii_isdigit(*x)) {
-      emsg(_("E144: non-numeric argument to :z"));
+      emsg(_(e_non_numeric_argument_to_z));
       return;
     }
     bigness = atol(x);

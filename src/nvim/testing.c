@@ -30,16 +30,26 @@
 #include "nvim/types.h"
 #include "nvim/vim.h"
 
+/// Type of assert_* check being performed
+typedef enum {
+  ASSERT_EQUAL,
+  ASSERT_NOTEQUAL,
+  ASSERT_MATCH,
+  ASSERT_NOTMATCH,
+  ASSERT_FAILS,
+  ASSERT_OTHER,
+} assert_type_T;
+
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "testing.c.generated.h"
 #endif
 
 static const char e_assert_fails_second_arg[]
-  = N_("E856: assert_fails() second argument must be a string or a list with one or two strings");
+  = N_("E856: \"assert_fails()\" second argument must be a string or a list with one or two strings");
 static const char e_assert_fails_fourth_argument[]
-  = N_("E1115: assert_fails() fourth argument must be a number");
+  = N_("E1115: \"assert_fails()\" fourth argument must be a number");
 static const char e_assert_fails_fifth_argument[]
-  = N_("E1116: assert_fails() fifth argument must be a string");
+  = N_("E1116: \"assert_fails()\" fifth argument must be a string");
 static const char e_calling_test_garbagecollect_now_while_v_testing_is_not_set[]
   = N_("E1142: Calling test_garbagecollect_now() while v:testing is not set");
 
@@ -121,7 +131,7 @@ static void ga_concat_shorten_esc(garray_T *gap, const char *str)
   for (const char *p = str; *p != NUL; p++) {
     int same_len = 1;
     const char *s = p;
-    const int c = mb_ptr2char_adv(&s);
+    const int c = mb_cptr2char_adv(&s);
     const int clen = (int)(s - p);
     while (*s != NUL && c == utf_ptr2char(s)) {
       same_len++;
@@ -142,7 +152,7 @@ static void ga_concat_shorten_esc(garray_T *gap, const char *str)
 }
 
 /// Fill "gap" with information about an assert error.
-static void fill_assert_error(garray_T *gap, typval_T *opt_msg_tv, char *exp_str,
+static void fill_assert_error(garray_T *gap, typval_T *opt_msg_tv, const char *exp_str,
                               typval_T *exp_tv_arg, typval_T *got_tv_arg, assert_type_T atype)
 {
   char *tofree;
@@ -220,7 +230,13 @@ static void fill_assert_error(garray_T *gap, typval_T *opt_msg_tv, char *exp_str
     ga_concat_shorten_esc(gap, tofree);
     xfree(tofree);
   } else {
+    if (atype == ASSERT_FAILS) {
+      ga_concat(gap, "'");
+    }
     ga_concat_shorten_esc(gap, exp_str);
+    if (atype == ASSERT_FAILS) {
+      ga_concat(gap, "'");
+    }
   }
 
   if (atype != ASSERT_NOTEQUAL) {
@@ -271,11 +287,10 @@ static int assert_match_common(typval_T *argvars, assert_type_T atype)
 {
   char buf1[NUMBUFLEN];
   char buf2[NUMBUFLEN];
-  const int called_emsg_before = called_emsg;
   const char *const pat = tv_get_string_buf_chk(&argvars[0], buf1);
   const char *const text = tv_get_string_buf_chk(&argvars[1], buf2);
 
-  if (called_emsg == called_emsg_before
+  if (pat != NULL && text != NULL
       && pattern_match(pat, text, false) != (atype == ASSERT_MATCH)) {
     garray_T ga;
     prepare_assert_error(&ga);
@@ -377,12 +392,10 @@ static int assert_equalfile(typval_T *argvars)
 {
   char buf1[NUMBUFLEN];
   char buf2[NUMBUFLEN];
-  const int called_emsg_before = called_emsg;
   const char *const fname1 = tv_get_string_buf_chk(&argvars[0], buf1);
   const char *const fname2 = tv_get_string_buf_chk(&argvars[1], buf2);
-  garray_T ga;
 
-  if (called_emsg > called_emsg_before) {
+  if (fname1 == NULL || fname2 == NULL) {
     return 0;
   }
 
@@ -435,7 +448,9 @@ static int assert_equalfile(typval_T *argvars)
       fclose(fd2);
     }
   }
+
   if (IObuff[0] != NUL) {
+    garray_T ga;
     prepare_assert_error(&ga);
     if (argvars[2].v_type != VAR_UNKNOWN) {
       char *const tofree = encode_tv2echo(&argvars[2], NULL);
@@ -459,6 +474,7 @@ static int assert_equalfile(typval_T *argvars)
     ga_clear(&ga);
     return 1;
   }
+
   return 0;
 }
 
@@ -500,11 +516,21 @@ void f_assert_exception(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "assert_fails(cmd [, error [, msg]])" function
 void f_assert_fails(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  const char *const cmd = tv_get_string_chk(&argvars[0]);
   garray_T ga;
-  int save_trylevel = trylevel;
+  const int save_trylevel = trylevel;
   const int called_emsg_before = called_emsg;
   const char *wrong_arg_msg = NULL;
+  char *tofree = NULL;
+
+  if (tv_check_for_string_or_number_arg(argvars, 0) == FAIL
+      || tv_check_for_opt_string_or_list_arg(argvars, 1) == FAIL
+      || (argvars[1].v_type != VAR_UNKNOWN
+          && (argvars[2].v_type != VAR_UNKNOWN
+              && (tv_check_for_opt_number_arg(argvars, 3) == FAIL
+                  || (argvars[3].v_type != VAR_UNKNOWN
+                      && tv_check_for_opt_string_arg(argvars, 4) == FAIL))))) {
+    return;
+  }
 
   // trylevel must be zero for a ":throw" command to be considered failed
   trylevel = 0;
@@ -512,7 +538,13 @@ void f_assert_fails(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   in_assert_fails = true;
   no_wait_return++;
 
+  const char *const cmd = tv_get_string_chk(&argvars[0]);
   do_cmdline_cmd(cmd);
+
+  // reset here for any errors reported below
+  trylevel = save_trylevel;
+  suppress_errthrow = false;
+
   if (called_emsg == called_emsg_before) {
     prepare_assert_error(&ga);
     ga_concat(&ga, "command did not fail: ");
@@ -523,6 +555,7 @@ void f_assert_fails(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   } else if (argvars[1].v_type != VAR_UNKNOWN) {
     char buf[NUMBUFLEN];
     const char *expected;
+    const char *expected_str = NULL;
     bool error_found = false;
     int error_found_index = 1;
     char *actual = emsg_assert_fails_msg == NULL ? "[unknown]" : emsg_assert_fails_msg;
@@ -538,14 +571,23 @@ void f_assert_fails(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       }
       const typval_T *tv = TV_LIST_ITEM_TV(tv_list_first(list));
       expected = tv_get_string_buf_chk(tv, buf);
+      if (expected == NULL) {
+        goto theend;
+      }
       if (!pattern_match(expected, actual, false)) {
         error_found = true;
+        expected_str = expected;
       } else if (tv_list_len(list) == 2) {
+        // make a copy, an error in pattern_match() may free it
+        tofree = actual = xstrdup(get_vim_var_str(VV_ERRMSG));
         tv = TV_LIST_ITEM_TV(tv_list_last(list));
-        actual = get_vim_var_str(VV_ERRMSG);
         expected = tv_get_string_buf_chk(tv, buf);
+        if (expected == NULL) {
+          goto theend;
+        }
         if (!pattern_match(expected, actual, false)) {
           error_found = true;
+          expected_str = expected;
         }
       }
     } else {
@@ -589,8 +631,8 @@ void f_assert_fails(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
         actual_tv.v_type = VAR_STRING;
         actual_tv.vval.v_string = actual;
       }
-      fill_assert_error(&ga, &argvars[2], NULL,
-                        &argvars[error_found_index], &actual_tv, ASSERT_OTHER);
+      fill_assert_error(&ga, &argvars[2], expected_str,
+                        &argvars[error_found_index], &actual_tv, ASSERT_FAILS);
       ga_concat(&ga, ": ");
       assert_append_cmd_or_arg(&ga, argvars, cmd);
       assert_error(&ga);
@@ -612,6 +654,7 @@ theend:
   msg_reset_scroll();
   lines_left = Rows;
   XFREE_CLEAR(emsg_assert_fails_msg);
+  xfree(tofree);
   set_vim_var_string(VV_ERRMSG, NULL, 0);
   if (wrong_arg_msg != NULL) {
     emsg(_(wrong_arg_msg));
@@ -639,16 +682,9 @@ static int assert_inrange(typval_T *argvars)
     if (factual < flower || factual > fupper) {
       garray_T ga;
       prepare_assert_error(&ga);
-      if (argvars[3].v_type != VAR_UNKNOWN) {
-        char *const tofree = encode_tv2string(&argvars[3], NULL);
-        ga_concat(&ga, tofree);
-        xfree(tofree);
-      } else {
-        char msg[80];
-        vim_snprintf(msg, sizeof(msg), "Expected range %g - %g, but got %g",
-                     flower, fupper, factual);
-        ga_concat(&ga, msg);
-      }
+      char expected_str[200];
+      vim_snprintf(expected_str, sizeof(expected_str), "range %g - %g,", flower, fupper);
+      fill_assert_error(&ga, &argvars[3], expected_str, NULL, &argvars[2], ASSERT_OTHER);
       assert_error(&ga);
       ga_clear(&ga);
       return 1;
@@ -664,13 +700,11 @@ static int assert_inrange(typval_T *argvars)
     if (actual < lower || actual > upper) {
       garray_T ga;
       prepare_assert_error(&ga);
-
-      char msg[55];
-      vim_snprintf(msg, sizeof(msg),
+      char expected_str[200];
+      vim_snprintf(expected_str, sizeof(expected_str),
                    "range %" PRIdVARNUMBER " - %" PRIdVARNUMBER ",",
                    lower, upper);  // -V576
-      fill_assert_error(&ga, &argvars[3], msg, NULL, &argvars[2],
-                        ASSERT_INRANGE);
+      fill_assert_error(&ga, &argvars[3], expected_str, NULL, &argvars[2], ASSERT_OTHER);
       assert_error(&ga);
       ga_clear(&ga);
       return 1;
@@ -682,6 +716,13 @@ static int assert_inrange(typval_T *argvars)
 /// "assert_inrange(lower, upper[, msg])" function
 void f_assert_inrange(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
+  if (tv_check_for_float_or_nr_arg(argvars, 0) == FAIL
+      || tv_check_for_float_or_nr_arg(argvars, 1) == FAIL
+      || tv_check_for_float_or_nr_arg(argvars, 2) == FAIL
+      || tv_check_for_opt_string_arg(argvars, 3) == FAIL) {
+    return;
+  }
+
   rettv->vval.v_number = assert_inrange(argvars);
 }
 

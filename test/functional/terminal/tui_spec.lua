@@ -1565,6 +1565,29 @@ describe('TUI', function()
       {5:-- TERMINAL --}                                    |
     ]])
   end)
+
+  it('redraws on SIGWINCH even if terminal size is unchanged #23411', function()
+    child_session:request('nvim_echo', {{'foo'}}, false, {})
+    screen:expect([[
+      {1: }                                                 |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name]                                         }|
+      foo                                               |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    exec_lua([[vim.loop.kill(vim.fn.jobpid(vim.bo.channel), 'sigwinch')]])
+    screen:expect([[
+      {1: }                                                 |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name]                                         }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+  end)
 end)
 
 describe('TUI', function()
@@ -2418,6 +2441,19 @@ describe("TUI as a client", function()
       {4:~                                                 }|
       {4:~                                                 }|
       {5:[No Name] [+]                                     }|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]]}
+
+    -- grid smaller than containing terminal window is cleared properly
+    feed_data(":call setline(1,['a'->repeat(&columns)]->repeat(&lines))\n")
+    feed_data("0:set lines=2\n")
+    screen_server:expect{grid=[[
+      {1:a}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {5:[No Name] [+]                                     }|
+                                                        |
+                                                        |
+                                                        |
                                                         |
       {3:-- TERMINAL --}                                    |
     ]]}

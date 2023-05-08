@@ -87,12 +87,22 @@
 
 static const char e_ambiguous_use_of_user_defined_command[]
   = N_("E464: Ambiguous use of user-defined command");
+static const char e_no_call_stack_to_substitute_for_stack[]
+  = N_("E489: No call stack to substitute for \"<stack>\"");
 static const char e_not_an_editor_command[]
   = N_("E492: Not an editor command");
+static const char e_no_autocommand_file_name_to_substitute_for_afile[]
+  = N_("E495: No autocommand file name to substitute for \"<afile>\"");
+static const char e_no_autocommand_buffer_number_to_substitute_for_abuf[]
+  = N_("E496: No autocommand buffer number to substitute for \"<abuf>\"");
+static const char e_no_autocommand_match_name_to_substitute_for_amatch[]
+  = N_("E497: No autocommand match name to substitute for \"<amatch>\"");
 static const char e_no_source_file_name_to_substitute_for_sfile[]
-  = N_("E498: no :source file name to substitute for \"<sfile>\"");
-static const char e_no_call_stack_to_substitute_for_stack[]
-  = N_("E489: no call stack to substitute for \"<stack>\"");
+  = N_("E498: No :source file name to substitute for \"<sfile>\"");
+static const char e_no_line_number_to_use_for_slnum[]
+  = N_("E842: No line number to use for \"<slnum>\"");
+static const char e_no_line_number_to_use_for_sflnum[]
+  = N_("E961: No line number to use for \"<sflnum>\"");
 static const char e_no_script_file_name_to_substitute_for_script[]
   = N_("E1274: No script file name to substitute for \"<script>\"");
 
@@ -220,7 +230,7 @@ void do_exmode(void)
     if ((prev_line != curwin->w_cursor.lnum
          || changedtick != buf_get_changedtick(curbuf)) && !ex_no_reprint) {
       if (curbuf->b_ml.ml_flags & ML_EMPTY) {
-        emsg(_(e_emptybuf));
+        emsg(_(e_empty_buffer));
       } else {
         if (ex_pressedreturn) {
           // Make sure the message overwrites the right line and isn't throttled.
@@ -238,7 +248,7 @@ void do_exmode(void)
       }
     } else if (ex_pressedreturn && !ex_no_reprint) {  // must be at EOF
       if (curbuf->b_ml.ml_flags & ML_EMPTY) {
-        emsg(_(e_emptybuf));
+        emsg(_(e_empty_buffer));
       } else {
         emsg(_("E501: At end-of-file"));
       }
@@ -278,7 +288,7 @@ static void msg_verbose_cmd(linenr_T lnum, char *cmd)
 /// Execute a simple command line.  Used for translated commands like "*".
 int do_cmdline_cmd(const char *cmd)
 {
-  return do_cmdline((char *)cmd, NULL, NULL, DOCMD_NOWAIT|DOCMD_KEYTYPED);
+  return do_cmdline((char *)cmd, NULL, NULL, DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_KEYTYPED);
 }
 
 /// do_cmdline(): execute one Ex command line
@@ -1852,7 +1862,8 @@ static bool skip_cmd(const exarg_T *eap)
 
 /// Execute one Ex command.
 ///
-/// If 'sourcing' is true, the command will be included in the error message.
+/// If "flags" has DOCMD_VERBOSE, the command will be included in the error
+/// message.
 ///
 /// 1. skip comment lines and leading space
 /// 2. handle command modifiers
@@ -4900,7 +4911,7 @@ static void ex_exit(exarg_T *eap)
 static void ex_print(exarg_T *eap)
 {
   if (curbuf->b_ml.ml_flags & ML_EMPTY) {
-    emsg(_(e_emptybuf));
+    emsg(_(e_empty_buffer));
   } else {
     for (; !got_int; os_breakcheck()) {
       print_line(eap->line1,
@@ -6894,7 +6905,7 @@ char *eval_vars(char *src, const char *srcstart, size_t *usedlen, linenr_T *lnum
       }
       result = autocmd_fname;
       if (result == NULL) {
-        *errormsg = _("E495: no autocommand file name to substitute for \"<afile>\"");
+        *errormsg = _(e_no_autocommand_file_name_to_substitute_for_afile);
         return NULL;
       }
       result = path_try_shorten_fname(result);
@@ -6902,7 +6913,7 @@ char *eval_vars(char *src, const char *srcstart, size_t *usedlen, linenr_T *lnum
 
     case SPEC_ABUF:             // buffer number for autocommand
       if (autocmd_bufnr <= 0) {
-        *errormsg = _("E496: no autocommand buffer number to substitute for \"<abuf>\"");
+        *errormsg = _(e_no_autocommand_buffer_number_to_substitute_for_abuf);
         return NULL;
       }
       snprintf(strbuf, sizeof(strbuf), "%d", autocmd_bufnr);
@@ -6912,7 +6923,7 @@ char *eval_vars(char *src, const char *srcstart, size_t *usedlen, linenr_T *lnum
     case SPEC_AMATCH:           // match name for autocommand
       result = autocmd_match;
       if (result == NULL) {
-        *errormsg = _("E497: no autocommand match name to substitute for \"<amatch>\"");
+        *errormsg = _(e_no_autocommand_match_name_to_substitute_for_amatch);
         return NULL;
       }
       break;
@@ -6944,7 +6955,7 @@ char *eval_vars(char *src, const char *srcstart, size_t *usedlen, linenr_T *lnum
 
     case SPEC_SLNUM:            // line in file for ":so" command
       if (SOURCING_NAME == NULL || SOURCING_LNUM == 0) {
-        *errormsg = _("E842: no line number to use for \"<slnum>\"");
+        *errormsg = _(e_no_line_number_to_use_for_slnum);
         return NULL;
       }
       snprintf(strbuf, sizeof(strbuf), "%" PRIdLINENR, SOURCING_LNUM);
@@ -6953,7 +6964,7 @@ char *eval_vars(char *src, const char *srcstart, size_t *usedlen, linenr_T *lnum
 
     case SPEC_SFLNUM:  // line in script file
       if (current_sctx.sc_lnum + SOURCING_LNUM == 0) {
-        *errormsg = _("E961: no line number to use for \"<sflnum>\"");
+        *errormsg = _(e_no_line_number_to_use_for_sflnum);
         return NULL;
       }
       snprintf(strbuf, sizeof(strbuf), "%" PRIdLINENR,

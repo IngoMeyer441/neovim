@@ -92,8 +92,8 @@ static buffheader_T readbuf2 = { { NULL, { NUL } }, NULL, 0, 0 };
 
 static int typeahead_char = 0;          // typeahead char that's not flushed
 
-// when block_redo is true redo buffer will not be changed
-// used by edit() to repeat insertions and 'V' command for redoing
+/// When block_redo is true the redo buffer will not be changed.
+/// Used by edit() to repeat insertions.
 static int block_redo = false;
 
 static int KeyNoremap = 0;                  // remapping flags
@@ -132,6 +132,12 @@ static size_t last_recorded_len = 0;      // number of last recorded chars
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "getchar.c.generated.h"
 #endif
+
+static const char e_recursive_mapping[] = N_("E223: Recursive mapping");
+static const char e_cmd_mapping_must_end_with_cr[]
+  = N_("E1255: <Cmd> mapping must end with <CR>");
+static const char e_cmd_mapping_must_end_with_cr_before_second_cmd[]
+  = N_("E1136: <Cmd> mapping must end with <CR> before second <Cmd>");
 
 // Free and clear a buffer.
 void free_buff(buffheader_T *buf)
@@ -548,6 +554,25 @@ void AppendToRedobuffLit(const char *str, int len)
   }
 }
 
+/// Append "s" to the redo buffer, leaving 3-byte special key codes unmodified
+/// and escaping other K_SPECIAL bytes.
+void AppendToRedobuffSpec(const char *s)
+{
+  if (block_redo) {
+    return;
+  }
+
+  while (*s != NUL) {
+    if ((uint8_t)(*s) == K_SPECIAL && s[1] != NUL && s[2] != NUL) {
+      // Insert special key literally.
+      add_buff(&redobuff, s, 3L);
+      s += 3;
+    } else {
+      add_char_buff(&redobuff, mb_cptr2char_adv(&s));
+    }
+  }
+}
+
 /// Append a character to the redo buffer.
 /// Translates special keys, NUL, K_SPECIAL and multibyte characters.
 void AppendCharToRedobuff(int c)
@@ -832,23 +857,23 @@ bool noremap_keys(void)
   return KeyNoremap & (RM_NONE|RM_SCRIPT);
 }
 
-// Insert a string in position 'offset' in the typeahead buffer (for "@r"
-// and ":normal" command, vgetorpeek() and check_termcode())
-//
-// If noremap is REMAP_YES, new string can be mapped again.
-// If noremap is REMAP_NONE, new string cannot be mapped again.
-// If noremap is REMAP_SKIP, first char of new string cannot be mapped again,
-// but abbreviations are allowed.
-// If noremap is REMAP_SCRIPT, new string cannot be mapped again, except for
-//                             script-local mappings.
-// If noremap is > 0, that many characters of the new string cannot be mapped.
-//
-// If nottyped is true, the string does not return KeyTyped (don't use when
-// offset is non-zero!).
-//
-// If silent is true, cmd_silent is set when the characters are obtained.
-//
-// return FAIL for failure, OK otherwise
+/// Insert a string in position "offset" in the typeahead buffer (for "@r"
+/// and ":normal" command, vgetorpeek() and check_termcode())
+///
+/// If "noremap" is REMAP_YES, new string can be mapped again.
+/// If "noremap" is REMAP_NONE, new string cannot be mapped again.
+/// If "noremap" is REMAP_SKIP, first char of new string cannot be mapped again,
+/// but abbreviations are allowed.
+/// If "noremap" is REMAP_SCRIPT, new string cannot be mapped again, except for
+///                               script-local mappings.
+/// If "noremap" is > 0, that many characters of the new string cannot be mapped.
+///
+/// If "nottyped" is true, the string does not return KeyTyped (don't use when
+/// "offset" is non-zero!).
+///
+/// If "silent" is true, cmd_silent is set when the characters are obtained.
+///
+/// @return  FAIL for failure, OK otherwise
 int ins_typebuf(char *str, int noremap, int offset, bool nottyped, bool silent)
 {
   uint8_t *s1, *s2;
@@ -1349,8 +1374,8 @@ void before_blocking(void)
   }
 }
 
-/// updatescript() is called when a character can be written to the script file
-/// or when we have waited some time for a character (c == 0).
+/// updatescript() is called when a character can be written to the script
+/// file or when we have waited some time for a character (c == 0).
 ///
 /// All the changed memfiles are synced if c == 0 or when the number of typed
 /// characters reaches 'updatecount' and 'updatecount' is non-zero.
@@ -2135,7 +2160,7 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
     // Put the replacement string in front of mapstr.
     // The depth check catches ":map x y" and ":map y x".
     if (++*mapdepth >= p_mmd) {
-      emsg(_("E223: recursive mapping"));
+      emsg(_(e_recursive_mapping));
       if (State & MODE_CMDLINE) {
         redrawcmdline();
       } else {
@@ -2882,7 +2907,8 @@ int fix_input_buffer(uint8_t *buf, int len)
   return len;
 }
 
-/// Get command argument for <Cmd> key
+/// Function passed to do_cmdline() to get the command after a <Cmd> key from
+/// typeahead.
 char *getcmdkeycmd(int promptc, void *cookie, int indent, bool do_concat)
 {
   garray_T line_ga;
@@ -2892,6 +2918,7 @@ char *getcmdkeycmd(int promptc, void *cookie, int indent, bool do_concat)
 
   ga_init(&line_ga, 1, 32);
 
+  // no mapping for these characters
   no_mapping++;
 
   got_int = false;
@@ -2901,16 +2928,17 @@ char *getcmdkeycmd(int promptc, void *cookie, int indent, bool do_concat)
     if (vgetorpeek(false) == NUL) {
       // incomplete <Cmd> is an error, because there is not much the user
       // could do in this state.
-      emsg(e_cmdmap_err);
+      emsg(_(e_cmd_mapping_must_end_with_cr));
       aborted = true;
       break;
     }
 
     // Get one character at a time.
     c1 = vgetorpeek(true);
+
     // Get two extra bytes for special keys
     if (c1 == K_SPECIAL) {
-      c1 = vgetorpeek(true);          // no mapping for these chars
+      c1 = vgetorpeek(true);
       c2 = vgetorpeek(true);
       if (c1 == KS_MODIFIER) {
         cmod = c2;
@@ -2926,8 +2954,8 @@ char *getcmdkeycmd(int promptc, void *cookie, int indent, bool do_concat)
     } else if (c1 == ESC) {
       aborted = true;
     } else if (c1 == K_COMMAND) {
-      // special case to give nicer error message
-      emsg(e_cmdmap_repeated);
+      // give a nicer error message for this special case
+      emsg(_(e_cmd_mapping_must_end_with_cr_before_second_cmd));
       aborted = true;
     } else if (c1 == K_SNR) {
       ga_concat(&line_ga, "<SNR>");

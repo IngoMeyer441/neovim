@@ -198,7 +198,7 @@ describe(':luado command', function()
   end)
   it('works correctly when changing lines out of range', function()
     curbufmeths.set_lines(0, 1, false, {"ABC", "def", "gHi"})
-    eq('Vim(luado):E322: line number out of range: 1 past the end',
+    eq('Vim(luado):E322: Line number out of range: 1 past the end',
        pcall_err(command, '2,$luado vim.api.nvim_command("%d") return linenr'))
     eq({''}, curbufmeths.get_lines(0, -1, false))
   end)
@@ -214,7 +214,7 @@ describe(':luado command', function()
   end)
   it('fails in sandbox when needed', function()
     curbufmeths.set_lines(0, 1, false, {"ABC", "def", "gHi"})
-    eq('Vim(luado):E48: Not allowed in sandbox',
+    eq('Vim(luado):E48: Not allowed in sandbox: sandbox luado runs = (runs or 0) + 1',
        pcall_err(command, 'sandbox luado runs = (runs or 0) + 1'))
     eq(NIL, funcs.luaeval('runs'))
   end)

@@ -977,7 +977,7 @@ void tui_grid_clear(TUIData *tui, Integer g)
   UGrid *grid = &tui->grid;
   ugrid_clear(grid);
   kv_size(tui->invalid_regions) = 0;
-  clear_region(tui, 0, grid->height, 0, grid->width, 0);
+  clear_region(tui, 0, tui->height, 0, tui->width, 0);
 }
 
 void tui_grid_cursor_goto(TUIData *tui, Integer grid, Integer row, Integer col)
@@ -1529,12 +1529,11 @@ void tui_guess_size(TUIData *tui)
     height = DFLT_ROWS;
   }
 
-  if (tui->width != width || tui->height != height) {
-    tui->width = width;
-    tui->height = height;
+  tui->width = width;
+  tui->height = height;
 
-    ui_client_set_size(width, height);
-  }
+  // Redraw on SIGWINCH event if size didn't change. #23411
+  ui_client_set_size(width, height);
 }
 
 static void unibi_goto(TUIData *tui, int row, int col)

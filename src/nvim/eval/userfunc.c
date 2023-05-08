@@ -79,6 +79,8 @@ static const char *e_funcref = N_("E718: Funcref required");
 static const char *e_nofunc = N_("E130: Unknown function: %s");
 static const char e_function_list_was_modified[]
   = N_("E454: Function list was modified");
+static const char e_function_nesting_too_deep[]
+  = N_("E1058: Function nesting too deep");
 static const char e_no_white_space_allowed_before_str_str[]
   = N_("E1068: No white space allowed before '%s': %s");
 static const char e_missing_heredoc_end_marker_str[]
@@ -465,12 +467,10 @@ char *deref_func_name(const char *name, int *lenp, partial_T **const partialp, b
 /// @param name function name
 void emsg_funcname(const char *errmsg, const char *name)
 {
-  char *p;
+  char *p = (char *)name;
 
-  if ((uint8_t)(*name) == K_SPECIAL) {
+  if ((uint8_t)name[0] == K_SPECIAL && name[1] != NUL && name[2] != NUL) {
     p = concat_str("<SNR>", name + 3);
-  } else {
-    p = (char *)name;
   }
 
   semsg(_(errmsg), p);
@@ -1861,8 +1861,7 @@ char *trans_function_name(char **pp, bool skip, int flags, funcdict_T *fdp, part
 
   // Check for hard coded <SNR>: already translated function ID (from a user
   // command).
-  if ((unsigned char)(*pp)[0] == K_SPECIAL && (unsigned char)(*pp)[1] == KS_EXTRA
-      && (*pp)[2] == KE_SNR) {
+  if ((uint8_t)(*pp)[0] == K_SPECIAL && (uint8_t)(*pp)[1] == KS_EXTRA && (*pp)[2] == KE_SNR) {
     *pp += 3;
     len = get_id_len((const char **)pp) + 3;
     return xmemdupz(start, (size_t)len);
@@ -2138,7 +2137,6 @@ void ex_function(exarg_T *eap)
   char *theline;
   char *line_to_free = NULL;
   char c;
-  int saved_did_emsg;
   bool saved_wait_return = need_wait_return;
   char *name = NULL;
   char *p;
@@ -2232,7 +2230,7 @@ void ex_function(exarg_T *eap)
 
   // An error in a function call during evaluation of an expression in magic
   // braces should not cause the function not to be defined.
-  saved_did_emsg = did_emsg;
+  const int saved_did_emsg = did_emsg;
   did_emsg = false;
 
   //
@@ -2528,7 +2526,7 @@ void ex_function(exarg_T *eap)
         xfree(trans_function_name(&p, true, 0, NULL, NULL));
         if (*skipwhite(p) == '(') {
           if (nesting == MAX_FUNC_NESTING - 1) {
-            emsg(_("E1058: function nesting too deep"));
+            emsg(_(e_function_nesting_too_deep));
           } else {
             nesting++;
             indent += 2;
@@ -2587,19 +2585,13 @@ void ex_function(exarg_T *eap)
 
       // Check for ":let v =<< [trim] EOF"
       //       and ":let [a, b] =<< [trim] EOF"
-      arg = skipwhite(skiptowhite(p));
-      if (*arg == '[') {
-        arg = vim_strchr(arg, ']');
-      }
-      if (arg != NULL) {
-        arg = skipwhite(skiptowhite(arg));
-        if (arg[0] == '='
-            && arg[1] == '<'
-            && arg[2] == '<'
-            && (p[0] == 'l'
-                && p[1] == 'e'
-                && (!ASCII_ISALNUM(p[2])
-                    || (p[2] == 't' && !ASCII_ISALNUM(p[3]))))) {
+      arg = p;
+      if (checkforcmd(&arg, "let", 2)) {
+        while (vim_strchr("$@&", *arg) != NULL) {
+          arg++;
+        }
+        arg = skipwhite(find_name_end(arg, NULL, NULL, FNE_INCL_BR));
+        if (arg[0] == '=' && arg[1] == '<' && arg[2] == '<') {
           p = skipwhite(arg + 3);
           while (true) {
             if (strncmp(p, "trim", 4) == 0) {
