@@ -1,9 +1,7 @@
-# Luarocks recipe. Luarocks is only required when building Neovim.
+# Luarocks recipe. Luarocks is only required when testing Neovim.
 # NOTE: LuaRocks rocks need to "DEPENDS" on the previous module, because
 #       running luarocks in parallel will break, e.g. when some rocks have
 #       the same dependency.
-
-option(USE_BUNDLED_BUSTED "Use the bundled version of busted to run tests." ON)
 
 # The luarocks binary location
 set(LUAROCKS_BINARY ${DEPS_BIN_DIR}/luarocks)
@@ -33,7 +31,7 @@ if(UNIX)
     find_package(Luajit)
     if(LUAJIT_FOUND)
       list(APPEND LUAROCKS_OPTS
-        --with-lua-include=${LUAJIT_INCLUDE_DIRS}
+        --with-lua-include=${LUAJIT_INCLUDE_DIR}
         --with-lua-interpreter=luajit)
     endif()
 
@@ -48,7 +46,7 @@ if(UNIX)
       OUTPUT_VARIABLE LUA_VERSION
       ERROR_VARIABLE ERR
       RESULT_VARIABLE RES)
-    if(NOT RES EQUAL 0)
+    if(RES)
       message(FATAL_ERROR "Could not get LUA_VERSION with ${LUA_EXE}: ${ERR}")
     endif()
   endif()
@@ -119,19 +117,17 @@ function(Download ROCK VER)
   set(CURRENT_DEP ${ROCK} PARENT_SCOPE)
 endfunction()
 
-if(USE_BUNDLED_BUSTED)
-  if(WIN32)
-    set(BUSTED_EXE "${DEPS_BIN_DIR}/busted.bat")
-    set(LUACHECK_EXE "${DEPS_BIN_DIR}/luacheck.bat")
-  else()
-    set(BUSTED_EXE "${DEPS_BIN_DIR}/busted")
-    set(LUACHECK_EXE "${DEPS_BIN_DIR}/luacheck")
-  endif()
+if(WIN32)
+  set(BUSTED_EXE "${DEPS_BIN_DIR}/busted.bat")
+  set(LUACHECK_EXE "${DEPS_BIN_DIR}/luacheck.bat")
+else()
+  set(BUSTED_EXE "${DEPS_BIN_DIR}/busted")
+  set(LUACHECK_EXE "${DEPS_BIN_DIR}/luacheck")
+endif()
 
-  Download(busted 2.1.1 ${BUSTED_EXE})
-  Download(luacheck 1.1.0-1 ${LUACHECK_EXE})
+Download(busted 2.1.1 ${BUSTED_EXE})
+Download(luacheck 1.1.0-1 ${LUACHECK_EXE})
 
-  if (USE_BUNDLED_LUA OR NOT USE_BUNDLED_LUAJIT)
-    Download(coxpcall 1.17.0-1)
-  endif()
+if (USE_BUNDLED_LUA OR NOT USE_BUNDLED_LUAJIT)
+  Download(coxpcall 1.17.0-1)
 endif()

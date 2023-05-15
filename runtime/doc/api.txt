@@ -411,7 +411,7 @@ use >lua
   extid = vim.api.nvim_buf_set_extmark(buf, ns_id, line, col_start, {end_col = col_end, hl_group = hl_group})
 
   -- example: modify the extmark's highlight group
-  vim.api.nvim_buf_set_extmark(buf, ns_id, NEW_HL_GROUP, line, col_start, {end_col = col_end, hl_group = hl_group, id = extid})
+  vim.api.nvim_buf_set_extmark(buf, ns_id, line, col_start, {end_col = col_end, hl_group = NEW_HL_GROUP, id = extid})
 
   -- example: change the highlight's position
   vim.api.nvim_buf_set_extmark(buf, ns_id, NEW_LINE, col_start, {end_col = col_end, hl_group = NEW_HL_GROUP, id = extid})
@@ -1795,6 +1795,7 @@ nvim_create_user_command({name}, {command}, {*opts})
                    • fargs: (table) The args split by unescaped whitespace
                      (when more than one argument is allowed), if any
                      |<f-args>|
+                   • nargs: (string) Number of arguments |:command-nargs|
                    • bang: (boolean) "true" if the command was executed with a
                      ! modifier |<bang>|
                    • line1: (number) The starting line of the command range

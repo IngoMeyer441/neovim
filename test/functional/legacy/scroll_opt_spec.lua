@@ -548,21 +548,21 @@ describe('smoothscroll', function()
     exec('set scrolloff=0')
     feed('0j')
     screen:expect([[
-      <<<of text with lots of text with lots o|
-      f text with lots of text end            |
-      ^four                                    |
-      ~                                       |
-      ~                                       |
-                                              |
-    ]])
-    -- Test zt/zz/zb that they work properly when a long line is above it
-    feed('zb')
-    screen:expect([[
       <<<th lots of text with lots of text wit|
       h lots of text with lots of text with lo|
       ts of text with lots of text with lots o|
       f text with lots of text end            |
       ^four                                    |
+                                              |
+    ]])
+    -- Test zt/zz/zb that they work properly when a long line is above it
+    feed('zt')
+    screen:expect([[
+      ^four                                    |
+      ~                                       |
+      ~                                       |
+      ~                                       |
+      ~                                       |
                                               |
     ]])
     feed('zz')
@@ -574,21 +574,7 @@ describe('smoothscroll', function()
       ~                                       |
                                               |
     ]])
-    feed('zt')
-    screen:expect([[
-      ^four                                    |
-      ~                                       |
-      ~                                       |
-      ~                                       |
-      ~                                       |
-                                              |
-    ]])
-    -- Repeat the step and move the cursor down again.
-    -- This time, use a shorter long line that is barely long enough to span more
-    -- than one window. Note that the cursor is at the bottom this time because
-    -- Vim prefers to do so if we are scrolling a few lines only.
-    exec("call setline(1, ['one', 'two', 'Line' .. (' with lots of text'->repeat(10)) .. ' end', 'four'])")
-    feed('3Gztj')
+    feed('zb')
     screen:expect([[
       <<<th lots of text with lots of text wit|
       h lots of text with lots of text with lo|
@@ -597,6 +583,16 @@ describe('smoothscroll', function()
       ^four                                    |
                                               |
     ]])
+    -- Repeat the step and move the cursor down again.
+    -- This time, use a shorter long line that is barely long enough to span more
+    -- than one window. Note that the cursor is at the bottom this time because
+    -- Vim prefers to do so if we are scrolling a few lines only.
+    exec("call setline(1, ['one', 'two', 'Line' .. (' with lots of text'->repeat(10)) .. ' end', 'four'])")
+    -- Currently visible lines were replaced, test that the lines and cursor
+    -- are correctly displayed.
+    screen:expect_unchanged()
+    feed('3Gztj')
+    screen:expect_unchanged()
     -- Repeat the step but this time start it when the line is smooth-scrolled by
     -- one line. This tests that the offset calculation is still correct and
     -- still end up scrolling down to the next line with cursor at bottom of
@@ -696,7 +692,7 @@ describe('smoothscroll', function()
   end)
 
   -- oldtest: Test_smoothscroll_ins_lines()
-  it("this was unnecessarily inserting lines", function()
+  it("does not unnecessarily insert lines", function()
     screen:try_resize(40, 6)
     exec([=[
       set wrap smoothscroll scrolloff=0 conceallevel=2 concealcursor=nc
@@ -715,6 +711,67 @@ describe('smoothscroll', function()
       line three                              |
       line four                               |
       line five                               |
+                                              |
+    ]])
+  end)
+
+  -- oldtest: Test_smoothscroll_cursormoved_line()
+  it("does not place the cursor in the command line", function()
+    screen:try_resize(40, 6)
+    exec([=[
+      set smoothscroll
+      call setline(1, [
+        \'',
+        \'_'->repeat(&lines * &columns),
+        \(('_')->repeat(&columns - 2) .. 'xxx')->repeat(2)
+      \])
+      autocmd CursorMoved * eval [line('w0'), line('w$')]
+      call search('xxx')
+    ]=])
+    screen:expect([[
+      <<<_____________________________________|
+      ________________________________________|
+      ______________________________________^xx|
+      x______________________________________x|
+      xx                                      |
+                                              |
+    ]])
+  end)
+
+  -- oldtest: Test_smoothscroll_eob()
+  it("does not scroll halfway at end of buffer", function()
+    screen:try_resize(40, 10)
+    exec([[
+      set smoothscroll
+      call setline(1, ['']->repeat(100))
+      norm G
+    ]])
+    -- does not scroll halfway when scrolling to end of buffer
+    screen:expect([[
+                                              |
+                                              |
+                                              |
+                                              |
+                                              |
+                                              |
+                                              |
+                                              |
+      ^                                        |
+                                              |
+    ]])
+    exec("call setline(92, 'a'->repeat(100))")
+    feed('<C-B>G')
+    -- cursor is not placed below window
+    screen:expect([[
+      <<<aaaaaaaaaaaaaaaaa                    |
+                                              |
+                                              |
+                                              |
+                                              |
+                                              |
+                                              |
+                                              |
+      ^                                        |
                                               |
     ]])
   end)

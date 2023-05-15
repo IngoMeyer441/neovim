@@ -9,7 +9,7 @@ if(TARGET libuv::uv_a)
 else()
   # Fall back to find module for older libuv versions that don't provide config file
   find_package(Libuv 1.28.0 REQUIRED MODULE)
-  target_include_directories(libuv SYSTEM BEFORE INTERFACE ${LIBUV_INCLUDE_DIRS})
+  target_include_directories(libuv SYSTEM BEFORE INTERFACE ${LIBUV_INCLUDE_DIR})
   target_link_libraries(libuv INTERFACE ${LIBUV_LIBRARIES})
 endif()
 
@@ -21,9 +21,9 @@ elseif(APPLE)
   set_target_properties(nlua0 PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
 endif()
 
-find_package(Libluv 1.43.0 REQUIRED)
-target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LIBLUV_INCLUDE_DIR})
-target_link_libraries(main_lib INTERFACE ${LIBLUV_LIBRARY})
+find_package(Luv 1.43.0 REQUIRED)
+target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LUV_INCLUDE_DIR})
+target_link_libraries(main_lib INTERFACE ${LUV_LIBRARY})
 
 find_package(Iconv REQUIRED)
 find_package(Lpeg REQUIRED)
@@ -61,11 +61,11 @@ if(PREFER_LUA)
   find_package(Luajit)
 else()
   find_package(Luajit REQUIRED)
-  target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LUAJIT_INCLUDE_DIRS})
-  target_link_libraries(main_lib INTERFACE ${LUAJIT_LIBRARIES})
-  target_include_directories(nlua0 SYSTEM BEFORE PUBLIC ${LUAJIT_INCLUDE_DIRS})
+  target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LUAJIT_INCLUDE_DIR})
+  target_link_libraries(main_lib INTERFACE ${LUAJIT_LIBRARY})
+  target_include_directories(nlua0 SYSTEM BEFORE PUBLIC ${LUAJIT_INCLUDE_DIR})
   if(WIN32)
-    target_link_libraries(nlua0 PUBLIC ${LUAJIT_LIBRARIES})
+    target_link_libraries(nlua0 PUBLIC ${LUAJIT_LIBRARY})
   endif()
 endif()
 
@@ -292,6 +292,7 @@ set(LUA_FILETYPE_MODULE_SOURCE ${PROJECT_SOURCE_DIR}/runtime/lua/vim/filetype.lu
 set(LUA_INIT_PACKAGES_MODULE_SOURCE ${PROJECT_SOURCE_DIR}/runtime/lua/vim/_init_packages.lua)
 set(LUA_KEYMAP_MODULE_SOURCE ${PROJECT_SOURCE_DIR}/runtime/lua/vim/keymap.lua)
 set(CHAR_BLOB_GENERATOR ${GENERATOR_DIR}/gen_char_blob.lua)
+set(LUAJIT_RUNTIME_DIR ${DEPS_PREFIX}/share/luajit-2.1.0-beta3/jit)
 
 glob_wrapper(UNICODE_FILES ${UNICODE_DIR}/*.txt)
 glob_wrapper(API_HEADERS api/*.h)
@@ -797,6 +798,15 @@ endif()
 install(DIRECTORY ${BINARY_LIB_DIR}
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/nvim/
   USE_SOURCE_PERMISSIONS)
+
+if(NOT PREFER_LUA)
+  # install luajit runtime files if bundled
+  if(EXISTS ${LUAJIT_RUNTIME_DIR})
+    install(DIRECTORY ${LUAJIT_RUNTIME_DIR}
+      DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/nvim/runtime/lua
+      USE_SOURCE_PERMISSIONS)
+  endif()
+endif()
 
 add_library(libnvim STATIC EXCLUDE_FROM_ALL)
 if(MSVC)

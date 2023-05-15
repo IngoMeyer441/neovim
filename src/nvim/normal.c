@@ -107,6 +107,8 @@ static int VIsual_mode_orig = NUL;              // saved Visual mode
 #endif
 
 static const char e_changelist_is_empty[] = N_("E664: Changelist is empty");
+static const char e_cmdline_window_already_open[]
+  = N_("E1292: Command-line window is already open");
 
 static inline void normal_state_init(NormalState *s)
 {
@@ -3232,7 +3234,7 @@ static void nv_colon(cmdarg_T *cap)
   }
 
   if (is_lua) {
-    cmd_result = map_execute_lua();
+    cmd_result = map_execute_lua(true);
   } else {
     // get a command line and execute it
     cmd_result = do_cmdline(NULL, is_cmdkey ? getcmdkeycmd : getexline, NULL,
@@ -5272,6 +5274,7 @@ static void nv_g_home_m_cmd(cmdarg_T *cap)
     curwin->w_valid &= ~VALID_WCOL;
   }
   curwin->w_set_curswant = true;
+  adjust_skipcol();
 }
 
 /// "g_": to the last non-blank character in the line or <count> lines downward.
@@ -6371,6 +6374,10 @@ static void nv_record(cmdarg_T *cap)
   }
 
   if (cap->nchar == ':' || cap->nchar == '/' || cap->nchar == '?') {
+    if (cmdwin_type != 0) {
+      emsg(_(e_cmdline_window_already_open));
+      return;
+    }
     stuffcharReadbuff(cap->nchar);
     stuffcharReadbuff(K_CMDWIN);
   } else {

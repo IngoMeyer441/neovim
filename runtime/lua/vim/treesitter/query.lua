@@ -609,10 +609,10 @@ end
 ---
 --- {source} is needed if the query contains predicates; then the caller
 --- must ensure to use a freshly parsed tree consistent with the current
---- text of the buffer (if relevant). {start_row} and {end_row} can be used to limit
+--- text of the buffer (if relevant). {start} and {stop} can be used to limit
 --- matches inside a row range (this is typically used with root node
 --- as the {node}, i.e., to get syntax highlight matches in the current
---- viewport). When omitted, the {start} and {end} row values are used from the given node.
+--- viewport). When omitted, the {start} and {stop} row values are used from the given node.
 ---
 --- The iterator returns three values: a numeric id identifying the capture,
 --- the captured node, and metadata from any directives processing the match.
@@ -686,16 +686,20 @@ end
 ---@param source (integer|string) Source buffer or string to search
 ---@param start integer Starting line for the search
 ---@param stop integer Stopping line for the search (end-exclusive)
+---@param opts table|nil Options:
+---   - max_start_depth (integer) if non-zero, sets the maximum start depth
+---     for each match. This is used to prevent traversing too deep into a tree.
+---     Requires treesitter >= 0.20.9.
 ---
 ---@return (fun(): integer, table<integer,TSNode>, table): pattern id, match, metadata
-function Query:iter_matches(node, source, start, stop)
+function Query:iter_matches(node, source, start, stop, opts)
   if type(source) == 'number' and source == 0 then
     source = api.nvim_get_current_buf()
   end
 
   start, stop = value_or_node_range(start, stop, node)
 
-  local raw_iter = node:_rawquery(self.query, false, start, stop)
+  local raw_iter = node:_rawquery(self.query, false, start, stop, opts)
   ---@cast raw_iter fun(): string, any
   local function iter()
     local pattern, match = raw_iter()

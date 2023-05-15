@@ -323,11 +323,11 @@ func Test_smoothscroll_wrap_long_line()
   call VerifyScreenDump(buf, 'Test_smooth_long_10', {})
 
   " Test zt/zz/zb that they work properly when a long line is above it
-  call term_sendkeys(buf, "zb")
+  call term_sendkeys(buf, "zt")
   call VerifyScreenDump(buf, 'Test_smooth_long_11', {})
   call term_sendkeys(buf, "zz")
   call VerifyScreenDump(buf, 'Test_smooth_long_12', {})
-  call term_sendkeys(buf, "zt")
+  call term_sendkeys(buf, "zb")
   call VerifyScreenDump(buf, 'Test_smooth_long_13', {})
 
   " Repeat the step and move the cursor down again.
@@ -335,9 +335,12 @@ func Test_smoothscroll_wrap_long_line()
   " than one window. Note that the cursor is at the bottom this time because
   " Vim prefers to do so if we are scrolling a few lines only.
   call term_sendkeys(buf, ":call setline(1, ['one', 'two', 'Line' .. (' with lots of text'->repeat(10)) .. ' end', 'four'])\<CR>")
+  " Currently visible lines were replaced, test that the lines and cursor
+  " are correctly displayed.
+  call VerifyScreenDump(buf, 'Test_smooth_long_14', {})
   call term_sendkeys(buf, "3Gzt")
   call term_sendkeys(buf, "j")
-  call VerifyScreenDump(buf, 'Test_smooth_long_14', {})
+  call VerifyScreenDump(buf, 'Test_smooth_long_15', {})
 
   " Repeat the step but this time start it when the line is smooth-scrolled by
   " one line. This tests that the offset calculation is still correct and
@@ -345,7 +348,7 @@ func Test_smoothscroll_wrap_long_line()
   " screen.
   call term_sendkeys(buf, "3Gzt")
   call term_sendkeys(buf, "\<C-E>j")
-  call VerifyScreenDump(buf, 'Test_smooth_long_15', {})
+  call VerifyScreenDump(buf, 'Test_smooth_long_16', {})
   
   call StopVimInTerminal(buf)
 endfunc
@@ -416,6 +419,17 @@ func Test_smoothscroll_cursor_position()
   exe "normal \<C-Y>"
   call s:check_col_calc(1, 3, 41)
 
+   " Test "g0/g<Home>"
+  exe "normal gg\<C-E>"
+  norm $gkg0
+  call s:check_col_calc(1, 2, 21)
+
+  " Test moving the cursor behind the <<< display with 'virtualedit'
+  set virtualedit=all
+  exe "normal \<C-E>3lgkh"
+  call s:check_col_calc(3, 2, 23)
+  set virtualedit&
+
   normal gg3l
   exe "normal \<C-E>"
 
@@ -482,6 +496,16 @@ func Test_smoothscroll_cursor_position()
   call s:check_col_calc(1, 2, 37)
   exe "normal \<C-Y>"
   call s:check_col_calc(1, 3, 37)
+  normal gg
+
+  " Test list + listchars "precedes", where there is always 1 overlap
+  " regardless of number and cpo-=n.
+  setl number list listchars=precedes:< cpo-=n
+  call s:check_col_calc(5, 1, 1)
+  exe "normal 2|\<C-E>"
+  call s:check_col_calc(6, 1, 18)
+  norm h
+  call s:check_col_calc(5, 2, 17)
   normal gg
 
   bwipe!
@@ -634,6 +658,49 @@ func Test_smoothscroll_ins_lines()
 
   call term_sendkeys(buf, "\<C-E>gjgk")
   call VerifyScreenDump(buf, 'Test_smooth_ins_lines', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+" this placed the cursor in the command line
+func Test_smoothscroll_cursormoved_line()
+  CheckScreendump
+
+  let lines =<< trim END
+      set smoothscroll
+      call setline(1, [
+        \'',
+        \'_'->repeat(&lines * &columns),
+        \(('_')->repeat(&columns - 2) .. 'xxx')->repeat(2)
+      \])
+      autocmd CursorMoved * eval [line('w0'), line('w$')]
+      call search('xxx')
+  END
+  call writefile(lines, 'XSmoothCursorMovedLine', 'D')
+  let buf = RunVimInTerminal('-S XSmoothCursorMovedLine', #{rows: 6})
+
+  call VerifyScreenDump(buf, 'Test_smooth_cursormoved_line', {})
+
+  call StopVimInTerminal(buf)
+endfunc
+
+func Test_smoothscroll_eob()
+  CheckScreendump
+
+  let lines =<< trim END
+      set smoothscroll
+      call setline(1, ['']->repeat(100))
+      norm G
+  END
+  call writefile(lines, 'XSmoothEob', 'D')
+  let buf = RunVimInTerminal('-S XSmoothEob', #{rows: 10})
+
+  " does not scroll halfway when scrolling to end of buffer
+  call VerifyScreenDump(buf, 'Test_smooth_eob_1', {})
+
+  " cursor is not placed below window
+  call term_sendkeys(buf, ":call setline(92, 'a'->repeat(100))\<CR>\<C-B>G")
+  call VerifyScreenDump(buf, 'Test_smooth_eob_2', {})
 
   call StopVimInTerminal(buf)
 endfunc
