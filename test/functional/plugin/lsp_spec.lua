@@ -33,7 +33,9 @@ local test_rpc_server = lsp_helpers.test_rpc_server
 
 local function get_buf_option(name, bufnr)
     bufnr = bufnr or "BUFFER"
-    return exec_lua(string.format("return vim.api.nvim_buf_get_option(%s, '%s')", bufnr, name))
+    return exec_lua(
+      string.format("return vim.api.nvim_get_option_value('%s', { buf = %s })", name, bufnr)
+    )
 end
 
 -- TODO(justinmk): hangs on Windows https://github.com/neovim/neovim/pull/11837
@@ -356,8 +358,8 @@ describe('LSP', function()
             vim.api.nvim_command('filetype plugin on')
             BUFFER_1 = vim.api.nvim_create_buf(false, true)
             BUFFER_2 = vim.api.nvim_create_buf(false, true)
-            vim.api.nvim_buf_set_option(BUFFER_1, 'filetype', 'man')
-            vim.api.nvim_buf_set_option(BUFFER_2, 'filetype', 'xml')
+            vim.api.nvim_set_option_value('filetype', 'man', { buf = BUFFER_1 })
+            vim.api.nvim_set_option_value('filetype', 'xml', { buf = BUFFER_2 })
           ]]
 
           -- Sanity check to ensure that some values are set after setting filetype.
@@ -394,9 +396,9 @@ describe('LSP', function()
           client = _client
           exec_lua [[
             BUFFER = vim.api.nvim_create_buf(false, true)
-            vim.api.nvim_buf_set_option(BUFFER, 'tagfunc', 'tfu')
-            vim.api.nvim_buf_set_option(BUFFER, 'omnifunc', 'ofu')
-            vim.api.nvim_buf_set_option(BUFFER, 'formatexpr', 'fex')
+            vim.api.nvim_set_option_value('tagfunc', 'tfu', { buf = BUFFER })
+            vim.api.nvim_set_option_value('omnifunc', 'ofu', { buf = BUFFER })
+            vim.api.nvim_set_option_value('formatexpr', 'fex', { buf = BUFFER })
             lsp.buf_attach_client(BUFFER, TEST_RPC_CLIENT_ID)
           ]]
         end;
@@ -1166,7 +1168,7 @@ describe('LSP', function()
               "testing";
               "123";
             })
-            vim.api.nvim_buf_set_option(BUFFER, 'eol', false)
+            vim.bo[BUFFER].eol = false
           ]]
         end;
         on_init = function(_client)
@@ -2929,8 +2931,8 @@ describe('LSP', function()
   describe('lsp.util.get_effective_tabstop', function()
     local function test_tabstop(tabsize, shiftwidth)
       exec_lua(string.format([[
-        vim.api.nvim_buf_set_option(0, 'shiftwidth', %d)
-        vim.api.nvim_buf_set_option(0, 'tabstop', 2)
+        vim.bo.shiftwidth = %d
+        vim.bo.tabstop = 2
       ]], shiftwidth))
       eq(tabsize, exec_lua('return vim.lsp.util.get_effective_tabstop()'))
     end
@@ -3778,6 +3780,13 @@ describe('LSP', function()
           name = 'watchfiles-test',
           cmd = server.cmd,
           root_dir = root_dir,
+          capabilities = {
+            workspace = {
+              didChangeWatchedFiles = {
+                dynamicRegistration = true,
+              },
+            },
+          },
         })
 
         local expected_messages = 2 -- initialize, initialized
@@ -3865,6 +3874,13 @@ describe('LSP', function()
           name = 'watchfiles-test',
           cmd = server.cmd,
           root_dir = root_dir,
+          capabilities = {
+            workspace = {
+              didChangeWatchedFiles = {
+                dynamicRegistration = true,
+              },
+            },
+          },
         })
 
         local expected_messages = 2 -- initialize, initialized
@@ -3982,6 +3998,13 @@ describe('LSP', function()
           name = 'watchfiles-test',
           cmd = server.cmd,
           root_dir = root_dir,
+          capabilities = {
+            workspace = {
+              didChangeWatchedFiles = {
+                dynamicRegistration = true,
+              },
+            },
+          },
         })
 
         local expected_messages = 2 -- initialize, initialized
@@ -4116,6 +4139,13 @@ describe('LSP', function()
           name = 'watchfiles-test',
           cmd = server.cmd,
           root_dir = root_dir,
+          capabilities = {
+            workspace = {
+              didChangeWatchedFiles = {
+                dynamicRegistration = true,
+              },
+            },
+          },
         })
 
         local expected_messages = 2 -- initialize, initialized
@@ -4185,6 +4215,62 @@ describe('LSP', function()
           },
         },
       }, result[3].params)
+    end)
+
+    it("ignores registrations by servers when the client doesn't advertise support", function()
+      exec_lua(create_server_definition)
+      local result = exec_lua([[
+        local server = _create_server()
+        local client_id = vim.lsp.start({
+          name = 'watchfiles-test',
+          cmd = server.cmd,
+          root_dir = 'some_dir',
+          capabilities = {
+            workspace = {
+              didChangeWatchedFiles = {
+                dynamicRegistration = false,
+              },
+            },
+          },
+        })
+
+        local watching = false
+        require('vim.lsp._watchfiles')._watchfunc = function(_, _, callback)
+          -- Since the registration is ignored, this should not execute and `watching` should stay false
+          watching = true
+          return function() end
+        end
+
+        vim.lsp.handlers['client/registerCapability'](nil, {
+          registrations = {
+            {
+              id = 'watchfiles-test-kind',
+              method = 'workspace/didChangeWatchedFiles',
+              registerOptions = {
+                watchers = {
+                  {
+                    globPattern = '**/*',
+                  },
+                },
+              },
+            },
+          },
+        }, { client_id = client_id })
+
+        -- Ensure no errors occur when unregistering something that was never really registered.
+        vim.lsp.handlers['client/unregisterCapability'](nil, {
+          unregisterations = {
+            {
+              id = 'watchfiles-test-kind',
+              method = 'workspace/didChangeWatchedFiles',
+            },
+          },
+        }, { client_id = client_id })
+
+        return watching
+      ]])
+
+      eq(false, result)
     end)
   end)
 end)

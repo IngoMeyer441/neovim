@@ -836,6 +836,7 @@ if(ENABLE_ASAN_UBSAN)
     -fsanitize=address
     -fsanitize=undefined)
   target_link_libraries(nvim PRIVATE -fsanitize=address -fsanitize=undefined)
+  target_compile_definitions(nvim PRIVATE ENABLE_ASAN_UBSAN)
 elseif(ENABLE_MSAN)
   message(STATUS "Enabling memory sanitizer for nvim.")
   target_compile_options(nvim PRIVATE
@@ -887,18 +888,13 @@ add_glob_target(
   EXCLUDE
     tui/terminfo_defs.h)
 
-add_custom_target(uncrustify-version
-  COMMAND ${CMAKE_COMMAND}
-    -D UNCRUSTIFY_PRG=${UNCRUSTIFY_PRG}
-    -D CONFIG_FILE=${PROJECT_SOURCE_DIR}/src/uncrustify.cfg
-    -P ${PROJECT_SOURCE_DIR}/cmake/CheckUncrustifyVersion.cmake)
-
+set(UNCRUSTIFY_PRG ${DEPS_BIN_DIR}/uncrustify)
 add_glob_target(
   TARGET lintc-uncrustify
   COMMAND ${UNCRUSTIFY_PRG}
   FLAGS -c "${PROJECT_SOURCE_DIR}/src/uncrustify.cfg" -q --check
   FILES ${LINT_NVIM_SOURCES})
-add_dependencies(lintc-uncrustify uncrustify-version)
+add_dependencies(lintc-uncrustify uncrustify)
 
 add_custom_target(lintc)
 add_dependencies(lintc lintc-clint lintc-uncrustify)
@@ -909,7 +905,7 @@ add_custom_target(formatc
     -D LANG=c
     -P ${PROJECT_SOURCE_DIR}/cmake/Format.cmake
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-add_dependencies(formatc uncrustify-version)
+add_dependencies(formatc uncrustify)
 
 add_custom_target(generated-sources DEPENDS
   ${NVIM_GENERATED_FOR_SOURCES}
