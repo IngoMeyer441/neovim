@@ -78,18 +78,6 @@ jobs:
         name: uncrustify
         run: cmake --build build --target lintc-uncrustify
 
-      - if: success() || failure() && steps.abort_job.outputs.status == 'success'
-        name: suggester / uncrustify
-        uses: reviewdog/action-suggester@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tool_name: uncrustify
-          cleanup: false
-
-      - if: success() || failure() && steps.abort_job.outputs.status == 'success'
-        name: check uncrustify
-        run: git diff --color --exit-code
-
   posix:
     name: ${{ matrix.runner }} ${{ matrix.flavor }} (cc=${{ matrix.cc }})
     strategy:
@@ -179,15 +167,10 @@ jobs:
         timeout-minutes: 5
         run: cmake --build build --target unittest
 
-      - if: matrix.flavor != 'functionaltest-lua' && (success() || failure() && steps.abort_job.outputs.status == 'success')
+      - if: success() || failure() && steps.abort_job.outputs.status == 'success'
         name: Functionaltest
         timeout-minutes: 20
         run: cmake --build build --target functionaltest
-
-      - if: matrix.flavor == 'functionaltest-lua' && (success() || failure() && steps.abort_job.outputs.status == 'success')
-        name: Functionaltest with PUC Lua
-        timeout-minutes: 20
-        run: cmake --build build --target functionaltest-lua
 
       - if: matrix.flavor != 'tsan' && (success() || failure() && steps.abort_job.outputs.status == 'success')
         name: Oldtest

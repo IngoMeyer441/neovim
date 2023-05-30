@@ -241,6 +241,7 @@ local extension = {
   copyright = function(path, bufnr)
     return require('vim.filetype.detect').copyright(bufnr)
   end,
+  corn = 'corn',
   csh = function(path, bufnr)
     return require('vim.filetype.detect').csh(path, bufnr)
   end,
@@ -1547,6 +1548,7 @@ local filename = {
   ['man.config'] = 'manconf',
   ['maxima-init.mac'] = 'maxima',
   ['meson.build'] = 'meson',
+  ['meson.options'] = 'meson',
   ['meson_options.txt'] = 'meson',
   ['/etc/conf.modules'] = 'modconf',
   ['/etc/modules'] = 'modconf',

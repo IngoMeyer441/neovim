@@ -42,7 +42,10 @@ describe("folded lines", function()
         [9] = {bold = true, foreground = Screen.colors.Brown},
         [10] = {background = Screen.colors.LightGrey, underline = true},
         [11] = {bold=true},
-        [12] = {background = Screen.colors.Grey90},
+        [12] = {foreground = Screen.colors.Red},
+        [13] = {foreground = Screen.colors.Red, background = Screen.colors.LightGrey},
+        [14] = {background = Screen.colors.Red},
+        [15] = {foreground = Screen.colors.DarkBlue, background = Screen.colors.Red},
       })
     end)
 
@@ -86,7 +89,7 @@ describe("folded lines", function()
       end
     end)
 
-    it("highlights with CursorLineFold when 'cursorline' is set", function()
+    local function test_folded_cursorline()
       command("set number cursorline foldcolumn=2")
       command("hi link CursorLineFold Search")
       insert(content1)
@@ -138,7 +141,7 @@ describe("folded lines", function()
           [2:---------------------------------------------]|
           [3:---------------------------------------------]|
         ## grid 2
-          {6:+ }{9:  1 }{12:^+--  4 lines: This is a················}|
+          {6:+ }{9:  1 }{13:^+--  4 lines: This is a················}|
           {7:  }{8:  5 }in his cave.                           |
           {7:  }{8:  6 }                                       |
           {1:~                                            }|
@@ -150,7 +153,7 @@ describe("folded lines", function()
         ]])
       else
         screen:expect([[
-          {6:+ }{9:  1 }{12:^+--  4 lines: This is a················}|
+          {6:+ }{9:  1 }{13:^+--  4 lines: This is a················}|
           {7:  }{8:  5 }in his cave.                           |
           {7:  }{8:  6 }                                       |
           {1:~                                            }|
@@ -179,7 +182,7 @@ describe("folded lines", function()
           [2:---------------------------------------------]|
           [3:---------------------------------------------]|
         ## grid 2
-          {7:+ }{8:  1 }{12:^+--  4 lines: This is a················}|
+          {7:+ }{8:  1 }{13:^+--  4 lines: This is a················}|
           {7:  }{8:  5 }in his cave.                           |
           {7:  }{8:  6 }                                       |
           {1:~                                            }|
@@ -191,7 +194,7 @@ describe("folded lines", function()
         ]])
       else
         screen:expect([[
-          {7:+ }{8:  1 }{12:^+--  4 lines: This is a················}|
+          {7:+ }{8:  1 }{13:^+--  4 lines: This is a················}|
           {7:  }{8:  5 }in his cave.                           |
           {7:  }{8:  6 }                                       |
           {1:~                                            }|
@@ -236,6 +239,22 @@ describe("folded lines", function()
                                                        |
         ]])
       end
+    end
+
+    describe("when 'cursorline' is set", function()
+      it('with high-priority CursorLine', function()
+        command("hi! CursorLine guibg=NONE guifg=Red gui=NONE")
+        test_folded_cursorline()
+      end)
+
+      it('with low-priority CursorLine', function()
+        command("hi! CursorLine guibg=NONE guifg=NONE gui=underline")
+        local attrs = screen:get_default_attr_ids()
+        attrs[12] = {underline = true}
+        attrs[13] = {foreground = Screen.colors.DarkBlue, background = Screen.colors.LightGrey, underline = true}
+        screen:set_default_attr_ids(attrs)
+        test_folded_cursorline()
+      end)
     end)
 
     it("work with spell", function()
@@ -2010,6 +2029,57 @@ describe("folded lines", function()
           line 5                                       |
           {1:~                                            }|
                                                        |
+        ]])
+      end
+    end)
+
+    it('Folded and Visual highlights are combined #19691', function()
+      command('hi! Visual guibg=Red')
+      insert([[
+        " foo
+        " {{{1
+        set nocp
+        " }}}1
+        " bar
+        " {{{1
+        set foldmethod=marker
+        " }}}1
+        " baz]])
+      feed('gg')
+      command('source')
+      feed('<C-V>G3l')
+      if multigrid then
+        screen:expect([[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [3:---------------------------------------------]|
+        ## grid 2
+          {14:" fo}o                                        |
+          {15:+-- }{5: 3 lines: "······························}|
+          {14:" ba}r                                        |
+          {15:+-- }{5: 3 lines: "······························}|
+          {14:" b}^az                                        |
+          {1:~                                            }|
+          {1:~                                            }|
+        ## grid 3
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      else
+        screen:expect([[
+          {14:" fo}o                                        |
+          {15:+-- }{5: 3 lines: "······························}|
+          {14:" ba}r                                        |
+          {15:+-- }{5: 3 lines: "······························}|
+          {14:" b}^az                                        |
+          {1:~                                            }|
+          {1:~                                            }|
+          {11:-- VISUAL BLOCK --}                           |
         ]])
       end
     end)

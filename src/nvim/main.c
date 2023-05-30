@@ -49,6 +49,7 @@
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
 #include "nvim/lua/executor.h"
+#include "nvim/lua/secure.h"
 #include "nvim/macros.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
@@ -248,6 +249,11 @@ int main(int argc, char **argv)
 #endif
 
   argv0 = argv[0];
+
+  if (!appname_is_valid()) {
+    os_errmsg("$NVIM_APPNAME is not a valid file name.\n");
+    exit(1);
+  }
 
   if (argc > 1 && STRICMP(argv[1], "-ll") == 0) {
     if (argc == 2) {
@@ -1055,6 +1061,10 @@ static void command_line_scan(mparm_T *parmp)
           version();
           os_exit(0);
         } else if (STRICMP(argv[0] + argv_idx, "api-info") == 0) {
+#ifdef MSWIN
+          // set stdout to binary to avoid crlf in --api-info output
+          _setmode(STDOUT_FILENO, _O_BINARY);
+#endif
           FileDescriptor fp;
           const int fof_ret = file_open_fd(&fp, STDOUT_FILENO,
                                            kFileWriteOnly);

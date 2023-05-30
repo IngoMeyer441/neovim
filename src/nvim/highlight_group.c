@@ -697,10 +697,18 @@ int load_colors(char *name)
   char *buf = xmalloc(buflen);
   apply_autocmds(EVENT_COLORSCHEMEPRE, name, curbuf->b_fname, false, curbuf);
   snprintf(buf, buflen, "colors/%s.vim", name);
-  int retval = source_runtime(buf, DIP_START + DIP_OPT);
+  int retval = source_runtime(buf, 0);
   if (retval == FAIL) {
     snprintf(buf, buflen, "colors/%s.lua", name);
-    retval = source_runtime(buf, DIP_START + DIP_OPT);
+    retval = source_runtime(buf, 0);
+  }
+  if (retval == FAIL) {
+    snprintf(buf, buflen, "colors/%s.vim", name);
+    retval = source_runtime(buf, DIP_NORTP + DIP_START + DIP_OPT);
+  }
+  if (retval == FAIL) {
+    snprintf(buf, buflen, "colors/%s.lua", name);
+    retval = source_runtime(buf, DIP_NORTP + DIP_START + DIP_OPT);
   }
   xfree(buf);
   if (retval == OK) {
@@ -1548,8 +1556,11 @@ static bool hlgroup2dict(Dictionary *hl, NS ns_id, int hl_id, Arena *arena)
   HlAttrs attr =
     syn_attr2entry(ns_id == 0 ? sgp->sg_attr : ns_get_hl(&ns_id, hl_id, false, sgp->sg_set));
   *hl = arena_dict(arena, HLATTRS_DICT_SIZE + 1);
+  if (attr.rgb_ae_attr & HL_DEFAULT) {
+    PUT_C(*hl, "default", BOOLEAN_OBJ(true));
+  }
   if (link > 0) {
-    PUT_C(*hl, "link", STRING_OBJ(cstr_as_string(hl_table[link - 1].sg_name)));
+    PUT_C(*hl, "link", CSTR_AS_OBJ(hl_table[link - 1].sg_name));
   }
   Dictionary hl_cterm = arena_dict(arena, HLATTRS_DICT_SIZE);
   hlattrs2dict(hl, NULL, attr, true, true);

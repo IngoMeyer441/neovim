@@ -15,7 +15,7 @@
 #include "nvim/api/ui.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
-#include "nvim/buffer_defs.h"
+#include "nvim/buffer.h"
 #include "nvim/cursor_shape.h"
 #include "nvim/drawscreen.h"
 #include "nvim/ex_getln.h"
@@ -348,6 +348,7 @@ void ui_attach_impl(UI *ui, uint64_t chanid)
 
   uis[ui_count++] = ui;
   ui_refresh_options();
+  resettitle();
 
   for (UIExtension i = kUIGlobalCount; (int)i < kUIExtCount; i++) {
     ui_set_ext_option(ui, i, ui->ui_ext[i]);
@@ -613,8 +614,8 @@ Array ui_array(void)
     PUT(info, "override", BOOLEAN_OBJ(ui->override));
 
     // TUI fields. (`stdin_fd` is intentionally omitted.)
-    PUT(info, "term_name", STRING_OBJ(cstr_to_string(ui->term_name)));
-    PUT(info, "term_background", STRING_OBJ(cstr_to_string(ui->term_background)));
+    PUT(info, "term_name", CSTR_TO_OBJ(ui->term_name));
+    PUT(info, "term_background", CSTR_TO_OBJ(ui->term_background));
     PUT(info, "term_colors", INTEGER_OBJ(ui->term_colors));
     PUT(info, "stdin_tty", BOOLEAN_OBJ(ui->stdin_tty));
     PUT(info, "stdout_tty", BOOLEAN_OBJ(ui->stdout_tty));

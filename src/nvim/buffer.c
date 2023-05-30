@@ -248,6 +248,11 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags_arg)
     return FAIL;
   }
 
+  // Do not sync this buffer yet, may first want to read the file.
+  if (curbuf->b_ml.ml_mfp != NULL) {
+    curbuf->b_ml.ml_mfp->mf_dirty = MF_DIRTY_YES_NOSYNC;
+  }
+
   // The autocommands in readfile() may change the buffer, but only AFTER
   // reading the file.
   set_bufref(&old_curbuf, curbuf);
@@ -314,6 +319,12 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags_arg)
     if (retval == OK) {
       retval = read_buffer(true, eap, flags);
     }
+  }
+
+  // Can now sync this buffer in ml_sync_all().
+  if (curbuf->b_ml.ml_mfp != NULL
+      && curbuf->b_ml.ml_mfp->mf_dirty == MF_DIRTY_YES_NOSYNC) {
+    curbuf->b_ml.ml_mfp->mf_dirty = MF_DIRTY_YES;
   }
 
   // if first time loading this buffer, init b_chartab[]
@@ -3444,7 +3455,6 @@ void resettitle(void)
 {
   ui_call_set_icon(cstr_as_string(lasticon));
   ui_call_set_title(cstr_as_string(lasttitle));
-  ui_flush();
 }
 
 #if defined(EXITFREE)
@@ -3514,23 +3524,20 @@ bool append_arg_number(win_T *wp, char *buf, int buflen, bool add_file)
     return false;
   }
 
+  const char *msg;
+  switch ((wp->w_arg_idx_invalid ? 1 : 0) + (add_file ? 2 : 0)) {
+  case 0:
+    msg = _(" (%d of %d)"); break;
+  case 1:
+    msg = _(" ((%d) of %d)"); break;
+  case 2:
+    msg = _(" (file %d of %d)"); break;
+  case 3:
+    msg = _(" (file (%d) of %d)"); break;
+  }
+
   char *p = buf + strlen(buf);  // go to the end of the buffer
-
-  // Early out if the string is getting too long
-  if (p - buf + 35 >= buflen) {
-    return false;
-  }
-
-  *p++ = ' ';
-  *p++ = '(';
-  if (add_file) {
-    STRCPY(p, "file ");
-    p += 5;
-  }
-  vim_snprintf(p, (size_t)(buflen - (p - buf)),
-               wp->w_arg_idx_invalid
-               ? "(%d) of %d)"
-               : "%d of %d)", wp->w_arg_idx + 1, ARGCOUNT);
+  vim_snprintf(p, (size_t)(buflen - (p - buf)), msg, wp->w_arg_idx + 1, ARGCOUNT);
   return true;
 }
 

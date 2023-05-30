@@ -36,6 +36,7 @@ ADDED FEATURES                                                     *news-added*
 
 The following new APIs or features were added.
 
+• Dynamic registration of LSP capabilities. An implication of this change is that checking a client's `server_capabilities` is no longer a sufficient indicator to see if a server supports a feature. Instead use `client.supports_method(<method>)`. It considers both the dynamic capabilities and static `server_capabilities`.
 • |vim.iter()| provides a generic iterator interface for tables and Lua
   iterators |luaref-in|.
 
@@ -55,6 +56,12 @@ The following new APIs or features were added.
 
 • |Query:iter_matches()| now has the ability to set the maximum start depth
   for matches.
+
+• Added inline virtual text support to |nvim_buf_set_extmark()|.
+
+• The terminal buffer now supports reflow (wrapped lines adapt when the buffer
+  is resized horizontally). Note: Lines that are not visible and kept in
+  |'scrollback'| are not reflown.
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
