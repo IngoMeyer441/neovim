@@ -666,6 +666,7 @@ describe('extmark decorations', function()
       [30] = {foreground = Screen.colors.DarkCyan, background = Screen.colors.LightGray, underline = true};
       [31] = {underline = true, foreground = Screen.colors.DarkCyan};
       [32] = {underline = true};
+      [33] = {foreground = Screen.colors.DarkBlue, background = Screen.colors.LightGray};
     }
 
     ns = meths.create_namespace 'test'
@@ -1143,6 +1144,46 @@ describe('extmark decorations', function()
                                                         |
                                                         |
       {1:~                                                 }|
+                                                        |
+    ]]}
+  end)
+
+  it('can have virtual text on folded line', function()
+    insert([[
+      11111
+      22222
+      33333]])
+    command('1,2fold')
+    command('set nowrap')
+    screen:try_resize(50, 3)
+    feed('zb')
+    -- XXX: the behavior of overlay virtual text at non-zero column is strange:
+    -- 1. With 'wrap' it is never shown.
+    -- 2. With 'nowrap' it is shown only if the extmark is hidden before leftcol.
+    meths.buf_set_extmark(0, ns, 0, 0, { virt_text = {{'AA', 'Underlined'}}, hl_mode = 'combine', virt_text_pos = 'overlay' })
+    meths.buf_set_extmark(0, ns, 0, 1, { virt_text = {{'BB', 'Underlined'}}, hl_mode = 'combine', virt_text_win_col = 10 })
+    meths.buf_set_extmark(0, ns, 0, 2, { virt_text = {{'CC', 'Underlined'}}, hl_mode = 'combine', virt_text_pos = 'right_align' })
+    screen:expect{grid=[[
+      {29:AA}{33:-  2 lin}{29:BB}{33:: 11111·····························}{29:CC}|
+      3333^3                                             |
+                                                        |
+    ]]}
+    feed('zl')
+    screen:expect{grid=[[
+      {29:AA}{33:-  2 lin}{29:BB}{33:: 11111·····························}{29:CC}|
+      333^3                                              |
+                                                        |
+    ]]}
+    feed('zl')
+    screen:expect{grid=[[
+      {29:AA}{33:-  2 lin}{29:BB}{33:: 11111·····························}{29:CC}|
+      33^3                                               |
+                                                        |
+    ]]}
+    feed('zl')
+    screen:expect{grid=[[
+      {29:AA}{33:-  2 lin}{29:BB}{33:: 11111·····························}{29:CC}|
+      3^3                                                |
                                                         |
     ]]}
   end)
@@ -2227,31 +2268,52 @@ bbbbbbb]])
   end)
 
   it('does not crash at column 0 when folded in a wide window', function()
-    screen:try_resize(82, 4)
+    screen:try_resize(82, 5)
     command('hi! CursorLine guibg=NONE guifg=Red gui=NONE')
     command('set cursorline')
     insert([[
       aaaaa
       bbbbb
+
       ccccc]])
     meths.buf_set_extmark(0, ns, 0, 0, { virt_text = {{'foo'}}, virt_text_pos = 'inline' })
+    meths.buf_set_extmark(0, ns, 2, 0, { virt_text = {{'bar'}}, virt_text_pos = 'inline' })
     screen:expect{grid=[[
       fooaaaaa                                                                          |
       bbbbb                                                                             |
+      bar                                                                               |
       {16:cccc^c                                                                             }|
                                                                                         |
     ]]}
     command('1,2fold')
     screen:expect{grid=[[
       {17:+--  2 lines: aaaaa·······························································}|
+      bar                                                                               |
       {16:cccc^c                                                                             }|
       {1:~                                                                                 }|
                                                                                         |
     ]]}
-    feed('k')
+    feed('2k')
     screen:expect{grid=[[
       {18:^+--  2 lines: aaaaa·······························································}|
+      bar                                                                               |
       ccccc                                                                             |
+      {1:~                                                                                 }|
+                                                                                        |
+    ]]}
+    command('3,4fold')
+    screen:expect{grid=[[
+      {18:^+--  2 lines: aaaaa·······························································}|
+      {17:+--  2 lines: ccccc·······························································}|
+      {1:~                                                                                 }|
+      {1:~                                                                                 }|
+                                                                                        |
+    ]]}
+    feed('j')
+    screen:expect{grid=[[
+      {17:+--  2 lines: aaaaa·······························································}|
+      {18:^+--  2 lines: ccccc·······························································}|
+      {1:~                                                                                 }|
       {1:~                                                                                 }|
                                                                                         |
     ]]}
@@ -3321,8 +3383,8 @@ l5
     insert(example_test3)
     feed 'gg'
 
-    helpers.command('sign define Oldsign text=O3')
-    helpers.command([[exe 'sign place 42 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command('sign define Oldsign text=O3')
+    command([[exe 'sign place 42 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
 
     meths.buf_set_extmark(0, ns, 0, -1, {sign_text='S4', priority=100})
     meths.buf_set_extmark(0, ns, 0, -1, {sign_text='S2', priority=5})
@@ -3343,6 +3405,39 @@ l5
       {1:  }l2                |
                           |
     ]]}
+  end)
+
+  it('does not overflow with many old signs #23852', function()
+    screen:try_resize(20, 3)
+
+    command('set signcolumn:auto:9')
+    command('sign define Oldsign text=O3')
+    command([[exe 'sign place 01 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command([[exe 'sign place 02 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command([[exe 'sign place 03 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command([[exe 'sign place 04 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command([[exe 'sign place 05 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command([[exe 'sign place 06 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command([[exe 'sign place 07 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command([[exe 'sign place 08 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    command([[exe 'sign place 09 line=1 name=Oldsign priority=10 buffer=' . bufnr('')]])
+    screen:expect{grid=[[
+      O3O3O3O3O3O3O3O3O3^  |
+      {2:~                   }|
+                          |
+    ]]}
+
+    meths.buf_set_extmark(0, ns, 0, -1, {sign_text='S1', priority=1})
+    screen:expect_unchanged()
+
+    meths.buf_set_extmark(0, ns, 0, -1, {sign_text='S5', priority=200})
+    screen:expect{grid=[[
+      O3O3O3O3O3O3O3O3S5^  |
+      {2:~                   }|
+                          |
+    ]]}
+
+    assert_alive()
   end)
 
   it('does not set signcolumn for signs without text', function()

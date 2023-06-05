@@ -10,7 +10,7 @@ local semantic_tokens = require('vim.lsp.semantic_tokens')
 local api = vim.api
 local nvim_err_writeln, nvim_buf_get_lines, nvim_command, nvim_exec_autocmds =
   api.nvim_err_writeln, api.nvim_buf_get_lines, api.nvim_command, api.nvim_exec_autocmds
-local uv = vim.loop
+local uv = vim.uv
 local tbl_isempty, tbl_extend = vim.tbl_isempty, vim.tbl_extend
 local validate = vim.validate
 local if_nil = vim.F.if_nil
@@ -799,7 +799,9 @@ end
 ---    to the server. Entries are key-value pairs with the key
 ---    being the request ID while the value is a table with `type`,
 ---    `bufnr`, and `method` key-value pairs. `type` is either "pending"
----    for an active request, or "cancel" for a cancel request.
+---    for an active request, or "cancel" for a cancel request. It will
+---    be "complete" ephemerally while executing |LspRequest| autocmds
+---    when replies are received from the server.
 ---
 ---  - {config} (table): copy of the table that was passed by the user
 ---    to |vim.lsp.start_client()|.
@@ -1342,6 +1344,10 @@ function lsp.start_client(config)
         assert(result.capabilities, "initialize result doesn't contain capabilities")
       client.server_capabilities = protocol.resolve_capabilities(client.server_capabilities)
 
+      if client.server_capabilities.positionEncoding then
+        client.offset_encoding = client.server_capabilities.positionEncoding
+      end
+
       if next(config.settings) then
         client.notify('workspace/didChangeConfiguration', { settings = config.settings })
       end
@@ -1408,13 +1414,24 @@ function lsp.start_client(config)
         { method = method, client_id = client_id, bufnr = bufnr, params = params }
       )
     end, function(request_id)
+      local request = client.requests[request_id]
+      request.type = 'complete'
+      nvim_exec_autocmds('LspRequest', {
+        buffer = bufnr,
+        modeline = false,
+        data = { client_id = client_id, request_id = request_id, request = request },
+      })
       client.requests[request_id] = nil
-      nvim_exec_autocmds('User', { pattern = 'LspRequest', modeline = false })
     end)
 
     if success and request_id then
-      client.requests[request_id] = { type = 'pending', bufnr = bufnr, method = method }
-      nvim_exec_autocmds('User', { pattern = 'LspRequest', modeline = false })
+      local request = { type = 'pending', bufnr = bufnr, method = method }
+      client.requests[request_id] = request
+      nvim_exec_autocmds('LspRequest', {
+        buffer = bufnr,
+        modeline = false,
+        data = { client_id = client_id, request_id = request_id, request = request },
+      })
     end
 
     return success, request_id
@@ -1486,7 +1503,11 @@ function lsp.start_client(config)
     local request = client.requests[id]
     if request and request.type == 'pending' then
       request.type = 'cancel'
-      nvim_exec_autocmds('User', { pattern = 'LspRequest', modeline = false })
+      nvim_exec_autocmds('LspRequest', {
+        buffer = request.bufnr,
+        modeline = false,
+        data = { client_id = client_id, request_id = id, request = request },
+      })
     end
     return rpc.notify('$/cancelRequest', { id = id })
   end
@@ -2258,7 +2279,8 @@ end
 ---@param client_id (integer)
 ---@return boolean stopped true if client is stopped, false otherwise.
 function lsp.client_is_stopped(client_id)
-  return active_clients[client_id] == nil
+  assert(client_id, 'missing client_id param')
+  return active_clients[client_id] == nil and not uninitialized_clients[client_id]
 end
 
 --- Gets a map of client_id:client pairs for the given buffer, where each value

@@ -30,13 +30,32 @@ The following changes may require adaptations in user config or plugins.
     set mousemodel=popup
     set keymodel=startsel,stopsel
 <
+• When switching windows, |CursorMoved| autocommands trigger when Nvim is back
+  in the main loop rather than immediately. This is more compatible with Vim.
+
+• |LspRequest| autocmd was promoted from a |User| autocmd to a first class
+  citizen.
 
 ==============================================================================
 ADDED FEATURES                                                     *news-added*
 
 The following new APIs or features were added.
 
-• Dynamic registration of LSP capabilities. An implication of this change is that checking a client's `server_capabilities` is no longer a sufficient indicator to see if a server supports a feature. Instead use `client.supports_method(<method>)`. It considers both the dynamic capabilities and static `server_capabilities`.
+• Neovim's LSP client now always saves and restores named buffer marks when
+  applying text edits.
+
+• Nvim's LSP client now advertises the general.positionEncodings client
+  capability to indicate to servers that it supports utf-8, utf-16, and utf-32
+  encodings. If the server responds with the positionEncoding capability in
+  its initialization response, Nvim automatically sets the client's
+  `offset_encoding` field.
+
+• Dynamic registration of LSP capabilities. An implication of this change is
+  that checking a client's `server_capabilities` is no longer a sufficient
+  indicator to see if a server supports a feature. Instead use
+  `client.supports_method(<method>)`. It considers both the dynamic
+  capabilities and static `server_capabilities`.
+
 • |vim.iter()| provides a generic iterator interface for tables and Lua
   iterators |luaref-in|.
 
@@ -80,6 +99,12 @@ The following changes to existing APIs or features add new behavior.
 • The `workspace/didChangeWatchedFiles` LSP client capability is now enabled
   by default.
 
+• |LspRequest| autocmd callbacks now contain additional information about the LSP
+  request status update that occurred.
+
+• `:source` without arguments treats a buffer with its 'filetype' set to "lua"
+  as Lua code regardless of its extension.
+
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
 
@@ -108,5 +133,7 @@ release.
   - |nvim_set_option()|		Use |nvim_set_option_value()| instead.
   - |nvim_win_get_option()|	Use |nvim_get_option_value()| instead.
   - |nvim_win_set_option()|	Use |nvim_set_option_value()| instead.
+
+• `vim.loop` has been renamed to `vim.uv`.
 
  vim:tw=78:ts=8:sw=2:et:ft=help:norl:
