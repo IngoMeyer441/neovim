@@ -2213,8 +2213,8 @@ describe('LSP', function()
       local prefix = 'foo'
       local completion_list = {
         -- resolves into label
-        { label='foobar', sortText="a" },
-        { label='foobar', sortText="b", textEdit={} },
+        { label = 'foobar', sortText = 'a', documentation = 'documentation' },
+        { label = 'foobar', sortText = 'b', documentation = { value = 'documentation' }, textEdit = {} },
         -- resolves into insertText
         { label='foocar', sortText="c", insertText='foobar' },
         { label='foocar', sortText="d", insertText='foobar', textEdit={} },
@@ -2233,17 +2233,17 @@ describe('LSP', function()
       }
       local completion_list_items = {items=completion_list}
       local expected = {
-        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label = 'foobar', sortText="a" } } } } },
-        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foobar', sortText="b", textEdit={} } } }  } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="c", insertText='foobar' } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="d", insertText='foobar', textEdit={} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="e", insertText='foodar', textEdit={newText='foobar'} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="f", textEdit={newText='foobar'} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foobar(place holder, more ...holder{})', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="g", insertText='foodar', insertTextFormat=2, textEdit={newText='foobar(${1:place holder}, ${2:more ...holder{\\}})'} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(var1 typ1, var2 *typ2) {}', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="h", insertText='foodar(${1:var1} typ1, ${2:var2} *typ2) {$0\\}', insertTextFormat=2, textEdit={} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(var1 typ2 tail) {}', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="i", insertText='foodar(${1:var1 ${2|typ2,typ3|} ${3:tail}}) {$0\\}', insertTextFormat=2, textEdit={} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar()', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="j", insertText='foodar()${0}', insertTextFormat=2, textEdit={} } } } } },
-        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, info = ' ', kind = 'Unknown', menu = '', word = 'foodar(${1:var1})', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="k", insertText='foodar(${1:var1})', insertTextFormat=1, textEdit={} } } } } },
+        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = 'documentation', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label = 'foobar', sortText="a",  documentation = 'documentation' } } } } },
+        { abbr = 'foobar', dup = 1, empty = 1, icase = 1, info = 'documentation', kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foobar', sortText="b", textEdit={},documentation = { value = 'documentation' } } } }  } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="c", insertText='foobar' } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="d", insertText='foobar', textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="e", insertText='foodar', textEdit={newText='foobar'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foobar', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="f", textEdit={newText='foobar'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foobar(place holder, more ...holder{})', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="g", insertText='foodar', insertTextFormat=2, textEdit={newText='foobar(${1:place holder}, ${2:more ...holder{\\}})'} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foodar(var1 typ1, var2 *typ2) {}', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="h", insertText='foodar(${1:var1} typ1, ${2:var2} *typ2) {$0\\}', insertTextFormat=2, textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foodar(var1 typ2 tail) {}', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="i", insertText='foodar(${1:var1 ${2|typ2,typ3|} ${3:tail}}) {$0\\}', insertTextFormat=2, textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foodar()', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="j", insertText='foodar()${0}', insertTextFormat=2, textEdit={} } } } } },
+        { abbr = 'foocar', dup = 1, empty = 1, icase = 1, kind = 'Unknown', menu = '', word = 'foodar(${1:var1})', user_data = { nvim = { lsp = { completion_item = { label='foocar', sortText="k", insertText='foodar(${1:var1})', insertTextFormat=1, textEdit={} } } } } },
       }
 
       eq(expected, exec_lua([[return vim.lsp.util.text_document_completion_list_to_complete_items(...)]], completion_list, prefix))
@@ -3230,9 +3230,10 @@ describe('LSP', function()
           eq(0, signal, "exit signal")
         end;
         on_handler = function(err, result, ctx)
-          -- Don't compare & assert params, they're not relevant for the testcase
+          -- Don't compare & assert params and version, they're not relevant for the testcase
           -- This allows us to be lazy and avoid declaring them
           ctx.params = nil
+          ctx.version = nil
 
           eq(table.remove(test.expected_handlers), {err, result, ctx}, "expected handler")
           if ctx.method == 'start' then
@@ -3314,6 +3315,7 @@ describe('LSP', function()
         end,
         on_handler = function(err, result, ctx)
           ctx.params = nil -- don't compare in assert
+          ctx.version = nil
           eq(table.remove(expected_handlers), { err, result, ctx })
           if ctx.method == 'start' then
             exec_lua([[
@@ -4440,3 +4442,4 @@ describe('LSP', function()
     end)
   end)
 end)
+
