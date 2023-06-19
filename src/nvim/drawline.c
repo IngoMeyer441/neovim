@@ -871,9 +871,11 @@ static void apply_cursorline_highlight(win_T *wp, winlinevars_T *wlv)
 
 static void handle_inline_virtual_text(win_T *wp, winlinevars_T *wlv, ptrdiff_t v, bool *do_save)
 {
-  while (true) {
-    // we could already be inside an existing inline text with multiple chunks
-    if (!(wlv->virt_inline_i < kv_size(wlv->virt_inline))) {
+  while (wlv->n_extra == 0) {
+    if (wlv->virt_inline_i >= kv_size(wlv->virt_inline)) {
+      // need to find inline virtual text
+      wlv->virt_inline = VIRTTEXT_EMPTY;
+      wlv->virt_inline_i = 0;
       DecorState *state = &decor_state;
       for (size_t i = 0; i < kv_size(state->active); i++) {
         DecorRange *item = &kv_A(state->active, i);
@@ -884,18 +886,16 @@ static void handle_inline_virtual_text(win_T *wp, winlinevars_T *wlv, ptrdiff_t 
         }
         if (item->draw_col >= -1 && item->start_col == v) {
           wlv->virt_inline = item->decor.virt_text;
-          wlv->virt_inline_i = 0;
           item->draw_col = INT_MIN;
           break;
         }
       }
-    }
-
-    if (wlv->n_extra == 0 || !wlv->extra_for_extmark) {
-      wlv->reset_extra_attr = false;
-    }
-
-    if (wlv->n_extra <= 0 && wlv->virt_inline_i < kv_size(wlv->virt_inline)) {
+      if (!kv_size(wlv->virt_inline)) {
+        // no more inline virtual text here
+        break;
+      }
+    } else {
+      // already inside existing inline virtual text with multiple chunks
       VirtTextChunk vtc = kv_A(wlv->virt_inline, wlv->virt_inline_i);
       wlv->p_extra = vtc.text;
       wlv->n_extra = (int)strlen(wlv->p_extra);
@@ -932,7 +932,6 @@ static void handle_inline_virtual_text(win_T *wp, winlinevars_T *wlv, ptrdiff_t 
         }
       }
     }
-    break;
   }
 }
 
@@ -1760,50 +1759,10 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
       break;
     }
 
-    if (wlv.draw_state == WL_LINE
-        && has_fold
-        && wlv.col == win_col_offset
-        && wlv.n_extra == 0
-        && wlv.row == startrow + wlv.filler_lines) {
+    const bool draw_folded = wlv.draw_state == WL_LINE && has_fold
+                             && wlv.row == startrow + wlv.filler_lines;
+    if (draw_folded && wlv.n_extra == 0) {
       wlv.char_attr = folded_attr = win_hl_attr(wp, HLF_FL);
-
-      linenr_T lnume = lnum + foldinfo.fi_lines - 1;
-      memset(buf_fold, ' ', FOLD_TEXT_LEN);
-      wlv.p_extra = get_foldtext(wp, lnum, lnume, foldinfo, buf_fold);
-      wlv.n_extra = (int)strlen(wlv.p_extra);
-
-      if (wlv.p_extra != buf_fold) {
-        xfree(wlv.p_extra_free);
-        wlv.p_extra_free = wlv.p_extra;
-      }
-      wlv.c_extra = NUL;
-      wlv.c_final = NUL;
-      wlv.p_extra[wlv.n_extra] = NUL;
-
-      // Get the line again as evaluating 'foldtext' may free it.
-      line = ml_get_buf(wp->w_buffer, lnum, false);
-      ptr = line + v;
-    }
-
-    if (wlv.draw_state == WL_LINE
-        && has_fold
-        && wlv.col < grid->cols
-        && wlv.n_extra == 0
-        && wlv.row == startrow + wlv.filler_lines) {
-      // fill rest of line with 'fold'
-      wlv.c_extra = wp->w_p_fcs_chars.fold;
-      wlv.c_final = NUL;
-
-      wlv.n_extra = wp->w_p_rl ? (wlv.col + 1) : (grid->cols - wlv.col);
-    }
-
-    if (wlv.draw_state == WL_LINE
-        && has_fold
-        && wlv.col >= grid->cols
-        && wlv.n_extra != 0
-        && wlv.row == startrow + wlv.filler_lines) {
-      // Truncate the folding.
-      wlv.n_extra = 0;
     }
 
     int extmark_attr = 0;
@@ -1826,7 +1785,11 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         area_active = false;
       }
 
-      if (has_decor && v >= 0) {
+      if (wlv.n_extra == 0 || !wlv.extra_for_extmark) {
+        wlv.reset_extra_attr = false;
+      }
+
+      if (has_decor && v >= 0 && wlv.n_extra == 0) {
         bool selected = (area_active || (area_highlighting && noinvcur
                                          && wlv.vcol == wp->w_virtcol));
         extmark_attr = decor_redraw_col(wp, (colnr_T)v, wlv.off, selected, &decor_state);
@@ -1914,6 +1877,37 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
       if (folded_attr != 0) {
         wlv.char_attr = hl_combine_attr(folded_attr, wlv.char_attr);
       }
+    }
+
+    if (draw_folded && wlv.n_extra == 0 && wlv.col == win_col_offset) {
+      linenr_T lnume = lnum + foldinfo.fi_lines - 1;
+      memset(buf_fold, ' ', FOLD_TEXT_LEN);
+      wlv.p_extra = get_foldtext(wp, lnum, lnume, foldinfo, buf_fold);
+      wlv.n_extra = (int)strlen(wlv.p_extra);
+
+      if (wlv.p_extra != buf_fold) {
+        xfree(wlv.p_extra_free);
+        wlv.p_extra_free = wlv.p_extra;
+      }
+      wlv.c_extra = NUL;
+      wlv.c_final = NUL;
+      wlv.p_extra[wlv.n_extra] = NUL;
+
+      // Get the line again as evaluating 'foldtext' may free it.
+      line = ml_get_buf(wp->w_buffer, lnum, false);
+      ptr = line + v;
+    }
+
+    if (draw_folded && wlv.n_extra == 0 && wlv.col < grid->cols) {
+      // Fill rest of line with 'fold'.
+      wlv.c_extra = wp->w_p_fcs_chars.fold;
+      wlv.c_final = NUL;
+      wlv.n_extra = wp->w_p_rl ? (wlv.col + 1) : (grid->cols - wlv.col);
+    }
+
+    if (draw_folded && wlv.n_extra != 0 && wlv.col >= grid->cols) {
+      // Truncate the folding.
+      wlv.n_extra = 0;
     }
 
     // Get the next character to put on the screen.

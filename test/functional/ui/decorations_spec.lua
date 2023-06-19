@@ -667,6 +667,8 @@ describe('extmark decorations', function()
       [31] = {underline = true, foreground = Screen.colors.DarkCyan};
       [32] = {underline = true};
       [33] = {foreground = Screen.colors.DarkBlue, background = Screen.colors.LightGray};
+      [34] = {background = Screen.colors.Yellow};
+      [35] = {background = Screen.colors.Yellow, bold = true, foreground = Screen.colors.Blue};
     }
 
     ns = meths.create_namespace 'test'
@@ -886,6 +888,25 @@ describe('extmark decorations', function()
     screen:expect{grid=[[
       {4:?????}……………………………………………………………………………………………|
       ………{4:!!!!!}……………………………^…                    |
+                                              |
+    ]]}
+  end)
+
+  it('overlay virtual text works on and after a TAB #24022', function()
+    screen:try_resize(40, 3)
+    meths.buf_set_lines(0, 0, -1, true, {'\t\tline 1'})
+    meths.buf_set_extmark(0, ns, 0, 0, { virt_text = {{'AA', 'Search'}}, virt_text_pos = 'overlay', hl_mode = 'combine' })
+    meths.buf_set_extmark(0, ns, 0, 1, { virt_text = {{'BB', 'Search'}}, virt_text_pos = 'overlay', hl_mode = 'combine' })
+    meths.buf_set_extmark(0, ns, 0, 2, { virt_text = {{'CC', 'Search'}}, virt_text_pos = 'overlay', hl_mode = 'combine' })
+    screen:expect{grid=[[
+      {34:AA}     ^ {34:BB}      {34:CC}ne 1                  |
+      {1:~                                       }|
+                                              |
+    ]]}
+    command('setlocal list listchars=tab:<->')
+    screen:expect{grid=[[
+      {35:^AA}{1:----->}{35:BB}{1:----->}{34:CC}ne 1                  |
+      {1:~                                       }|
                                               |
     ]]}
   end)
@@ -1294,6 +1315,26 @@ describe('extmark decorations', function()
       ]])
   end)
 
+  it('conceal works just before truncated double-width char #21486', function()
+    screen:try_resize(40, 4)
+    meths.buf_set_lines(0, 0, -1, true, {'', ('a'):rep(37) .. '<>古'})
+    meths.buf_set_extmark(0, ns, 1, 37, {end_col=39, conceal=''})
+    command('setlocal conceallevel=2')
+    screen:expect{grid=[[
+      ^                                        |
+      aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa{1:>}  |
+      古                                      |
+                                              |
+    ]]}
+    feed('j')
+    screen:expect{grid=[[
+                                              |
+      ^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa<>{1:>}|
+      古                                      |
+                                              |
+    ]]}
+  end)
+
   it('avoids redraw issue #20651', function()
     exec_lua[[
       vim.cmd.normal'10oXXX'
@@ -1615,6 +1656,51 @@ describe('decorations: inline virtual text', function()
               cell.text = text                                |
               cell.hl_id = hl_id                              |
                                                               |
+    ]]}
+  end)
+
+  it('works with empty chunk', function()
+    insert(example_text)
+    feed 'gg'
+    screen:expect{grid=[[
+      ^for _,item in ipairs(items) do                    |
+          local text, hl_id_cell, count = unpack(item)  |
+          if hl_id_cell ~= nil then                     |
+              hl_id = hl_id_cell                        |
+          end                                           |
+          for _ = 1, (count or 1) do                    |
+              local cell = line[colpos]                 |
+              cell.text = text                          |
+              cell.hl_id = hl_id                        |
+                                                        |
+    ]]}
+
+    meths.buf_set_extmark(0, ns, 1, 14, {virt_text={{''}, {': ', 'Special'}, {'string', 'Type'}}, virt_text_pos='inline'})
+    screen:expect{grid=[[
+      ^for _,item in ipairs(items) do                    |
+          local text{10:: }{3:string}, hl_id_cell, count = unpack|
+      (item)                                            |
+          if hl_id_cell ~= nil then                     |
+              hl_id = hl_id_cell                        |
+          end                                           |
+          for _ = 1, (count or 1) do                    |
+              local cell = line[colpos]                 |
+              cell.text = text                          |
+                                                        |
+    ]]}
+
+    feed('jf,')
+    screen:expect{grid=[[
+      for _,item in ipairs(items) do                    |
+          local text{10:: }{3:string}^, hl_id_cell, count = unpack|
+      (item)                                            |
+          if hl_id_cell ~= nil then                     |
+              hl_id = hl_id_cell                        |
+          end                                           |
+          for _ = 1, (count or 1) do                    |
+              local cell = line[colpos]                 |
+              cell.text = text                          |
+                                                        |
     ]]}
   end)
 
@@ -2013,7 +2099,7 @@ bbbbbbb]])
       ]]}
   end)
 
-  it('cursor position is correct when inserting around virtual texts with both left and right gravity ', function()
+  it('cursor position is correct when inserting around virtual texts with both left and right gravity', function()
     insert('foo foo foo foo')
     meths.buf_set_extmark(0, ns, 0, 8, { virt_text = {{ '>>', 'Special' }}, virt_text_pos = 'inline', right_gravity = false })
     meths.buf_set_extmark(0, ns, 0, 8, { virt_text = {{ '<<', 'Special' }}, virt_text_pos = 'inline', right_gravity = true })

@@ -153,10 +153,12 @@ func Test_strwidth()
     call assert_fails('call strwidth({->0})', 'E729:')
     call assert_fails('call strwidth([])', 'E730:')
     call assert_fails('call strwidth({})', 'E731:')
-    if has('float')
-      call assert_fails('call strwidth(1.2)', 'E806:')
-    endif
   endfor
+
+  if has('float')
+    call assert_equal(3, strwidth(1.2))
+    call CheckDefExecAndScriptFailure(['echo strwidth(1.2)'], 'E806:')
+  endif
 
   set ambiwidth&
 endfunc
@@ -221,7 +223,9 @@ func Test_str2nr()
   call assert_fails('call str2nr([])', 'E730:')
   call assert_fails('call str2nr({->2})', 'E729:')
   if has('float')
-    call assert_fails('call str2nr(1.2)', 'E806:')
+    call assert_equal(1, str2nr(1.2))
+    call CheckDefExecFailure(['echo str2nr(1.2)'], 'E1013:')
+    call CheckScriptFailure(['vim9script', 'echo str2nr(1.2)'], 'E806:')
   endif
   call assert_fails('call str2nr(10, [])', 'E745:')
 endfunc
@@ -372,7 +376,8 @@ func Test_simplify()
   call assert_fails('call simplify([])', 'E730:')
   call assert_fails('call simplify({})', 'E731:')
   if has('float')
-    call assert_fails('call simplify(1.2)', 'E806:')
+    call assert_equal('1.2', simplify(1.2))
+    call CheckDefExecAndScriptFailure(['echo simplify(1.2)'], 'E806:')
   endif
 endfunc
 
@@ -1390,14 +1395,14 @@ func Test_utf16idx_from_byteidx()
   " UTF-16 index of a string with four byte characters
   let str = 'a😊😊b'
   call assert_equal(0, utf16idx(str, 0))
-  call assert_equal(2, utf16idx(str, 1))
-  call assert_equal(2, utf16idx(str, 2))
-  call assert_equal(2, utf16idx(str, 3))
-  call assert_equal(2, utf16idx(str, 4))
-  call assert_equal(4, utf16idx(str, 5))
-  call assert_equal(4, utf16idx(str, 6))
-  call assert_equal(4, utf16idx(str, 7))
-  call assert_equal(4, utf16idx(str, 8))
+  call assert_equal(1, utf16idx(str, 1))
+  call assert_equal(1, utf16idx(str, 2))
+  call assert_equal(1, utf16idx(str, 3))
+  call assert_equal(1, utf16idx(str, 4))
+  call assert_equal(3, utf16idx(str, 5))
+  call assert_equal(3, utf16idx(str, 6))
+  call assert_equal(3, utf16idx(str, 7))
+  call assert_equal(3, utf16idx(str, 8))
   call assert_equal(5, utf16idx(str, 9))
   call assert_equal(6, utf16idx(str, 10))
   call assert_equal(-1, utf16idx(str, 11))
@@ -1493,8 +1498,8 @@ func Test_utf16idx_from_charidx()
   " UTF-16 index of a string with four byte characters
   let str = "a😊😊b"
   call assert_equal(0, utf16idx(str, 0, v:false, v:true))
-  call assert_equal(2, utf16idx(str, 1, v:false, v:true))
-  call assert_equal(4, utf16idx(str, 2, v:false, v:true))
+  call assert_equal(1, utf16idx(str, 1, v:false, v:true))
+  call assert_equal(3, utf16idx(str, 2, v:false, v:true))
   call assert_equal(5, utf16idx(str, 3, v:false, v:true))
   call assert_equal(6, utf16idx(str, 4, v:false, v:true))
   call assert_equal(-1, utf16idx(str, 5, v:false, v:true))
