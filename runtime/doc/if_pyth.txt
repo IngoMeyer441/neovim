@@ -187,8 +187,8 @@ vim.foreach_rtp(callable)				*python-foreach_rtp*
 	are no longer paths. If stopped in case callable returned non-None,
 	vim.foreach_rtp function returns the value returned by callable.
 
-vim.chdir(*args, **kwargs)				*python-chdir*
-vim.fchdir(*args, **kwargs)				*python-fchdir*
+`vim.chdir(*args, **kwargs)`				*python-chdir*
+`vim.fchdir(*args, **kwargs)`				*python-fchdir*
 	Run os.chdir or os.fchdir, then all appropriate vim stuff.
 	Note: you should not use these functions directly, use os.chdir and
 	      os.fchdir instead. Behavior of vim.fchdir is undefined in case
@@ -575,8 +575,8 @@ Python 3						*python3*
 
 As Python 3 is the only supported version in Nvim, "python" is synonymous
 with "python3" in the current version. However, code that aims to support older
-versions of Neovim, as well as Vim, should prefer to use "python3"
-variants explicitly if Python 3 is required.
+versions of Nvim, as well as Vim, should prefer to use "python3" variants
+explicitly if Python 3 is required.
 
 							*:py3* *:python3*
 :[range]py3 {stmt}

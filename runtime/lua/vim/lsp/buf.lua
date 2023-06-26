@@ -122,7 +122,7 @@ end
 ---@private
 ---@param bufnr integer
 ---@param mode "v"|"V"
----@return table {start={row, col}, end={row, col}} using (1, 0) indexing
+---@return table {start={row,col}, end={row,col}} using (1, 0) indexing
 local function range_from_selection(bufnr, mode)
   -- TODO: Use `vim.region()` instead https://github.com/neovim/neovim/pull/13896
 
@@ -159,7 +159,7 @@ end
 --- @param options table|nil Optional table which holds the following optional fields:
 ---     - formatting_options (table|nil):
 ---         Can be used to specify FormattingOptions. Some unspecified options will be
----         automatically derived from the current Neovim options.
+---         automatically derived from the current Nvim options.
 ---         See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#formattingOptions
 ---     - timeout_ms (integer|nil, default 1000):
 ---         Time in milliseconds to block for formatting requests. No effect if async=true
@@ -189,7 +189,7 @@ end
 ---         Restrict formatting to the client with name (client.name) matching this field.
 ---
 ---     - range (table|nil) Range to format.
----         Table must contain `start` and `end` keys with {row, col} tuples using
+---         Table must contain `start` and `end` keys with {row,col} tuples using
 ---         (1,0) indexing.
 ---         Defaults to current selection in visual mode
 ---         Defaults to `nil` in other modes, formatting the full buffer
@@ -646,21 +646,7 @@ local function on_code_action_results(results, ctx, options)
     end
     if action.command then
       local command = type(action.command) == 'table' and action.command or action
-      local fn = client.commands[command.command] or vim.lsp.commands[command.command]
-      if fn then
-        local enriched_ctx = vim.deepcopy(ctx)
-        enriched_ctx.client_id = client.id
-        fn(command, enriched_ctx)
-      else
-        -- Not using command directly to exclude extra properties,
-        -- see https://github.com/python-lsp/python-lsp-server/issues/146
-        local params = {
-          command = command.command,
-          arguments = command.arguments,
-          workDoneToken = command.workDoneToken,
-        }
-        client.request('workspace/executeCommand', params, nil, ctx.bufnr)
-      end
+      client._exec_cmd(command, ctx)
     end
   end
 
@@ -697,7 +683,7 @@ local function on_code_action_results(results, ctx, options)
           return
         end
         apply_action(resolved_action, client)
-      end)
+      end, ctx.bufnr)
     else
       apply_action(action, client)
     end
@@ -755,7 +741,7 @@ end
 ---  - range: (table|nil)
 ---           Range for which code actions should be requested.
 ---           If in visual mode this defaults to the active selection.
----           Table must contain `start` and `end` keys with {row, col} tuples
+---           Table must contain `start` and `end` keys with {row,col} tuples
 ---           using mark-like indexing. See |api-indexing|
 ---
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
@@ -808,6 +794,21 @@ function M.execute_command(command_params)
     workDoneToken = command_params.workDoneToken,
   }
   request('workspace/executeCommand', command_params)
+end
+
+--- Enable/disable/toggle inlay hints for a buffer
+---@param bufnr (integer) Buffer handle, or 0 for current
+---@param enable (boolean|nil) true/false to enable/disable, nil to toggle
+function M.inlay_hint(bufnr, enable)
+  vim.validate({ enable = { enable, { 'boolean', 'nil' } }, bufnr = { bufnr, 'number' } })
+  local inlay_hint = require('vim.lsp._inlay_hint')
+  if enable then
+    inlay_hint.enable(bufnr)
+  elseif enable == false then
+    inlay_hint.disable(bufnr)
+  else
+    inlay_hint.toggle(bufnr)
+  end
 end
 
 return M

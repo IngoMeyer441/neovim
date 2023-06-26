@@ -2,6 +2,7 @@ local helpers = require('test.functional.helpers')(after_each)
 local lsp_helpers = require('test.functional.plugin.lsp.helpers')
 local Screen = require('test.functional.ui.screen')
 
+local eq = helpers.eq
 local dedent = helpers.dedent
 local exec_lua = helpers.exec_lua
 local insert = helpers.insert
@@ -63,16 +64,22 @@ describe('inlay hints', function()
     end)
 
     it(
-      'inlay hints are applied when vim.lsp._inlay_hint.refresh() is called',
+      'inlay hints are applied when vim.lsp.buf.inlay_hint(true) is called',
       function()
-        exec_lua([[
-        bufnr = vim.api.nvim_get_current_buf()
-        vim.api.nvim_win_set_buf(0, bufnr)
-        client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
-      ]])
+        local res = exec_lua([[
+          bufnr = vim.api.nvim_get_current_buf()
+          vim.api.nvim_win_set_buf(0, bufnr)
+          client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
+          local client = vim.lsp.get_client_by_id(client_id)
+          return {
+            supports_method = client.supports_method("textDocument/inlayHint")
+          }
+        ]])
+        eq(res, { supports_method = true })
+
 
         insert(text)
-        exec_lua([[vim.lsp._inlay_hint.refresh({bufnr = bufnr})]])
+        exec_lua([[vim.lsp.buf.inlay_hint(bufnr, true)]])
         screen:expect({
           grid = [[
   auto add(int a, int b)-> int { return a + b; }    |
@@ -89,7 +96,7 @@ describe('inlay hints', function()
       end)
 
     it(
-      'inlay hints are cleared when vim.lsp._inlay_hint.clear() is called',
+      'inlay hints are cleared when vim.lsp.buf.inlay_hint(false) is called',
       function()
         exec_lua([[
         bufnr = vim.api.nvim_get_current_buf()
@@ -98,7 +105,7 @@ describe('inlay hints', function()
       ]])
 
         insert(text)
-        exec_lua([[vim.lsp._inlay_hint.refresh({bufnr = bufnr})]])
+        exec_lua([[vim.lsp.buf.inlay_hint(bufnr, true)]])
         screen:expect({
           grid = [[
   auto add(int a, int b)-> int { return a + b; }    |
@@ -112,7 +119,7 @@ describe('inlay hints', function()
                                                     |
 ]]
         })
-        exec_lua([[vim.lsp._inlay_hint.clear()]])
+        exec_lua([[vim.lsp.buf.inlay_hint(bufnr, false)]])
         screen:expect({
           grid = [[
   auto add(int a, int b) { return a + b; }          |

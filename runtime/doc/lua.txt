@@ -14,7 +14,7 @@ INTRODUCTION                                                       *lua-intro*
 The Lua 5.1 script engine is builtin and always available. Try this command to
 get an idea of what lurks beneath: >vim
 
-    :lua print(vim.inspect(package.loaded))
+    :lua vim.print(package.loaded)
 
 Nvim includes a "standard library" |lua-stdlib| for Lua.  It complements the
 "editor stdlib" (|builtin-functions| and |Ex-commands|) and the |API|, all of
@@ -34,7 +34,7 @@ Nvim ever ships with Lua 5.4+, a Lua 5.1 compatibility shim will be provided
 so that old plugins continue to work transparently.
 
                                                                   *lua-luajit*
-Neovim is built with luajit on platforms which support it, which provides
+Nvim is built with luajit on platforms which support it, which provides
 extra functionality. Lua code in |init.lua| and plugins can assume its presence
 on installations on common platforms. For maximum compatibility with less
 common platforms, availability can be checked using the `jit` global variable: >lua
@@ -46,7 +46,7 @@ common platforms, availability can be checked using the `jit` global variable: >
 <
                                                                   *lua-bit*
 In particular, the luajit "bit" extension module is _always_ available.
-A fallback implementation is included when nvim is built with PUC lua 5.1,
+A fallback implementation is included when nvim is built with PUC Lua 5.1,
 and will be transparently used when `require("bit")` is invoked.
 
 ==============================================================================
@@ -423,7 +423,7 @@ is unnecessary.
 
 You can peek at the module properties: >vim
 
-    :lua print(vim.inspect(vim))
+    :lua vim.print(vim)
 
 Result is something like this: >
 
@@ -549,7 +549,7 @@ Multithreading                                            *lua-loop-threading*
 
 Plugins can perform work in separate (os-level) threads using the threading
 APIs in luv, for instance `vim.uv.new_thread`. Note that every thread
-gets its own separate lua interpreter state, with no access to lua globals
+gets its own separate Lua interpreter state, with no access to Lua globals
 in the main thread. Neither can the state of the editor (buffers, windows,
 etc) be directly accessed from threads.
 
@@ -557,10 +557,10 @@ A subset of the `vim.*` API is available in threads. This includes:
 
 - `vim.uv` with a separate event loop per thread.
 - `vim.mpack` and `vim.json` (useful for serializing messages between threads)
-- `require` in threads can use lua packages from the global |package.path|
+- `require` in threads can use Lua packages from the global |package.path|
 - `print()` and `vim.inspect`
 - `vim.diff`
-- most utility functions in `vim.*` for working with pure lua values
+- most utility functions in `vim.*` for working with pure Lua values
   like `vim.split`, `vim.tbl_*`, `vim.list_*`, and so on.
 - `vim.is_thread()` returns true from a non-main thread.
 
@@ -624,7 +624,7 @@ vim.highlight.priorities                            *vim.highlight.priorities*
 ------------------------------------------------------------------------------
 VIM.REGEX                                                          *lua-regex*
 
-Vim regexes can be used directly from lua. Currently they only allow
+Vim regexes can be used directly from Lua. Currently they only allow
 matching within a single line.
 
 vim.regex({re})                                                  *vim.regex()*
@@ -747,9 +747,22 @@ vim.json.encode({obj})                                       *vim.json.encode*
 vim.json.decode({str}[, {opts}])                             *vim.json.decode*
     Decodes (or "unpacks") the JSON-encoded {str} to a Lua object.
 
-    {opts} is a table with the key `luanil = { object: bool, array: bool }`
-    that controls whether `null` in JSON objects or arrays should be converted
-    to Lua `nil` instead of `vim.NIL`.
+    - Decodes JSON "null" as |vim.NIL| (controllable by {opts}, see below).
+    - Decodes empty object as |vim.empty_dict()|.
+    - Decodes empty array as `{}` (empty Lua table).
+
+    Example: >lua
+    :lua vim.print(vim.json.decode('{"bar":[],"foo":{},"zub":null}'))
+    --> { bar = {}, foo = vim.empty_dict(), zub = vim.NIL }
+<
+    Parameters: ~
+      • {str}    Stringified JSON data.
+      • {opts}   Options map keys:
+                 • luanil: { object: bool, array: bool }
+                   • `luanil.object=true` converts `null` in JSON objects to
+                     Lua `nil` instead of `vim.NIL`.
+                   • `luanil.array=true` converts `null` in JSON arrays to Lua
+                     `nil` instead of `vim.NIL`.
 
 ------------------------------------------------------------------------------
 VIM.SPELL                                                          *lua-spell*
@@ -920,8 +933,8 @@ vim.wait({time} [, {callback}, {interval}, {fast_only}])          *vim.wait()*
 
 vim.ui_attach({ns}, {options}, {callback})                *vim.ui_attach()*
     Attach to ui events, similar to |nvim_ui_attach()| but receive events
-    as lua callback. Can be used to implement screen elements like
-    popupmenu or message handling in lua.
+    as Lua callback. Can be used to implement screen elements like
+    popupmenu or message handling in Lua.
 
     {options} should be a dictionary-like table, where `ext_...` options should
     be set to true to receive events for the respective external element.
@@ -1002,10 +1015,18 @@ Log levels are one of the values defined in `vim.log.levels`:
 ------------------------------------------------------------------------------
 LUA-VIMSCRIPT BRIDGE                                           *lua-vimscript*
 
-Nvim Lua provides an interface to Vimscript variables and functions, and
-editor commands and options.
+Nvim Lua provides an interface or "bridge" to Vimscript variables and
+functions, and editor commands and options.
 
-See also https://github.com/nanotee/nvim-lua-guide.
+Objects passed over this bridge are COPIED (marshalled): there are no
+"references". |lua-guide-variables| For example, using `vim.fn.remove()` on
+a Lua list copies the list object to Vimscript and does NOT modify the Lua
+list: >lua
+
+    local list = { 1, 2, 3 }
+    vim.fn.remove(list, 0)
+    vim.print(list)  --> "{ 1, 2, 3 }"
+
 
 vim.call({func}, {...})                                           *vim.call()*
     Invokes |vim-function| or |user-function| {func} with arguments {...}.
@@ -1241,7 +1262,7 @@ In any of the above examples, to replicate the behavior |:setlocal|, use
                                                                *vim.opt:get()*
 Option:get()
 
-    Returns a lua-representation of the option. Boolean, number and string
+    Returns a Lua-representation of the option. Boolean, number and string
     values will be returned in exactly the same fashion.
 
     For values that are comma-separated lists, an array will be returned with
@@ -1393,6 +1414,7 @@ inspect({object}, {options})                                   *vim.inspect()*
     Gets a human-readable representation of the given object.
 
     See also: ~
+      • |vim.print()|
       • https://github.com/kikito/inspect.lua
       • https://github.com/mpeterv/vinspect
 
@@ -1414,10 +1436,10 @@ keycode({str})                                                 *vim.keycode()*
       • |nvim_replace_termcodes()|
 
 lua_omnifunc({find_start}, {_})                           *vim.lua_omnifunc()*
-    Omnifunc for completing lua values from the runtime lua interpreter,
+    Omnifunc for completing Lua values from the runtime Lua interpreter,
     similar to the builtin completion for the `:lua` command.
 
-    Activate using `set omnifunc=v:lua.vim.lua_omnifunc` in a lua buffer.
+    Activate using `set omnifunc=v:lua.vim.lua_omnifunc` in a Lua buffer.
 
 notify({msg}, {level}, {opts})                                  *vim.notify()*
     Display a notification to the user.
@@ -1517,6 +1539,7 @@ print({...})                                                     *vim.print()*
 
     See also: ~
       • |vim.inspect()|
+      • |:=|
 
 region({bufnr}, {pos1}, {pos2}, {regtype}, {inclusive})         *vim.region()*
     Get a table of lines with start, end columns for a region marked by two
@@ -2209,17 +2232,17 @@ Lua module: loader                                                *lua-loader*
 disable()                                               *vim.loader.disable()*
     Disables the experimental Lua module loader:
     • removes the loaders
-    • adds the default Neovim loader
+    • adds the default Nvim loader
 
 enable()                                                 *vim.loader.enable()*
     Enables the experimental Lua module loader:
     • overrides loadfile
-    • adds the lua loader using the byte-compilation cache
+    • adds the Lua loader using the byte-compilation cache
     • adds the libs loader
-    • removes the default Neovim loader
+    • removes the default Nvim loader
 
 find({modname}, {opts})                                    *vim.loader.find()*
-    Finds lua modules for the given module name.
+    Finds Lua modules for the given module name.
 
     Parameters: ~
       • {modname}  (string) Module name, or `"*"` to find the top-level
@@ -2970,8 +2993,9 @@ range({spec})                                            *vim.version.range()*
 Lua module: iter                                                    *lua-iter*
 
 
-The *vim.iter* module provides a generic "iterator" interface over tables
-and iterator functions.
+The *vim.iter* module provides a generic interface for working with
+iterables: tables, lists, iterator functions, pair()/ipair()-like
+iterators, and `vim.iter()` objects.
 
 *vim.iter()* wraps its table or function argument into an *Iter* object
 with methods (such as |Iter:filter()| and |Iter:map()|) that transform the
@@ -3150,7 +3174,7 @@ Iter:find({self}, {f})                                           *Iter:find()*
         any
 
 Iter:fold({self}, {init}, {f})                                   *Iter:fold()*
-    Fold an iterator or table into a single value.
+    Fold ("reduce") an iterator or table into a single value.
 
     Examples: >lua
 

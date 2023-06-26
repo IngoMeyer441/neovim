@@ -676,9 +676,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	line.
 	When 'smartindent' or 'cindent' is on the indent is changed in
 	a different way.
-	{small difference from Vi: After the indent is deleted when typing
-	<Esc> or <CR>, the cursor position when moving up or down is after the
-	deleted indent; Vi puts the cursor somewhere in the deleted indent}.
 
 				 *'autoread'* *'ar'* *'noautoread'* *'noar'*
 'autoread' 'ar'		boolean	(default on)
@@ -1449,7 +1446,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'completeslash'* *'csl'*
 'completeslash' 'csl'	string	(default: "")
 			local to buffer
-			{only for MS-Windows}
+			only for MS-Windows
 	When this option is set it overrules 'shellslash' for completion:
 	- When this option is set to "slash", a forward slash is used for path
 	  completion in insert mode. This is useful when editing HTML tag, or
@@ -1866,9 +1863,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Pattern to be used to find a macro definition.  It is a search
 	pattern, just like for the "/" command.  This option is used for the
 	commands like "[i" and "[d" |include-search|.  The 'isident' option is
-	used to recognize the defined name after the match:
+	used to recognize the defined name after the match: >
 		{match with 'define'}{non-ID chars}{defined name}{non-ID char}
-	See |option-backslash| about inserting backslashes to include a space
+<	See |option-backslash| about inserting backslashes to include a space
 	or backslash.
 	For C++ this value would be useful, to include const type declarations: >
 		^\(#\s*define\|[a-z]*\s*const\s*[a-z]*\)
@@ -2088,17 +2085,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 	    :set dir=c:\\tmp,\ dir\\,with\\,commas,\\\ dir\ with\ spaces
 <	- For backwards compatibility with Vim version 3.0 a '>' at the start
 	  of the option is removed.
-	Using "." first in the list is recommended.  This means that editing
-	the same file twice will result in a warning.  Using "/tmp" on Unix is
-	discouraged: When the system crashes you lose the swap file.
-	"/var/tmp" is often not cleared when rebooting, thus is a better
-	choice than "/tmp".  But others on the computer may be able to see the
-	files, and it can contain a lot of files, your swap files get lost in
-	the crowd.  That is why a "tmp" directory in your home directory is
-	tried first.
-	The use of |:set+=| and |:set-=| is preferred when adding or removing
-	directories from the list.  This avoids problems when a future version
-	uses another default.
+
+	Editing the same file twice will result in a warning.  Using "/tmp" on
+	is discouraged: if the system crashes you lose the swap file. And
+	others on the computer may be able to see the files.
+	Use |:set+=| and |:set-=| when adding or removing directories from the
+	list, this avoids problems if the Nvim default is changed.
+
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
@@ -3745,7 +3738,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'linespace'* *'lsp'*
 'linespace' 'lsp'	number	(default 0)
 			global
-			{only in the GUI}
+			only in the GUI
 	Number of pixel lines inserted between characters.  Useful if the font
 	uses the full character cell height, making lines touch each other.
 	When non-zero there is room for underlining.
@@ -4046,9 +4039,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 	per word depends very much on how similar the words are, that's why
 	this tuning is complicated.
 
-	There are three numbers, separated by commas:
+	There are three numbers, separated by commas: >
 		{start},{inc},{added}
-
+<
 	For most languages the uncompressed word tree fits in memory.  {start}
 	gives the amount of memory in Kbyte that can be used before any
 	compression is done.  It should be a bit smaller than the amount of
@@ -4191,7 +4184,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			*'mousehide'* *'mh'* *'nomousehide'* *'nomh'*
 'mousehide' 'mh'	boolean	(default on)
 			global
-			{only works in the GUI}
+			only in the GUI
 	When on, the mouse pointer is hidden when characters are typed.
 	The mouse pointer is restored when the mouse is moved.
 
@@ -4430,7 +4423,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			    *'opendevice'* *'odev'* *'noopendevice'* *'noodev'*
 'opendevice' 'odev'	boolean	(default off)
 			global
-			{only for Windows}
+			only for Windows
 	Enable reading and writing from devices.  This may get Vim stuck on a
 	device that can be opened but doesn't actually do the I/O.  Therefore
 	it is off by default.
@@ -5327,7 +5320,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			*'shellslash'* *'ssl'* *'noshellslash'* *'nossl'*
 'shellslash' 'ssl'	boolean	(default off)
 			global
-			{only for MS-Windows}
+			only for MS-Windows
 	When set, a forward slash is used when expanding file names.  This is
 	useful when a Unix-like shell is used instead of cmd.exe.  Backward
 	slashes can still be typed, but they are changed to forward slashes by
@@ -7058,7 +7051,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'winaltkeys'* *'wak'*
 'winaltkeys' 'wak'	string	(default "menu")
 			global
-			{only used in Win32}
+			only used in Win32
 	Some GUI versions allow the access to menu entries by using the ALT
 	key in combination with a character that appears underlined in the
 	menu.  This conflicts with the use of the ALT key for mappings and

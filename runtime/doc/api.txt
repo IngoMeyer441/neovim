@@ -7,7 +7,7 @@
 Nvim API                                                           *API* *api*
 
 Nvim exposes a powerful API that can be used by plugins and external processes
-via |RPC|, |Lua| and VimL (|eval-api|).
+via |RPC|, |Lua| and Vimscript (|eval-api|).
 
 Applications can also embed libnvim to work with the C API directly.
 
@@ -17,8 +17,15 @@ Applications can also embed libnvim to work with the C API directly.
 API Usage                                               *api-rpc* *RPC* *rpc*
 
                                                         *msgpack-rpc*
-RPC is the typical way to control Nvim programmatically.  Nvim implements the
-MessagePack-RPC protocol:
+RPC is the main way to control Nvim programmatically.  Nvim implements the
+MessagePack-RPC protocol with these extra (out-of-spec) constraints:
+
+1. Responses must be given in reverse order of requests (like "unwinding
+   a stack").
+2. Nvim processes all messages (requests and notifications) in the order they
+   are received.
+
+MessagePack-RPC specification:
   https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md
   https://github.com/msgpack/msgpack/blob/0b8f5ac/spec.md
 
@@ -202,7 +209,7 @@ any of these approaches:
      nvim --api-info | python -c 'import msgpack, sys, yaml; yaml.dump(msgpack.unpackb(sys.stdin.buffer.read()), sys.stdout)'
 <
   3. Use the |api_info()| Vimscript function. >vim
-     :lua print(vim.inspect(vim.fn.api_info()))
+     :lua vim.print(vim.fn.api_info())
 <     Example using |filter()| to exclude non-deprecated API functions: >vim
      :new|put =map(filter(api_info().functions, '!has_key(v:val,''deprecated_since'')'), 'v:val.name')
 
@@ -580,7 +587,7 @@ nvim__get_runtime({pat}, {all}, {*opts})                 *nvim__get_runtime()*
     Parameters: ~
       • {pat}   pattern of files to search for
       • {all}   whether to return all matches or only the first
-      • {opts}  is_lua: only search lua subdirs
+      • {opts}  is_lua: only search Lua subdirs
 
     Return: ~
         list of absolute paths to the found files
@@ -1133,7 +1140,7 @@ nvim_list_chans()                                          *nvim_list_chans()*
         specified at |nvim_get_chan_info()|.
 
 nvim_list_runtime_paths()                          *nvim_list_runtime_paths()*
-    Gets the paths contained in 'runtimepath'.
+    Gets the paths contained in |runtime-search-path|.
 
     Return: ~
         List of paths
@@ -1196,7 +1203,7 @@ nvim_open_term({buffer}, {opts})                            *nvim_open_term()*
     Parameters: ~
       • {buffer}  the buffer to use (expected to be empty)
       • {opts}    Optional parameters.
-                  • on_input: lua callback for input sent, i e keypresses in
+                  • on_input: Lua callback for input sent, i e keypresses in
                     terminal mode. Note: keypresses are sent raw as they would
                     be to the pty master end. For instance, a carriage return
                     is sent as a "\r", not as a "\n". |textlock| applies. It
@@ -1549,22 +1556,22 @@ Vimscript Functions                                            *api-vimscript*
 
                                                    *nvim_call_dict_function()*
 nvim_call_dict_function({dict}, {fn}, {args})
-    Calls a VimL |Dictionary-function| with the given arguments.
+    Calls a Vimscript |Dictionary-function| with the given arguments.
 
-    On execution error: fails with VimL error, updates v:errmsg.
+    On execution error: fails with Vimscript error, updates v:errmsg.
 
     Parameters: ~
-      • {dict}  Dictionary, or String evaluating to a VimL |self| dict
-      • {fn}    Name of the function defined on the VimL dict
+      • {dict}  Dictionary, or String evaluating to a Vimscript |self| dict
+      • {fn}    Name of the function defined on the Vimscript dict
       • {args}  Function arguments packed in an Array
 
     Return: ~
         Result of the function call
 
 nvim_call_function({fn}, {args})                        *nvim_call_function()*
-    Calls a VimL function with the given arguments.
+    Calls a Vimscript function with the given arguments.
 
-    On execution error: fails with VimL error, updates v:errmsg.
+    On execution error: fails with Vimscript error, updates v:errmsg.
 
     Parameters: ~
       • {fn}    Function to call
@@ -1576,7 +1583,7 @@ nvim_call_function({fn}, {args})                        *nvim_call_function()*
 nvim_command({command})                                       *nvim_command()*
     Executes an Ex command.
 
-    On execution error: fails with VimL error, updates v:errmsg.
+    On execution error: fails with Vimscript error, updates v:errmsg.
 
     Prefer using |nvim_cmd()| or |nvim_exec2()| over this. To evaluate
     multiple lines of Vim script or an Ex command directly, use
@@ -1588,13 +1595,13 @@ nvim_command({command})                                       *nvim_command()*
       • {command}  Ex command string
 
 nvim_eval({expr})                                                *nvim_eval()*
-    Evaluates a VimL |expression|. Dictionaries and Lists are recursively
+    Evaluates a Vimscript |expression|. Dictionaries and Lists are recursively
     expanded.
 
-    On execution error: fails with VimL error, updates v:errmsg.
+    On execution error: fails with Vimscript error, updates v:errmsg.
 
     Parameters: ~
-      • {expr}  VimL expression string
+      • {expr}  Vimscript expression string
 
     Return: ~
         Evaluation result or expanded object
@@ -1606,7 +1613,7 @@ nvim_exec2({src}, {*opts})                                      *nvim_exec2()*
     Unlike |nvim_command()| this function supports heredocs, script-scope
     (s:), etc.
 
-    On execution error: fails with VimL error, updates v:errmsg.
+    On execution error: fails with Vimscript error, updates v:errmsg.
 
     Parameters: ~
       • {src}   Vimscript code
@@ -1625,7 +1632,7 @@ nvim_exec2({src}, {*opts})                                      *nvim_exec2()*
 
                                                      *nvim_parse_expression()*
 nvim_parse_expression({expr}, {flags}, {highlight})
-    Parse a VimL expression.
+    Parse a Vimscript expression.
 
     Attributes: ~
         |api-fast|
@@ -1753,7 +1760,7 @@ nvim_cmd({*cmd}, {*opts})                                         *nvim_cmd()*
     example, instead of `vim.cmd.bdelete{ count = 2 }`, you may do
     `vim.cmd.bdelete(2)`.
 
-    On execution error: fails with VimL error, updates v:errmsg.
+    On execution error: fails with Vimscript error, updates v:errmsg.
 
     Parameters: ~
       • {cmd}   Command to execute. Must be a Dictionary that can contain the
@@ -2008,7 +2015,7 @@ Buffer Functions                                                  *api-buffer*
 
 For more information on buffers, see |buffers|.
 
-Unloaded Buffers:~
+Unloaded Buffers: ~
 
 Buffers may be unloaded by the |:bunload| command or the buffer's
 |'bufhidden'| option. When a buffer is unloaded its file contents are
@@ -2023,7 +2030,7 @@ whether a buffer is loaded.
 nvim_buf_attach({buffer}, {send_buffer}, {opts})           *nvim_buf_attach()*
     Activates buffer-update events on a channel, or as Lua callbacks.
 
-    Example (Lua): capture buffer updates in a global `events` variable (use "print(vim.inspect(events))" to see its contents): >lua
+    Example (Lua): capture buffer updates in a global `events` variable (use "vim.print(events)" to see its contents): >lua
       events = {}
       vim.api.nvim_buf_attach(0, false, {
         on_lines=function(...) table.insert(events, {...}) end})
@@ -2048,7 +2055,7 @@ nvim_buf_attach({buffer}, {send_buffer}, {opts})           *nvim_buf_attach()*
                          • deleted_codepoints (if `utf_sizes` is true)
                          • deleted_codeunits (if `utf_sizes` is true)
 
-                       • on_bytes: lua callback invoked on change. This
+                       • on_bytes: Lua callback invoked on change. This
                          callback receives more granular information about the
                          change compared to on_lines. Return `true` to detach. Args:
                          • the string "bytes"
@@ -2111,12 +2118,12 @@ nvim_buf_call({buffer}, {fun})                               *nvim_buf_call()*
 
     Parameters: ~
       • {buffer}  Buffer handle, or 0 for current buffer
-      • {fun}     Function to call inside the buffer (currently lua callable
+      • {fun}     Function to call inside the buffer (currently Lua callable
                   only)
 
     Return: ~
-        Return value of function. NB: will deepcopy lua values currently, use
-        upvalues to send lua references in and out.
+        Return value of function. NB: will deepcopy Lua values currently, use
+        upvalues to send Lua references in and out.
 
 nvim_buf_del_keymap({buffer}, {mode}, {lhs})           *nvim_buf_del_keymap()*
     Unmaps a buffer-local |mapping| for the given mode.
@@ -2547,7 +2554,7 @@ nvim_buf_get_extmarks({buffer}, {ns_id}, {start}, {end}, {opts})
       local ms  = api.nvim_buf_get_extmarks(0, ns, {2,0}, {2,0}, {})
       -- Get all marks in this buffer + namespace.
       local all = api.nvim_buf_get_extmarks(0, ns, 0, -1, {})
-      print(vim.inspect(ms))
+      vim.print(ms)
 <
 
     Parameters: ~
@@ -2623,9 +2630,10 @@ nvim_buf_set_extmark({buffer}, {ns_id}, {line}, {col}, {*opts})
                     highlights of the text. Currently only affects virt_text
                     highlights, but might affect `hl_group` in later versions.
                     • "replace": only show the virt_text color. This is the
-                      default
-                    • "combine": combine with background text color
-                    • "blend": blend with background text color.
+                      default.
+                    • "combine": combine with background text color.
+                    • "blend": blend with background text color. Not supported
+                      for "inline" virt_text.
 
                   • virt_lines : virtual lines to add next to this mark This
                     should be an array over lines, where each line in turn is
@@ -2713,7 +2721,7 @@ nvim_get_namespaces()                                  *nvim_get_namespaces()*
 nvim_set_decoration_provider({ns_id}, {*opts})
     Set or change decoration provider for a |namespace|
 
-    This is a very general purpose interface for having lua callbacks being
+    This is a very general purpose interface for having Lua callbacks being
     triggered during the redraw code.
 
     The expected usage is to set |extmarks| for the currently redrawn buffer.
@@ -2769,12 +2777,12 @@ nvim_win_call({window}, {fun})                               *nvim_win_call()*
 
     Parameters: ~
       • {window}  Window handle, or 0 for current window
-      • {fun}     Function to call inside the window (currently lua callable
+      • {fun}     Function to call inside the window (currently Lua callable
                   only)
 
     Return: ~
-        Return value of function. NB: will deepcopy lua values currently, use
-        upvalues to send lua references in and out.
+        Return value of function. NB: will deepcopy Lua values currently, use
+        upvalues to send Lua references in and out.
 
     See also: ~
       • |win_execute()|
@@ -2818,6 +2826,9 @@ nvim_win_get_cursor({window})                          *nvim_win_get_cursor()*
 
     Return: ~
         (row, col) tuple
+
+    See also: ~
+      • |getcurpos()|
 
 nvim_win_get_height({window})                          *nvim_win_get_height()*
     Gets the window height

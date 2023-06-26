@@ -1051,8 +1051,7 @@ typed after an abbreviation: >
 There are no default abbreviations.
 
 Abbreviations are never recursive.  You can use ":ab f f-o-o" without any
-problem.  But abbreviations can be mapped.  {some versions of Vi support
-recursive abbreviations, for no apparent reason}
+problem.  But abbreviations can be mapped.
 
 				*:abbreviate-local* *:abbreviate-<buffer>*
 Just like mappings, abbreviations can be local to a buffer.  This is mostly
@@ -1546,6 +1545,7 @@ supports incremental command preview:
 	-- If invoked as a preview callback, performs 'inccommand' preview by
 	-- highlighting trailing whitespace in the current buffer.
 	local function trim_space_preview(opts, preview_ns, preview_buf)
+	  vim.cmd('hi clear Whitespace')
 	  local line1 = opts.line1
 	  local line2 = opts.line2
 	  local buf = vim.api.nvim_get_current_buf()

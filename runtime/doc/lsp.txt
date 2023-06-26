@@ -24,60 +24,59 @@ QUICKSTART                                              *lsp-quickstart*
 Nvim provides an LSP client, but the servers are provided by third parties.
 Follow these steps to get LSP features:
 
-  1. Install language servers using your package manager or by
-     following the upstream installation instruction.
+1. Install language servers using your package manager or by following the
+   upstream installation instruction. You can find language servers here:
+   https://microsoft.github.io/language-server-protocol/implementors/servers/
 
-     A list of language servers is available at:
+2. Configure the LSP client per language server. See |vim.lsp.start()| or use
+   this minimal example as a guide: >lua
 
-     https://microsoft.github.io/language-server-protocol/implementors/servers/
-
-  2. Configure the LSP client per language server.
-     A minimal example:
->lua
     vim.lsp.start({
       name = 'my-server-name',
       cmd = {'name-of-language-server-executable'},
       root_dir = vim.fs.dirname(vim.fs.find({'setup.py', 'pyproject.toml'}, { upward = true })[1]),
     })
 <
-     See |vim.lsp.start()| for details.
+3. Check that the server attached to the buffer: >
+    :lua =vim.lsp.get_active_clients()
 
-  3. Configure keymaps and autocmds to utilize LSP features.
-     See |lsp-config|.
+4. Configure keymaps and autocmds to use LSP features. See |lsp-config|.
 
                                                         *lsp-config*
+                                                        *lsp-defaults*
+When the LSP client starts it enables diagnostics |vim.diagnostic| (see
+|vim.diagnostic.config()| to customize). It also sets various default options,
+listed below, if (1) the language server supports the functionality and (2)
+the options are empty or were set by the builtin runtime (ftplugin) files. The
+options are not restored when the LSP client is stopped or detached.
 
-Starting a LSP client will automatically report diagnostics via
-|vim.diagnostic|. Read |vim.diagnostic.config()| to learn how to customize the
-display.
-
-It also sets some buffer options if the language server supports the
-functionality and if the options are otherwise empty or have the default
-values set by Nvim runtime files (e.g. a ftplugin). In the latter case,
-the default values are not restored when the LSP client is detached from
-the buffer.
-
-- 'omnifunc' is set to |vim.lsp.omnifunc()|. This allows to trigger completion
-  using |i_CTRL-X_CTRL-O|
+- 'omnifunc' is set to |vim.lsp.omnifunc()|, use |i_CTRL-X_CTRL-O| to trigger
+  completion.
 - 'tagfunc' is set to |vim.lsp.tagfunc()|. This enables features like
   go-to-definition, |:tjump|, and keymaps like |CTRL-]|, |CTRL-W_]|,
   |CTRL-W_}| to utilize the language server.
-- 'formatexpr' is set to |vim.lsp.formatexpr()| if both 'formatprg' and
-  'formatexpr' are empty. This allows to format lines via |gq| if the language
-  server supports it.
+- 'formatexpr' is set to |vim.lsp.formatexpr()|, so you can format lines via
+  |gq| if the language server supports it.
+  - To opt out of this use |gw| instead of gq, or set 'formatexpr' on LspAttach.
 
-To use other LSP features like hover, rename, etc. you can setup some
-additional keymaps. It's recommended to setup them in a |LspAttach| autocmd to
-ensure they're only active if there is a LSP client running. An example:
->lua
+                                                        *lsp-defaults-disable*
+To override the above defaults, set or unset the options on |LspAttach|: >lua
+    vim.api.nvim_create_autocmd('LspAttach', {
+      callback = function(ev)
+        vim.bo[ev.buf].formatexpr = nil
+        vim.bo[ev.buf].omnifunc = nil
+      end,
+    })
+
+To use other LSP features like hover, rename, etc. you can set other keymaps
+on |LspAttach|. Example: >lua
     vim.api.nvim_create_autocmd('LspAttach', {
       callback = function(args)
         vim.keymap.set('n', 'K', vim.lsp.buf.hover, { buffer = args.buf })
       end,
     })
 
-<
-The most used functions are:
+The most common functions are:
 
 - |vim.lsp.buf.hover()|
 - |vim.lsp.buf.format()|
@@ -101,11 +100,9 @@ calls behind capability checks:
 <
 
 To learn what capabilities are available you can run the following command in
-a buffer with a started LSP client:
+a buffer with a started LSP client: >vim
 
->vim
     :lua =vim.lsp.get_active_clients()[1].server_capabilities
-<
 
 Full list of features provided by default can be found in |lsp-buf|.
 
@@ -113,47 +110,28 @@ Full list of features provided by default can be found in |lsp-buf|.
 FAQ                                                     *lsp-faq*
 
 - Q: How to force-reload LSP?
-  A: Stop all clients, then reload the buffer. >vim
-
+- A: Stop all clients, then reload the buffer. >vim
      :lua vim.lsp.stop_client(vim.lsp.get_active_clients())
      :edit
 
 - Q: Why isn't completion working?
-  A: In the buffer where you want to use LSP, check that 'omnifunc' is set to
-     "v:lua.vim.lsp.omnifunc": >vim
-
-     :verbose set omnifunc?
-
-<     Some other plugin may be overriding the option. To avoid that, you could
-     set the option in an |after-directory| ftplugin, e.g.
-     "after/ftplugin/python.vim".
+- A: In the buffer where you want to use LSP, check that 'omnifunc' is set to
+     "v:lua.vim.lsp.omnifunc": `:verbose set omnifunc?`
+     - Some other plugin may be overriding the option. To avoid that you could
+       set the option in an |after-directory| ftplugin, e.g.
+       "after/ftplugin/python.vim".
 
 - Q: How do I run a request synchronously (e.g. for formatting on file save)?
-  A: Check if the function has an `async` parameter and set the value to
-  false.
-
-     E.g. code formatting: >vim
+- A: Check if the function has an `async` parameter and set the value to
+  false. E.g. code formatting: >vim
 
      " Auto-format *.rs (rust) files prior to saving them
      " (async = false is the default for format)
      autocmd BufWritePre *.rs lua vim.lsp.buf.format({ async = false })
 <
-- Q: How can I disable LSP formatting when using the |gq| command?
-  A: To use the default internal formatting method and bypass the LSP client's
-  'formatexpr', use |gw| instead.
-  Alternatively you can completely disable LSP formatting with gq by
-  unsetting 'formatexpr':
-
->lua
-    vim.api.nvim_create_autocmd('LspAttach', {
-        callback = function(args)
-            vim.bo[args.buf].formatexpr = nil
-        end,
-    })
-<
                                                            *lsp-vs-treesitter*
 - Q: How do LSP and Treesitter compare?
-  A: LSP requires a client and language server. The language server uses
+- A: LSP requires a client and language server. The language server uses
      semantic analysis to understand code at a project level. This provides
      language servers with the ability to rename across files, find
      definitions in external libraries and more.
@@ -176,132 +154,84 @@ The `vim.lsp.buf_…` functions perform operations for all LSP clients attached
 to the given buffer. |lsp-buf|
 
 LSP request/response handlers are implemented as Lua functions (see
-|lsp-handler|). The |vim.lsp.handlers| table defines default handlers used
-when creating a new client. Keys are LSP method names: >vim
-
-    :lua print(vim.inspect(vim.tbl_keys(vim.lsp.handlers)))
-<
+|lsp-handler|).
                                                                   *lsp-method*
 
-Methods are the names of requests and notifications as defined by the LSP
-specification. These LSP requests/notifications are defined by default:
+Requests and notifications defined by the LSP specification are referred to as
+"LSP methods". The Nvim LSP client provides default handlers in the global
+|vim.lsp.handlers| table, you can list them with this command: >vim
 
-    callHierarchy/incomingCalls
-    callHierarchy/outgoingCalls
-    textDocument/codeAction
-    textDocument/completion
-    textDocument/declaration*
-    textDocument/definition
-    textDocument/documentHighlight
-    textDocument/documentSymbol
-    textDocument/formatting
-    textDocument/hover
-    textDocument/implementation*
-    textDocument/inlayHint
-    textDocument/publishDiagnostics
-    textDocument/rangeFormatting
-    textDocument/references
-    textDocument/rename
-    textDocument/semanticTokens/full
-    textDocument/semanticTokens/full/delta
-    textDocument/signatureHelp
-    textDocument/typeDefinition*
-    window/logMessage
-    window/showMessage
-    window/showDocument
-    window/showMessageRequest
-    workspace/applyEdit
-    workspace/inlayHint/refresh
-    workspace/symbol
+    :lua vim.print(vim.tbl_keys(vim.lsp.handlers))
+<
+They are also listed below. Note that handlers depend on server support: they
+won't run if your server doesn't support them.
 
-* NOTE: These are sometimes not implemented by servers.
+- callHierarchy/incomingCalls
+- callHierarchy/outgoingCalls
+- textDocument/codeAction
+- textDocument/completion
+- textDocument/declaration*
+- textDocument/definition
+- textDocument/documentHighlight
+- textDocument/documentSymbol
+- textDocument/formatting
+- textDocument/hover
+- textDocument/implementation*
+- textDocument/inlayHint
+- textDocument/publishDiagnostics
+- textDocument/rangeFormatting
+- textDocument/references
+- textDocument/rename
+- textDocument/semanticTokens/full
+- textDocument/semanticTokens/full/delta
+- textDocument/signatureHelp
+- textDocument/typeDefinition*
+- window/logMessage
+- window/showMessage
+- window/showDocument
+- window/showMessageRequest
+- workspace/applyEdit
+- workspace/configuration
+- workspace/executeCommand
+- workspace/inlayHint/refresh
+- workspace/symbol
+- workspace/workspaceFolders
 
                                                                  *lsp-handler*
+LSP handlers are functions that handle |lsp-response|s to requests made by Nvim
+to the server. (Notifications, as opposed to requests, are fire-and-forget:
+there is no response, so they can't be handled. |lsp-notification|)
 
-lsp-handlers are functions with special signatures that are designed to handle
-responses and notifications from LSP servers.
+Each response handler has this signature: >
 
-For |lsp-request|, each |lsp-handler| has this signature: >
-
-  function(err, result, ctx, config)
+    function(err, result, ctx, config)
 <
     Parameters: ~
-        {err}       (table|nil)
-                        When the language server is unable to complete a
-                        request, a table with information about the error is
-                        sent. Otherwise, it is `nil`. See |lsp-response|.
-        {result}    (Result | Params | nil)
-                        When the language server is able to successfully
-                        complete a request, this contains the `result` key of
-                        the response. See |lsp-response|.
-        {ctx}       (table)
-                        Context describes additional calling state associated
-                        with the handler. It consists of the following key,
-                        value pairs:
-
-                        {method}    (string)
-                                    The |lsp-method| name.
-                        {client_id} (number)
-                                    The ID of the |vim.lsp.client|.
-                        {bufnr}     (Buffer)
-                                    Buffer handle, or 0 for current.
-                        {params}    (table|nil)
-                                    The parameters used in the original
-                                    request which resulted in this handler
-                                    call.
-        {config}    (table)
-                        Configuration for the handler.
-
-                        Each handler can define its own configuration table
-                        that allows users to customize the behavior of a
-                        particular handler.
-
-                        To configure a particular |lsp-handler|, see:
-                            |lsp-handler-configuration|
-
+        - {err}     (table|nil) Error info dict, or `nil` if the request
+                    completed.
+        - {result}  (Result | Params | nil) `result` key of the |lsp-response| or
+                    `nil` if the request failed.
+        - {ctx}     (table) Table of calling state associated with the
+                    handler, with these keys:
+                    - {method}  (string) |lsp-method| name.
+                    - {client_id} (number) |vim.lsp.client| identifier.
+                    - {bufnr}   (Buffer) Buffer handle.
+                    - {params}  (table|nil) Request parameters table.
+                    - {version} (number) Document version at time of
+                                request. Handlers can compare this to the
+                                current document version to check if the
+                                response is "stale". See also |b:changedtick|.
+        - {config}  (table) Handler-defined configuration table, which allows
+                    users to customize handler behavior.
+                    For an example, see:
+                        |vim.lsp.diagnostic.on_publish_diagnostics()|
+                    To configure a particular |lsp-handler|, see:
+                        |lsp-handler-configuration|
 
     Returns: ~
-        The |lsp-handler| can respond by returning two values: `result, err`
-        Where `err` must be shaped like an RPC error:
-            `{ code, message, data? }`
-
-        You can use |vim.lsp.rpc.rpc_response_error()| to create this object.
-
-For |lsp-notification|, each |lsp-handler| has this signature: >
-
-  function(err, result, ctx, config)
-<
-    Parameters: ~
-        {err}       (nil)
-                        This is always `nil`.
-                        See |lsp-notification|
-        {result}    (Result)
-                        This contains the `params` key of the notification.
-                        See |lsp-notification|
-        {ctx}       (table)
-                        Context describes additional calling state associated
-                        with the handler. It consists of the following key,
-                        value pairs:
-
-                        {method}    (string)
-                                        The |lsp-method| name.
-                        {client_id} (number)
-                                        The ID of the |vim.lsp.client|.
-        {config}    (table)
-                        Configuration for the handler.
-
-                        Each handler can define its own configuration table
-                        that allows users to customize the behavior of a
-                        particular handler.
-
-                        For an example, see:
-                            |vim.lsp.diagnostic.on_publish_diagnostics()|
-
-                        To configure a particular |lsp-handler|, see:
-                            |lsp-handler-configuration|
-
-    Returns: ~
-        The |lsp-handler|'s return value will be ignored.
+        Two values `result, err` where `err` is shaped like an RPC error: >
+            { code, message, data? }
+<        You can use |vim.lsp.rpc.rpc_response_error()| to create this object.
 
                                                    *lsp-handler-configuration*
 
@@ -374,42 +304,37 @@ To configure the behavior of a builtin |lsp-handler|, the convenient method
 Handlers can be set by:
 
 - Setting a field in vim.lsp.handlers.                      *vim.lsp.handlers*
-    vim.lsp.handlers is a global table that contains the default mapping of
-    |lsp-method| names to |lsp-handlers|.
-
-    To override the handler for the `"textDocument/definition"` method: >lua
+  vim.lsp.handlers is a global table that contains the default mapping of
+  |lsp-method| names to |lsp-handlers|. To override the handler for the
+  `"textDocument/definition"` method: >lua
 
     vim.lsp.handlers["textDocument/definition"] = my_custom_default_definition
 <
-- The {handlers} parameter for |vim.lsp.start_client()|.
-    This will set the |lsp-handler| as the default handler for this server.
+- The {handlers} parameter of |vim.lsp.start()|. This sets the default
+  |lsp-handler| for the server being started. Example: >lua
 
-    For example: >lua
-
-    vim.lsp.start_client {
+    vim.lsp.start {
       ..., -- Other configuration omitted.
       handlers = {
         ["textDocument/definition"] = my_custom_server_definition
       },
     }
 
-- The {handler} parameter for |vim.lsp.buf_request()|.
-    This will set the |lsp-handler| ONLY for the current request.
+- The {handler} parameter of |vim.lsp.buf_request_all()|. This sets
+  the |lsp-handler| ONLY for the given request(s). Example: >lua
 
-    For example: >lua
-
-    vim.lsp.buf_request(
+    vim.lsp.buf_request_all(
       0,
       "textDocument/definition",
-      definition_params,
-      my_request_custom_definition
+      my_request_params,
+      my_handler
     )
 <
 In summary, the |lsp-handler| will be chosen based on the current |lsp-method|
 in the following order:
 
-1. Handler passed to |vim.lsp.buf_request()|, if any.
-2. Handler defined in |vim.lsp.start_client()|, if any.
+1. Handler passed to |vim.lsp.buf_request_all()|, if any.
+2. Handler defined in |vim.lsp.start()|, if any.
 3. Handler defined in |vim.lsp.handlers|, if any.
 
                                                             *vim.lsp.log_levels*
@@ -430,12 +355,12 @@ name: >lua
 <
 
                                                                 *lsp-response*
-For the format of the response message, see:
-    https://microsoft.github.io/language-server-protocol/specifications/specification-current/#responseMessage
+LSP response shape:
+https://microsoft.github.io/language-server-protocol/specifications/specification-current/#responseMessage
 
                                                                 *lsp-notification*
-For the format of the notification message, see:
-    https://microsoft.github.io/language-server-protocol/specifications/specification-current/#notificationMessage
+LSP notification shape:
+https://microsoft.github.io/language-server-protocol/specifications/specification-current/#notificationMessage
 
                                                                 *lsp-on-list-handler*
 
@@ -478,6 +403,8 @@ LspReferenceText          used for highlighting "text" references
 LspReferenceRead          used for highlighting "read" references
                                                           *hl-LspReferenceWrite*
 LspReferenceWrite         used for highlighting "write" references
+                                                          *hl-LspInlayHint*
+LspInlayHint              used for highlighting inlay hints
 
 
                                                       *lsp-highlight-codelens*
@@ -692,6 +619,10 @@ buf_attach_client({bufnr}, {client_id})          *vim.lsp.buf_attach_client()*
       • {bufnr}      (integer) Buffer handle, or 0 for current
       • {client_id}  (integer) Client id
 
+    Return: ~
+        (boolean) success `true` if client was attached successfully; `false`
+        otherwise
+
 buf_detach_client({bufnr}, {client_id})          *vim.lsp.buf_detach_client()*
     Detaches client from the specified buffer. Note: While the server is
     notified that the text document (buffer) was closed, it is still able to
@@ -720,31 +651,27 @@ buf_notify({bufnr}, {method}, {params})                 *vim.lsp.buf_notify()*
         (boolean) success true if any client returns true; false otherwise
 
                                                    *vim.lsp.buf_request_all()*
-buf_request_all({bufnr}, {method}, {params}, {callback})
-    Sends an async request for all active clients attached to the buffer.
-    Executes the callback on the combined result. Parameters are the same as
-    |vim.lsp.buf_request()| but the return result and callback are different.
+buf_request_all({bufnr}, {method}, {params}, {handler})
+    Sends an async request for all active clients attached to the buffer and
+    executes the `handler` callback with the combined result.
 
     Parameters: ~
-      • {bufnr}     (integer) Buffer handle, or 0 for current.
-      • {method}    (string) LSP method name
-      • {params}    (table|nil) Parameters to send to the server
-      • {callback}  (function) The callback to call when all requests are
-                    finished. Unlike `buf_request`, this will collect all the
-                    responses from each server instead of handling them. A map
-                    of client_id:request_result will be provided to the
-                    callback.
+      • {bufnr}    (integer) Buffer handle, or 0 for current.
+      • {method}   (string) LSP method name
+      • {params}   (table|nil) Parameters to send to the server
+      • {handler}  (function) Handler called after all requests are completed.
+                   Server results are passed as a `client_id:result` map.
 
     Return: ~
-        fun() cancel A function that will cancel all requests
+        fun() cancel Function that cancels all requests.
 
                                                   *vim.lsp.buf_request_sync()*
 buf_request_sync({bufnr}, {method}, {params}, {timeout_ms})
     Sends a request to all server and waits for the response of all of them.
 
     Calls |vim.lsp.buf_request_all()| but blocks Nvim while awaiting the
-    result. Parameters are the same as |vim.lsp.buf_request()| but the return
-    result is different. Wait maximum of {timeout_ms} (default 1000) ms.
+    result. Parameters are the same as |vim.lsp.buf_request_all()| but the
+    result is different. Waits a maximum of {timeout_ms} (default 1000) ms.
 
     Parameters: ~
       • {bufnr}       (integer) Buffer handle, or 0 for current.
@@ -827,21 +754,6 @@ client_is_stopped({client_id})                   *vim.lsp.client_is_stopped()*
 
     Return: ~
         (boolean) stopped true if client is stopped, false otherwise.
-
-                                            *vim.lsp.for_each_buffer_client()*
-for_each_buffer_client({bufnr}, {fn})
-    Invokes a function for each LSP client attached to a buffer.
-
-    Parameters: ~
-      • {bufnr}  (integer) Buffer number
-      • {fn}     (function) Function to run on each client attached to buffer
-                 {bufnr}. The function takes the client, client ID, and buffer
-                 number as arguments. Example: >lua
-
-                   vim.lsp.for_each_buffer_client(0, function(client, client_id, bufnr)
-                     print(vim.inspect(client))
-                   end)
-<
 
 formatexpr({opts})                                      *vim.lsp.formatexpr()*
     Provides an interface between the built-in client and a `formatexpr`
@@ -1066,8 +978,8 @@ start_client({config})                                *vim.lsp.start_client()*
                     if `capabilities.offsetEncoding` was sent to it. You can
                     only modify the `client.offset_encoding` here before any
                     notifications are sent. Most language servers expect to be
-                    sent client specified settings after initialization.
-                    Neovim does not make this assumption. A
+                    sent client specified settings after initialization. Nvim
+                    does not make this assumption. A
                     `workspace/didChangeConfiguration` notification should be
                     sent to the server during on_init.
                   • on_exit Callback (code, signal, client_id) invoked on
@@ -1185,7 +1097,7 @@ code_action({options})                             *vim.lsp.buf.code_action()*
                    • range: (table|nil) Range for which code actions should be
                      requested. If in visual mode this defaults to the active
                      selection. Table must contain `start` and `end` keys with
-                     {row, col} tuples using mark-like indexing. See
+                     {row,col} tuples using mark-like indexing. See
                      |api-indexing|
 
     See also: ~
@@ -1268,8 +1180,7 @@ format({options})                                       *vim.lsp.buf.format()*
                    fields:
                    • formatting_options (table|nil): Can be used to specify
                      FormattingOptions. Some unspecified options will be
-                     automatically derived from the current Neovim options.
-                     See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#formattingOptions
+                     automatically derived from the current Nvim options. See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#formattingOptions
                    • timeout_ms (integer|nil, default 1000): Time in
                      milliseconds to block for formatting requests. No effect
                      if async=true
@@ -1293,7 +1204,7 @@ format({options})                                       *vim.lsp.buf.format()*
                    • name (string|nil): Restrict formatting to the client with
                      name (client.name) matching this field.
                    • range (table|nil) Range to format. Table must contain
-                     `start` and `end` keys with {row, col} tuples using (1,0)
+                     `start` and `end` keys with {row,col} tuples using (1,0)
                      indexing. Defaults to current selection in visual mode
                      Defaults to `nil` in other modes, formatting the full
                      buffer
@@ -1315,6 +1226,13 @@ incoming_calls()                                *vim.lsp.buf.incoming_calls()*
     Lists all the call sites of the symbol under the cursor in the |quickfix|
     window. If the symbol can resolve to multiple items, the user can pick one
     in the |inputlist()|.
+
+inlay_hint({bufnr}, {enable})                       *vim.lsp.buf.inlay_hint()*
+    Enable/disable/toggle inlay hints for a buffer
+
+    Parameters: ~
+      • {bufnr}   (integer) Buffer handle, or 0 for current
+      • {enable}  (boolean|nil) true/false to enable/disable, nil to toggle
 
 list_workspace_folders()                *vim.lsp.buf.list_workspace_folders()*
     List workspace folders.
@@ -1814,9 +1732,9 @@ make_given_range_params({start_pos}, {end_pos}, {bufnr}, {offset_encoding})
     similar to |vim.lsp.util.make_range_params()|.
 
     Parameters: ~
-      • {start_pos}        integer[]|nil {row, col} mark-indexed position.
+      • {start_pos}        integer[]|nil {row,col} mark-indexed position.
                            Defaults to the start of the last visual selection.
-      • {end_pos}          integer[]|nil {row, col} mark-indexed position.
+      • {end_pos}          integer[]|nil {row,col} mark-indexed position.
                            Defaults to the end of the last visual selection.
       • {bufnr}            (integer|nil) buffer handle or 0 for current,
                            defaults to current
@@ -1953,8 +1871,8 @@ set_lines({lines}, {A}, {B}, {new_lines})           *vim.lsp.util.set_lines()*
 
     Parameters: ~
       • {lines}      (table) Original list of strings
-      • {A}          (table) Start position; a 2-tuple of {line, col} numbers
-      • {B}          (table) End position; a 2-tuple of {line, col} numbers
+      • {A}          (table) Start position; a 2-tuple of {line,col} numbers
+      • {B}          (table) End position; a 2-tuple of {line,col} numbers
       • {new_lines}  A list of strings to replace the original
 
     Return: ~

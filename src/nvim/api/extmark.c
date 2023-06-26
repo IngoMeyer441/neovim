@@ -320,7 +320,7 @@ ArrayOf(Integer) nvim_buf_get_extmark_by_id(Buffer buffer, Integer ns_id,
 ///   local ms  = api.nvim_buf_get_extmarks(0, ns, {2,0}, {2,0}, {})
 ///   -- Get all marks in this buffer + namespace.
 ///   local all = api.nvim_buf_get_extmarks(0, ns, 0, -1, {})
-///   print(vim.inspect(ms))
+///   vim.print(ms)
 /// </pre>
 ///
 /// @param buffer  Buffer handle, or 0 for current buffer
@@ -478,7 +478,7 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
 ///                              shifting the underlying text.
 ///                 - "right_align": display right aligned in the window.
 ///                 - "inline": display at the specified column, and
-///                              shift the buffer text to the right as needed
+///                             shift the buffer text to the right as needed
 ///               - virt_text_win_col : position the virtual text at a fixed
 ///                                     window column (starting from the first
 ///                                     text column)
@@ -490,10 +490,10 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
 ///                           highlights of the text. Currently only affects
 ///                           virt_text highlights, but might affect `hl_group`
 ///                           in later versions.
-///                 - "replace": only show the virt_text color. This is the
-///                              default
-///                 - "combine": combine with background text color
+///                 - "replace": only show the virt_text color. This is the default.
+///                 - "combine": combine with background text color.
 ///                 - "blend": blend with background text color.
+///                            Not supported for "inline" virt_text.
 ///
 ///               - virt_lines : virtual lines to add next to this mark
 ///                   This should be an array over lines, where each line in
@@ -701,7 +701,7 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
     } else if (strequal("inline", str.data)) {
       decor.virt_text_pos = kVTInline;
     } else {
-      VALIDATE_S(false, "virt_text_pos", "", {
+      VALIDATE_S(false, "virt_text_pos", str.data, {
         goto error;
       });
     }
@@ -719,23 +719,28 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
   OPTION_TO_BOOL(decor.virt_text_hide, virt_text_hide, false);
   OPTION_TO_BOOL(decor.hl_eol, hl_eol, false);
 
-  if (opts->hl_mode.type == kObjectTypeString) {
+  if (HAS_KEY(opts->hl_mode)) {
+    VALIDATE_T("hl_mode", kObjectTypeString, opts->hl_mode.type, {
+      goto error;
+    });
+
     String str = opts->hl_mode.data.string;
     if (strequal("replace", str.data)) {
       decor.hl_mode = kHlModeReplace;
     } else if (strequal("combine", str.data)) {
       decor.hl_mode = kHlModeCombine;
     } else if (strequal("blend", str.data)) {
+      if (decor.virt_text_pos == kVTInline) {
+        VALIDATE(false, "%s", "cannot use 'blend' hl_mode with inline virtual text", {
+          goto error;
+        });
+      }
       decor.hl_mode = kHlModeBlend;
     } else {
-      VALIDATE_S(false, "virt_text_pos", "", {
+      VALIDATE_S(false, "hl_mode", str.data, {
         goto error;
       });
     }
-  } else if (HAS_KEY(opts->hl_mode)) {
-    VALIDATE_T("hl_mode", kObjectTypeString, opts->hl_mode.type, {
-      goto error;
-    });
   }
 
   bool virt_lines_leftcol = false;
@@ -1048,7 +1053,7 @@ void nvim_buf_clear_namespace(Buffer buffer, Integer ns_id, Integer line_start, 
 
 /// Set or change decoration provider for a |namespace|
 ///
-/// This is a very general purpose interface for having lua callbacks
+/// This is a very general purpose interface for having Lua callbacks
 /// being triggered during the redraw code.
 ///
 /// The expected usage is to set |extmarks| for the currently

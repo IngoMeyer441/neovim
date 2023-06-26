@@ -6,22 +6,31 @@ local M = {}
 ---@class lsp._inlay_hint.bufstate
 ---@field version integer
 ---@field client_hint table<integer, table<integer, lsp.InlayHint[]>> client_id -> (lnum -> hints)
+---@field enabled boolean Whether inlay hints are enabled for the buffer
+---@field timer uv.uv_timer_t? Debounce timer associated with the buffer
+---@field applied table<integer, integer> Last version of hints applied to this line
 
 ---@type table<integer, lsp._inlay_hint.bufstate>
-local hint_cache_by_buf = setmetatable({}, {
-  __index = function(t, b)
-    local key = b > 0 and b or api.nvim_get_current_buf()
-    return rawget(t, key)
-  end,
-})
+local bufstates = {}
 
 local namespace = api.nvim_create_namespace('vim_lsp_inlayhint')
+local augroup = api.nvim_create_augroup('vim_lsp_inlayhint', {})
 
-M.__explicit_buffers = {}
+--- Reset the request debounce timer of a buffer
+---@private
+local function reset_timer(reset_bufnr)
+  local timer = bufstates[reset_bufnr].timer
+  if timer then
+    bufstates[reset_bufnr].timer = nil
+    if not timer:is_closing() then
+      timer:stop()
+      timer:close()
+    end
+  end
+end
 
 --- |lsp-handler| for the method `textDocument/inlayHint`
 --- Store hints for a specific buffer and client
---- Resolves unresolved hints
 ---@private
 function M.on_inlayhint(err, result, ctx, _)
   if err then
@@ -36,23 +45,10 @@ function M.on_inlayhint(err, result, ctx, _)
   if not result then
     return
   end
-  local bufstate = hint_cache_by_buf[bufnr]
-  if not bufstate then
-    bufstate = {
-      client_hint = vim.defaulttable(),
-      version = ctx.version,
-    }
-    hint_cache_by_buf[bufnr] = bufstate
-    api.nvim_buf_attach(bufnr, false, {
-      on_detach = function(_, b)
-        api.nvim_buf_clear_namespace(b, namespace, 0, -1)
-        hint_cache_by_buf[b] = nil
-      end,
-      on_reload = function(_, b)
-        api.nvim_buf_clear_namespace(b, namespace, 0, -1)
-        hint_cache_by_buf[b] = nil
-      end,
-    })
+  local bufstate = bufstates[bufnr]
+  if not (bufstate.client_hint and bufstate.version) then
+    bufstate.client_hint = vim.defaulttable()
+    bufstate.version = ctx.version
   end
   local hints_by_client = bufstate.client_hint
   local client = vim.lsp.get_client_by_id(client_id)
@@ -95,28 +91,24 @@ end
 
 ---@private
 local function resolve_bufnr(bufnr)
-  return bufnr == 0 and api.nvim_get_current_buf() or bufnr
+  return bufnr > 0 and bufnr or api.nvim_get_current_buf()
 end
 
 --- Refresh inlay hints for a buffer
 ---
---- It is recommended to trigger this using an autocmd or via keymap.
 ---@param opts (nil|table) Optional arguments
 ---  - bufnr (integer, default: 0): Buffer whose hints to refresh
 ---  - only_visible (boolean, default: false): Whether to only refresh hints for the visible regions of the buffer
 ---
---- Example:
---- <pre>vim
----   autocmd BufEnter,InsertLeave,BufWritePost <buffer> lua vim.lsp._inlay_hint.refresh()
---- </pre>
----
 ---@private
 function M.refresh(opts)
   opts = opts or {}
-  local bufnr = opts.bufnr or 0
+  local bufnr = resolve_bufnr(opts.bufnr or 0)
+  local bufstate = bufstates[bufnr]
+  if not (bufstate and bufstate.enabled) then
+    return
+  end
   local only_visible = opts.only_visible or false
-  bufnr = resolve_bufnr(bufnr)
-  M.__explicit_buffers[bufnr] = true
   local buffer_windows = {}
   for _, winid in ipairs(api.nvim_list_wins()) do
     if api.nvim_win_get_buf(winid) == bufnr then
@@ -148,30 +140,102 @@ function M.refresh(opts)
 end
 
 --- Clear inlay hints
----
----@param client_id integer|nil filter by client_id. All clients if nil
----@param bufnr integer|nil filter by buffer. All buffers if nil
+---@param bufnr (integer) Buffer handle, or 0 for current
 ---@private
-function M.clear(client_id, bufnr)
-  local buffers = bufnr and { resolve_bufnr(bufnr) } or vim.tbl_keys(hint_cache_by_buf)
-  for _, iter_bufnr in ipairs(buffers) do
-    M.__explicit_buffers[iter_bufnr] = false
-    local bufstate = hint_cache_by_buf[iter_bufnr]
-    local client_lens = (bufstate or {}).client_hint or {}
-    local client_ids = client_id and { client_id } or vim.tbl_keys(client_lens)
-    for _, iter_client_id in ipairs(client_ids) do
-      if bufstate then
-        bufstate.client_hint[iter_client_id] = {}
-      end
-    end
-    api.nvim_buf_clear_namespace(iter_bufnr, namespace, 0, -1)
+local function clear(bufnr)
+  bufnr = resolve_bufnr(bufnr)
+  if not bufstates[bufnr] then
+    return
   end
-  vim.cmd('redraw!')
+  reset_timer(bufnr)
+  local bufstate = bufstates[bufnr]
+  local client_lens = (bufstate or {}).client_hint or {}
+  local client_ids = vim.tbl_keys(client_lens)
+  for _, iter_client_id in ipairs(client_ids) do
+    if bufstate then
+      bufstate.client_hint[iter_client_id] = {}
+    end
+  end
+  api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
+  api.nvim__buf_redraw_range(bufnr, 0, -1)
+end
+
+---@private
+local function make_request(request_bufnr)
+  reset_timer(request_bufnr)
+  M.refresh({ bufnr = request_bufnr })
+end
+
+--- Enable inlay hints for a buffer
+---@param bufnr (integer) Buffer handle, or 0 for current
+---@private
+function M.enable(bufnr)
+  bufnr = resolve_bufnr(bufnr)
+  local bufstate = bufstates[bufnr]
+  if not (bufstate and bufstate.enabled) then
+    bufstates[bufnr] = { enabled = true, timer = nil, applied = {} }
+    M.refresh({ bufnr = bufnr })
+    api.nvim_buf_attach(bufnr, true, {
+      on_lines = function(_, cb_bufnr)
+        if not bufstates[cb_bufnr].enabled then
+          return true
+        end
+        reset_timer(cb_bufnr)
+        bufstates[cb_bufnr].timer = vim.defer_fn(function()
+          make_request(cb_bufnr)
+        end, 200)
+      end,
+      on_reload = function(_, cb_bufnr)
+        clear(cb_bufnr)
+        if bufstates[cb_bufnr] and bufstates[cb_bufnr].enabled then
+          bufstates[cb_bufnr] = { enabled = true }
+        end
+        M.refresh({ bufnr = cb_bufnr })
+      end,
+      on_detach = function(_, cb_bufnr)
+        clear(cb_bufnr)
+        bufstates[cb_bufnr] = nil
+      end,
+    })
+    api.nvim_create_autocmd('LspDetach', {
+      buffer = bufnr,
+      callback = function(opts)
+        clear(opts.buf)
+      end,
+      once = true,
+      group = augroup,
+    })
+  end
+end
+
+--- Disable inlay hints for a buffer
+---@param bufnr (integer) Buffer handle, or 0 for current
+---@private
+function M.disable(bufnr)
+  bufnr = resolve_bufnr(bufnr)
+  if bufstates[bufnr] and bufstates[bufnr].enabled then
+    clear(bufnr)
+    bufstates[bufnr].enabled = nil
+    bufstates[bufnr].timer = nil
+  end
+end
+
+--- Toggle inlay hints for a buffer
+---@param bufnr (integer) Buffer handle, or 0 for current
+---@private
+function M.toggle(bufnr)
+  bufnr = resolve_bufnr(bufnr)
+  local bufstate = bufstates[bufnr]
+  if bufstate and bufstate.enabled then
+    M.disable(bufnr)
+  else
+    M.enable(bufnr)
+  end
 end
 
 api.nvim_set_decoration_provider(namespace, {
   on_win = function(_, _, bufnr, topline, botline)
-    local bufstate = hint_cache_by_buf[bufnr]
+    local bufstate = bufstates[bufnr]
     if not bufstate then
       return
     end
@@ -180,35 +244,38 @@ api.nvim_set_decoration_provider(namespace, {
       return
     end
     local hints_by_client = bufstate.client_hint
-    api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
 
     for lnum = topline, botline do
-      for _, hints_by_lnum in pairs(hints_by_client) do
-        local line_hints = hints_by_lnum[lnum] or {}
-        for _, hint in pairs(line_hints) do
-          local text = ''
-          if type(hint.label) == 'string' then
-            text = hint.label
-          else
-            for _, part in ipairs(hint.label) do
-              text = text .. part.value
+      if bufstate.applied[lnum] ~= bufstate.version then
+        api.nvim_buf_clear_namespace(bufnr, namespace, lnum, lnum + 1)
+        for _, hints_by_lnum in pairs(hints_by_client) do
+          local line_hints = hints_by_lnum[lnum] or {}
+          for _, hint in pairs(line_hints) do
+            local text = ''
+            if type(hint.label) == 'string' then
+              text = hint.label
+            else
+              for _, part in ipairs(hint.label) do
+                text = text .. part.value
+              end
             end
+            local vt = {}
+            if hint.paddingLeft then
+              vt[#vt + 1] = { ' ' }
+            end
+            vt[#vt + 1] = { text, 'LspInlayHint' }
+            if hint.paddingRight then
+              vt[#vt + 1] = { ' ' }
+            end
+            api.nvim_buf_set_extmark(bufnr, namespace, lnum, hint.position.character, {
+              virt_text_pos = 'inline',
+              ephemeral = false,
+              virt_text = vt,
+              hl_mode = 'combine',
+            })
           end
-          if hint.paddingLeft then
-            text = ' ' .. text
-          end
-          if hint.paddingRight then
-            text = text .. ' '
-          end
-          api.nvim_buf_set_extmark(bufnr, namespace, lnum, hint.position.character, {
-            virt_text_pos = 'inline',
-            ephemeral = false,
-            virt_text = {
-              { text, 'LspInlayHint' },
-            },
-            hl_mode = 'combine',
-          })
         end
+        bufstate.applied[lnum] = bufstate.version
       end
     end
   end,

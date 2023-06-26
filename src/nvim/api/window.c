@@ -57,6 +57,8 @@ void nvim_win_set_buf(Window window, Buffer buffer, Error *err)
 /// (different windows showing the same buffer have independent cursor
 /// positions). |api-indexing|
 ///
+/// @see |getcurpos()|
+///
 /// @param window   Window handle, or 0 for current window
 /// @param[out] err Error details, if any
 /// @return (row, col) tuple
@@ -410,11 +412,11 @@ void nvim_win_close(Window window, Boolean force, Error *err)
 /// @see |nvim_buf_call()|
 ///
 /// @param window     Window handle, or 0 for current window
-/// @param fun        Function to call inside the window (currently lua callable
+/// @param fun        Function to call inside the window (currently Lua callable
 ///                   only)
 /// @param[out] err   Error details, if any
-/// @return           Return value of function. NB: will deepcopy lua values
-///                   currently, use upvalues to send lua references in and out.
+/// @return           Return value of function. NB: will deepcopy Lua values
+///                   currently, use upvalues to send Lua references in and out.
 Object nvim_win_call(Window window, LuaRef fun, Error *err)
   FUNC_API_SINCE(7)
   FUNC_API_LUA_ONLY
