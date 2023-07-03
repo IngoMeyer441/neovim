@@ -873,8 +873,7 @@ static void f_confirm(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   if (!error) {
-    rettv->vval.v_number = do_dialog(type, NULL, (char *)message, (char *)buttons, def, NULL,
-                                     false);
+    rettv->vval.v_number = do_dialog(type, NULL, message, buttons, def, NULL, false);
   }
 }
 
@@ -1717,7 +1716,7 @@ static void f_expand(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       emsg_off++;
     }
     size_t len;
-    char *errormsg = NULL;
+    const char *errormsg = NULL;
     char *result = eval_vars((char *)s, s, &len, NULL, &errormsg, NULL, false);
     if (p_verbose == 0) {
       emsg_off--;
@@ -1782,7 +1781,7 @@ static void f_menu_get(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// Expand all the special characters in a command string.
 static void f_expandcmd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  char *errormsg = NULL;
+  const char *errormsg = NULL;
   bool emsgoff = true;
 
   if (argvars[1].v_type == VAR_DICT

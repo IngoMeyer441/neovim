@@ -109,7 +109,7 @@ Dictionary nvim_parse_cmd(String str, Dictionary opts, Error *err)
   exarg_T ea;
   CmdParseInfo cmdinfo;
   char *cmdline = string_to_cstr(str);
-  char *errormsg = NULL;
+  const char *errormsg = NULL;
 
   if (!parse_cmdline(cmdline, &ea, &cmdinfo, &errormsg)) {
     if (errormsg != NULL) {
@@ -391,6 +391,12 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
     goto end;
   });
   VALIDATE(!is_cmd_ni(ea.cmdidx), "Command not implemented: %s", cmdname, {
+    goto end;
+  });
+  const char *fullname = IS_USER_CMDIDX(ea.cmdidx)
+    ? get_user_command_name(ea.useridx, ea.cmdidx)
+    : get_command_name(NULL, ea.cmdidx);
+  VALIDATE(strncmp(fullname, cmdname, strlen(cmdname)) == 0, "Invalid command: \"%s\"", cmdname, {
     goto end;
   });
 

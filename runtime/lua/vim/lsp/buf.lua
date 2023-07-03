@@ -581,9 +581,9 @@ function M.document_highlight()
 end
 
 --- Removes document highlights from current buffer.
----
-function M.clear_references()
-  util.buf_clear_references()
+--- @param bufnr integer|nil
+function M.clear_references(bufnr)
+  util.buf_clear_references(bufnr or 0)
 end
 
 ---@private
@@ -794,21 +794,6 @@ function M.execute_command(command_params)
     workDoneToken = command_params.workDoneToken,
   }
   request('workspace/executeCommand', command_params)
-end
-
---- Enable/disable/toggle inlay hints for a buffer
----@param bufnr (integer) Buffer handle, or 0 for current
----@param enable (boolean|nil) true/false to enable/disable, nil to toggle
-function M.inlay_hint(bufnr, enable)
-  vim.validate({ enable = { enable, { 'boolean', 'nil' } }, bufnr = { bufnr, 'number' } })
-  local inlay_hint = require('vim.lsp._inlay_hint')
-  if enable then
-    inlay_hint.enable(bufnr)
-  elseif enable == false then
-    inlay_hint.disable(bufnr)
-  else
-    inlay_hint.toggle(bufnr)
-  end
 end
 
 return M

@@ -1810,7 +1810,7 @@ bool path_with_extension(const char *path, const char *extension)
 }
 
 /// Return true if "name" is a full (absolute) path name or URL.
-bool vim_isAbsName(char *name)
+bool vim_isAbsName(const char *name)
 {
   return path_with_url(name) != 0 || path_is_absolute(name);
 }
@@ -1871,7 +1871,7 @@ char *fix_fname(const char *fname)
 #ifdef UNIX
   return FullName_save(fname, true);
 #else
-  if (!vim_isAbsName((char *)fname)
+  if (!vim_isAbsName(fname)
       || strstr(fname, "..") != NULL
       || strstr(fname, "//") != NULL
 # ifdef BACKSLASH_IN_FILENAME
@@ -2129,7 +2129,7 @@ int expand_wildcards_eval(char **pat, int *num_file, char ***file, int flags)
   int ret = FAIL;
   char *eval_pat = NULL;
   char *exp_pat = *pat;
-  char *ignored_msg;
+  const char *ignored_msg;
   size_t usedlen;
   const bool is_cur_alt_file = *exp_pat == '%' || *exp_pat == '#';
   bool star_follows = false;

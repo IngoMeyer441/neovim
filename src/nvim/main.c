@@ -629,8 +629,14 @@ int main(int argc, char **argv)
   }
 
   if (params.luaf != NULL) {
+    // Like "--cmd", "+", "-c" and "-S", don't truncate messages.
+    msg_scroll = true;
     bool lua_ok = nlua_exec_file(params.luaf);
     TIME_MSG("executing Lua -l script");
+    if (msg_didout) {
+      msg_putchar('\n');
+      msg_didout = false;
+    }
     getout(lua_ok ? 0 : 1);
   }
 
@@ -1361,7 +1367,7 @@ static void command_line_scan(mparm_T *parmp)
           }
           parmp->luaf = argv[0];
           argc--;
-          if (argc > 0) {  // Lua args after "-l <file>".
+          if (argc >= 0) {  // Lua args after "-l <file>".
             parmp->lua_arg0 = parmp->argc - argc;
             argc = 0;
           }

@@ -248,8 +248,8 @@ StlClickDefinition *stl_alloc_click_defs(StlClickDefinition *cdp, long width, si
 }
 
 /// Fill the click definitions array if needed.
-void stl_fill_click_defs(StlClickDefinition *click_defs, StlClickRecord *click_recs, char *buf,
-                         int width, bool tabline)
+void stl_fill_click_defs(StlClickDefinition *click_defs, StlClickRecord *click_recs,
+                         const char *buf, int width, bool tabline)
 {
   if (click_defs == NULL) {
     return;
@@ -263,6 +263,7 @@ void stl_fill_click_defs(StlClickDefinition *click_defs, StlClickRecord *click_r
   };
   for (int i = 0; click_recs[i].start != NULL; i++) {
     len += vim_strnsize(buf, (int)(click_recs[i].start - buf));
+    assert(len <= width);
     if (col < len) {
       while (col < len) {
         click_defs[col++] = cur_click_def;
@@ -270,7 +271,7 @@ void stl_fill_click_defs(StlClickDefinition *click_defs, StlClickRecord *click_r
     } else {
       xfree(cur_click_def.func);
     }
-    buf = (char *)click_recs[i].start;
+    buf = click_recs[i].start;
     cur_click_def = click_recs[i].def;
     if (!tabline && !(cur_click_def.type == kStlClickDisabled
                       || cur_click_def.type == kStlClickFuncRun)) {
@@ -905,9 +906,9 @@ int build_statuscol_str(win_T *wp, linenr_T lnum, long relnum, statuscol_T *stcp
   // Only update click definitions once per window per redraw
   if (fillclick) {
     stl_clear_click_defs(wp->w_statuscol_click_defs, wp->w_statuscol_click_defs_size);
-    wp->w_statuscol_click_defs = stl_alloc_click_defs(wp->w_statuscol_click_defs, width,
+    wp->w_statuscol_click_defs = stl_alloc_click_defs(wp->w_statuscol_click_defs, stcp->width,
                                                       &wp->w_statuscol_click_defs_size);
-    stl_fill_click_defs(wp->w_statuscol_click_defs, clickrec, stcp->text, width, false);
+    stl_fill_click_defs(wp->w_statuscol_click_defs, clickrec, stcp->text, stcp->width, false);
   }
 
   return width;
@@ -2052,17 +2053,6 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
 
       // Put a `<` to mark where we truncated at
       *trunc_p = '<';
-
-      if (width + 1 < maxwidth) {
-        // Advance the pointer to the end of the string
-        trunc_p = trunc_p + strlen(trunc_p);
-      }
-
-      // Fill up for half a double-wide character.
-      while (++width < maxwidth) {
-        MB_CHAR2BYTES(fillchar, trunc_p);
-        *trunc_p = NUL;
-      }
       // }
 
       // { Change the start point for items based on
@@ -2077,13 +2067,24 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
         // to be moved backwards.
         if (stl_items[i].start >= trunc_end_p) {
           stl_items[i].start -= item_offset;
+        } else {
           // Anything inside the truncated area is set to start
           // at the `<` truncation character.
-        } else {
           stl_items[i].start = trunc_p;
         }
       }
       // }
+
+      if (width + 1 < maxwidth) {
+        // Advance the pointer to the end of the string
+        trunc_p = trunc_p + strlen(trunc_p);
+      }
+
+      // Fill up for half a double-wide character.
+      while (++width < maxwidth) {
+        MB_CHAR2BYTES(fillchar, trunc_p);
+        *trunc_p = NUL;
+      }
     }
     width = maxwidth;
 

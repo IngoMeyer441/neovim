@@ -91,7 +91,6 @@ Copyright: Copyright (C) 2017 Charles E Campbell    *netrw-copyright*
       Marked Files: Grep..................................|netrw-mg|
       Marked Files: Hiding and Unhiding by Suffix.........|netrw-mh|
       Marked Files: Moving................................|netrw-mm|
-      Marked Files: Printing..............................|netrw-mp|
       Marked Files: Sourcing..............................|netrw-ms|
       Marked Files: Setting the Target Directory..........|netrw-mt|
       Marked Files: Tagging...............................|netrw-mT|
@@ -440,12 +439,10 @@ settings are described below, in |netrw-browser-options|, and in
 
  *g:netrw_use_errorwindow* =2: messages from netrw will use a popup window
 			     Move the mouse and pause to remove the popup window.
-			     (default value if popup windows are available)
 			 =1 : messages from netrw will use a separate one
 			      line window.  This window provides reliable
 			      delivery of messages.
-			     (default value if popup windows are not available)
-			 =0 : messages from netrw will use echoerr ;
+			 =0 : (default) messages from netrw will use echoerr ;
 			      messages don't always seem to show up this
 			      way, but one doesn't have to quit the window.
 
@@ -1108,7 +1105,6 @@ QUICK REFERENCE: MAPS				*netrw-browse-maps* {{{2
 	   mg	Apply vimgrep to marked files                        |netrw-mg|
 	   mh	Toggle marked file suffices' presence on hiding list |netrw-mh|
 	   mm	Move marked files to marked-file target directory    |netrw-mm|
-	   mp	Print marked files                                   |netrw-mp|
 	   mr	Mark files using a shell-style |regexp|                |netrw-mr|
 	   mt	Current browsing directory becomes markfile target   |netrw-mt|
 	   mT	Apply ctags to marked files                          |netrw-mT|
@@ -2154,7 +2150,6 @@ The following netrw maps make use of marked files:
     |netrw-mF|	Unmark marked files
     |netrw-mg|	Apply vimgrep to marked files
     |netrw-mm|	Move marked files to target
-    |netrw-mp|	Print marked files
     |netrw-ms|	Netrw will source marked files
     |netrw-mt|	Set target for |netrw-mm| and |netrw-mc|
     |netrw-mT|	Generate tags using marked files

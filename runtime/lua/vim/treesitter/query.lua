@@ -195,6 +195,12 @@ function M.set(lang, query_name, text)
   explicit_queries[lang][query_name] = M.parse(lang, text)
 end
 
+--- `false` if query files didn't exist or were empty
+---@type table<string, table<string, Query|false>>
+local query_get_cache = vim.defaulttable(function()
+  return setmetatable({}, { __mode = 'v' })
+end)
+
 ---@deprecated
 function M.get_query(...)
   vim.deprecate('vim.treesitter.query.get_query()', 'vim.treesitter.query.get()', '0.10')
@@ -212,16 +218,28 @@ function M.get(lang, query_name)
     return explicit_queries[lang][query_name]
   end
 
+  local cached = query_get_cache[lang][query_name]
+  if cached then
+    return cached
+  elseif cached == false then
+    return nil
+  end
+
   local query_files = M.get_files(lang, query_name)
   local query_string = read_query_files(query_files)
 
-  if #query_string > 0 then
-    return M.parse(lang, query_string)
+  if #query_string == 0 then
+    query_get_cache[lang][query_name] = false
+    return nil
   end
+
+  local query = M.parse(lang, query_string)
+  query_get_cache[lang][query_name] = query
+  return query
 end
 
----@type {[string]: {[string]: Query}}
-local query_cache = vim.defaulttable(function()
+---@type table<string, table<string, Query>>
+local query_parse_cache = vim.defaulttable(function()
   return setmetatable({}, { __mode = 'v' })
 end)
 
@@ -250,7 +268,7 @@ end
 ---@return Query Parsed query
 function M.parse(lang, query)
   language.add(lang)
-  local cached = query_cache[lang][query]
+  local cached = query_parse_cache[lang][query]
   if cached then
     return cached
   end
@@ -259,7 +277,7 @@ function M.parse(lang, query)
   self.query = vim._ts_parse_query(lang, query)
   self.info = self.query:inspect()
   self.captures = self.info.captures
-  query_cache[lang][query] = self
+  query_parse_cache[lang][query] = self
   return self
 end
 
@@ -475,7 +493,6 @@ local directive_handlers = {
       metadata[capture_id].range = range
     end
   end,
-
   -- Transform the content of the node
   -- Example: (#gsub! @_node ".*%.(.*)" "%1")
   ['gsub!'] = function(match, _, bufnr, pred, metadata)
@@ -496,6 +513,65 @@ local directive_handlers = {
     assert(type(replacement) == 'string')
 
     metadata[id].text = text:gsub(pattern, replacement)
+  end,
+  -- Trim blank lines from end of the node
+  -- Example: (#trim! @fold)
+  -- TODO(clason): generalize to arbitrary whitespace removal
+  ['trim!'] = function(match, _, bufnr, pred, metadata)
+    local node = match[pred[2]]
+    if not node then
+      return
+    end
+
+    local start_row, start_col, end_row, end_col = node:range()
+
+    -- Don't trim if region ends in middle of a line
+    if end_col ~= 0 then
+      return
+    end
+
+    while true do
+      -- As we only care when end_col == 0, always inspect one line above end_row.
+      local end_line = vim.api.nvim_buf_get_lines(bufnr, end_row - 1, end_row, true)[1]
+
+      if end_line ~= '' then
+        break
+      end
+
+      end_row = end_row - 1
+    end
+
+    -- If this produces an invalid range, we just skip it.
+    if start_row < end_row or (start_row == end_row and start_col <= end_col) then
+      metadata.range = { start_row, start_col, end_row, end_col }
+    end
+  end,
+  -- Set injection language from node text, interpreted first as language and then as filetype
+  -- Example: (#inject-language! @_lang)
+  ['inject-language!'] = function(match, _, bufnr, pred, metadata)
+    local id = pred[2]
+    local node = match[id]
+    if not node then
+      return
+    end
+
+    -- TODO(clason): replace by refactored `ts.has_parser` API
+    local has_parser = function(lang)
+      return vim._ts_has_language(lang)
+        or #vim.api.nvim_get_runtime_file('parser/' .. lang .. '.*', false) > 0
+    end
+
+    local alias = vim.treesitter.get_node_text(node, bufnr, { metadata = metadata[id] })
+    if not alias then
+      return
+    elseif has_parser(alias) then
+      metadata['injection.language'] = alias
+    else
+      local lang = vim.treesitter.language.get_lang(alias)
+      if lang and has_parser(lang) then
+        metadata['injection.language'] = lang
+      end
+    end
   end,
 }
 
