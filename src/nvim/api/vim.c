@@ -87,6 +87,9 @@ Integer nvim_get_hl_id_by_name(String name)
 
 /// Gets all or specific highlight groups in a namespace.
 ///
+/// @note When the `link` attribute is defined in the highlight definition
+///       map, other attributes will not be taking effect (see |:hi-link|).
+///
 /// @param ns_id Get highlight groups for namespace ns_id |nvim_get_namespaces()|.
 ///              Use 0 to get global highlight groups |:highlight|.
 /// @param opts  Options dict:
@@ -97,9 +100,6 @@ Integer nvim_get_hl_id_by_name(String name)
 /// @param[out] err Error details, if any.
 /// @return Highlight groups as a map from group name to a highlight definition map as in |nvim_set_hl()|,
 ///                   or only a single highlight definition map if requested by name or id.
-///
-/// @note When the `link` attribute is defined in the highlight definition
-///       map, other attributes will not be taking effect (see |:hi-link|).
 Dictionary nvim_get_hl(Integer ns_id, Dict(get_highlight) *opts, Arena *arena, Error *err)
   FUNC_API_SINCE(11)
 {
@@ -612,7 +612,7 @@ String nvim_get_current_line(Error *err)
 /// @param[out] err Error details, if any
 void nvim_set_current_line(String line, Error *err)
   FUNC_API_SINCE(1)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   buffer_set_line(curbuf->handle, curwin->w_cursor.lnum - 1, line, err);
 }
@@ -622,7 +622,7 @@ void nvim_set_current_line(String line, Error *err)
 /// @param[out] err Error details, if any
 void nvim_del_current_line(Error *err)
   FUNC_API_SINCE(1)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   buffer_del_line(curbuf->handle, curwin->w_cursor.lnum - 1, err);
 }
@@ -803,7 +803,7 @@ Buffer nvim_get_current_buf(void)
 /// @param[out] err Error details, if any
 void nvim_set_current_buf(Buffer buffer, Error *err)
   FUNC_API_SINCE(1)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
 
@@ -858,7 +858,7 @@ Window nvim_get_current_win(void)
 /// @param[out] err Error details, if any
 void nvim_set_current_win(Window window, Error *err)
   FUNC_API_SINCE(1)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK
 {
   win_T *win = find_window_by_handle(window, err);
 
@@ -951,9 +951,15 @@ fail:
 /// @return Channel id, or 0 on error
 Integer nvim_open_term(Buffer buffer, DictionaryOf(LuaRef) opts, Error *err)
   FUNC_API_SINCE(7)
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
   if (!buf) {
+    return 0;
+  }
+
+  if (cmdwin_type != 0 && buf == curbuf) {
+    api_set_error(err, kErrorTypeException, "%s", _(e_cmdwin));
     return 0;
   }
 
@@ -1084,7 +1090,7 @@ Tabpage nvim_get_current_tabpage(void)
 /// @param[out] err Error details, if any
 void nvim_set_current_tabpage(Tabpage tabpage, Error *err)
   FUNC_API_SINCE(1)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK
 {
   tabpage_T *tp = find_tab_by_handle(tabpage, err);
 
@@ -1126,7 +1132,7 @@ void nvim_set_current_tabpage(Tabpage tabpage, Error *err)
 ///     - false: Client must cancel the paste.
 Boolean nvim_paste(String data, Boolean crlf, Integer phase, Error *err)
   FUNC_API_SINCE(6)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   static bool draining = false;
   bool cancel = false;
@@ -1197,7 +1203,7 @@ theend:
 /// @param[out] err Error details, if any
 void nvim_put(ArrayOf(String) lines, String type, Boolean after, Boolean follow, Error *err)
   FUNC_API_SINCE(6)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   yankreg_T *reg = xcalloc(1, sizeof(yankreg_T));
   VALIDATE_S((prepare_yankreg_from_object(reg, type, lines.size)), "type", type.data, {
@@ -1687,6 +1693,7 @@ static void write_msg(String message, bool to_err, bool writeln)
   if (c == NL) { \
     kv_push(line_buf, NUL); \
     msg(line_buf.items); \
+    msg_didout = true; \
     kv_drop(line_buf, kv_size(line_buf)); \
     kv_resize(line_buf, LINE_BUFFER_MIN_SIZE); \
   } else { \
@@ -1951,7 +1958,7 @@ Object nvim__unpack(String str, Error *err)
 
 /// Deletes an uppercase/file named mark. See |mark-motions|.
 ///
-/// @note fails with error if a lowercase or buffer local named mark is used.
+/// @note Lowercase name (or other buffer-local mark) is an error.
 /// @param name       Mark name
 /// @return true if the mark was deleted, else false.
 /// @see |nvim_buf_del_mark()|
@@ -1973,12 +1980,13 @@ Boolean nvim_del_mark(String name, Error *err)
   return res;
 }
 
-/// Return a tuple (row, col, buffer, buffername) representing the position of
-/// the uppercase/file named mark. See |mark-motions|.
+/// Returns a `(row, col, buffer, buffername)` tuple representing the position
+/// of the uppercase/file named mark. "End of line" column position is returned
+/// as |v:maxcol| (big number). See |mark-motions|.
 ///
 /// Marks are (1,0)-indexed. |api-indexing|
 ///
-/// @note fails with error if a lowercase or buffer local named mark is used.
+/// @note Lowercase name (or other buffer-local mark) is an error.
 /// @param name       Mark name
 /// @param opts       Optional parameters. Reserved for future use.
 /// @return 4-tuple (row, col, buffer, buffername), (0, 0, 0, '') if the mark is

@@ -775,9 +775,9 @@ void validate_cursor_col(void)
 // fold column and sign column (these don't move when scrolling horizontally).
 int win_col_off(win_T *wp)
 {
-  return ((wp->w_p_nu || wp->w_p_rnu || (*wp->w_p_stc != NUL)) ?
+  return ((wp->w_p_nu || wp->w_p_rnu || *wp->w_p_stc != NUL) ?
           (number_width(wp) + (*wp->w_p_stc == NUL)) : 0)
-         + (cmdwin_type == 0 || wp != curwin ? 0 : 1)
+         + ((cmdwin_type == 0 || wp != curwin) ? 0 : 1)
          + win_fdccol_count(wp)
          + (win_signcol_count(wp) * win_signcol_width(wp));
 }
@@ -792,8 +792,9 @@ int curwin_col_off(void)
 // is in 'cpoptions'.
 int win_col_off2(win_T *wp)
 {
-  if ((wp->w_p_nu || wp->w_p_rnu) && vim_strchr(p_cpo, CPO_NUMCOL) != NULL) {
-    return number_width(wp) + 1;
+  if ((wp->w_p_nu || wp->w_p_rnu || *wp->w_p_stc != NUL)
+      && vim_strchr(p_cpo, CPO_NUMCOL) != NULL) {
+    return number_width(wp) + (*wp->w_p_stc == NUL);
   }
   return 0;
 }
@@ -1334,7 +1335,7 @@ bool scrolldown(long line_count, int byfold)
 ///
 /// @param line_count number of lines to scroll
 /// @param byfold if true, count a closed fold as one line
-bool scrollup(long line_count, int byfold)
+bool scrollup(linenr_T line_count, int byfold)
 {
   linenr_T topline = curwin->w_topline;
   linenr_T botline = curwin->w_botline;
@@ -1402,8 +1403,8 @@ bool scrollup(long line_count, int byfold)
       redraw_later(curwin, UPD_NOT_VALID);
     }
   } else {
-    curwin->w_topline += (linenr_T)line_count;
-    curwin->w_botline += (linenr_T)line_count;            // approximate w_botline
+    curwin->w_topline += line_count;
+    curwin->w_botline += line_count;            // approximate w_botline
   }
 
   if (curwin->w_topline > curbuf->b_ml.ml_line_count) {

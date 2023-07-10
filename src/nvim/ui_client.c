@@ -53,8 +53,8 @@ uint64_t ui_client_start_server(int argc, char **argv)
   CallbackReader on_err = CALLBACK_READER_INIT;
   on_err.fwd_err = true;
 
-  Channel *channel = channel_job_start(args, CALLBACK_READER_INIT,
-                                       on_err, CALLBACK_NONE,
+  Channel *channel = channel_job_start(args, get_vim_var_str(VV_PROGPATH),
+                                       CALLBACK_READER_INIT, on_err, CALLBACK_NONE,
                                        false, true, true, false, kChannelStdinPipe,
                                        NULL, 0, 0, NULL, &exit_status);
 
@@ -210,9 +210,7 @@ void ui_client_event_raw_line(GridLineEvent *g)
   int grid = g->args[0], row = g->args[1], startcol = g->args[2];
   Integer endcol = startcol + g->coloff;
   Integer clearcol = endcol + g->clear_width;
-
-  // TODO(hlpr98): Accommodate other LineFlags when included in grid_line
-  LineFlags lineflags = 0;
+  LineFlags lineflags = g->wrap ? kLineFlagWrap : 0;
 
   tui_raw_line(tui, grid, row, startcol, endcol, clearcol, g->cur_attr, lineflags,
                (const schar_T *)grid_line_buf_char, grid_line_buf_attr);

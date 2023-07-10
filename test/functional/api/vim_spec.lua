@@ -440,7 +440,7 @@ describe('API', function()
       eq({mode='n', blocking=false}, nvim("get_mode"))
     end)
 
-    it('Does not cause heap buffer overflow with large output', function()
+    it('does not cause heap buffer overflow with large output', function()
       eq(eval('string(range(1000000))'),
          nvim('command_output', 'echo range(1000000)'))
     end)
@@ -577,7 +577,6 @@ describe('API', function()
     local start_dir
 
     before_each(function()
-      clear()
       funcs.mkdir("Xtestdir")
       start_dir = funcs.getcwd()
     end)
@@ -1829,6 +1828,23 @@ describe('API', function()
       feed('<C-D>')
       expect('a')  -- recognized i_0_CTRL-D
     end)
+
+    it("does not interrupt with 'digraph'", function()
+      command('set digraph')
+      feed('i,')
+      eq(2, eval('1+1'))  -- causes K_EVENT key
+      feed('<BS>')
+      eq(2, eval('1+1'))  -- causes K_EVENT key
+      feed('.')
+      expect('…')  -- digraph ",." worked
+      feed('<Esc>')
+      feed(':,')
+      eq(2, eval('1+1'))  -- causes K_EVENT key
+      feed('<BS>')
+      eq(2, eval('1+1'))  -- causes K_EVENT key
+      feed('.')
+      eq('…', funcs.getcmdline())  -- digraph ",." worked
+    end)
   end)
 
   describe('nvim_get_context', function()
@@ -1989,6 +2005,39 @@ describe('API', function()
         redir END
       ]])
       eq('\naaa\n' .. ('a'):rep(5002) .. '\naaa', meths.get_var('out'))
+    end)
+
+    it('blank line in message works', function()
+      local screen = Screen.new(40, 8)
+      screen:attach()
+      screen:set_default_attr_ids({
+        [0] = {bold = true, foreground = Screen.colors.Blue},
+        [1] = {bold = true, foreground = Screen.colors.SeaGreen},
+        [2] = {bold = true, reverse = true},
+      })
+      feed([[:call nvim_out_write("\na\n")<CR>]])
+      screen:expect{grid=[[
+                                                |
+        {0:~                                       }|
+        {0:~                                       }|
+        {0:~                                       }|
+        {2:                                        }|
+                                                |
+        a                                       |
+        {1:Press ENTER or type command to continue}^ |
+      ]]}
+      feed('<CR>')
+      feed([[:call nvim_out_write("b\n\nc\n")<CR>]])
+      screen:expect{grid=[[
+                                                |
+        {0:~                                       }|
+        {0:~                                       }|
+        {2:                                        }|
+        b                                       |
+                                                |
+        c                                       |
+        {1:Press ENTER or type command to continue}^ |
+      ]]}
     end)
   end)
 
@@ -3029,11 +3078,10 @@ describe('API', function()
     local screen
 
     before_each(function()
-      clear()
       screen = Screen.new(40, 8)
       screen:attach()
       screen:set_default_attr_ids({
-        [0] = {bold=true, foreground=Screen.colors.Blue},
+        [0] = {bold = true, foreground = Screen.colors.Blue},
         [1] = {bold = true, foreground = Screen.colors.SeaGreen},
         [2] = {bold = true, reverse = true},
         [3] = {foreground = Screen.colors.Brown, bold = true}, -- Statement
@@ -3103,7 +3151,6 @@ describe('API', function()
     local screen
 
     before_each(function()
-      clear()
       screen = Screen.new(100, 35)
       screen:attach()
       screen:set_default_attr_ids({
@@ -4364,8 +4411,6 @@ describe('API', function()
       eq('1', meths.cmd({cmd = 'echo', args = {true}}, {output = true}))
     end)
     describe('first argument as count', function()
-      before_each(clear)
-
       it('works', function()
         command('vsplit | enew')
         meths.cmd({cmd = 'bdelete', args = {meths.get_current_buf()}}, {})

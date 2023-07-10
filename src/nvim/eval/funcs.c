@@ -886,7 +886,7 @@ static void f_copy(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "count()" function
 static void f_count(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  long n = 0;
+  varnumber_T n = 0;
   int ic = 0;
   bool error = false;
 
@@ -1085,8 +1085,9 @@ static void f_ctxsize(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// Otherwise use the column number as a byte offset.
 static void set_cursorpos(typval_T *argvars, typval_T *rettv, bool charcol)
 {
-  long lnum, col;
-  long coladd = 0;
+  linenr_T lnum;
+  colnr_T col;
+  colnr_T coladd = 0;
   bool set_curswant = true;
 
   rettv->vval.v_number = -1;
@@ -1114,12 +1115,12 @@ static void set_cursorpos(typval_T *argvars, typval_T *rettv, bool charcol)
     } else if (lnum == 0) {
       lnum = curwin->w_cursor.lnum;
     }
-    col = (long)tv_get_number_chk(&argvars[1], NULL);
+    col = (colnr_T)tv_get_number_chk(&argvars[1], NULL);
     if (charcol) {
-      col = buf_charidx_to_byteidx(curbuf, (linenr_T)lnum, (int)col) + 1;
+      col = buf_charidx_to_byteidx(curbuf, lnum, (int)col) + 1;
     }
     if (argvars[2].v_type != VAR_UNKNOWN) {
-      coladd = (long)tv_get_number_chk(&argvars[2], NULL);
+      coladd = (colnr_T)tv_get_number_chk(&argvars[2], NULL);
     }
   } else {
     emsg(_(e_invarg));
@@ -1129,12 +1130,12 @@ static void set_cursorpos(typval_T *argvars, typval_T *rettv, bool charcol)
     return;  // type error; errmsg already given
   }
   if (lnum > 0) {
-    curwin->w_cursor.lnum = (linenr_T)lnum;
+    curwin->w_cursor.lnum = lnum;
   }
   if (col > 0) {
-    curwin->w_cursor.col = (colnr_T)col - 1;
+    curwin->w_cursor.col = col - 1;
   }
-  curwin->w_cursor.coladd = (colnr_T)coladd;
+  curwin->w_cursor.coladd = coladd;
 
   // Make sure the cursor is in a valid position.
   check_cursor();
@@ -4119,7 +4120,7 @@ static void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   env = create_environment(job_env, clear_env, pty, term_name);
 
-  Channel *chan = channel_job_start(argv, on_stdout, on_stderr, on_exit, pty,
+  Channel *chan = channel_job_start(argv, NULL, on_stdout, on_stderr, on_exit, pty,
                                     rpc, overlapped, detach, stdin_mode, cwd,
                                     width, height, env, &rettv->vval.v_number);
   if (chan) {
@@ -6677,7 +6678,7 @@ static void f_rpcstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   // The last item of argv must be NULL
   argv[i] = NULL;
 
-  Channel *chan = channel_job_start(argv, CALLBACK_READER_INIT,
+  Channel *chan = channel_job_start(argv, NULL, CALLBACK_READER_INIT,
                                     CALLBACK_READER_INIT, CALLBACK_NONE,
                                     false, true, false, false,
                                     kChannelStdinPipe, NULL, 0, 0, NULL,
@@ -8384,7 +8385,10 @@ static void f_termopen(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   if (check_secure()) {
     return;
   }
-
+  if (text_locked()) {
+    text_locked_msg();
+    return;
+  }
   if (curbuf->b_changed) {
     emsg(_("Can only call this function in an unmodified buffer"));
     return;
@@ -8451,7 +8455,7 @@ static void f_termopen(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   const bool detach = false;
   ChannelStdinMode stdin_mode = kChannelStdinPipe;
   uint16_t term_width = (uint16_t)MAX(0, curwin->w_width_inner - win_col_off(curwin));
-  Channel *chan = channel_job_start(argv, on_stdout, on_stderr, on_exit,
+  Channel *chan = channel_job_start(argv, NULL, on_stdout, on_stderr, on_exit,
                                     pty, rpc, overlapped, detach, stdin_mode,
                                     cwd, term_width, (uint16_t)curwin->w_height_inner,
                                     env, &rettv->vval.v_number);

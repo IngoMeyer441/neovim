@@ -709,15 +709,16 @@ local function gen_one(fname, to_fname, old, commit, parser_path)
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Neovim user documentation">
+
+    <!-- algolia docsearch https://docsearch.algolia.com/docs/docsearch-v3/ -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3" />
+    <link rel="preconnect" href="https://X185E15FPG-dsn.algolia.net" crossorigin />
+
     <link href="/css/normalize.min.css" rel="stylesheet">
     <link href="/css/bootstrap.css" rel="stylesheet">
     <link href="/css/main.css" rel="stylesheet">
     <link href="help.css" rel="stylesheet">
     <link href="/highlight/styles/neovim.min.css" rel="stylesheet">
-
-    <!-- algolia docsearch https://docsearch.algolia.com/docs/docsearch-v3/ -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3" />
-    <link rel="preconnect" href="https://X185E15FPG-dsn.algolia.net" crossorigin />
 
     <script src="/highlight/highlight.min.js"></script>
     <script>hljs.highlightAll();</script>
@@ -1089,7 +1090,7 @@ end
 --- @returns info dict
 function M.gen(help_dir, to_dir, include, commit, parser_path)
   vim.validate{
-    help_dir={help_dir, function(d) return vim.fn.isdirectory(d) == 1 end, 'valid directory'},
+    help_dir={help_dir, function(d) return vim.fn.isdirectory(vim.fn.expand(d)) == 1 end, 'valid directory'},
     to_dir={to_dir, 's'},
     include={include, 't', true},
     commit={commit, 's', true},
@@ -1098,8 +1099,9 @@ function M.gen(help_dir, to_dir, include, commit, parser_path)
 
   local err_count = 0
   ensure_runtimepath()
-  tagmap = get_helptags(help_dir)
+  tagmap = get_helptags(vim.fn.expand(help_dir))
   helpfiles = get_helpfiles(include)
+  to_dir = vim.fn.expand(to_dir)
   parser_path = parser_path and vim.fn.expand(parser_path) or nil
 
   print(('output dir: %s'):format(to_dir))
@@ -1134,14 +1136,14 @@ end
 -- @returns results dict
 function M.validate(help_dir, include, parser_path)
   vim.validate{
-    help_dir={help_dir, function(d) return vim.fn.isdirectory(d) == 1 end, 'valid directory'},
+    help_dir={help_dir, function(d) return vim.fn.isdirectory(vim.fn.expand(d)) == 1 end, 'valid directory'},
     include={include, 't', true},
     parser_path={parser_path, function(f) return f == nil or vim.fn.filereadable(vim.fn.expand(f)) == 1 end, 'valid vimdoc.{so,dll} filepath'},
   }
   local err_count = 0
   local files_to_errors = {}
   ensure_runtimepath()
-  tagmap = get_helptags(help_dir)
+  tagmap = get_helptags(vim.fn.expand(help_dir))
   helpfiles = get_helpfiles(include)
   parser_path = parser_path and vim.fn.expand(parser_path) or nil
 

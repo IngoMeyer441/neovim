@@ -553,19 +553,19 @@ int win_signcol_width(win_T *wp)
 
 static inline void get_line_number_str(win_T *wp, linenr_T lnum, char *buf, size_t buf_len)
 {
-  long num;
-  char *fmt = "%*ld ";
+  linenr_T num;
+  char *fmt = "%*" PRIdLINENR " ";
 
   if (wp->w_p_nu && !wp->w_p_rnu) {
     // 'number' + 'norelativenumber'
-    num = (long)lnum;
+    num = lnum;
   } else {
     // 'relativenumber', don't use negative numbers
-    num = labs((long)get_cursor_rel_lnum(wp, lnum));
+    num = abs(get_cursor_rel_lnum(wp, lnum));
     if (num == 0 && wp->w_p_nu && wp->w_p_rnu) {
       // 'number' + 'relativenumber'
       num = lnum;
-      fmt = "%-*ld ";
+      fmt = "%-*" PRIdLINENR " ";
     }
   }
 
@@ -673,7 +673,7 @@ static void handle_lnum_col(win_T *wp, winlinevars_T *wlv, int num_signs, int si
 static void get_statuscol_str(win_T *wp, linenr_T lnum, int virtnum, statuscol_T *stcp)
 {
   // When called for the first non-filler row of line "lnum" set num v:vars
-  long relnum = virtnum == 0 ? labs(get_cursor_rel_lnum(wp, lnum)) : -1;
+  linenr_T relnum = virtnum == 0 ? abs(get_cursor_rel_lnum(wp, lnum)) : -1;
 
   // When a buffer's line count has changed, make a best estimate for the full
   // width of the status column by building with "w_nrwidth_line_count". Add
@@ -748,7 +748,7 @@ static void get_statuscol_display_info(statuscol_T *stcp, winlinevars_T *wlv)
     // Skip over empty highlight sections
   } while (wlv->n_extra == 0 && stcp->textp < stcp->text_end);
   if (wlv->n_extra > 0) {
-    static char transbuf[MAX_NUMBERWIDTH * MB_MAXBYTES + 1];
+    static char transbuf[(MAX_NUMBERWIDTH + 9 + 9 * 2) * MB_MAXBYTES + 1];
     wlv->n_extra = (int)transstr_buf(wlv->p_extra, wlv->n_extra, transbuf, sizeof transbuf, true);
     wlv->p_extra = transbuf;
   }
@@ -1088,7 +1088,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
   winlinevars_T wlv;                  // variables passed between functions
 
   int c = 0;                          // init for GCC
-  long vcol_prev = -1;                // "wlv.vcol" of previous character
+  colnr_T vcol_prev = -1;             // "wlv.vcol" of previous character
   char *line;                         // current line
   char *ptr;                          // current position in "line"
   ScreenGrid *grid = &wp->w_grid;     // grid specific to the window
@@ -1114,10 +1114,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
   bool area_highlighting = false;       // Visual or incsearch highlighting in this line
   int vi_attr = 0;                      // attributes for Visual and incsearch highlighting
   int area_attr = 0;                    // attributes desired by highlighting
-  int saved_area_attr = 0;              // idem for area_attr
   int search_attr = 0;                  // attributes desired by 'hlsearch'
-  int saved_search_attr = 0;            // search_attr to be used when n_extra
-                                        // goes to zero
   int vcol_save_attr = 0;               // saved attr for 'cursorcolumn'
   int decor_attr = 0;                   // attributes desired by syntax and extmarks
   bool has_syntax = false;              // this buffer has syntax highl.
@@ -1150,8 +1147,13 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
   int prev_c1 = 0;                      // first composing char for prev_c
 
   bool search_attr_from_match = false;  // if search_attr is from :match
-  bool saved_search_attr_from_match = false;  // if search_attr is from :match
   bool has_decor = false;               // this buffer has decoration
+
+  int saved_search_attr = 0;            // search_attr to be used when n_extra goes to zero
+  int saved_area_attr = 0;              // idem for area_attr
+  int saved_decor_attr = 0;             // idem for decor_attr
+  bool saved_search_attr_from_match = false;
+
   int win_col_offset = 0;               // offset for window columns
 
   char buf_fold[FOLD_TEXT_LEN];         // Hold value returned by get_foldtext
@@ -1185,9 +1187,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
     wlv.boguscols = 0; \
   }
 
-  if (startrow > endrow) {              // past the end already!
-    return startrow;
-  }
+  assert(startrow < endrow);
 
   CLEAR_FIELD(wlv);
 
@@ -1469,7 +1469,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
       nextlinecol = MAXCOL;
       nextline_idx = 0;
     } else {
-      v = (long)strlen(line);
+      v = (ptrdiff_t)strlen(line);
       if (v < SPWORDLEN) {
         // Short line, use it completely and append the start of the
         // next line.
@@ -1779,7 +1779,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
     if (((dollar_vcol >= 0
           && wp == curwin
           && lnum == wp->w_cursor.lnum
-          && wlv.vcol >= (long)wp->w_virtcol)
+          && wlv.vcol >= wp->w_virtcol)
          || (number_only && wlv.draw_state > WL_STC))
         && wlv.filler_todo <= 0) {
       draw_virt_text(wp, buf, win_col_offset, &wlv.col, grid->cols, wlv.row);
@@ -1836,11 +1836,12 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
             // TODO(bfredl): this is ugly as fuck. look if we can do this some other way.
             saved_search_attr = search_attr;
             saved_area_attr = area_attr;
+            saved_decor_attr = decor_attr;
             saved_search_attr_from_match = search_attr_from_match;
-            search_attr_from_match = false;
             search_attr = 0;
             area_attr = 0;
-            extmark_attr = 0;
+            decor_attr = 0;
+            search_attr_from_match = false;
             n_skip = 0;
           }
         }
@@ -2010,9 +2011,15 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         if (wlv.saved_n_extra <= 0) {
           if (search_attr == 0) {
             search_attr = saved_search_attr;
+            saved_search_attr = 0;
           }
           if (area_attr == 0 && *ptr != NUL) {
             area_attr = saved_area_attr;
+            saved_area_attr = 0;
+          }
+          if (decor_attr == 0) {
+            decor_attr = saved_decor_attr;
+            saved_decor_attr = 0;
           }
 
           if (wlv.extra_for_extmark) {
@@ -2396,7 +2403,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         // turn it into something else on the way to putting it on the screen.
         if (c == TAB && (!wp->w_p_list || wp->w_p_lcs_chars.tab1)) {
           int tab_len = 0;
-          long vcol_adjusted = wlv.vcol;  // removed showbreak length
+          colnr_T vcol_adjusted = wlv.vcol;  // removed showbreak length
           char *const sbr = get_showbreak_value(wp);
 
           // Only adjust the tab_len, when at the first column after the
@@ -2405,7 +2412,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
             vcol_adjusted = wlv.vcol - mb_charlen(sbr);
           }
           // tab amount depends on current column
-          tab_len = tabstop_padding((colnr_T)vcol_adjusted,
+          tab_len = tabstop_padding(vcol_adjusted,
                                     wp->w_buffer->b_p_ts,
                                     wp->w_buffer->b_p_vts_array) - 1;
 
@@ -2705,7 +2712,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
       // flag to indicate whether prevcol equals startcol of search_hl or
       // one of the matches
       bool prevcol_hl_flag = get_prevcol_hl_flag(wp, &screen_search_hl,
-                                                 (long)(ptr - line) - 1);  // NOLINT(google-readability-casting)
+                                                 (colnr_T)(ptr - line) - 1);
 
       // Invert at least one char, used for Visual and empty line or
       // highlight match at end of line. If it's beyond the last
@@ -2743,7 +2750,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
           // 'search_hl' and the match list.
           get_search_match_hl(wp,
                               &screen_search_hl,
-                              (long)(ptr - line),  // NOLINT(google-readability-casting)
+                              (colnr_T)(ptr - line),
                               &wlv.char_attr);
         }
 

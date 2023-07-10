@@ -3341,6 +3341,508 @@ describe('ext_multigrid', function()
       [2] = {win = {id = 1000}, topline = 0, botline = 3, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0},
       [4] = {win = {id = 1001}, topline = 6, botline = 10, curline = 6, curcol = 0, linecount = 11, sum_scroll_delta = 5},
     }}
+
+    command('close | 21vsplit | setlocal number smoothscroll')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {19:  1 }Lorem ipsu^m dolor|
+      {19:    } sit amet, consec|
+      {19:    }tetur            |
+      {19:  2 }adipisicing elit,|
+      {19:    } sed do eiusmod t|
+      {19:    }empor            |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 0, botline = 3, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+    }}
+
+    feed('5<C-E>')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {1:<<<}{19: }empo^r            |
+      {19:  3 }incididunt ut lab|
+      {19:    }ore et dolore mag|
+      {19:    }na aliqua.       |
+      {19:  4 }Ut enim ad minim |
+      {19:    }veniam, quis n{1:@@@}|
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 1, botline = 4, curline = 1, curcol = 38, linecount = 11, sum_scroll_delta = 5};
+    }}
+
+    feed('<C-Y>')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {1:<<<}{19: } sed do eiusmod t|
+      {19:    }empo^r            |
+      {19:  3 }incididunt ut lab|
+      {19:    }ore et dolore mag|
+      {19:    }na aliqua.       |
+      {19:  4 }Ut enim ad min{1:@@@}|
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 1, botline = 4, curline = 1, curcol = 38, linecount = 11, sum_scroll_delta = 4};
+    }}
+
+    command('set cpoptions+=n')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {1:<<<}d do eiusmod tempo|
+      ^r                    |
+      {19:  3 }incididunt ut lab|
+      ore et dolore magna a|
+      liqua.               |
+      {19:  4 }Ut enim ad min{1:@@@}|
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 1, botline = 4, curline = 1, curcol = 38, linecount = 11, sum_scroll_delta = 4};
+    }}
+
+    feed('4<C-E>')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {1:<<<}ua^.               |
+      {19:  4 }Ut enim ad minim |
+      veniam, quis nostrud |
+      {19:  5 }exercitation ulla|
+      mco laboris nisi ut a|
+      liquip ex            |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 2, botline = 6, curline = 2, curcol = 43, linecount = 11, sum_scroll_delta = 8};
+    }}
+
+    feed('2<C-Y>')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {19:  3 }incididunt ut lab|
+      ore et dolore magna a|
+      liqua^.               |
+      {19:  4 }Ut enim ad minim |
+      veniam, quis nostrud |
+      {19:  5 }exercitation u{1:@@@}|
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 2, botline = 5, curline = 2, curcol = 43, linecount = 11, sum_scroll_delta = 6};
+    }}
+
+    command('setlocal numberwidth=12')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {19:          3 }incididun|
+      t ut labore et dolore|
+       magna aliqua^.       |
+      {19:          4 }Ut enim a|
+      d minim veniam, quis |
+      nostrud              |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 2, botline = 5, curline = 2, curcol = 43, linecount = 11, sum_scroll_delta = 6};
+    }}
+
+    feed('2<C-E>')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {1:<<<}gna aliqua^.       |
+      {19:          4 }Ut enim a|
+      d minim veniam, quis |
+      nostrud              |
+      {19:          5 }exercitat|
+      ion ullamco labori{1:@@@}|
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 2, botline = 5, curline = 2, curcol = 43, linecount = 11, sum_scroll_delta = 8};
+    }}
+
+    feed('<C-E>')
+    screen:expect{grid=[[
+    ## grid 1
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      [5:---------------------]│[2:--------------------------]|
+      {11:[No Name] [+]         }{12:[No Name] [+]             }|
+      [3:------------------------------------------------]|
+    ## grid 2
+      Lorem ipsum dolor sit amet|
+      , consectetur             |
+      adipisicing elit, sed do e|
+      iusmod tempor             |
+      incididunt ut labore et do|
+      lore magna aliqua.        |
+    ## grid 3
+                                                      |
+    ## grid 5
+      {19:          4 }Ut enim a|
+      d minim veniam, quis |
+      nostru^d              |
+      {19:          5 }exercitat|
+      ion ullamco laboris n|
+      isi ut aliquip ex    |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 4, curline = 0, curcol = 10, linecount = 11, sum_scroll_delta = 0};
+      [5] = {win = {id = 1002}, topline = 3, botline = 6, curline = 3, curcol = 36, linecount = 11, sum_scroll_delta = 9};
+    }}
+  end)
+
+  it('scroll_delta is approximated reasonably when scrolling many lines #24234', function()
+    command('setlocal number nowrap')
+    command('edit test/functional/fixtures/bigfile.txt')
+    screen:expect{grid=[[
+    ## grid 1
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      {11:test/functional/fixtures/bigfile.txt                 }|
+      [3:-----------------------------------------------------]|
+    ## grid 2
+      {19:    1 }^0000;<control>;Cc;0;BN;;;;;N;NULL;;;;          |
+      {19:    2 }0001;<control>;Cc;0;BN;;;;;N;START OF HEADING;;|
+      {19:    3 }0002;<control>;Cc;0;BN;;;;;N;START OF TEXT;;;; |
+      {19:    4 }0003;<control>;Cc;0;BN;;;;;N;END OF TEXT;;;;   |
+      {19:    5 }0004;<control>;Cc;0;BN;;;;;N;END OF TRANSMISSIO|
+      {19:    6 }0005;<control>;Cc;0;BN;;;;;N;ENQUIRY;;;;       |
+      {19:    7 }0006;<control>;Cc;0;BN;;;;;N;ACKNOWLEDGE;;;;   |
+      {19:    8 }0007;<control>;Cc;0;BN;;;;;N;BELL;;;;          |
+      {19:    9 }0008;<control>;Cc;0;BN;;;;;N;BACKSPACE;;;;     |
+      {19:   10 }0009;<control>;Cc;0;S;;;;;N;CHARACTER TABULATIO|
+      {19:   11 }000A;<control>;Cc;0;B;;;;;N;LINE FEED (LF);;;; |
+      {19:   12 }000B;<control>;Cc;0;S;;;;;N;LINE TABULATION;;;;|
+    ## grid 3
+                                                           |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 13, curline = 0, curcol = 0, linecount = 30592, sum_scroll_delta = 0};
+    }}
+    feed('G')
+    screen:expect{grid=[[
+    ## grid 1
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      {11:test/functional/fixtures/bigfile.txt                 }|
+      [3:-----------------------------------------------------]|
+    ## grid 2
+      {19:30581 }E01E8;VARIATION SELECTOR-249;Mn;0;NSM;;;;;N;;;;|
+      {19:30582 }E01E9;VARIATION SELECTOR-250;Mn;0;NSM;;;;;N;;;;|
+      {19:30583 }E01EA;VARIATION SELECTOR-251;Mn;0;NSM;;;;;N;;;;|
+      {19:30584 }E01EB;VARIATION SELECTOR-252;Mn;0;NSM;;;;;N;;;;|
+      {19:30585 }E01EC;VARIATION SELECTOR-253;Mn;0;NSM;;;;;N;;;;|
+      {19:30586 }E01ED;VARIATION SELECTOR-254;Mn;0;NSM;;;;;N;;;;|
+      {19:30587 }E01EE;VARIATION SELECTOR-255;Mn;0;NSM;;;;;N;;;;|
+      {19:30588 }E01EF;VARIATION SELECTOR-256;Mn;0;NSM;;;;;N;;;;|
+      {19:30589 }F0000;<Plane 15 Private Use, First>;Co;0;L;;;;;|
+      {19:30590 }FFFFD;<Plane 15 Private Use, Last>;Co;0;L;;;;;N|
+      {19:30591 }100000;<Plane 16 Private Use, First>;Co;0;L;;;;|
+      {19:30592 }^10FFFD;<Plane 16 Private Use, Last>;Co;0;L;;;;;|
+    ## grid 3
+                                                           |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 30580, botline = 30592, curline = 30591, curcol = 0, linecount = 30592, sum_scroll_delta = 30580};
+    }}
+    feed('gg')
+    screen:expect{grid=[[
+    ## grid 1
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      {11:test/functional/fixtures/bigfile.txt                 }|
+      [3:-----------------------------------------------------]|
+    ## grid 2
+      {19:    1 }^0000;<control>;Cc;0;BN;;;;;N;NULL;;;;          |
+      {19:    2 }0001;<control>;Cc;0;BN;;;;;N;START OF HEADING;;|
+      {19:    3 }0002;<control>;Cc;0;BN;;;;;N;START OF TEXT;;;; |
+      {19:    4 }0003;<control>;Cc;0;BN;;;;;N;END OF TEXT;;;;   |
+      {19:    5 }0004;<control>;Cc;0;BN;;;;;N;END OF TRANSMISSIO|
+      {19:    6 }0005;<control>;Cc;0;BN;;;;;N;ENQUIRY;;;;       |
+      {19:    7 }0006;<control>;Cc;0;BN;;;;;N;ACKNOWLEDGE;;;;   |
+      {19:    8 }0007;<control>;Cc;0;BN;;;;;N;BELL;;;;          |
+      {19:    9 }0008;<control>;Cc;0;BN;;;;;N;BACKSPACE;;;;     |
+      {19:   10 }0009;<control>;Cc;0;S;;;;;N;CHARACTER TABULATIO|
+      {19:   11 }000A;<control>;Cc;0;B;;;;;N;LINE FEED (LF);;;; |
+      {19:   12 }000B;<control>;Cc;0;S;;;;;N;LINE TABULATION;;;;|
+    ## grid 3
+                                                           |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 13, curline = 0, curcol = 0, linecount = 30592, sum_scroll_delta = 0};
+    }}
+    command('setlocal wrap')
+    screen:expect{grid=[[
+    ## grid 1
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      {11:test/functional/fixtures/bigfile.txt                 }|
+      [3:-----------------------------------------------------]|
+    ## grid 2
+      {19:    1 }^0000;<control>;Cc;0;BN;;;;;N;NULL;;;;          |
+      {19:    2 }0001;<control>;Cc;0;BN;;;;;N;START OF HEADING;;|
+      {19:      };;                                             |
+      {19:    3 }0002;<control>;Cc;0;BN;;;;;N;START OF TEXT;;;; |
+      {19:    4 }0003;<control>;Cc;0;BN;;;;;N;END OF TEXT;;;;   |
+      {19:    5 }0004;<control>;Cc;0;BN;;;;;N;END OF TRANSMISSIO|
+      {19:      }N;;;;                                          |
+      {19:    6 }0005;<control>;Cc;0;BN;;;;;N;ENQUIRY;;;;       |
+      {19:    7 }0006;<control>;Cc;0;BN;;;;;N;ACKNOWLEDGE;;;;   |
+      {19:    8 }0007;<control>;Cc;0;BN;;;;;N;BELL;;;;          |
+      {19:    9 }0008;<control>;Cc;0;BN;;;;;N;BACKSPACE;;;;     |
+      {19:   10 }0009;<control>;Cc;0;S;;;;;N;CHARACTER TABULA{1:@@@}|
+    ## grid 3
+                                                           |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 10, curline = 0, curcol = 0, linecount = 30592, sum_scroll_delta = 0};
+    }}
+    feed('G')
+    screen:expect{grid=[[
+    ## grid 1
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      {11:test/functional/fixtures/bigfile.txt                 }|
+      [3:-----------------------------------------------------]|
+    ## grid 2
+      {19:30587 }E01EE;VARIATION SELECTOR-255;Mn;0;NSM;;;;;N;;;;|
+      {19:      };                                              |
+      {19:30588 }E01EF;VARIATION SELECTOR-256;Mn;0;NSM;;;;;N;;;;|
+      {19:      };                                              |
+      {19:30589 }F0000;<Plane 15 Private Use, First>;Co;0;L;;;;;|
+      {19:      }N;;;;;                                         |
+      {19:30590 }FFFFD;<Plane 15 Private Use, Last>;Co;0;L;;;;;N|
+      {19:      };;;;;                                          |
+      {19:30591 }100000;<Plane 16 Private Use, First>;Co;0;L;;;;|
+      {19:      };N;;;;;                                        |
+      {19:30592 }^10FFFD;<Plane 16 Private Use, Last>;Co;0;L;;;;;|
+      {19:      }N;;;;;                                         |
+    ## grid 3
+                                                           |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 30586, botline = 30592, curline = 30591, curcol = 0, linecount = 30592, sum_scroll_delta = 30588};
+    }}
+    feed('gg')
+    screen:expect{grid=[[
+    ## grid 1
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      [2:-----------------------------------------------------]|
+      {11:test/functional/fixtures/bigfile.txt                 }|
+      [3:-----------------------------------------------------]|
+    ## grid 2
+      {19:    1 }^0000;<control>;Cc;0;BN;;;;;N;NULL;;;;          |
+      {19:    2 }0001;<control>;Cc;0;BN;;;;;N;START OF HEADING;;|
+      {19:      };;                                             |
+      {19:    3 }0002;<control>;Cc;0;BN;;;;;N;START OF TEXT;;;; |
+      {19:    4 }0003;<control>;Cc;0;BN;;;;;N;END OF TEXT;;;;   |
+      {19:    5 }0004;<control>;Cc;0;BN;;;;;N;END OF TRANSMISSIO|
+      {19:      }N;;;;                                          |
+      {19:    6 }0005;<control>;Cc;0;BN;;;;;N;ENQUIRY;;;;       |
+      {19:    7 }0006;<control>;Cc;0;BN;;;;;N;ACKNOWLEDGE;;;;   |
+      {19:    8 }0007;<control>;Cc;0;BN;;;;;N;BELL;;;;          |
+      {19:    9 }0008;<control>;Cc;0;BN;;;;;N;BACKSPACE;;;;     |
+      {19:   10 }0009;<control>;Cc;0;S;;;;;N;CHARACTER TABULA{1:@@@}|
+    ## grid 3
+                                                           |
+    ]], win_viewport={
+      [2] = {win = {id = 1000}, topline = 0, botline = 10, curline = 0, curcol = 0, linecount = 30592, sum_scroll_delta = 0};
+    }}
   end)
 
   it('does not crash when dragging mouse across grid boundary', function()
