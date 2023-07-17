@@ -13,10 +13,11 @@ local M = {}
 ---@param params (table|nil) Parameters to send to the server
 ---@param handler (function|nil) See |lsp-handler|. Follows |lsp-handler-resolution|
 --
----@returns 2-tuple:
----  - Map of client-id:request-id pairs for all successful requests.
----  - Function which can be used to cancel all the requests. You could instead
----    iterate all clients and call their `cancel_request()` methods.
+---@return table<integer, integer> client_request_ids Map of client-id:request-id pairs
+---for all successful requests.
+---@return function _cancel_all_requests Function which can be used to
+---cancel all the requests. You could instead
+---iterate all clients and call their `cancel_request()` methods.
 ---
 ---@see |vim.lsp.buf_request()|
 local function request(method, params, handler)
@@ -30,7 +31,7 @@ end
 --- Checks whether the language servers attached to the current buffer are
 --- ready.
 ---
----@returns `true` if server responds.
+---@return boolean if server responds.
 ---@deprecated
 function M.server_ready()
   vim.deprecate('vim.lsp.buf.server_ready', nil, '0.10.0')
@@ -108,7 +109,7 @@ end
 --- Retrieves the completion items at the current cursor position. Can only be
 --- called in Insert mode.
 ---
----@param context (context support not yet implemented) Additional information
+---@param context table (context support not yet implemented) Additional information
 --- about the context in which a completion was triggered (how it was triggered,
 --- and by which trigger character, if applicable)
 ---
@@ -196,15 +197,6 @@ end
 function M.format(options)
   options = options or {}
   local bufnr = options.bufnr or api.nvim_get_current_buf()
-  local clients = vim.lsp.get_active_clients({
-    id = options.id,
-    bufnr = bufnr,
-    name = options.name,
-  })
-
-  if options.filter then
-    clients = vim.tbl_filter(options.filter, clients)
-  end
 
   local mode = api.nvim_get_mode().mode
   local range = options.range
@@ -213,9 +205,15 @@ function M.format(options)
   end
   local method = range and 'textDocument/rangeFormatting' or 'textDocument/formatting'
 
-  clients = vim.tbl_filter(function(client)
-    return client.supports_method(method)
-  end, clients)
+  local clients = vim.lsp.get_active_clients({
+    id = options.id,
+    bufnr = bufnr,
+    name = options.name,
+    method = method,
+  })
+  if options.filter then
+    clients = vim.tbl_filter(options.filter, clients)
+  end
 
   if #clients == 0 then
     vim.notify('[LSP] Format request failed, no matching language servers.')
@@ -276,15 +274,12 @@ function M.rename(new_name, options)
   local clients = vim.lsp.get_active_clients({
     bufnr = bufnr,
     name = options.name,
+    -- Clients must at least support rename, prepareRename is optional
+    method = 'textDocument/rename',
   })
   if options.filter then
     clients = vim.tbl_filter(options.filter, clients)
   end
-
-  -- Clients must at least support rename, prepareRename is optional
-  clients = vim.tbl_filter(function(client)
-    return client.supports_method('textDocument/rename')
-  end, clients)
 
   if #clients == 0 then
     vim.notify('[LSP] Rename, no matching language servers with rename capability.')
@@ -549,7 +544,7 @@ end
 --- call, the user is prompted to enter a string on the command line. An empty
 --- string means no filtering is done.
 ---
----@param query (string, optional)
+---@param query string|nil optional
 ---@param options table|nil additional options
 ---     - on_list: (function) handler for list results. See |lsp-on-list-handler|
 function M.workspace_symbol(query, options)

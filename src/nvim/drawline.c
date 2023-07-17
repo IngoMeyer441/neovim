@@ -1805,9 +1805,11 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         && (area_highlighting || spv->spv_has_spell || extra_check)) {
       // handle Visual or match highlighting in this line
       if (wlv.vcol == wlv.fromcol
-          || (wlv.vcol + 1 == wlv.fromcol && wlv.n_extra == 0
-              && utf_ptr2cells(ptr) > 1)
-          || ((int)vcol_prev == fromcol_prev
+          || (wlv.vcol + 1 == wlv.fromcol
+              && ((wlv.n_extra == 0 && utf_ptr2cells(ptr) > 1)
+                  || (wlv.n_extra > 0 && wlv.p_extra != NULL
+                      && utf_ptr2cells(wlv.p_extra) > 1)))
+          || (vcol_prev == fromcol_prev
               && vcol_prev < wlv.vcol               // not at margin
               && wlv.vcol < wlv.tocol)) {
         area_attr = vi_attr;                    // start highlighting
@@ -1829,7 +1831,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
                                          && wlv.vcol == wp->w_virtcol));
         extmark_attr = decor_redraw_col(wp, (colnr_T)v, wlv.off, selected, &decor_state);
 
-        if (!has_fold) {
+        if (!has_fold && wp->w_buffer->b_virt_text_inline > 0) {
           handle_inline_virtual_text(wp, &wlv, v);
           if (wlv.n_extra > 0 && wlv.virt_inline_hl_mode <= kHlModeReplace) {
             // restore search_attr and area_attr when n_extra is down to zero

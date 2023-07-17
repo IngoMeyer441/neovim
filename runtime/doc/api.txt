@@ -2615,15 +2615,16 @@ nvim_buf_set_extmark({buffer}, {ns_id}, {line}, {col}, {*opts})
                     string or as an integer, the latter which can be obtained
                     using |nvim_get_hl_id_by_name()|.
                   • virt_text_pos : position of virtual text. Possible values:
-                    • "eol": right after eol character (default)
+                    • "eol": right after eol character (default).
                     • "overlay": display over the specified column, without
                       shifting the underlying text.
                     • "right_align": display right aligned in the window.
                     • "inline": display at the specified column, and shift the
-                      buffer text to the right as needed
+                      buffer text to the right as needed.
 
                   • virt_text_win_col : position the virtual text at a fixed
-                    window column (starting from the first text column)
+                    window column (starting from the first text column of the
+                    screen line) instead of "virt_text_pos".
                   • virt_text_hide : hide the virtual text when the background
                     text is selected or hidden because of scrolling with
                     'nowrap' or 'smoothscroll'. Currently only affects
@@ -2960,6 +2961,40 @@ nvim_win_set_width({window}, {width})                   *nvim_win_set_width()*
     Parameters: ~
       • {window}  Window handle, or 0 for current window
       • {width}   Width as a count of columns
+
+nvim_win_text_height({window}, {*opts})               *nvim_win_text_height()*
+    Computes the number of screen lines occupied by a range of text in a given
+    window. Works for off-screen text and takes folds into account.
+
+    Diff filler or virtual lines above a line are counted as a part of that
+    line, unless the line is on "start_row" and "start_vcol" is specified.
+
+    Diff filler or virtual lines below the last buffer line are counted in the
+    result when "end_row" is omitted.
+
+    Line indexing is similar to |nvim_buf_get_text()|.
+
+    Parameters: ~
+      • {window}  Window handle, or 0 for current window.
+      • {opts}    Optional parameters:
+                  • start_row: Starting line index, 0-based inclusive. When
+                    omitted start at the very top.
+                  • end_row: Ending line index, 0-based inclusive. When
+                    omitted end at the very bottom.
+                  • start_vcol: Starting virtual column index on "start_row",
+                    0-based inclusive, rounded down to full screen lines. When
+                    omitted include the whole line.
+                  • end_vcol: Ending virtual column index on "end_row",
+                    0-based exclusive, rounded up to full screen lines. When
+                    omitted include the whole line.
+
+    Return: ~
+        Dictionary containing text height information, with these keys:
+        • all: The total number of screen lines occupied by the range.
+        • fill: The number of diff filler or virtual lines among them.
+
+    See also: ~
+      • |virtcol()| for text width.
 
 
 ==============================================================================

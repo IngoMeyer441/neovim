@@ -99,7 +99,13 @@ The following new APIs and features were added.
 
 • |vim.system()| for running system commands.
 
+• Added |nvim_win_text_height()| to compute the number of screen lines occupied
+  by a range of text in a given window.
+
 • |nvim_set_keymap()| and |nvim_del_keymap()| now support abbreviations.
+
+• Builtin TUI can now recognize "super" (|<D-|) and "meta" (|<T-|) modifiers in a
+  terminal emulator that supports |tui-csiu|.
 
 • Implemented LSP inlay hints: |vim.lsp.inlay_hint()|
   https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_inlayHint
@@ -152,6 +158,10 @@ The following changes to existing APIs or features add new behavior.
 • |gx| now uses |vim.ui.open()| and not netrw. To customize, you can redefine
   `vim.ui.open` or remap `gx`. To continue using netrw (deprecated): >vim
   :call netrw#BrowseX(expand(exists("g:netrw_gx")? g:netrw_gx : '<cfile>'), netrw#CheckIfRemote())<CR>
+
+• |vim.lsp.start()| now maps |K| to use |vim.lsp.buf.hover()| if the server
+  supports it, unless |'keywordprg'| was customized before calling
+  |vim.lsp.start()|.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
