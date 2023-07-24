@@ -61,12 +61,12 @@ lsp._request_name_to_capability = {
   ['textDocument/semanticTokens/full'] = { 'semanticTokensProvider' },
   ['textDocument/semanticTokens/full/delta'] = { 'semanticTokensProvider' },
   ['textDocument/inlayHint'] = { 'inlayHintProvider' },
+  ['textDocument/diagnostic'] = { 'diagnosticProvider' },
   ['inlayHint/resolve'] = { 'inlayHintProvider', 'resolveProvider' },
 }
 
 -- TODO improve handling of scratch buffers with LSP attached.
 
----@private
 --- Concatenates and writes a list of strings to the Vim error buffer.
 ---
 ---@param ... string List to write to the buffer
@@ -75,7 +75,6 @@ local function err_message(...)
   nvim_command('redraw')
 end
 
----@private
 --- Returns the buffer number for the given {bufnr}.
 ---
 ---@param bufnr (integer|nil) Buffer number to resolve. Defaults to current buffer
@@ -101,7 +100,6 @@ function lsp._unsupported_method(method)
   return msg
 end
 
----@private
 --- Checks whether a given path is a directory.
 ---
 ---@param filename (string) path to check
@@ -132,7 +130,6 @@ local format_line_ending = {
   ['mac'] = '\r',
 }
 
----@private
 ---@param bufnr (number)
 ---@return string
 local function buf_get_line_ending(bufnr)
@@ -140,7 +137,6 @@ local function buf_get_line_ending(bufnr)
 end
 
 local client_index = 0
----@private
 --- Returns a new, unused client id.
 ---
 ---@return integer client_id
@@ -153,7 +149,6 @@ local active_clients = {} --- @type table<integer,lsp.Client>
 local all_buffer_active_clients = {} --- @type table<integer,table<integer,true>>
 local uninitialized_clients = {} --- @type table<integer,lsp.Client>
 
----@private
 ---@param bufnr? integer
 ---@param fn fun(client: lsp.Client, client_id: integer, bufnr: integer)
 local function for_each_buffer_client(bufnr, fn, restrict_client_ids)
@@ -185,9 +180,10 @@ local function for_each_buffer_client(bufnr, fn, restrict_client_ids)
   end
 end
 
--- Error codes to be used with `on_error` from |vim.lsp.start_client|.
--- Can be used to look up the string from a the number or the number
--- from the string.
+--- Error codes to be used with `on_error` from |vim.lsp.start_client|.
+--- Can be used to look up the string from a the number or the number
+--- from the string.
+--- @nodoc
 lsp.client_errors = tbl_extend(
   'error',
   lsp_rpc.client_errors,
@@ -196,7 +192,6 @@ lsp.client_errors = tbl_extend(
   })
 )
 
----@private
 --- Normalizes {encoding} to valid LSP encoding names.
 ---
 ---@param encoding (string) Encoding to normalize
@@ -243,7 +238,6 @@ function lsp._cmd_parts(input)
   return cmd, cmd_args
 end
 
----@private
 --- Augments a validator function with support for optional (nil) values.
 ---
 ---@param fn (fun(v): boolean) The original validator function; should return a
@@ -256,7 +250,6 @@ local function optional_validator(fn)
   end
 end
 
----@private
 --- Validates a client configuration as given to |vim.lsp.start_client()|.
 ---
 ---@param config (lsp.ClientConfig)
@@ -308,7 +301,6 @@ local function validate_client_config(config)
   return cmd, cmd_args, offset_encoding
 end
 
----@private
 --- Returns full text of buffer {bufnr} as a string.
 ---
 ---@param bufnr (number) Buffer handle, or 0 for current.
@@ -322,7 +314,6 @@ local function buf_get_full_text(bufnr)
   return text
 end
 
----@private
 --- Memoizes a function. On first run, the function return value is saved and
 --- immediately returned on subsequent runs. If the function returns a multival,
 --- only the first returned value will be memoized and returned. The function will only be run once,
@@ -382,7 +373,6 @@ do
   --- @field debounce integer debounce duration in ms
   --- @field clients table<integer, table> clients using this state. {client_id, client}
 
-  ---@private
   ---@param group CTGroup
   ---@return string
   local function group_key(group)
@@ -403,7 +393,6 @@ do
     end,
   })
 
-  ---@private
   ---@return CTGroup
   local function get_group(client)
     local allow_inc_sync = if_nil(client.config.flags.allow_incremental_sync, true)
@@ -419,7 +408,6 @@ do
     }
   end
 
-  ---@private
   ---@param state CTBufferState
   local function incremental_changes(state, encoding, bufnr, firstline, lastline, new_lastline)
     local prev_lines = state.lines
@@ -543,8 +531,6 @@ do
     end
   end
 
-  ---@private
-  --
   -- Adjust debounce time by taking time of last didChange notification into
   -- consideration. If the last didChange happened more than `debounce` time ago,
   -- debounce can be skipped and otherwise maybe reduced.
@@ -567,7 +553,6 @@ do
     return math.max(debounce - ms_since_last_flush, 0)
   end
 
-  ---@private
   ---@param bufnr integer
   ---@param sync_kind integer protocol.TextDocumentSyncKind
   ---@param state CTGroupState
@@ -612,7 +597,7 @@ do
   ---@private
   function changetracking.send_changes(bufnr, firstline, lastline, new_lastline)
     local groups = {} ---@type table<string,CTGroup>
-    for _, client in pairs(lsp.get_active_clients({ bufnr = bufnr })) do
+    for _, client in pairs(lsp.get_clients({ bufnr = bufnr })) do
       local group = get_group(client)
       groups[group_key(group)] = group
     end
@@ -694,7 +679,6 @@ do
   end
 end
 
----@private
 --- Default handler for the 'textDocument/didOpen' LSP notification.
 ---
 ---@param bufnr integer Number of the buffer, or 0 for current
@@ -734,7 +718,7 @@ end
 -- FIXME: DOC: Shouldn't need to use a dummy function
 --
 --- LSP client object. You can get an active client object via
---- |vim.lsp.get_client_by_id()| or |vim.lsp.get_active_clients()|.
+--- |vim.lsp.get_client_by_id()| or |vim.lsp.get_clients()|.
 ---
 --- - Methods:
 ---
@@ -880,7 +864,7 @@ function lsp.start(config, opts)
   if bufnr == nil or bufnr == 0 then
     bufnr = api.nvim_get_current_buf()
   end
-  for _, clients in ipairs({ uninitialized_clients, lsp.get_active_clients() }) do
+  for _, clients in ipairs({ uninitialized_clients, lsp.get_clients() }) do
     for _, client in pairs(clients) do
       if reuse_client(client, config) then
         lsp.buf_attach_client(bufnr, client.id)
@@ -903,7 +887,7 @@ end
 function lsp.status()
   local percentage = nil
   local messages = {}
-  for _, client in ipairs(vim.lsp.get_active_clients()) do
+  for _, client in ipairs(vim.lsp.get_clients()) do
     for progress in client.progress do
       local value = progress.value
       if type(value) == 'table' and value.kind then
@@ -924,7 +908,6 @@ function lsp.status()
   return message
 end
 
----@private
 -- Determines whether the given option can be set by `set_defaults`.
 local function is_empty_or_default(bufnr, option)
   if vim.bo[bufnr][option] == '' then
@@ -972,6 +955,9 @@ function lsp._set_defaults(client, bufnr)
       vim.keymap.set('n', 'K', vim.lsp.buf.hover, { buffer = bufnr })
     end
   end)
+  if client.supports_method('textDocument/diagnostic') then
+    lsp.diagnostic._enable(bufnr)
+  end
 end
 
 --- @class lsp.ClientConfig
@@ -1138,7 +1124,6 @@ function lsp.start_client(config)
 
   local dispatch = {}
 
-  ---@private
   --- Returns the handler associated with an LSP method.
   --- Returns the default handler if the user hasn't set a custom one.
   ---
@@ -1208,7 +1193,6 @@ function lsp.start_client(config)
     end
   end
 
-  ---@private
   --- Reset defaults set by `set_defaults`.
   --- Must only be called if the last client attached to a buffer exits.
   local function reset_defaults(bufnr)
@@ -1337,7 +1321,6 @@ function lsp.start_client(config)
   -- Store the uninitialized_clients for cleanup in case we exit before initialize finishes.
   uninitialized_clients[client_id] = client
 
-  ---@private
   local function initialize()
     local valid_traces = {
       off = 'off',
@@ -1588,7 +1571,23 @@ function lsp.start_client(config)
     if method ~= 'textDocument/didChange' then
       changetracking.flush(client)
     end
-    return rpc.notify(method, params)
+
+    local client_active = rpc.notify(method, params)
+
+    if client_active then
+      vim.schedule(function()
+        nvim_exec_autocmds('LspNotify', {
+          modeline = false,
+          data = {
+            client_id = client.id,
+            method = method,
+            params = params,
+          },
+        })
+      end)
+    end
+
+    return client_active
   end
 
   ---@private
@@ -1749,13 +1748,12 @@ do
   end
 end
 
----@private
 ---Buffer lifecycle handler for textDocument/didSave
 local function text_document_did_save_handler(bufnr)
   bufnr = resolve_bufnr(bufnr)
   local uri = vim.uri_from_bufnr(bufnr)
   local text = once(buf_get_full_text)
-  for _, client in ipairs(lsp.get_active_clients({ bufnr = bufnr })) do
+  for _, client in ipairs(lsp.get_clients({ bufnr = bufnr })) do
     local name = api.nvim_buf_get_name(bufnr)
     local old_name = changetracking._get_and_set_name(client, bufnr, name)
     if old_name and name ~= old_name then
@@ -1823,7 +1821,7 @@ function lsp.buf_attach_client(bufnr, client_id)
       buffer = bufnr,
       desc = 'vim.lsp: textDocument/willSave',
       callback = function(ctx)
-        for _, client in ipairs(lsp.get_active_clients({ bufnr = ctx.buf })) do
+        for _, client in ipairs(lsp.get_clients({ bufnr = ctx.buf })) do
           local params = {
             textDocument = {
               uri = uri,
@@ -1858,7 +1856,7 @@ function lsp.buf_attach_client(bufnr, client_id)
       on_lines = text_document_did_change_handler,
       on_reload = function()
         local params = { textDocument = { uri = uri } }
-        for _, client in ipairs(lsp.get_active_clients({ bufnr = bufnr })) do
+        for _, client in ipairs(lsp.get_clients({ bufnr = bufnr })) do
           changetracking.reset_buf(client, bufnr)
           if vim.tbl_get(client.server_capabilities, 'textDocumentSync', 'openClose') then
             client.notify('textDocument/didClose', params)
@@ -1868,7 +1866,7 @@ function lsp.buf_attach_client(bufnr, client_id)
       end,
       on_detach = function()
         local params = { textDocument = { uri = uri } }
-        for _, client in ipairs(lsp.get_active_clients({ bufnr = bufnr })) do
+        for _, client in ipairs(lsp.get_clients({ bufnr = bufnr })) do
           changetracking.reset_buf(client, bufnr)
           if vim.tbl_get(client.server_capabilities, 'textDocumentSync', 'openClose') then
             client.notify('textDocument/didClose', params)
@@ -1985,7 +1983,7 @@ end
 --- You can also use the `stop()` function on a |vim.lsp.client| object.
 --- To stop all clients:
 --- <pre>lua
---- vim.lsp.stop_client(vim.lsp.get_active_clients())
+--- vim.lsp.stop_client(vim.lsp.get_clients())
 --- </pre>
 ---
 --- By default asks the server to shutdown, unless stop was requested
@@ -2006,7 +2004,7 @@ function lsp.stop_client(client_id, force)
   end
 end
 
----@class vim.lsp.get_active_clients.filter
+---@class vim.lsp.get_clients.filter
 ---@field id integer|nil Match clients by id
 ---@field bufnr integer|nil match clients attached to the given buffer
 ---@field name string|nil match clients by name
@@ -2014,7 +2012,7 @@ end
 
 --- Get active clients.
 ---
----@param filter vim.lsp.get_active_clients.filter|nil (table|nil) A table with
+---@param filter vim.lsp.get_clients.filter|nil (table|nil) A table with
 ---              key-value pairs used to filter the returned clients.
 ---              The available keys are:
 ---               - id (number): Only return clients with the given id
@@ -2022,7 +2020,7 @@ end
 ---               - name (string): Only return clients with the given name
 ---               - method (string): Only return clients supporting the given method
 ---@return lsp.Client[]: List of |vim.lsp.client| objects
-function lsp.get_active_clients(filter)
+function lsp.get_clients(filter)
   validate({ filter = { filter, 't', true } })
 
   filter = filter or {}
@@ -2043,6 +2041,13 @@ function lsp.get_active_clients(filter)
     end
   end
   return clients
+end
+
+---@private
+---@deprecated
+function lsp.get_active_clients(filter)
+  -- TODO: add vim.deprecate call after 0.10 is out for removal in 0.12
+  return lsp.get_clients(filter)
 end
 
 api.nvim_create_autocmd('VimLeavePre', {
@@ -2075,7 +2080,6 @@ api.nvim_create_autocmd('VimLeavePre', {
 
     local poll_time = 50
 
-    ---@private
     local function check_clients_closed()
       for client_id, timeout in pairs(timeouts) do
         timeouts[client_id] = timeout - poll_time
@@ -2125,7 +2129,7 @@ function lsp.buf_request(bufnr, method, params, handler)
 
   bufnr = resolve_bufnr(bufnr)
   local method_supported = false
-  local clients = lsp.get_active_clients({ bufnr = bufnr })
+  local clients = lsp.get_clients({ bufnr = bufnr })
   local client_request_ids = {}
   for _, client in ipairs(clients) do
     if client.supports_method(method, { bufnr = bufnr }) then
@@ -2173,7 +2177,7 @@ function lsp.buf_request_all(bufnr, method, params, handler)
   local expected_result_count = 0
 
   local set_expected_result_count = once(function()
-    for _, client in ipairs(lsp.get_active_clients({ bufnr = bufnr })) do
+    for _, client in ipairs(lsp.get_clients({ bufnr = bufnr })) do
       if client.supports_method(method, { bufnr = bufnr }) then
         expected_result_count = expected_result_count + 1
       end
@@ -2240,7 +2244,7 @@ function lsp.buf_notify(bufnr, method, params)
     method = { method, 's' },
   })
   local resp = false
-  for _, client in ipairs(lsp.get_active_clients({ bufnr = bufnr })) do
+  for _, client in ipairs(lsp.get_clients({ bufnr = bufnr })) do
     if client.rpc.notify(method, params) then
       resp = true
     end
@@ -2284,8 +2288,9 @@ function lsp.omnifunc(findstart, base)
   end
 
   local bufnr = resolve_bufnr()
-  local has_buffer_clients = not tbl_isempty(all_buffer_active_clients[bufnr] or {})
-  if not has_buffer_clients then
+  local clients = lsp.get_clients({ bufnr = bufnr, method = 'textDocument/completion' })
+  local remaining = #clients
+  if remaining == 0 then
     return findstart == 1 and -1 or {}
   end
 
@@ -2294,47 +2299,66 @@ function lsp.omnifunc(findstart, base)
     log.info('base ', base)
   end
 
-  local pos = api.nvim_win_get_cursor(0)
+  local win = api.nvim_get_current_win()
+  local pos = api.nvim_win_get_cursor(win)
   local line = api.nvim_get_current_line()
   local line_to_cursor = line:sub(1, pos[2])
   local _ = log.trace() and log.trace('omnifunc.line', pos, line)
 
   -- Get the start position of the current keyword
-  local textMatch = vim.fn.match(line_to_cursor, '\\k*$')
-
-  local params = util.make_position_params()
-
+  local match_pos = vim.fn.match(line_to_cursor, '\\k*$') + 1
   local items = {}
-  lsp.buf_request(bufnr, 'textDocument/completion', params, function(err, result, ctx)
-    if err or not result or vim.fn.mode() ~= 'i' then
-      return
-    end
 
-    -- Completion response items may be relative to a position different than `textMatch`.
-    -- Concrete example, with sumneko/lua-language-server:
-    --
-    -- require('plenary.asy|
-    --         ▲       ▲   ▲
-    --         │       │   └── cursor_pos: 20
-    --         │       └────── textMatch: 17
-    --         └────────────── textEdit.range.start.character: 9
-    --                                 .newText = 'plenary.async'
-    --                  ^^^
-    --                  prefix (We'd remove everything not starting with `asy`,
-    --                  so we'd eliminate the `plenary.async` result
-    --
-    -- `adjust_start_col` is used to prefer the language server boundary.
-    --
-    local client = lsp.get_client_by_id(ctx.client_id)
-    local encoding = client and client.offset_encoding or 'utf-16'
-    local candidates = util.extract_completion_items(result)
-    local startbyte = adjust_start_col(pos[1], line, candidates, encoding) or textMatch
-    local prefix = line:sub(startbyte + 1, pos[2])
-    local matches = util.text_document_completion_list_to_complete_items(result, prefix)
-    -- TODO(ashkan): is this the best way to do this?
-    vim.list_extend(items, matches)
-    vim.fn.complete(startbyte + 1, items)
-  end)
+  local startbyte
+
+  ---@private
+  local function on_done()
+    local mode = api.nvim_get_mode()['mode']
+    if mode == 'i' or mode == 'ic' then
+      vim.fn.complete(startbyte or match_pos, items)
+    end
+  end
+
+  for _, client in ipairs(clients) do
+    local params = util.make_position_params(win, client.offset_encoding)
+    client.request('textDocument/completion', params, function(err, result)
+      if err then
+        log.warn(err.message)
+      end
+      if result and vim.fn.mode() == 'i' then
+        -- Completion response items may be relative to a position different than `textMatch`.
+        -- Concrete example, with sumneko/lua-language-server:
+        --
+        -- require('plenary.asy|
+        --         ▲       ▲   ▲
+        --         │       │   └── cursor_pos: 20
+        --         │       └────── textMatch: 17
+        --         └────────────── textEdit.range.start.character: 9
+        --                                 .newText = 'plenary.async'
+        --                  ^^^
+        --                  prefix (We'd remove everything not starting with `asy`,
+        --                  so we'd eliminate the `plenary.async` result
+        --
+        -- `adjust_start_col` is used to prefer the language server boundary.
+        --
+        local encoding = client.offset_encoding
+        local candidates = util.extract_completion_items(result)
+        local curstartbyte = adjust_start_col(pos[1], line, candidates, encoding)
+        if startbyte == nil then
+          startbyte = curstartbyte
+        elseif curstartbyte ~= nil and curstartbyte ~= startbyte then
+          startbyte = match_pos
+        end
+        local prefix = startbyte and line:sub(startbyte + 1) or line_to_cursor:sub(match_pos)
+        local matches = util.text_document_completion_list_to_complete_items(result, prefix)
+        vim.list_extend(items, matches)
+      end
+      remaining = remaining - 1
+      if remaining == 0 then
+        vim.schedule(on_done)
+      end
+    end, bufnr)
+  end
 
   -- Return -2 to signal that we should continue completion so that we can
   -- async complete.
@@ -2367,7 +2391,7 @@ function lsp.formatexpr(opts)
     return 0
   end
   local bufnr = api.nvim_get_current_buf()
-  for _, client in pairs(lsp.get_active_clients({ bufnr = bufnr })) do
+  for _, client in pairs(lsp.get_clients({ bufnr = bufnr })) do
     if client.supports_method('textDocument/rangeFormatting') then
       local params = util.make_formatting_params()
       local end_line = vim.fn.getline(end_lnum) --[[@as string]]
@@ -2424,21 +2448,22 @@ end
 ---
 ---@param bufnr (integer|nil): Buffer handle, or 0 for current
 ---@return table result is table of (client_id, client) pairs
----@deprecated Use |vim.lsp.get_active_clients()| instead.
+---@deprecated Use |vim.lsp.get_clients()| instead.
 function lsp.buf_get_clients(bufnr)
   local result = {}
-  for _, client in ipairs(lsp.get_active_clients({ bufnr = resolve_bufnr(bufnr) })) do
+  for _, client in ipairs(lsp.get_clients({ bufnr = resolve_bufnr(bufnr) })) do
     result[client.id] = client
   end
   return result
 end
 
--- Log level dictionary with reverse lookup as well.
---
--- Can be used to lookup the number from the name or the
--- name from the number.
--- Levels by name: "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "OFF"
--- Level numbers begin with "TRACE" at 0
+--- Log level dictionary with reverse lookup as well.
+---
+--- Can be used to lookup the number from the name or the
+--- name from the number.
+--- Levels by name: "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "OFF"
+--- Level numbers begin with "TRACE" at 0
+--- @nodoc
 lsp.log_levels = log.levels
 
 --- Sets the global log level for LSP logging.
@@ -2478,7 +2503,7 @@ end
 ---                 vim.print(client)
 ---               end)
 ---             </pre>
----@deprecated use lsp.get_active_clients({ bufnr = bufnr }) with regular loop
+---@deprecated use lsp.get_clients({ bufnr = bufnr }) with regular loop
 function lsp.for_each_buffer_client(bufnr, fn)
   return for_each_buffer_client(bufnr, fn)
 end

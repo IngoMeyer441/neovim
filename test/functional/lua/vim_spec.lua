@@ -276,7 +276,7 @@ describe('lua stdlib', function()
                                                                   |
     ]]}
 
-    -- nvim_command causes a vimL exception, check that it is properly caught
+    -- nvim_command causes a Vimscript exception, check that it is properly caught
     -- and propagated as an error message in async contexts.. #10809
     exec_lua([[
       vim.schedule(function()
@@ -831,7 +831,7 @@ describe('lua stdlib', function()
   it('vim.call, vim.fn', function()
     eq(true, exec_lua([[return vim.call('sin', 0.0) == 0.0 ]]))
     eq(true, exec_lua([[return vim.fn.sin(0.0) == 0.0 ]]))
-    -- compat: nvim_call_function uses "special" value for vimL float
+    -- compat: nvim_call_function uses "special" value for Vimscript float
     eq(false, exec_lua([[return vim.api.nvim_call_function('sin', {0.0}) == 0.0 ]]))
 
     exec([[
@@ -1509,7 +1509,7 @@ describe('lua stdlib', function()
     ]]
     eq('', funcs.luaeval "vim.bo.filetype")
     eq(true, funcs.luaeval "vim.bo[BUF].modifiable")
-    matches("Invalid option %(not found%): 'nosuchopt'$",
+    matches("Unknown option 'nosuchopt'$",
        pcall_err(exec_lua, 'return vim.bo.nosuchopt'))
     matches("Expected lua string$",
        pcall_err(exec_lua, 'return vim.bo[0][0].autoread'))
@@ -1530,7 +1530,7 @@ describe('lua stdlib', function()
     eq(0, funcs.luaeval "vim.wo.cole")
     eq(0, funcs.luaeval "vim.wo[0].cole")
     eq(0, funcs.luaeval "vim.wo[1001].cole")
-    matches("Invalid option %(not found%): 'notanopt'$",
+    matches("Unknown option 'notanopt'$",
        pcall_err(exec_lua, 'return vim.wo.notanopt'))
     matches("Invalid window id: %-1$",
        pcall_err(exec_lua, 'return vim.wo[-1].list'))

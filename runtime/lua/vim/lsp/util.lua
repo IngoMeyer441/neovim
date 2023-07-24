@@ -22,7 +22,6 @@ local default_border = {
   { ' ', 'NormalFloat' },
 }
 
----@private
 --- Check the border given by opts or the default border for the additional
 --- size it adds to a float.
 ---@param opts table optional options for the floating window
@@ -60,7 +59,6 @@ local function get_border_size(opts)
         )
       )
     end
-    ---@private
     local function border_width(id)
       id = (id - 1) % #border + 1
       if type(border[id]) == 'table' then
@@ -77,7 +75,6 @@ local function get_border_size(opts)
         )
       )
     end
-    ---@private
     local function border_height(id)
       id = (id - 1) % #border + 1
       if type(border[id]) == 'table' then
@@ -103,13 +100,11 @@ local function get_border_size(opts)
   return { height = height, width = width }
 end
 
----@private
 local function split_lines(value)
   value = string.gsub(value, '\r\n?', '\n')
   return split(value, '\n', { plain = true })
 end
 
----@private
 local function create_window_without_focus()
   local prev = vim.api.nvim_get_current_win()
   vim.cmd.new()
@@ -219,7 +214,6 @@ function M.set_lines(lines, A, B, new_lines)
   return lines
 end
 
----@private
 local function sort_by_key(fn)
   return function(a, b)
     local ka, kb = fn(a), fn(b)
@@ -234,7 +228,6 @@ local function sort_by_key(fn)
   end
 end
 
----@private
 --- Gets the zero-indexed lines from the given buffer.
 --- Works on unloaded buffers by reading the file using libuv to bypass buf reading events.
 --- Falls back to loading the buffer and nvim_buf_get_lines for buffers with non-file URI.
@@ -250,7 +243,6 @@ local function get_lines(bufnr, rows)
     bufnr = api.nvim_get_current_buf()
   end
 
-  ---@private
   local function buf_lines()
     local lines = {}
     for _, row in ipairs(rows) do
@@ -316,7 +308,6 @@ local function get_lines(bufnr, rows)
   return lines
 end
 
----@private
 --- Gets the zero-indexed line from the given buffer.
 --- Works on unloaded buffers by reading the file using libuv to bypass buf reading events.
 --- Falls back to loading the buffer and nvim_buf_get_lines for buffers with non-file URI.
@@ -328,7 +319,6 @@ local function get_line(bufnr, row)
   return get_lines(bufnr, { row })[row]
 end
 
----@private
 --- Position is a https://microsoft.github.io/language-server-protocol/specifications/specification-current/#position
 --- Returns a zero-indexed column, since set_lines() does the conversion to
 ---@param offset_encoding string|nil utf-8|utf-16|utf-32
@@ -360,7 +350,7 @@ function M.get_progress_messages()
   local new_messages = {}
   local progress_remove = {}
 
-  for _, client in ipairs(vim.lsp.get_active_clients()) do
+  for _, client in ipairs(vim.lsp.get_clients()) do
     local groups = {}
     for progress in client.progress do
       local value = progress.value
@@ -670,7 +660,6 @@ function M.parse_snippet(input)
   return parsed
 end
 
----@private
 --- Sorts by CompletionItem.sortText.
 ---
 --see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
@@ -680,7 +669,6 @@ local function sort_completion_items(items)
   end)
 end
 
----@private
 --- Returns text that should be inserted when selecting completion item. The
 --- precedence is as follows: textEdit.newText > insertText > label
 --see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
@@ -703,7 +691,6 @@ local function get_completion_word(item)
   return item.label
 end
 
----@private
 --- Some language servers return complementary candidates whose prefixes do not
 --- match are also returned. So we exclude completion candidates whose prefix
 --- does not match.
@@ -784,7 +771,6 @@ function M.text_document_completion_list_to_complete_items(result, prefix)
   return matches
 end
 
----@private
 --- Like vim.fn.bufwinid except it works across tabpages.
 local function bufwinid(bufnr)
   for _, win in ipairs(api.nvim_list_wins()) do
@@ -795,7 +781,6 @@ local function bufwinid(bufnr)
 end
 
 --- Get list of buffers for a directory
----@private
 local function get_dir_bufs(path)
   path = path:gsub('([^%w])', '%%%1')
   local buffers = {}
@@ -855,7 +840,6 @@ function M.rename(old_fname, new_fname, opts)
   end
 end
 
----@private
 local function create_file(change)
   local opts = change.options or {}
   -- from spec: Overwrite wins over `ignoreIfExists`
@@ -870,7 +854,6 @@ local function create_file(change)
   vim.fn.bufadd(fname)
 end
 
----@private
 local function delete_file(change)
   local opts = change.options or {}
   local fname = vim.uri_to_fname(change.uri)
@@ -1266,7 +1249,6 @@ function M.preview_location(location, opts)
   return M.open_floating_preview(contents, syntax, opts)
 end
 
----@private
 local function find_window_by_var(name, value)
   for _, win in ipairs(api.nvim_list_wins()) do
     if npcall(api.nvim_win_get_var, win, name) == value then
@@ -1305,7 +1287,6 @@ end
 --- Generates a table mapping markdown code block lang to vim syntax,
 --- based on g:markdown_fenced_languages
 ---@return table table of lang -> syntax mappings
----@private
 local function get_markdown_fences()
   local fences = {}
   for _, fence in pairs(vim.g.markdown_fenced_languages or {}) do
@@ -1460,7 +1441,6 @@ function M.stylize_markdown(bufnr, contents, opts)
   api.nvim_buf_set_lines(bufnr, 0, -1, false, stripped)
 
   local idx = 1
-  ---@private
   -- keep track of syntaxes we already included.
   -- no need to include the same syntax more than once
   local langs = {}
@@ -1521,7 +1501,6 @@ function M.stylize_markdown(bufnr, contents, opts)
   return stripped
 end
 
----@private
 --- Closes the preview window
 ---
 ---@param winnr integer window id of preview window
@@ -1539,7 +1518,6 @@ local function close_preview_window(winnr, bufnrs)
   end)
 end
 
----@private
 --- Creates autocommands to close a preview window when events happen.
 ---
 ---@param events table list of events
@@ -1841,7 +1819,7 @@ function M.locations_to_items(locations, offset_encoding)
       'locations_to_items must be called with valid offset encoding',
       vim.log.levels.WARN
     )
-    offset_encoding = vim.lsp.get_active_clients({ bufnr = 0 })[1].offset_encoding
+    offset_encoding = vim.lsp.get_clients({ bufnr = 0 })[1].offset_encoding
   end
 
   local items = {}
@@ -1905,7 +1883,6 @@ end
 ---
 ---@param symbols table DocumentSymbol[] or SymbolInformation[]
 function M.symbols_to_items(symbols, bufnr)
-  ---@private
   local function _symbols_to_items(_symbols, _items, _bufnr)
     for _, symbol in ipairs(_symbols) do
       if symbol.location then -- SymbolInformation type
@@ -1991,7 +1968,6 @@ function M.try_trim_markdown_code_blocks(lines)
   return 'markdown'
 end
 
----@private
 ---@param window integer|nil: window handle or 0 for current, defaults to current
 ---@param offset_encoding string utf-8|utf-16|utf-32|nil defaults to `offset_encoding` of first client of buffer of `window`
 local function make_position_param(window, offset_encoding)
@@ -2036,7 +2012,7 @@ function M._get_offset_encoding(bufnr)
 
   local offset_encoding
 
-  for _, client in pairs(vim.lsp.get_active_clients({ bufnr = bufnr })) do
+  for _, client in pairs(vim.lsp.get_clients({ bufnr = bufnr })) do
     if client.offset_encoding == nil then
       vim.notify_once(
         string.format(
@@ -2183,7 +2159,7 @@ function M.character_offset(buf, row, col, offset_encoding)
       'character_offset must be called with valid offset encoding',
       vim.log.levels.WARN
     )
-    offset_encoding = vim.lsp.get_active_clients({ bufnr = buf })[1].offset_encoding
+    offset_encoding = vim.lsp.get_clients({ bufnr = buf })[1].offset_encoding
   end
   -- If the col is past the EOL, use the line length.
   if col > #line then
@@ -2207,8 +2183,49 @@ function M.lookup_section(settings, section)
   return settings
 end
 
+---@private
+--- Request updated LSP information for a buffer.
+---
+---@param method string LSP method to call
+---@param opts (nil|table) Optional arguments
+---  - bufnr (integer, default: 0): Buffer to refresh
+---  - only_visible (boolean, default: false): Whether to only refresh for the visible regions of the buffer
+function M._refresh(method, opts)
+  opts = opts or {}
+  local bufnr = opts.bufnr
+  if bufnr == nil or bufnr == 0 then
+    bufnr = api.nvim_get_current_buf()
+  end
+  local only_visible = opts.only_visible or false
+  for _, window in ipairs(api.nvim_list_wins()) do
+    if api.nvim_win_get_buf(window) == bufnr then
+      local first = vim.fn.line('w0', window)
+      local last = vim.fn.line('w$', window)
+      local params = {
+        textDocument = M.make_text_document_params(bufnr),
+        range = {
+          start = { line = first - 1, character = 0 },
+          ['end'] = { line = last, character = 0 },
+        },
+      }
+      vim.lsp.buf_request(bufnr, method, params)
+    end
+  end
+  if not only_visible then
+    local params = {
+      textDocument = M.make_text_document_params(bufnr),
+      range = {
+        start = { line = 0, character = 0 },
+        ['end'] = { line = api.nvim_buf_line_count(bufnr), character = 0 },
+      },
+    }
+    vim.lsp.buf_request(bufnr, method, params)
+  end
+end
+
 M._get_line_byte_from_position = get_line_byte_from_position
 
+---@nodoc
 M.buf_versions = {}
 
 return M

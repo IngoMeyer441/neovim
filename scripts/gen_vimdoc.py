@@ -45,6 +45,8 @@ import logging
 from pathlib import Path
 
 from xml.dom import minidom
+Element = minidom.Element
+Document = minidom.Document
 
 MIN_PYTHON_VERSION = (3, 6)
 MIN_DOXYGEN_VERSION = (1, 9, 0)
@@ -133,7 +135,7 @@ CONFIG = {
         # Section helptag.
         'helptag_fmt': lambda name: f'*api-{name.lower()}*',
         # Per-function helptag.
-        'fn_helptag_fmt': lambda fstem, name: f'*{name}()*',
+        'fn_helptag_fmt': lambda fstem, name, istbl: f'*{name}()*',
         # Module name overrides (for Lua).
         'module_override': {},
         # Append the docs for these modules, do not start a new section.
@@ -143,6 +145,14 @@ CONFIG = {
         'mode': 'lua',
         'filename': 'lua.txt',
         'section_order': [
+            'highlight.lua',
+            'regex.lua',
+            'diff.lua',
+            'mpack.lua',
+            'json.lua',
+            'spell.lua',
+            'builtin.lua',
+            '_options.lua',
             '_editor.lua',
             '_inspector.lua',
             'shared.lua',
@@ -159,6 +169,7 @@ CONFIG = {
         'files': [
             'runtime/lua/vim/iter.lua',
             'runtime/lua/vim/_editor.lua',
+            'runtime/lua/vim/_options.lua',
             'runtime/lua/vim/shared.lua',
             'runtime/lua/vim/loader.lua',
             'runtime/lua/vim/uri.lua',
@@ -166,30 +177,50 @@ CONFIG = {
             'runtime/lua/vim/filetype.lua',
             'runtime/lua/vim/keymap.lua',
             'runtime/lua/vim/fs.lua',
+            'runtime/lua/vim/highlight.lua',
             'runtime/lua/vim/secure.lua',
             'runtime/lua/vim/version.lua',
             'runtime/lua/vim/_inspector.lua',
+            'runtime/lua/vim/_meta/builtin.lua',
+            'runtime/lua/vim/_meta/diff.lua',
+            'runtime/lua/vim/_meta/mpack.lua',
+            'runtime/lua/vim/_meta/json.lua',
+            'runtime/lua/vim/_meta/regex.lua',
+            'runtime/lua/vim/_meta/spell.lua',
         ],
         'file_patterns': '*.lua',
         'fn_name_prefix': '',
+        'fn_name_fmt': lambda fstem, name: (
+            name if fstem in [ 'vim.iter' ] else
+            f'vim.{name}' if fstem in [ '_editor', 'vim.regex'] else
+            f'vim.{name}' if fstem == '_options' and not name[0].isupper() else
+            f'{fstem}.{name}' if fstem.startswith('vim') else
+            name
+        ),
         'section_name': {
             'lsp.lua': 'core',
             '_inspector.lua': 'inspector',
         },
         'section_fmt': lambda name: (
-            'Lua module: vim'
-            if name.lower() == '_editor'
-            else f'Lua module: {name.lower()}'),
+            'Lua module: vim' if name.lower() == '_editor' else
+            'LUA-VIMSCRIPT BRIDGE' if name.lower() == '_options' else
+            f'VIM.{name.upper()}' if name.lower() in [ 'highlight', 'mpack', 'json', 'diff', 'spell', 'regex' ] else
+            'VIM' if name.lower() == 'builtin' else
+            f'Lua module: vim.{name.lower()}'),
         'helptag_fmt': lambda name: (
-            '*lua-vim*'
-            if name.lower() == '_editor'
-            else f'*lua-{name.lower()}*'),
-        'fn_helptag_fmt': lambda fstem, name: (
-            f'*vim.{name}()*'
-            if fstem.lower() == '_editor'
-            else f'*{name}()*'
-            if name[0].isupper()
-            else f'*{fstem}.{name}()*'),
+            '*lua-vim*' if name.lower() == '_editor' else
+            '*lua-vimscript*' if name.lower() == '_options' else
+            f'*vim.{name.lower()}*'),
+        'fn_helptag_fmt': lambda fstem, name, istbl: (
+            f'*vim.opt:{name.split(":")[-1]}()*' if ':' in name and name.startswith('Option') else
+            # Exclude fstem for methods
+            f'*{name}()*' if ':' in name else
+            f'*vim.{name}()*' if fstem.lower() == '_editor' else
+            f'*vim.{name}*' if fstem.lower() == '_options' and istbl else
+            # Prevents vim.regex.regex
+            f'*{fstem}()*' if fstem.endswith('.' + name) else
+            f'*{fstem}.{name}{"" if istbl else "()"}*'
+            ),
         'module_override': {
             # `shared` functions are exposed on the `vim` module.
             'shared': 'vim',
@@ -200,9 +231,16 @@ CONFIG = {
             'filetype': 'vim.filetype',
             'keymap': 'vim.keymap',
             'fs': 'vim.fs',
+            'highlight': 'vim.highlight',
             'secure': 'vim.secure',
             'version': 'vim.version',
             'iter': 'vim.iter',
+            'diff': 'vim',
+            'builtin': 'vim',
+            'mpack': 'vim.mpack',
+            'json': 'vim.json',
+            'regex': 'vim.regex',
+            'spell': 'vim.spell',
         },
         'append_only': [
             'shared.lua',
@@ -239,14 +277,11 @@ CONFIG = {
             '*lsp-core*'
             if name.lower() == 'lsp'
             else f'*lsp-{name.lower()}*'),
-        'fn_helptag_fmt': lambda fstem, name: (
-            f'*vim.lsp.{name}()*'
-            if fstem == 'lsp' and name != 'client'
-            else (
-                '*vim.lsp.client*'
-                # HACK. TODO(justinmk): class/structure support in lua2dox
-                if 'lsp.client' == f'{fstem}.{name}'
-                else f'*vim.lsp.{fstem}.{name}()*')),
+        'fn_helptag_fmt': lambda fstem, name, istbl: (
+            f'*vim.lsp.{name}{"" if istbl else "()"}*' if fstem == 'lsp' and name != 'client' else
+            # HACK. TODO(justinmk): class/structure support in lua2dox
+            '*vim.lsp.client*' if 'lsp.client' == f'{fstem}.{name}' else
+            f'*vim.lsp.{fstem}.{name}{"" if istbl else "()"}*'),
         'module_override': {},
         'append_only': [],
     },
@@ -259,10 +294,11 @@ CONFIG = {
         'files': ['runtime/lua/vim/diagnostic.lua'],
         'file_patterns': '*.lua',
         'fn_name_prefix': '',
+        'include_tables': False,
         'section_name': {'diagnostic.lua': 'diagnostic'},
         'section_fmt': lambda _: 'Lua module: vim.diagnostic',
         'helptag_fmt': lambda _: '*diagnostic-api*',
-        'fn_helptag_fmt': lambda fstem, name: f'*vim.{fstem}.{name}()*',
+        'fn_helptag_fmt': lambda fstem, name, istbl: f'*vim.{fstem}.{name}{"" if istbl else "()"}*',
         'module_override': {},
         'append_only': [],
     },
@@ -292,7 +328,7 @@ CONFIG = {
             '*lua-treesitter-core*'
             if name.lower() == 'treesitter'
             else f'*lua-treesitter-{name.lower()}*'),
-        'fn_helptag_fmt': lambda fstem, name: (
+        'fn_helptag_fmt': lambda fstem, name, istbl: (
             f'*vim.{fstem}.{name}()*'
             if fstem == 'treesitter'
             else f'*{name}()*'
@@ -541,6 +577,8 @@ def render_node(n, text, prefix='', indent='', width=text_width - indentation,
             text += '>lua{}{}\n<'.format(ensure_nl, o[3:-1])
         elif o[0:4] == 'vim\n':
             text += '>vim{}{}\n<'.format(ensure_nl, o[3:-1])
+        elif o[0:5] == 'help\n':
+            text += o[4:-1]
         else:
             text += '>{}{}\n<'.format(ensure_nl, o)
 
@@ -720,8 +758,7 @@ def para_as_map(parent, indent='', width=text_width - indentation, fmt_vimhelp=F
 
     return chunks, xrefs
 
-
-def fmt_node_as_vimhelp(parent, width=text_width - indentation, indent='',
+def fmt_node_as_vimhelp(parent: Element, width=text_width - indentation, indent='',
                         fmt_vimhelp=False):
     """Renders (nested) Doxygen <para> nodes as Vim :help text.
 
@@ -734,6 +771,8 @@ def fmt_node_as_vimhelp(parent, width=text_width - indentation, indent='',
         max_name_len = max_name(m.keys()) + 4
         out = ''
         for name, desc in m.items():
+            if name == 'self':
+                continue
             name = '  • {}'.format('{{{}}}'.format(name).ljust(max_name_len))
             out += '{}{}\n'.format(name, desc)
         return out.rstrip()
@@ -803,6 +842,13 @@ def extract_from_xml(filename, target, width, fmt_vimhelp):
         if return_type == '':
             continue
 
+        if 'local_function' in return_type:  # Special from lua2dox.lua.
+            continue
+
+        istbl = return_type.startswith('table')  # Special from lua2dox.lua.
+        if istbl and not CONFIG[target].get('include_tables', True):
+            continue
+
         if return_type.startswith(('ArrayOf', 'DictionaryOf')):
             parts = return_type.strip('_').split('_')
             return_type = '{}({})'.format(parts[0], ', '.join(parts[1:]))
@@ -851,6 +897,7 @@ def extract_from_xml(filename, target, width, fmt_vimhelp):
                 and any(x[1] == 'self' for x in params):
             split_return = return_type.split(' ')
             name = f'{split_return[1]}:{name}'
+            params = [x for x in params if x[1] != 'self']
 
         c_args = []
         for param_type, param_name in params:
@@ -864,12 +911,20 @@ def extract_from_xml(filename, target, width, fmt_vimhelp):
             if '.' in compoundname:
                 fstem = compoundname.split('.')[0]
                 fstem = CONFIG[target]['module_override'].get(fstem, fstem)
-            vimtag = CONFIG[target]['fn_helptag_fmt'](fstem, name)
+            vimtag = CONFIG[target]['fn_helptag_fmt'](fstem, name, istbl)
 
-        prefix = '%s(' % name
-        suffix = '%s)' % ', '.join('{%s}' % a[1] for a in params
-                                   if a[0] not in ('void', 'Error', 'Arena',
-                                                   'lua_State'))
+            if 'fn_name_fmt' in CONFIG[target]:
+                name = CONFIG[target]['fn_name_fmt'](fstem, name)
+
+        if istbl:
+            aopen, aclose = '', ''
+        else:
+            aopen, aclose = '(', ')'
+
+        prefix = name + aopen
+        suffix = ', '.join('{%s}' % a[1] for a in params
+                           if a[0] not in ('void', 'Error', 'Arena',
+                                           'lua_State')) + aclose
 
         if not fmt_vimhelp:
             c_decl = '%s %s(%s);' % (return_type, name, ', '.join(c_args))
@@ -1047,6 +1102,42 @@ def delete_lines_below(filename, tokenstr):
         fp.writelines(lines[0:i])
 
 
+def extract_defgroups(base: str, dom: Document):
+    '''Generate module-level (section) docs (@defgroup).'''
+    section_docs = {}
+
+    for compound in dom.getElementsByTagName('compound'):
+        if compound.getAttribute('kind') != 'group':
+            continue
+
+        # Doxygen "@defgroup" directive.
+        groupname = get_text(find_first(compound, 'name'))
+        groupxml = os.path.join(base, '%s.xml' %
+                                compound.getAttribute('refid'))
+
+        group_parsed = minidom.parse(groupxml)
+        doc_list = []
+        brief_desc = find_first(group_parsed, 'briefdescription')
+        if brief_desc:
+            for child in brief_desc.childNodes:
+                doc_list.append(fmt_node_as_vimhelp(child))
+
+        desc = find_first(group_parsed, 'detaileddescription')
+        if desc:
+            doc = fmt_node_as_vimhelp(desc)
+
+            if doc:
+                doc_list.append(doc)
+
+        # Can't use '.' in @defgroup, so convert to '--'
+        # "vim.json" => "vim-dot-json"
+        groupname = groupname.replace('-dot-', '.')
+
+        section_docs[groupname] = "\n".join(doc_list)
+
+    return section_docs
+
+
 def main(doxygen_config, args):
     """Generates:
 
@@ -1088,37 +1179,12 @@ def main(doxygen_config, args):
 
         fn_map_full = {}  # Collects all functions as each module is processed.
         sections = {}
-        section_docs = {}
         sep = '=' * text_width
 
         base = os.path.join(output_dir, 'xml')
         dom = minidom.parse(os.path.join(base, 'index.xml'))
 
-        # Generate module-level (section) docs (@defgroup).
-        for compound in dom.getElementsByTagName('compound'):
-            if compound.getAttribute('kind') != 'group':
-                continue
-
-            # Doxygen "@defgroup" directive.
-            groupname = get_text(find_first(compound, 'name'))
-            groupxml = os.path.join(base, '%s.xml' %
-                                    compound.getAttribute('refid'))
-
-            group_parsed = minidom.parse(groupxml)
-            doc_list = []
-            brief_desc = find_first(group_parsed, 'briefdescription')
-            if brief_desc:
-                for child in brief_desc.childNodes:
-                    doc_list.append(fmt_node_as_vimhelp(child))
-
-            desc = find_first(group_parsed, 'detaileddescription')
-            if desc:
-                doc = fmt_node_as_vimhelp(desc)
-
-                if doc:
-                    doc_list.append(doc)
-
-            section_docs[groupname] = "\n".join(doc_list)
+        section_docs = extract_defgroups(base, dom)
 
         # Generate docs for all functions in the current module.
         for compound in dom.getElementsByTagName('compound'):
