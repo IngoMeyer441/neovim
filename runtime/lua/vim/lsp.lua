@@ -1260,8 +1260,13 @@ function lsp.start_client(config)
         changetracking.reset(client)
       end
       if code ~= 0 or (signal ~= 0 and signal ~= 15) then
-        local msg =
-          string.format('Client %s quit with exit code %s and signal %s', client_id, code, signal)
+        local msg = string.format(
+          'Client %s quit with exit code %s and signal %s. Check log for errors: %s',
+          name,
+          code,
+          signal,
+          lsp.get_log_path()
+        )
         vim.notify(msg, vim.log.levels.WARN)
       end
     end)
@@ -1455,7 +1460,7 @@ function lsp.start_client(config)
     end)
   end
 
-  ---@private
+  ---@nodoc
   --- Sends a request to the server.
   ---
   --- This is a thin wrapper around {client.rpc.request} with some additional
@@ -1559,7 +1564,7 @@ function lsp.start_client(config)
     return request_result
   end
 
-  ---@private
+  ---@nodoc
   --- Sends a notification to an LSP server.
   ---
   ---@param method string LSP method name.
@@ -1590,7 +1595,7 @@ function lsp.start_client(config)
     return client_active
   end
 
-  ---@private
+  ---@nodoc
   --- Cancels a request with a given request id.
   ---
   ---@param id (integer) id of request to cancel
@@ -1613,7 +1618,8 @@ function lsp.start_client(config)
   -- Track this so that we can escalate automatically if we've already tried a
   -- graceful shutdown
   local graceful_shutdown_failed = false
-  ---@private
+
+  ---@nodoc
   --- Stops a client, optionally with force.
   ---
   ---By default, it will just ask the - server to shutdown without force. If
@@ -2311,7 +2317,6 @@ function lsp.omnifunc(findstart, base)
 
   local startbyte
 
-  ---@private
   local function on_done()
     local mode = api.nvim_get_mode()['mode']
     if mode == 'i' or mode == 'ic' then
