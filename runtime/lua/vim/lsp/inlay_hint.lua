@@ -1,14 +1,15 @@
 local util = require('vim.lsp.util')
 local log = require('vim.lsp.log')
+local ms = require('vim.lsp.protocol').Methods
 local api = vim.api
 local M = {}
 
----@class lsp._inlay_hint.bufstate
+---@class lsp.inlay_hint.bufstate
 ---@field version integer
 ---@field client_hint table<integer, table<integer, lsp.InlayHint[]>> client_id -> (lnum -> hints)
 ---@field applied table<integer, integer> Last version of hints applied to this line
----@field autocmd_id integer The autocmd id for the buffer
----@type table<integer, lsp._inlay_hint.bufstate>
+---@field enabled boolean Whether inlay hints are enabled for this buffer
+---@type table<integer, lsp.inlay_hint.bufstate>
 local bufstates = {}
 
 local namespace = api.nvim_create_namespace('vim_lsp_inlayhint')
@@ -31,6 +32,9 @@ function M.on_inlayhint(err, result, ctx, _)
     return
   end
   local bufstate = bufstates[bufnr]
+  if not bufstate or not bufstate.enabled then
+    return
+  end
   if not (bufstate.client_hint and bufstate.version) then
     bufstate.client_hint = vim.defaulttable()
     bufstate.version = ctx.version
@@ -84,7 +88,7 @@ function M.on_refresh(err, _, ctx, _)
       if api.nvim_win_get_buf(winid) == bufnr then
         local bufstate = bufstates[bufnr]
         if bufstate then
-          util._refresh('textDocument/inlayHint', { bufnr = bufnr })
+          util._refresh(ms.textDocument_inlayHint, { bufnr = bufnr })
           break
         end
       end
@@ -122,10 +126,9 @@ local function disable(bufnr)
     bufnr = api.nvim_get_current_buf()
   end
   clear(bufnr)
-  if bufstates[bufnr] and bufstates[bufnr].autocmd_id then
-    api.nvim_del_autocmd(bufstates[bufnr].autocmd_id)
+  if bufstates[bufnr] then
+    bufstates[bufnr] = { enabled = false, applied = {} }
   end
-  bufstates[bufnr] = nil
 end
 
 --- Enable inlay hints for a buffer
@@ -136,26 +139,29 @@ local function enable(bufnr)
   end
   local bufstate = bufstates[bufnr]
   if not bufstate then
-    bufstates[bufnr] = { applied = {} }
-    bufstates[bufnr].autocmd_id = api.nvim_create_autocmd('LspNotify', {
+    bufstates[bufnr] = { applied = {}, enabled = true }
+    api.nvim_create_autocmd('LspNotify', {
       buffer = bufnr,
       callback = function(opts)
-        if opts.data.method ~= 'textDocument/didChange' then
+        if
+          opts.data.method ~= ms.textDocument_didChange
+          and opts.data.method ~= ms.textDocument_didOpen
+        then
           return
         end
-        if bufstates[bufnr] then
-          util._refresh('textDocument/inlayHint', { bufnr = bufnr })
+        if bufstates[bufnr] and bufstates[bufnr].enabled then
+          util._refresh(ms.textDocument_inlayHint, { bufnr = bufnr })
         end
       end,
       group = augroup,
     })
-    util._refresh('textDocument/inlayHint', { bufnr = bufnr })
-    api.nvim_buf_attach(bufnr, true, {
+    util._refresh(ms.textDocument_inlayHint, { bufnr = bufnr })
+    api.nvim_buf_attach(bufnr, false, {
       on_reload = function(_, cb_bufnr)
         clear(cb_bufnr)
-        if bufstates[cb_bufnr] then
+        if bufstates[cb_bufnr] and bufstates[cb_bufnr].enabled then
           bufstates[cb_bufnr].applied = {}
-          util._refresh('textDocument/inlayHint', { bufnr = cb_bufnr })
+          util._refresh(ms.textDocument_inlayHint, { bufnr = cb_bufnr })
         end
       end,
       on_detach = function(_, cb_bufnr)
@@ -167,9 +173,11 @@ local function enable(bufnr)
       callback = function()
         disable(bufnr)
       end,
-      once = true,
       group = augroup,
     })
+  else
+    bufstate.enabled = true
+    util._refresh(ms.textDocument_inlayHint, { bufnr = bufnr })
   end
 end
 
@@ -180,7 +188,7 @@ local function toggle(bufnr)
     bufnr = api.nvim_get_current_buf()
   end
   local bufstate = bufstates[bufnr]
-  if bufstate then
+  if bufstate and bufstate.enabled then
     disable(bufnr)
   else
     enable(bufnr)
