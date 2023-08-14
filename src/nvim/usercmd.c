@@ -296,6 +296,9 @@ const char *set_context_in_user_cmdarg(const char *cmd FUNC_ATTR_UNUSED, const c
     return set_context_in_menu_cmd(xp, cmd, (char *)arg, forceit);
   }
   if (context == EXPAND_COMMANDS) {
+    if (xp->xp_context == EXPAND_NOTHING) {
+      xp->xp_context = context;
+    }
     return arg;
   }
   if (context == EXPAND_MAPPINGS) {
@@ -876,7 +879,7 @@ int uc_add_command(char *name, size_t name_len, const char *rep, uint32_t argt, 
   char *rep_buf = NULL;
   garray_T *gap;
 
-  replace_termcodes(rep, strlen(rep), &rep_buf, 0, NULL, CPO_TO_CPO_FLAGS);
+  replace_termcodes(rep, strlen(rep), &rep_buf, 0, 0, NULL, CPO_TO_CPO_FLAGS);
   if (rep_buf == NULL) {
     // Can't replace termcodes - try using the string as is
     rep_buf = xstrdup(rep);

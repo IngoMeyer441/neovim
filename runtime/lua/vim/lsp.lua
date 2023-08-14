@@ -364,7 +364,7 @@ do
   --- @field lines string[] snapshot of buffer lines from last didChange
   --- @field lines_tmp string[]
   --- @field pending_changes table[] List of debounced changes in incremental sync mode
-  --- @field timer nil|uv_timer_t uv_timer
+  --- @field timer nil|uv.uv_timer_t uv_timer
   --- @field last_flush nil|number uv.hrtime of the last flush/didChange-notification
   --- @field needs_flush boolean true if buffer updates haven't been sent to clients/servers yet
   --- @field refs integer how many clients are using this group
@@ -2262,7 +2262,7 @@ end
 local function adjust_start_col(lnum, line, items, encoding)
   local min_start_char = nil
   for _, item in pairs(items) do
-    if item.filterText == nil and item.textEdit and item.textEdit.range.start.line == lnum - 1 then
+    if item.textEdit and item.textEdit.range.start.line == lnum - 1 then
       if min_start_char and min_start_char ~= item.textEdit.range.start.character then
         return nil
       end

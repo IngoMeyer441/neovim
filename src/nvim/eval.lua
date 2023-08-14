@@ -747,7 +747,7 @@ M.funcs = {
       refers to an existing file then the file is read.  Otherwise
       the buffer will be empty.  If the buffer was already loaded
       then there is no change.  If the buffer is not related to a
-      file the no file is read (e.g., when 'buftype' is "nofile").
+      file then no file is read (e.g., when 'buftype' is "nofile").
       If there is an existing swap file for the file of the buffer,
       there will be no dialog, the buffer will be loaded anyway.
       The {buf} argument is used like with |bufexists()|.
@@ -2898,6 +2898,9 @@ M.funcs = {
     signature = 'foldtextresult({lnum})',
   },
   foreground = {
+    args = 0,
+    params = {},
+    signature = '',
     lua = false,
   },
   fullcommand = {
@@ -4102,6 +4105,9 @@ M.funcs = {
       	text	description of the error
       	type	type of the error, 'E', '1', etc.
       	valid	|TRUE|: recognized error message
+      	user_data
+      		custom data associated with the item, can be
+      		any type.
 
       When there is no error list or it's empty, an empty list is
       returned. Quickfix list entries with a non-existing buffer
@@ -5057,6 +5063,7 @@ M.funcs = {
     args = 1,
     base = 1,
     desc = [=[
+      The result is a Number, which is indent of line {lnum} in the
       current buffer.  The indent is counted in spaces, the value
       of 'tabstop' is relevant.  {lnum} is used just like in
       |getline()|.
@@ -5775,6 +5782,7 @@ M.funcs = {
     args = 1,
     base = 1,
     desc = [=[
+      The result is a Number, which is the length of the argument.
       When {expr} is a String or a Number the length in bytes is
       used, as with |strlen()|.
       When {expr} is a |List| the number of items in the |List| is
@@ -9116,6 +9124,9 @@ M.funcs = {
           text	description of the error
           type	single-character error type, 'E', 'W', etc.
           valid	recognized error message
+          user_data
+      		custom data associated with the item, can be
+      		any type.
 
       The "col", "vcol", "nr", "type" and "text" entries are
       optional.  Either "lnum" or "pattern" entry can be used to
@@ -11324,10 +11335,21 @@ M.funcs = {
     signature = 'termopen({cmd} [, {opts}])',
   },
   test_garbagecollect_now = {
+    args = 0,
+    desc = [=[
+      Like |garbagecollect()|, but executed right away.  This must
+      only be called directly to avoid any structure to exist
+      internally, and |v:testing| must have been set before calling
+      any function.
+    ]=],
+    params = {},
+    signature = 'test_garbagecollect_now()',
     lua = false,
   },
   test_write_list_log = {
     args = 1,
+    params = { { 'fname' } },
+    signature = '',
     lua = false,
   },
   timer_info = {
@@ -11604,9 +11626,12 @@ M.funcs = {
     signature = 'undofile({name})',
   },
   undotree = {
+    args = { 0, 1 },
+    base = 1,
     desc = [=[
-      Return the current state of the undo tree in a dictionary with
-      the following items:
+      Return the current state of the undo tree for the current
+      buffer, or for a specific buffer if {buf} is given.  The
+      result is a dictionary with the following items:
         "seq_last"	The highest undo sequence number used.
         "seq_cur"	The sequence number of the current position in
       		the undo tree.  This differs from "seq_last"
@@ -11648,8 +11673,8 @@ M.funcs = {
       		item.
     ]=],
     name = 'undotree',
-    params = {},
-    signature = 'undotree()',
+    params = { { 'buf', 'any' } },
+    signature = 'undotree([{buf}])',
   },
   uniq = {
     args = { 1, 3 },

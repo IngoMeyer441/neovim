@@ -1,6 +1,6 @@
 ---@meta
 
----@class TSNode
+---@class TSNode: userdata
 ---@field id fun(self: TSNode): integer
 ---@field tree fun(self: TSNode): TSTree
 ---@field range fun(self: TSNode, include_bytes: false?): integer, integer, integer, integer
@@ -14,15 +14,15 @@
 ---@field extra fun(self: TSNode): boolean
 ---@field child_count fun(self: TSNode): integer
 ---@field named_child_count fun(self: TSNode): integer
----@field child fun(self: TSNode, integer): TSNode
----@field named_child fun(self: TSNode, integer): TSNode
----@field descendant_for_range fun(self: TSNode, integer, integer, integer, integer): TSNode
----@field named_descendant_for_range fun(self: TSNode, integer, integer, integer, integer): TSNode
----@field parent fun(self: TSNode): TSNode
----@field next_sibling fun(self: TSNode): TSNode
----@field prev_sibling fun(self: TSNode): TSNode
----@field next_named_sibling fun(self: TSNode): TSNode
----@field prev_named_sibling fun(self: TSNode): TSNode
+---@field child fun(self: TSNode, integer): TSNode?
+---@field named_child fun(self: TSNode, integer): TSNode?
+---@field descendant_for_range fun(self: TSNode, integer, integer, integer, integer): TSNode?
+---@field named_descendant_for_range fun(self: TSNode, integer, integer, integer, integer): TSNode?
+---@field parent fun(self: TSNode): TSNode?
+---@field next_sibling fun(self: TSNode): TSNode?
+---@field prev_sibling fun(self: TSNode): TSNode?
+---@field next_named_sibling fun(self: TSNode): TSNode?
+---@field prev_named_sibling fun(self: TSNode): TSNode?
 ---@field named_children fun(self: TSNode): TSNode[]
 ---@field has_changes fun(self: TSNode): boolean
 ---@field equal fun(self: TSNode, other: TSNode): boolean
@@ -51,7 +51,7 @@ function TSNode:_rawquery(query, captures, start, end_, opts) end
 ---@field parse fun(self: TSParser, tree: TSTree?, source: integer|string, include_bytes: boolean?): TSTree, integer[]
 ---@field reset fun(self: TSParser)
 ---@field included_ranges fun(self: TSParser, include_bytes: boolean?): integer[]
----@field set_included_ranges fun(self: TSParser, ranges: Range6[])
+---@field set_included_ranges fun(self: TSParser, ranges: (Range6|TSNode)[])
 ---@field set_timeout fun(self: TSParser, timeout: integer)
 ---@field timeout fun(self: TSParser): integer
 ---@field _set_logger fun(self: TSParser, lex: boolean, parse: boolean, cb: TSLoggerCallback)
@@ -61,7 +61,8 @@ function TSNode:_rawquery(query, captures, start, end_, opts) end
 ---@field root fun(self: TSTree): TSNode
 ---@field edit fun(self: TSTree, _: integer, _: integer, _: integer, _: integer, _: integer, _: integer, _: integer, _: integer, _:integer)
 ---@field copy fun(self: TSTree): TSTree
----@field included_ranges fun(self: TSTree, include_bytes: boolean?): integer[]
+---@field included_ranges fun(self: TSTree, include_bytes: true): Range6[]
+---@field included_ranges fun(self: TSTree, include_bytes: false): Range4[]
 
 ---@return integer
 vim._ts_get_language_version = function() end

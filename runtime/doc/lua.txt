@@ -2073,7 +2073,7 @@ vim.spairs({t})                                                 *vim.spairs()*
       • {t}  (table) Dict-like table
 
     Return: ~
-        iterator over sorted keys and their values
+        (function) iterator over sorted keys and their values
 
     See also: ~
       • Based on https://github.com/premake/premake-core/blob/master/src/base/table.lua
@@ -2654,10 +2654,10 @@ vim.filetype.add({filetypes})                             *vim.filetype.add()*
          ['.*'] = {
            priority = -math.huge,
            function(path, bufnr)
-             local content = vim.filetype.getlines(bufnr, 1)
-             if vim.filetype.matchregex(content, [[^#!.*\<mine\>]]) then
+             local content = vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1] or ''
+             if vim.regex([[^#!.*\<mine\>]]):match_str(content) ~= nil then
                return 'mine'
-             elseif vim.filetype.matchregex(content, [[\<drawing\>]]) then
+             elseif vim.regex([[\<drawing\>]]):match_str(content) ~= nil then
                return 'drawing'
              end
            end,
@@ -2884,11 +2884,11 @@ vim.fs.find({names}, {opts})                                   *vim.fs.find()*
 <
 
     Parameters: ~
-      • {names}  (string|table|fun(name: string, path: string): boolean) Names
-                 of the items to find. Must be base names, paths and globs are
-                 not supported when {names} is a string or a table. If {names}
-                 is a function, it is called for each traversed item with
-                 args:
+      • {names}  (string|string[]|fun(name: string, path: string): boolean)
+                 Names of the items to find. Must be base names, paths and
+                 globs are not supported when {names} is a string or a table.
+                 If {names} is a function, it is called for each traversed
+                 item with args:
                  • name: base name of the current item
                  • path: full path of the current item The function should
                    return `true` if the given item is considered a match.
@@ -2907,7 +2907,7 @@ vim.fs.find({names}, {opts})                                   *vim.fs.find()*
                    number of matches.
 
     Return: ~
-        (table) Normalized paths |vim.fs.normalize()| of all matching items
+        (string[]) Normalized paths |vim.fs.normalize()| of all matching items
 
 vim.fs.joinpath({...})                                     *vim.fs.joinpath()*
     Concatenate directories and/or file paths into a single path with
@@ -2967,8 +2967,10 @@ vim.fs.parents({start})                                     *vim.fs.parents()*
     Parameters: ~
       • {start}  (string) Initial path.
 
-    Return: ~
-        (function) Iterator
+    Return (multiple): ~
+        fun(_, dir: string): string? Iterator
+        nil
+        (string|nil)
 
 
 ==============================================================================
@@ -3005,10 +3007,9 @@ vim.secure.trust({opts})                                  *vim.secure.trust()*
                 • bufnr (number|nil): Buffer number to update. Mutually
                   exclusive with {path}.
 
-    Return: ~
-        (boolean, string) success, msg:
-        • true and full path of target file if operation was successful
-        • false and error message on failure
+    Return (multiple): ~
+        (boolean) success true if operation was successful
+        (string) msg full path if operation was successful, else error message
 
 
 ==============================================================================
@@ -3206,12 +3207,17 @@ receives as input the output values from the prior stage. The values used
 in the first stage of the pipeline depend on the type passed to this
 function:
 
-• List tables pass only the value of each element
-• Non-list (dict) tables pass both the key and value of each element
+• List tables (arrays) pass only the value of each element
+• Non-list tables (dictionaries) pass both the key and value of each
+  element
 • Function |iterator|s pass all of the values returned by their respective
   function
 • Tables with a metatable implementing |__call()| are treated as function
   iterators
+
+The iterator pipeline terminates when the original table or function
+iterator runs out of values (for function iterators, this means that the
+first value returned by the function is nil).
 
 Examples: >lua
 
@@ -3224,6 +3230,7 @@ Examples: >lua
    it:totable()
    -- { 9, 6, 3 }
 
+   -- ipairs() is a function iterator which returns both the index (i) and the value (v)
    vim.iter(ipairs({ 1, 2, 3, 4, 5 })):map(function(i, v)
      if i > 2 then return v end
    end):totable()

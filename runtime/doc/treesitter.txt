@@ -311,19 +311,7 @@ The following directives are built in:
             {capture_id}
 
         Example: >query
-            (#inject-language! @_lang)
-<
-    `inject-language!`                    *treesitter-directive-inject-language!*
-        Set the injection language from the node text, interpreted first as a
-        language name, then (if a parser is not found) a filetype. Custom
-        aliases can be added via |vim.treesitter.language.register()|. This
-        will set a new `metadata[capture_id]['injection.language']`.
-
-        Parameters: ~
-            {capture_id}
-
-        Example: >query
-            (#inject-language! @_lang)
+            (#trim! @fold)
 <
 Further directives can be added via |vim.treesitter.query.add_directive()|.
 Use |vim.treesitter.query.list_directives()| to list all available directives.
@@ -1032,13 +1020,6 @@ set({lang}, {query_name}, {text})                 *vim.treesitter.query.set()*
 
 
 ==============================================================================
-Lua module: vim.treesitter.highlighter            *lua-treesitter-highlighter*
-
-TSHighlighter:destroy()                              *TSHighlighter:destroy()*
-    Removes all internal references to the highlighter.
-
-
-==============================================================================
 Lua module: vim.treesitter.languagetree          *lua-treesitter-languagetree*
 
 
@@ -1065,7 +1046,7 @@ Whenever you need to access the current syntax tree, parse the buffer:
 
 >lua
 
-     local tree = parser:parse()
+     local tree = parser:parse({ start_row, end_row })
 
 <
 
@@ -1124,7 +1105,7 @@ LanguageTree:included_regions()              *LanguageTree:included_regions()*
     Gets the set of included regions
 
     Return: ~
-        integer[][]
+        Range6[][]
 
 LanguageTree:invalidate({reload})                  *LanguageTree:invalidate()*
     Invalidates this parser and all its children
@@ -1167,10 +1148,22 @@ LanguageTree:named_node_for_range({range}, {opts})
     Return: ~
         |TSNode| | nil Found node
 
-LanguageTree:parse()                                    *LanguageTree:parse()*
-    Parses all defined regions using a treesitter parser for the language this
-    tree represents. This will run the injection query for this language to
-    determine if any child languages should be created.
+LanguageTree:parse({range})                             *LanguageTree:parse()*
+    Recursively parse all regions in the language tree using
+    |treesitter-parsers| for the corresponding languages and run injection
+    queries on the parsed trees to determine whether child trees should be
+    created and parsed.
+
+    Any region with empty range (`{}`, typically only the root tree) is always
+    parsed; otherwise (typically injections) only if it intersects {range} (or
+    if {range} is `true`).
+
+    Parameters: ~
+      • {range}  boolean|Range|nil: Parse this range in the parser's source.
+                 Set to `true` to run a complete parse of the source (Note:
+                 Can be slow!) Set to `false|nil` to only parse regions with
+                 empty ranges (typically only the root tree without
+                 injections).
 
     Return: ~
         TSTree[]

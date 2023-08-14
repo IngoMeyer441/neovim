@@ -61,6 +61,10 @@ The following changes may require adaptations in user config or plugins.
     spaces (but paths themselves may contain spaces now).
   • |'directory'| will no longer remove a `>` at the start of the option.
 
+• |LanguageTree:parse()| will no longer parse injections by default and
+  now requires an explicit range argument to be passed. If injections are
+  required, provide an explicit range via `parser:parse({ start_row, end_row })`.
+
 ==============================================================================
 NEW FEATURES                                                    *news-features*
 
@@ -69,6 +73,9 @@ The following new APIs and features were added.
 • Performance:
   • 'diffopt' "linematch" scoring algorithm now favours larger and less groups
     https://github.com/neovim/neovim/pull/23611
+  • Treesitter highlighting now parses injections incrementally during
+    screen redraws only for the line range being rendered. This significantly
+    improves performance in large files with many injections.
 
 • |vim.iter()| provides a generic iterator interface for tables and Lua
   iterators |for-in|.
@@ -77,14 +84,8 @@ The following new APIs and features were added.
 
 • Added |vim.keycode()| for translating keycodes in a string.
 
-• Added |vim.treesitter.query.omnifunc()| for treesitter query files (set by
-  default).
-
 • |'smoothscroll'| option to scroll by screen line rather than by text line
   when |'wrap'| is set.
-
-• |Query:iter_matches()| now has the ability to set the maximum start depth
-  for matches.
 
 • Added inline virtual text support to |nvim_buf_set_extmark()|.
 
@@ -120,8 +121,16 @@ The following new APIs and features were added.
     `client.supports_method(<method>)`. It considers both the dynamic
     capabilities and static `server_capabilities`.
 
-• Bundled treesitter parser and queries (highlight, folds) for Markdown,
-  Python, and Bash.
+• Treesitter
+  • Bundled parsers and queries (highlight, folds) for Markdown, Python, and
+    Bash.
+  • Added |vim.treesitter.query.omnifunc()| for treesitter query files (set by
+    default).
+  • |Query:iter_matches()| now has the ability to set the maximum start depth
+    for matches.
+  • `@injection.language` now has smarter resolution and will now fallback to language aliases and/or attempt lower case variants of the text.
+    language via aliases (e.g., filetype) registered via
+    `vim.treesitter.language.register`.
 
 • |vim.ui.open()| opens URIs using the system default handler (macOS `open`,
   Windows `explorer`, Linux `xdg-open`, etc.)
@@ -133,6 +142,8 @@ The following new APIs and features were added.
   • `vim.*`
   • `vim.fn.*`
   • `vim.api.*`
+
+• Improved messages for type errors in `vim.api.*` calls (including `opts` params)
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
@@ -149,6 +160,7 @@ The following changes to existing APIs or features add new behavior.
   option, which allows for rendering e.g., diagnostic severities differently.
 
 • Defaults:
+  • 'comments' includes "fb:•".
   • 'shortmess' includes the "C" flag.
   • Automatic linting of treesitter query files (see |ft-query-plugin|).
     Can be disabled via: >lua
@@ -178,6 +190,10 @@ The following changes to existing APIs or features add new behavior.
   supports it, unless |'keywordprg'| was customized before calling
   |vim.lsp.start()|.
 
+• Terminal buffers started with no arguments (and use 'shell') close
+  automatically if the job exited without error, eliminating the (often
+  unwanted) "[Process exited 0]" message.
+
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
 
@@ -185,6 +201,8 @@ The following deprecated functions or APIs were removed.
 
 • Vimball support is removed.
   - :Vimuntar command removed.
+
+• Support for legacy treesitter injection queries is removed.
 
 ==============================================================================
 DEPRECATIONS                                                *news-deprecations*

@@ -37,6 +37,7 @@ Defaults					            *nvim-defaults*
 - 'backspace' defaults to "indent,eol,start"
 - 'backupdir' defaults to .,~/.local/state/nvim/backup// (|xdg|), auto-created
 - 'belloff' defaults to "all"
+- 'comments' includes "fb:•"
 - 'commentstring' defaults to ""
 - 'compatible' is always disabled
 - 'complete' excludes "i"
@@ -132,6 +133,8 @@ remove them and ":autocmd {group}" to see how they're defined.
 
 nvim_terminal:
 - BufReadCmd: Treats "term://" buffers as |terminal| buffers. |terminal-start|
+- TermClose: A |terminal| buffer started with no arguments (which thus uses
+  'shell') and which exits with no error is closed automatically.
 
 nvim_cmdwin:
 - CmdwinEnter: Limits syntax sync to maxlines=1 in the |cmdwin|.
@@ -454,7 +457,7 @@ coerced to strings. See |id()| for more details, currently it uses
 
 |c_CTRL-R| pasting a non-special register into |cmdline| omits the last <CR>.
 
-|CursorMoved| always triggers when moving between windows.
+|CursorMoved| triggers when moving between windows.
 
 Lua interface (|lua.txt|):
 

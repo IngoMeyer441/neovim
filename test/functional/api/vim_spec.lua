@@ -1957,6 +1957,12 @@ describe('API', function()
       -- value.
       eq('', meths.replace_termcodes('', true, true, true))
     end)
+
+    -- Not exactly the case, as nvim_replace_termcodes() escapes K_SPECIAL in Unicode
+    it('translates the result of keytrans() on string with 0x80 byte back', function()
+      local s = 'ff\128\253\097tt'
+      eq(s, meths.replace_termcodes(funcs.keytrans(s), true, true, true))
+    end)
   end)
 
   describe('nvim_feedkeys', function()
@@ -4112,12 +4118,10 @@ describe('API', function()
     it('validation', function()
       eq("Invalid 'cmd': expected non-empty String",
         pcall_err(meths.cmd, { cmd = ""}, {}))
-      eq("Invalid 'cmd': expected non-empty String",
+      eq("Invalid 'cmd': expected String, got Array",
         pcall_err(meths.cmd, { cmd = {}}, {}))
       eq("Invalid 'args': expected Array, got Boolean",
         pcall_err(meths.cmd, { cmd = "set", args = true }, {}))
-      eq("Invalid 'magic': expected Dict, got Array",
-        pcall_err(meths.cmd, { cmd = "set", args = {}, magic = {} }, {}))
       eq("Invalid command arg: expected non-whitespace",
         pcall_err(meths.cmd, { cmd = "set", args = {'  '}, }, {}))
       eq("Invalid command arg: expected valid type, got Array",
@@ -4138,7 +4142,7 @@ describe('API', function()
 
       eq("Command cannot accept count: set",
         pcall_err(meths.cmd, { cmd = "set", args = {}, count = 1 }, {}))
-      eq("Invalid 'count': expected non-negative Integer",
+      eq("Invalid 'count': expected Integer, got Boolean",
         pcall_err(meths.cmd, { cmd = "print", args = {}, count = true }, {}))
       eq("Invalid 'count': expected non-negative Integer",
         pcall_err(meths.cmd, { cmd = "print", args = {}, count = -1 }, {}))
@@ -4158,9 +4162,10 @@ describe('API', function()
       -- Lua call allows empty {} for dict item.
       eq('', exec_lua([[return vim.cmd{ cmd = "set", args = {}, magic = {} }]]))
       eq('', exec_lua([[return vim.cmd{ cmd = "set", args = {}, mods = {} }]]))
+      eq('', meths.cmd({ cmd = "set", args = {}, magic = {} }, {}))
 
       -- Lua call does not allow non-empty list-like {} for dict item.
-      eq("Invalid 'magic': expected Dict, got Array",
+      eq("Invalid 'magic': Expected Dict-like Lua table",
         pcall_err(exec_lua, [[return vim.cmd{ cmd = "set", args = {}, magic = { 'a' } }]]))
       eq("Invalid key: 'bogus'",
         pcall_err(exec_lua, [[return vim.cmd{ cmd = "set", args = {}, magic = { bogus = true } }]]))
