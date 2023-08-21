@@ -1361,18 +1361,43 @@ describe('extmark decorations', function()
     assert_alive()
   end)
 
-  it('conceal #19007', function()
+  it('conceal with conceal char #19007', function()
     screen:try_resize(50, 5)
     insert('foo\n')
-    command('let &conceallevel=2')
     meths.buf_set_extmark(0, ns, 0, 0, {end_col=0, end_row=2, conceal='X'})
+    command('set conceallevel=2')
     screen:expect([[
-        {26:X}                                                 |
-        ^                                                  |
-        {1:~                                                 }|
-        {1:~                                                 }|
-                                                          |
-      ]])
+      {26:X}                                                 |
+      ^                                                  |
+      {1:~                                                 }|
+      {1:~                                                 }|
+                                                        |
+    ]])
+    command('set conceallevel=1')
+    screen:expect_unchanged()
+  end)
+
+  it('conceal without conceal char #24782', function()
+    screen:try_resize(50, 5)
+    insert('foobar\n')
+    meths.buf_set_extmark(0, ns, 0, 0, {end_col=3, conceal=''})
+    command('set listchars=conceal:?')
+    command('let &conceallevel=1')
+    screen:expect([[
+      {26:?}bar                                              |
+      ^                                                  |
+      {1:~                                                 }|
+      {1:~                                                 }|
+                                                        |
+    ]])
+    command('let &conceallevel=2')
+    screen:expect([[
+      bar                                               |
+      ^                                                  |
+      {1:~                                                 }|
+      {1:~                                                 }|
+                                                        |
+    ]])
   end)
 
   it('conceal works just before truncated double-width char #21486', function()
@@ -2146,7 +2171,7 @@ bbbbbbb]])
       ]]}
   end)
 
-  it('visual select highlight is correct', function()
+  it('Visual select highlight is correct', function()
     insert('foo foo foo bar\nfoo foo foo bar')
     feed('gg0')
     meths.buf_set_extmark(0, ns, 0, 8, { virt_text = { { 'AAA', 'Special' } }, virt_text_pos = 'inline' })
@@ -2802,6 +2827,162 @@ bbbbbbb]])
       {1:~                                                 }|
                                                         |
       ]]}
+  end)
+
+  it('blockwise Visual highlight with double-width virtual text (replace)', function()
+    screen:try_resize(60, 6)
+    insert('123456789\n123456789\n123456789\n123456789')
+    meths.buf_set_extmark(0, ns, 1, 1, {
+      virt_text = { { '-口-', 'Special' } },
+      virt_text_pos = 'inline',
+      hl_mode = 'replace',
+    })
+    meths.buf_set_extmark(0, ns, 2, 2, {
+      virt_text = { { '口', 'Special' } },
+      virt_text_pos = 'inline',
+      hl_mode = 'replace',
+    })
+    feed('gg0')
+    screen:expect{grid=[[
+      ^123456789                                                   |
+      1{10:-口-}23456789                                               |
+      12{10:口}3456789                                                 |
+      123456789                                                   |
+      {1:~                                                           }|
+                                                                  |
+    ]]}
+    feed('<C-V>3jl')
+    screen:expect{grid=[[
+      {7:12}3456789                                                   |
+      {7:1}{10:-口-}23456789                                               |
+      {7:12}{10:口}3456789                                                 |
+      {7:1}^23456789                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('l')
+    screen:expect{grid=[[
+      {7:123}456789                                                   |
+      {7:1}{10:-口-}23456789                                               |
+      {7:12}{10:口}3456789                                                 |
+      {7:12}^3456789                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('4l')
+    screen:expect{grid=[[
+      {7:1234567}89                                                   |
+      {7:1}{10:-口-}{7:23}456789                                               |
+      {7:12}{10:口}{7:345}6789                                                 |
+      {7:123456}^789                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('Ol')
+    screen:expect{grid=[[
+      1{7:234567}89                                                   |
+      1{10:-口-}{7:23}456789                                               |
+      1{7:2}{10:口}{7:345}6789                                                 |
+      1^2{7:34567}89                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('l')
+    screen:expect{grid=[[
+      12{7:34567}89                                                   |
+      1{10:-口-}{7:23}456789                                               |
+      12{10:口}{7:345}6789                                                 |
+      12^3{7:4567}89                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('l')
+    screen:expect{grid=[[
+      123{7:4567}89                                                   |
+      1{10:-口-}{7:23}456789                                               |
+      12{10:口}{7:345}6789                                                 |
+      123^4{7:567}89                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+  end)
+
+  it('blockwise Visual highlight with double-width virtual text (combine)', function()
+    screen:try_resize(60, 6)
+    insert('123456789\n123456789\n123456789\n123456789')
+    meths.buf_set_extmark(0, ns, 1, 1, {
+      virt_text = { { '-口-', 'Special' } },
+      virt_text_pos = 'inline',
+      hl_mode = 'combine',
+    })
+    meths.buf_set_extmark(0, ns, 2, 2, {
+      virt_text = { { '口', 'Special' } },
+      virt_text_pos = 'inline',
+      hl_mode = 'combine',
+    })
+    feed('gg0')
+    screen:expect{grid=[[
+      ^123456789                                                   |
+      1{10:-口-}23456789                                               |
+      12{10:口}3456789                                                 |
+      123456789                                                   |
+      {1:~                                                           }|
+                                                                  |
+    ]]}
+    feed('<C-V>3jl')
+    screen:expect{grid=[[
+      {7:12}3456789                                                   |
+      {7:1}{20:-}{10:口-}23456789                                               |
+      {7:12}{10:口}3456789                                                 |
+      {7:1}^23456789                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('l')
+    screen:expect{grid=[[
+      {7:123}456789                                                   |
+      {7:1}{20:-口}{10:-}23456789                                               |
+      {7:12}{20:口}3456789                                                 |
+      {7:12}^3456789                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('4l')
+    screen:expect{grid=[[
+      {7:1234567}89                                                   |
+      {7:1}{20:-口-}{7:23}456789                                               |
+      {7:12}{20:口}{7:345}6789                                                 |
+      {7:123456}^789                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('Ol')
+    screen:expect{grid=[[
+      1{7:234567}89                                                   |
+      1{20:-口-}{7:23}456789                                               |
+      1{7:2}{20:口}{7:345}6789                                                 |
+      1^2{7:34567}89                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('l')
+    screen:expect{grid=[[
+      12{7:34567}89                                                   |
+      1{10:-}{20:口-}{7:23}456789                                               |
+      12{20:口}{7:345}6789                                                 |
+      12^3{7:4567}89                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
+    feed('l')
+    screen:expect{grid=[[
+      123{7:4567}89                                                   |
+      1{10:-}{20:口-}{7:23}456789                                               |
+      12{20:口}{7:345}6789                                                 |
+      123^4{7:567}89                                                   |
+      {1:~                                                           }|
+      {8:-- VISUAL BLOCK --}                                          |
+    ]]}
   end)
 end)
 

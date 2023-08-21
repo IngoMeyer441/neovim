@@ -570,6 +570,8 @@ function vim.fn.bufloaded(buf) end
 --- with a listed buffer, that one is returned.  Next unlisted
 --- buffers are searched for.
 --- If the {buf} is a String, but you want to use it as a buffer
+--- number, force it to be a Number by adding zero to it: >vim
+---   echo bufname("3" + 0)
 --- <If the buffer doesn't exist, or doesn't have a name, an empty
 --- string is returned. >vim
 ---   echo bufname("#")  " alternate buffer name
@@ -2005,10 +2007,11 @@ function vim.fn.filereadable(file) end
 --- @return 0|1
 function vim.fn.filewritable(file) end
 
---- {expr1} must be a |List|, |Blob|, or a |Dictionary|.
+--- {expr1} must be a |List|, |String|, |Blob| or |Dictionary|.
 --- For each item in {expr1} evaluate {expr2} and when the result
---- is zero remove the item from the |List| or |Dictionary|. For a
---- |Blob| each byte is removed.
+--- is zero or false remove the item from the |List| or
+--- |Dictionary|.  Similarly for each byte in a |Blob| and each
+--- character in a |String|.
 ---
 --- {expr2} must be a |string| or |Funcref|.
 ---
@@ -2016,8 +2019,8 @@ function vim.fn.filewritable(file) end
 --- of the current item.  For a |Dictionary| |v:key| has the key
 --- of the current item and for a |List| |v:key| has the index of
 --- the current item.  For a |Blob| |v:key| has the index of the
---- current byte.
----
+--- current byte. For a |String| |v:key| has the index of the
+--- current character.
 --- Examples: >vim
 ---   call filter(mylist, 'v:val !~ "OLD"')
 --- <Removes the items where "OLD" appears. >vim
@@ -2044,14 +2047,16 @@ function vim.fn.filewritable(file) end
 --- <If you do not use "val" you can leave it out: >vim
 ---   call filter(myList, {idx -> idx % 2 == 1})
 --- <
---- The operation is done in-place.  If you want a |List| or
---- |Dictionary| to remain unmodified make a copy first: >vim
+--- For a |List| and a |Dictionary| the operation is done
+--- in-place.  If you want it to remain unmodified make a copy
+--- first: >vim
 ---   let l = filter(copy(mylist), 'v:val =~ "KEEP"')
 ---
---- <Returns {expr1}, the |List|, |Blob| or |Dictionary| that was
---- filtered.  When an error is encountered while evaluating
---- {expr2} no further items in {expr1} are processed.  When
---- {expr2} is a Funcref errors inside a function are ignored,
+--- <Returns {expr1}, the |List| or |Dictionary| that was filtered,
+--- or a new |Blob| or |String|.
+--- When an error is encountered while evaluating {expr2} no
+--- further items in {expr1} are processed.
+--- When {expr2} is a Funcref errors inside a function are ignored,
 --- unless it was defined with the "abort" flag.
 ---
 --- @param expr1 any
@@ -2866,7 +2871,9 @@ function vim.fn.getcmdwintype() end
 --- color    color schemes
 --- command    Ex command
 --- compiler  compilers
---- diff_buffer     |:diffget| and |:diffput| completion
+--- custom,{func}  custom completion, defined via {func}
+--- customlist,{func} custom completion, defined via {func}
+--- diff_buffer  |:diffget| and |:diffput| completion
 --- dir    directory names
 --- environment  environment variable names
 --- event    autocommand events
@@ -4423,6 +4430,9 @@ function vim.fn.insert(object, item, idx) end
 function vim.fn.interrupt() end
 
 --- Bitwise invert.  The argument is converted to a number.  A
+--- List, Dict or Float argument causes an error.  Example: >vim
+---   let bits = invert(bits)
+--- <
 ---
 --- @param expr any
 --- @return any
@@ -4919,17 +4929,23 @@ function vim.fn.log(expr) end
 --- @return any
 function vim.fn.log10(expr) end
 
---- {expr1} must be a |List|, |Blob| or |Dictionary|.
---- Replace each item in {expr1} with the result of evaluating
---- {expr2}.  For a |Blob| each byte is replaced.
+--- {expr1} must be a |List|, |String|, |Blob| or |Dictionary|.
+--- When {expr1} is a |List|| or |Dictionary|, replace each
+--- item in {expr1} with the result of evaluating {expr2}.
+--- For a |Blob| each byte is replaced.
+--- For a |String|, each character, including composing
+--- characters, is replaced.
+--- If the item type changes you may want to use |mapnew()| to
+--- create a new List or Dictionary.
 ---
---- {expr2} must be a |string| or |Funcref|.
+--- {expr2} must be a |String| or |Funcref|.
 ---
---- If {expr2} is a |string|, inside {expr2} |v:val| has the value
+--- If {expr2} is a |String|, inside {expr2} |v:val| has the value
 --- of the current item.  For a |Dictionary| |v:key| has the key
 --- of the current item and for a |List| |v:key| has the index of
 --- the current item.  For a |Blob| |v:key| has the index of the
---- current byte.
+--- current byte. For a |String| |v:key| has the index of the
+--- current character.
 --- Example: >vim
 ---   call map(mylist, '"> " .. v:val .. " <"')
 --- <This puts "> " before and " <" after each item in "mylist".
@@ -4955,14 +4971,15 @@ function vim.fn.log10(expr) end
 --- <If you do not use "key" you can use a short name: >vim
 ---   call map(myDict, {_, val -> 'item: ' .. val})
 --- <
---- The operation is done in-place.  If you want a |List| or
---- |Dictionary| to remain unmodified make a copy first: >vim
+--- The operation is done in-place for a |List| and |Dictionary|.
+--- If you want it to remain unmodified make a copy first: >vim
 ---   let tlist = map(copy(mylist), ' v:val .. "\t"')
 ---
---- <Returns {expr1}, the |List|, |Blob| or |Dictionary| that was
---- filtered.  When an error is encountered while evaluating
---- {expr2} no further items in {expr1} are processed.  When
---- {expr2} is a Funcref errors inside a function are ignored,
+--- <Returns {expr1}, the |List| or |Dictionary| that was filtered,
+--- or a new |Blob| or |String|.
+--- When an error is encountered while evaluating {expr2} no
+--- further items in {expr1} are processed.
+--- When {expr2} is a Funcref errors inside a function are ignored,
 --- unless it was defined with the "abort" flag.
 ---
 --- @param expr1 any
@@ -5077,6 +5094,16 @@ function vim.fn.maparg(name, mode, abbr, dict) end
 --- @param abbr? any
 --- @return any
 function vim.fn.mapcheck(name, mode, abbr) end
+
+--- Like |map()| but instead of replacing items in {expr1} a new
+--- List or Dictionary is created and returned.  {expr1} remains
+--- unchanged.  Items can still be changed by {expr2}, if you
+--- don't want that use |deepcopy()| first.
+---
+--- @param expr1 any
+--- @param expr2 any
+--- @return any
+function vim.fn.mapnew(expr1, expr2) end
 
 --- Restore a mapping from a dictionary returned by |maparg()|.
 --- {mode} and {abbr} should be the same as for the call to
@@ -5989,7 +6016,11 @@ function vim.fn.prevnonblank(lnum) end
 --- The "%" starts a conversion specification.  The following
 --- arguments appear in sequence:
 ---
----   %  [flags]  [field-width]  [.precision]  type
+---   % [pos-argument] [flags] [field-width] [.precision] type
+---
+--- pos-argument
+---   At most one positional argument specifier. These
+---   take the form {n$}, where n is >= 1.
 ---
 --- flags
 ---   Zero or more of the following flags:
@@ -6057,6 +6088,13 @@ function vim.fn.prevnonblank(lnum) end
 ---   echo printf("%d: %.*s", nr, width, line)
 --- <This limits the length of the text used from "line" to
 --- "width" bytes.
+---
+--- If the argument to be formatted is specified using a posional
+--- argument specifier, and a '*' is used to indicate that a
+--- number argument is to be used to specify the width or
+--- precision, the argument(s) to be used must also be specified
+--- using a {n$} positional argument specifier. See |printf-$|.
+---
 ---
 --- The conversion specifiers and their meanings are:
 ---
@@ -6144,6 +6182,104 @@ function vim.fn.prevnonblank(lnum) end
 --- The number of {exprN} arguments must exactly match the number
 --- of "%" items.  If there are not sufficient or too many
 --- arguments an error is given.  Up to 18 arguments can be used.
+---
+---           *printf-$*
+--- In certain languages, error and informative messages are
+--- more readable when the order of words is different from the
+--- corresponding message in English. To accomodate translations
+--- having a different word order, positional arguments may be
+--- used to indicate this. For instance: >vim
+---
+---   #, c-format
+---   msgid "%s returning %s"
+---   msgstr "waarde %2$s komt terug van %1$s"
+--- <
+--- In this example, the sentence has its 2 string arguments reversed
+--- in the output. >vim
+---
+---   echo printf(
+---     "In The Netherlands, vim's creator's name is: %1$s %2$s",
+---     "Bram", "Moolenaar")
+--- <  In The Netherlands, vim's creator's name is: Bram Moolenaar >vim
+---
+---   echo printf(
+---     "In Belgium, vim's creator's name is: %2$s %1$s",
+---     "Bram", "Moolenaar")
+--- <  In Belgium, vim's creator's name is: Moolenaar Bram
+---
+--- Width (and precision) can be specified using the '*' specifier.
+--- In this case, you must specify the field width position in the
+--- argument list. >vim
+---
+---   echo printf("%1$*2$.*3$d", 1, 2, 3)
+--- <  001 >vim
+---   echo printf("%2$*3$.*1$d", 1, 2, 3)
+--- <    2 >vim
+---   echo printf("%3$*1$.*2$d", 1, 2, 3)
+--- <  03 >vim
+---   echo printf("%1$*2$.*3$g", 1.4142, 2, 3)
+--- <  1.414
+---
+--- You can mix specifying the width and/or precision directly
+--- and via positional arguments: >vim
+---
+---   echo printf("%1$4.*2$f", 1.4142135, 6)
+--- <  1.414214 >vim
+---   echo printf("%1$*2$.4f", 1.4142135, 6)
+--- <  1.4142 >vim
+---   echo printf("%1$*2$.*3$f", 1.4142135, 6, 2)
+--- <    1.41
+---
+---           *E1400*
+--- You cannot mix positional and non-positional arguments: >vim
+---   echo printf("%s%1$s", "One", "Two")
+--- <  E1400: Cannot mix positional and non-positional
+---   arguments: %s%1$s
+---
+---           *E1401*
+--- You cannot skip a positional argument in a format string: >vim
+---   echo printf("%3$s%1$s", "One", "Two", "Three")
+--- <  E1401: format argument 2 unused in $-style
+---   format: %3$s%1$s
+---
+---           *E1402*
+--- You can re-use a [field-width] (or [precision]) argument: >vim
+---   echo printf("%1$d at width %2$d is: %01$*2$d", 1, 2)
+--- <  1 at width 2 is: 01
+---
+--- However, you can't use it as a different type: >vim
+---   echo printf("%1$d at width %2$ld is: %01$*2$d", 1, 2)
+--- <  E1402: Positional argument 2 used as field
+---   width reused as different type: long int/int
+---
+---           *E1403*
+--- When a positional argument is used, but not the correct number
+--- or arguments is given, an error is raised: >vim
+---   echo printf("%1$d at width %2$d is: %01$*2$.*3$d", 1, 2)
+--- <  E1403: Positional argument 3 out of bounds:
+---   %1$d at width %2$d is: %01$*2$.*3$d
+---
+--- Only the first error is reported: >vim
+---   echo printf("%01$*2$.*3$d %4$d", 1, 2)
+--- <  E1403: Positional argument 3 out of bounds:
+---   %01$*2$.*3$d %4$d
+---
+---           *E1404*
+--- A positional argument can be used more than once: >vim
+---   echo printf("%1$s %2$s %1$s", "One", "Two")
+--- <  One Two One
+---
+--- However, you can't use a different type the second time: >vim
+---   echo printf("%1$s %2$s %1$d", "One", "Two")
+--- <  E1404: Positional argument 1 type used
+---   inconsistently: int/string
+---
+---           *E1405*
+--- Various other errors that lead to a format string being
+--- wrongly formatted lead to: >vim
+---   echo printf("%1$d at width %2$d is: %01$*2$.3$d", 1, 2)
+--- <  E1405: Invalid format specifier:
+---   %1$d at width %2$d is: %01$*2$.3$d
 ---
 --- @param fmt any
 --- @param expr1? any
@@ -6423,9 +6559,9 @@ function vim.fn.readdir(directory, expr) end
 function vim.fn.readfile(fname, type, max) end
 
 --- {func} is called for every item in {object}, which can be a
---- |List| or a |Blob|.  {func} is called with two arguments: the
---- result so far and current item.  After processing all items
---- the result is returned.
+--- |String|, |List| or a |Blob|.  {func} is called with two
+--- arguments: the result so far and current item.  After
+--- processing all items the result is returned.
 ---
 --- {initial} is the initial result.  When omitted, the first item
 --- in {object} is used and {func} is first called for the second
@@ -6436,6 +6572,7 @@ function vim.fn.readfile(fname, type, max) end
 ---   echo reduce([1, 3, 5], { acc, val -> acc + val })
 ---   echo reduce(['x', 'y'], { acc, val -> acc .. val }, 'a')
 ---   echo reduce(0z1122, { acc, val -> 2 * acc + val })
+---   echo reduce('xyz', { acc, val -> acc .. ',' .. val })
 --- <
 ---
 --- @param object any
@@ -6627,10 +6764,15 @@ vim.fn['repeat'] = function(expr, count) end
 --- @return any
 function vim.fn.resolve(filename) end
 
---- Reverse the order of items in {object} in-place.
---- {object} can be a |List| or a |Blob|.
---- Returns {object}.
---- Returns zero if {object} is not a List or a Blob.
+--- Reverse the order of items in {object}.  {object} can be a
+--- |List|, a |Blob| or a |String|.  For a List and a Blob the
+--- items are reversed in-place and {object} is returned.
+--- For a String a new String is returned.
+--- Returns zero if {object} is not a List, Blob or a String.
+--- If you want a List or Blob to remain unmodified make a copy
+--- first: >vim
+---   let revlist = reverse(copy(mylist))
+--- <
 ---
 --- @param object any
 --- @return any
@@ -8401,15 +8543,16 @@ function vim.fn.sockconnect(mode, address, opts) end
 --- If you want a list to remain unmodified make a copy first: >vim
 ---   let sortedlist = sort(copy(mylist))
 ---
---- <When {func} is omitted, is empty or zero, then sort() uses the
+--- <When {how} is omitted or is a string, then sort() uses the
 --- string representation of each item to sort on.  Numbers sort
 --- after Strings, |Lists| after Numbers.  For sorting text in the
 --- current buffer use |:sort|.
 ---
---- When {func} is given and it is '1' or 'i' then case is
---- ignored.
+--- When {how} is given and it is 'i' then case is ignored.
+--- For backwards compatibility, the value one can be used to
+--- ignore case.  Zero means to not ignore case.
 ---
---- When {func} is given and it is 'l' then the current collation
+--- When {how} is given and it is 'l' then the current collation
 --- locale is used for ordering. Implementation details: strcoll()
 --- is used to compare strings. See |:language| check or set the
 --- collation locale. |v:collate| can also be used to check the
@@ -8426,19 +8569,19 @@ function vim.fn.sockconnect(mode, address, opts) end
 --- <  ['n', 'o', 'O', 'p', 'z', 'ö'] ~
 --- This does not work properly on Mac.
 ---
---- When {func} is given and it is 'n' then all items will be
+--- When {how} is given and it is 'n' then all items will be
 --- sorted numerical (Implementation detail: this uses the
 --- strtod() function to parse numbers, Strings, Lists, Dicts and
 --- Funcrefs will be considered as being 0).
 ---
---- When {func} is given and it is 'N' then all items will be
+--- When {how} is given and it is 'N' then all items will be
 --- sorted numerical. This is like 'n' but a string containing
 --- digits will be used as the number they represent.
 ---
---- When {func} is given and it is 'f' then all items will be
+--- When {how} is given and it is 'f' then all items will be
 --- sorted numerical. All values must be a Number or a Float.
 ---
---- When {func} is a |Funcref| or a function name, this function
+--- When {how} is a |Funcref| or a function name, this function
 --- is called to compare items.  The function is invoked with two
 --- items as argument and must return zero if they are equal, 1 or
 --- bigger if the first one sorts after the second one, -1 or
@@ -8468,10 +8611,10 @@ function vim.fn.sockconnect(mode, address, opts) end
 --- <
 ---
 --- @param list any
---- @param func? any
+--- @param how? any
 --- @param dict? any
 --- @return any
-function vim.fn.sort(list, func, dict) end
+function vim.fn.sort(list, how, dict) end
 
 --- Return the sound-folded equivalent of {word}.  Uses the first
 --- language in 'spelllang' for the current window that supports
@@ -9874,9 +10017,12 @@ function vim.fn.values(dict) end
 ---       returns the cursor position.  Differs from |'<| in
 ---       that it's updated right away.
 ---
---- If {list} is present and non-zero then virtcol() returns a List
---- with the first and last screen position occupied by the
+--- If {list} is present and non-zero then virtcol() returns a
+--- List with the first and last screen position occupied by the
 --- character.
+---
+--- With the optional {winid} argument the values are obtained for
+--- that window instead of the current window.
 ---
 --- Note that only marks in the current file can be used.
 --- Examples: >vim
@@ -9889,15 +10035,16 @@ function vim.fn.values(dict) end
 ---   " With text "    there", with 't at 'h':
 ---
 ---   echo virtcol("'t")  " returns 6
---- <Techo he first column is 1.  0 is returned for an error.
---- A echo more advanced example that echoes the maximum length of
+--- <The first column is 1.  0 or [0, 0] is returned for an error.
+--- A more advanced example that echoes the maximum length of
 --- all lines: >vim
 ---     echo max(map(range(1, line('$')), "virtcol([v:val, '$'])"))
 ---
 --- @param expr any
 --- @param list? any
+--- @param winid? integer
 --- @return any
-function vim.fn.virtcol(expr, list) end
+function vim.fn.virtcol(expr, list, winid) end
 
 --- The result is a Number, which is the byte index of the
 --- character in window {winid} at buffer line {lnum} and virtual
@@ -9906,6 +10053,9 @@ function vim.fn.virtcol(expr, list) end
 --- If {col} is greater than the last virtual column in line
 --- {lnum}, then the byte index of the character at the last
 --- virtual column is returned.
+---
+--- For a multi-byte character, the column number of the first
+--- byte in the character is returned.
 ---
 --- The {winid} argument can be the window number or the
 --- |window-ID|. If this is zero, then the current window is used.

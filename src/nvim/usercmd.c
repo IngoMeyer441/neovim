@@ -296,9 +296,6 @@ const char *set_context_in_user_cmdarg(const char *cmd FUNC_ATTR_UNUSED, const c
     return set_context_in_menu_cmd(xp, cmd, (char *)arg, forceit);
   }
   if (context == EXPAND_COMMANDS) {
-    if (xp->xp_context == EXPAND_NOTHING) {
-      xp->xp_context = context;
-    }
     return arg;
   }
   if (context == EXPAND_MAPPINGS) {
@@ -428,6 +425,13 @@ char *get_user_cmd_complete(expand_T *xp, int idx)
 
 int cmdcomplete_str_to_type(const char *complete_str)
 {
+  if (strncmp(complete_str, "custom,", 7) == 0) {
+    return EXPAND_USER_DEFINED;
+  }
+  if (strncmp(complete_str, "customlist,", 11) == 0) {
+    return EXPAND_USER_LIST;
+  }
+
   for (int i = 0; i < (int)(ARRAY_SIZE(command_complete)); i++) {
     char *cmd_compl = get_command_complete(i);
     if (cmd_compl == NULL) {

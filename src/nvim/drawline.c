@@ -106,7 +106,7 @@ typedef struct {
   int c_extra;               ///< extra chars, all the same
   int c_final;               ///< final char, mandatory if set
 
-  bool extra_for_extmark;
+  bool extra_for_extmark;    ///< n_extra set for inline virtual text
 
   // saved "extra" items for when draw_state becomes WL_LINE (again)
   int saved_n_extra;
@@ -1147,8 +1147,6 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
 
   char buf_fold[FOLD_TEXT_LEN];         // Hold value returned by get_foldtext
 
-  bool area_active = false;
-
   // 'cursorlineopt' has "screenline" and cursor is in this line
   bool cul_screenline = false;
   // margin columns for the screen line, needed for when 'cursorlineopt'
@@ -1786,32 +1784,14 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
     int extmark_attr = 0;
     if (wlv.draw_state == WL_LINE
         && (area_highlighting || spv->spv_has_spell || extra_check)) {
-      // handle Visual or match highlighting in this line
-      if (wlv.vcol == wlv.fromcol
-          || (wlv.vcol + 1 == wlv.fromcol
-              && ((wlv.n_extra == 0 && utf_ptr2cells(ptr) > 1)
-                  || (wlv.n_extra > 0 && wlv.p_extra != NULL
-                      && utf_ptr2cells(wlv.p_extra) > 1)))
-          || (vcol_prev == fromcol_prev
-              && vcol_prev < wlv.vcol               // not at margin
-              && wlv.vcol < wlv.tocol)) {
-        area_attr = vi_attr;                    // start highlighting
-        if (area_highlighting) {
-          area_active = true;
-        }
-      } else if (area_attr != 0 && (wlv.vcol == wlv.tocol
-                                    || (noinvcur && wlv.vcol == wp->w_virtcol))) {
-        area_attr = 0;                          // stop highlighting
-        area_active = false;
-      }
-
       if (wlv.n_extra == 0 || !wlv.extra_for_extmark) {
         wlv.reset_extra_attr = false;
       }
 
       if (has_decor && wlv.n_extra == 0) {
-        bool selected = (area_active || (area_highlighting && noinvcur
-                                         && wlv.vcol == wp->w_virtcol));
+        bool selected = (area_highlighting
+                         && ((wlv.vcol >= wlv.fromcol && wlv.vcol < wlv.tocol)
+                             || (noinvcur && wlv.vcol == wp->w_virtcol)));
         extmark_attr = decor_redraw_col(wp, (colnr_T)v, wlv.off, selected, &decor_state);
 
         if (!has_fold && wp->w_buffer->b_virt_text_inline > 0) {
@@ -1827,9 +1807,31 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
             area_attr = 0;
             decor_attr = 0;
             search_attr_from_match = false;
+          }
+          if (wlv.n_extra > 0) {
             n_skip = 0;
           }
         }
+      }
+
+      int *area_attr_p
+        = wlv.extra_for_extmark && wlv.virt_inline_hl_mode <= kHlModeReplace
+          ? &saved_area_attr : &area_attr;
+
+      // handle Visual or match highlighting in this line
+      if (wlv.vcol == wlv.fromcol
+          || (wlv.vcol + 1 == wlv.fromcol
+              && ((wlv.n_extra == 0 && utf_ptr2cells(ptr) > 1)
+                  || (wlv.n_extra > 0 && wlv.p_extra != NULL
+                      && utf_ptr2cells(wlv.p_extra) > 1)))
+          || (vcol_prev == fromcol_prev
+              && vcol_prev < wlv.vcol               // not at margin
+              && wlv.vcol < wlv.tocol)) {
+        *area_attr_p = vi_attr;                     // start highlighting
+      } else if (*area_attr_p != 0
+                 && (wlv.vcol == wlv.tocol
+                     || (noinvcur && wlv.vcol == wp->w_virtcol))) {
+        *area_attr_p = 0;                           // stop highlighting
       }
 
       if (!has_fold && wlv.n_extra == 0) {
@@ -2020,6 +2022,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
       c = NUL;
     } else {
       int c0;
+      char *prev_ptr = ptr;
 
       // Get a character from the line itself.
       c0 = c = (uint8_t)(*ptr);
@@ -2176,11 +2179,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         if (has_decor && v > 0) {
           // extmarks take preceedence over syntax.c
           decor_attr = hl_combine_attr(decor_attr, extmark_attr);
-
           decor_conceal = decor_state.conceal;
-          if (decor_conceal && decor_state.conceal_char) {
-            decor_conceal = 2;  // really??
-          }
           can_spell = TRISTATE_TO_BOOL(decor_state.spell, can_spell);
         }
 
@@ -2207,7 +2206,6 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         v = (ptr - line);
         if (spv->spv_has_spell && v >= word_end && v > cur_checked_col) {
           spell_attr = 0;
-          char *prev_ptr = ptr - mb_l;
           // do not calculate cap_col at the end of the line or when
           // only white space is following
           if (c != 0 && (*skipwhite(prev_ptr) != NUL) && can_spell) {
@@ -2744,6 +2742,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
           eol_attr = hl_combine_attr(wlv.cul_attr, eol_attr);
         }
         linebuf_attr[wlv.off] = eol_attr;
+        linebuf_vcol[wlv.off] = MAXCOL;
         if (wp->w_p_rl) {
           wlv.col--;
           wlv.off--;
@@ -2830,6 +2829,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
 
         while (wp->w_p_rl ? wlv.col >= 0 : wlv.col < grid->cols) {
           schar_from_ascii(linebuf_char[wlv.off], ' ');
+          linebuf_vcol[wlv.off] = MAXCOL;
           wlv.col += col_stride;
           if (draw_color_col) {
             draw_color_col = advance_color_col(VCOL_HLC, &color_cols);
@@ -2864,6 +2864,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         while (wlv.col >= 0 && wlv.col < grid->cols) {
           schar_from_ascii(linebuf_char[wlv.off], ' ');
           linebuf_attr[wlv.off] = wlv.vcol >= TERM_ATTRS_MAX ? 0 : term_attrs[wlv.vcol];
+          linebuf_vcol[wlv.off] = wlv.vcol;
           wlv.off += n;
           wlv.vcol += n;
           wlv.col += n;
@@ -2939,13 +2940,14 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
       wlv.char_attr = hl_combine_attr(wlv.line_attr_lowprio, wlv.char_attr);
     }
 
+    if (wlv.draw_state == WL_LINE) {
+      vcol_prev = wlv.vcol;
+    }
+
     // Store character to be displayed.
     // Skip characters that are left of the screen for 'nowrap'.
-    vcol_prev = wlv.vcol;
     if (wlv.draw_state < WL_LINE || n_skip <= 0) {
-      //
       // Store the character.
-      //
       if (wp->w_p_rl && utf_char2cells(mb_c) > 1) {
         // A double-wide character is: put first half in left cell.
         wlv.off--;
@@ -2963,6 +2965,8 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         linebuf_attr[wlv.off] = wlv.char_attr;
       }
 
+      linebuf_vcol[wlv.off] = wlv.vcol;
+
       if (utf_char2cells(mb_c) > 1) {
         // Need to fill two screen columns.
         wlv.off++;
@@ -2978,6 +2982,9 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         if (wlv.tocol == wlv.vcol) {
           wlv.tocol++;
         }
+
+        linebuf_vcol[wlv.off] = wlv.vcol;
+
         if (wp->w_p_rl) {
           // now it's time to backup one cell
           wlv.off--;

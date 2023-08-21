@@ -1,4 +1,5 @@
 " Tests for the List and Dict types
+scriptencoding utf-8
 
 source vim9.vim
 
@@ -480,6 +481,19 @@ func Test_dict_func_remove_in_use()
   endfunc
   let expected = 'a:' . string(get(d, 'func'))
   call assert_equal(expected, d.func(string(remove(d, 'func'))))
+
+  " similar, in a way it also works in Vim9
+  let lines =<< trim END
+      VAR d = {1: 1, 2: 'x'}
+      func GetArg(a)
+        return "a:" .. a:a
+      endfunc
+      LET d.func = function('GetArg')
+      VAR expected = 'a:' .. string(get(d, 'func'))
+      call assert_equal(expected, d.func(string(remove(d, 'func'))))
+  END
+  call CheckTransLegacySuccess(lines)
+  call CheckTransVim9Success(lines)
 endfunc
 
 func Test_dict_literal_keys()
@@ -492,95 +506,112 @@ endfunc
 
 " Nasty: deepcopy() dict that refers to itself (fails when noref used)
 func Test_dict_deepcopy()
-  let d = {1:1, 2:2}
-  let l = [4, d, 6]
-  let d[3] = l
-  let dc = deepcopy(d)
-  call assert_fails('call deepcopy(d, 1)', 'E698:')
-  let l2 = [0, l, l, 3]
-  let l[1] = l2
-  let l3 = deepcopy(l2)
-  call assert_true(l3[1] is l3[2])
-  call assert_fails("call deepcopy([1, 2], 2)", 'E1023:')
+  let lines =<< trim END
+      VAR d = {1: 1, 2: '2'}
+      VAR l = [4, d, 6]
+      LET d[3] = l
+      VAR dc = deepcopy(d)
+      call deepcopy(d, 1)
+  END
+  call CheckLegacyAndVim9Failure(lines, 'E698:')
+
+  let lines =<< trim END
+      VAR d = {1: 1, 2: '2'}
+      VAR l = [4, d, 6]
+      LET d[3] = l
+      VAR l2 = [0, l, l, 3]
+      LET l[1] = l2
+      VAR l3 = deepcopy(l2)
+      call assert_true(l3[1] is l3[2])
+  END
+  call CheckLegacyAndVim9Success(lines)
+
+  call assert_fails("call deepcopy([1, 2], 2)", 'E1212:')
 endfunc
 
 " Locked variables
 func Test_list_locked_var()
-  let expected = [
-	      \ [['1000-000', 'ppppppF'],
-	      \  ['0000-000', 'ppppppp'],
-	      \  ['0000-000', 'ppppppp']],
-	      \ [['1000-000', 'ppppppF'],
-	      \  ['0000-000', 'ppppppp'],
-	      \  ['0000-000', 'ppppppp']],
-	      \ [['1100-100', 'ppFppFF'],
-	      \  ['0000-000', 'ppppppp'],
-	      \  ['0000-000', 'ppppppp']],
-	      \ [['1110-110', 'pFFpFFF'],
-	      \  ['0010-010', 'pFppFpp'],
-	      \  ['0000-000', 'ppppppp']],
-	      \ [['1111-111', 'FFFFFFF'],
-	      \  ['0011-011', 'FFpFFpp'],
-	      \  ['0000-000', 'ppppppp']]
-	      \ ]
-  for depth in range(5)
-    for u in range(3)
-      unlet! l
-      let l = [0, [1, [2, 3]], {4: 5, 6: {7: 8}}]
-      exe "lockvar " . depth . " l"
-      if u == 1
-        exe "unlockvar l"
-      elseif u == 2
-        exe "unlockvar " . depth . " l"
-      endif
-      let ps = islocked("l").islocked("l[1]").islocked("l[1][1]").islocked("l[1][1][0]").'-'.islocked("l[2]").islocked("l[2]['6']").islocked("l[2]['6'][7]")
-      call assert_equal(expected[depth][u][0], ps, 'depth: ' .. depth)
-      let ps = ''
-      try
-        let l[1][1][0] = 99
-        let ps .= 'p'
-      catch
-        let ps .= 'F'
-      endtry
-      try
-        let l[1][1] = [99]
-        let ps .= 'p'
-      catch
-        let ps .= 'F'
-      endtry
-      try
-        let l[1] = [99]
-        let ps .= 'p'
-      catch
-        let ps .= 'F'
-      endtry
-      try
-        let l[2]['6'][7] = 99
-        let ps .= 'p'
-      catch
-        let ps .= 'F'
-      endtry
-      try
-        let l[2][6] = {99: 99}
-        let ps .= 'p'
-      catch
-        let ps .= 'F'
-      endtry
-      try
-        let l[2] = {99: 99}
-        let ps .= 'p'
-      catch
-        let ps .= 'F'
-      endtry
-      try
-        let l = [99]
-        let ps .= 'p'
-      catch
-        let ps .= 'F'
-      endtry
-      call assert_equal(expected[depth][u][1], ps, 'depth: ' .. depth)
-    endfor
-  endfor
+  " Not tested with :def function, local vars cannot be locked.
+  let lines =<< trim END
+      VAR expected = [
+                  \ [['1000-000', 'ppppppF'],
+                  \  ['0000-000', 'ppppppp'],
+                  \  ['0000-000', 'ppppppp']],
+                  \ [['1000-000', 'ppppppF'],
+                  \  ['0000-000', 'ppppppp'],
+                  \  ['0000-000', 'ppppppp']],
+                  \ [['1100-100', 'ppFppFF'],
+                  \  ['0000-000', 'ppppppp'],
+                  \  ['0000-000', 'ppppppp']],
+                  \ [['1110-110', 'pFFpFFF'],
+                  \  ['0010-010', 'pFppFpp'],
+                  \  ['0000-000', 'ppppppp']],
+                  \ [['1111-111', 'FFFFFFF'],
+                  \  ['0011-011', 'FFpFFpp'],
+                  \  ['0000-000', 'ppppppp']]
+                  \ ]
+      for depth in range(5)
+        for u in range(3)
+          VAR l = [0, [1, [2, 3]], {4: 5, 6: {7: 8}}]
+          exe "lockvar " .. depth .. " l"
+          if u == 1
+            exe "unlockvar l"
+          elseif u == 2
+            exe "unlockvar " .. depth .. " l"
+          endif
+          VAR ps = islocked("l") .. islocked("l[1]") .. islocked("l[1][1]") .. islocked("l[1][1][0]") .. '-' .. islocked("l[2]") .. islocked("l[2]['6']") .. islocked("l[2]['6'][7]")
+          call assert_equal(expected[depth][u][0], ps, 'depth: ' .. depth)
+          LET ps = ''
+          try
+            LET l[1][1][0] = 99
+            LET ps ..= 'p'
+          catch
+            LET ps ..= 'F'
+          endtry
+          try
+            LET l[1][1] = [99]
+            LET ps ..= 'p'
+          catch
+            LET ps ..= 'F'
+          endtry
+          try
+            LET l[1] = [99]
+            LET ps ..= 'p'
+          catch
+            LET ps ..= 'F'
+          endtry
+          try
+            LET l[2]['6'][7] = 99
+            LET ps ..= 'p'
+          catch
+            LET ps ..= 'F'
+          endtry
+          try
+            LET l[2][6] = {99: 99}
+            LET ps ..= 'p'
+          catch
+            LET ps ..= 'F'
+          endtry
+          try
+            LET l[2] = {99: 99}
+            LET ps ..= 'p'
+          catch
+            LET ps ..= 'F'
+          endtry
+          try
+            LET l = [99]
+            LET ps ..= 'p'
+          catch
+            LET ps ..= 'F'
+          endtry
+          call assert_equal(expected[depth][u][1], ps, 'depth: ' .. depth)
+          unlock! l
+        endfor
+      endfor
+  END
+  call CheckTransLegacySuccess(lines)
+  call CheckTransVim9Success(lines)
+
   call assert_fails("let x=islocked('a b')", 'E488:')
   let mylist = [1, 2, 3]
   call assert_fails("let x = islocked('mylist[1:2]')", 'E786:')
@@ -590,6 +621,7 @@ endfunc
 
 " Unletting locked variables
 func Test_list_locked_var_unlet()
+  " Not tested with Vim9: script and local variables cannot be unlocked
   let expected = [
 	      \ [['1000-000', 'ppppppp'],
 	      \  ['0000-000', 'ppppppp'],
@@ -688,26 +720,43 @@ endfunc
 
 " unlet after lock on dict item
 func Test_dict_item_lock_unlet()
-  let d = {'a': 99, 'b': 100}
-  lockvar d.a
-  unlet d.a
-  call assert_equal({'b' : 100}, d)
+  let lines =<< trim END
+      VAR d = {'a': 99, 'b': 100}
+      lockvar d.a
+      unlet d.a
+      call assert_equal({'b': 100}, d)
+  END
+  " TODO: make this work in a :def function
+  "call CheckLegacyAndVim9Success(lines)
+  call CheckTransLegacySuccess(lines)
+  call CheckTransVim9Success(lines)
 endfunc
 
 " filter() after lock on dict item
 func Test_dict_lock_filter()
-  let d = {'a': 99, 'b': 100}
-  lockvar d.a
-  call filter(d, 'v:key != "a"')
-  call assert_equal({'b' : 100}, d)
+  let lines =<< trim END
+      VAR d = {'a': 99, 'b': 100}
+      lockvar d.a
+      call filter(d, 'v:key != "a"')
+      call assert_equal({'b': 100}, d)
+  END
+  " TODO: make this work in a :def function
+  "call CheckLegacyAndVim9Success(lines)
+  call CheckTransLegacySuccess(lines)
+  call CheckTransVim9Success(lines)
 endfunc
 
 " map() after lock on dict
 func Test_dict_lock_map()
-  let d = {'a': 99, 'b': 100}
-  lockvar 1 d
-  call map(d, 'v:val + 200')
-  call assert_equal({'a' : 299, 'b' : 300}, d)
+  let lines =<< trim END
+      VAR d = {'a': 99, 'b': 100}
+      lockvar 1 d
+      call map(d, 'v:val + 200')
+      call assert_equal({'a': 299, 'b': 300}, d)
+  END
+  " This won't work in a :def function
+  call CheckTransLegacySuccess(lines)
+  call CheckTransVim9Success(lines)
 endfunc
 
 " No extend() after lock on dict item
@@ -838,21 +887,31 @@ func Test_reverse_sort_uniq()
         call assert_equal([-1, 'one', 'two', 'three', 'four', 1.0e-15, 0.22, 7, 9, 12, 18, 22, 255], sort(copy(l), 'n'))
 
         LET l = [7, 9, 18, 12, 22, 10.0e-16, -1, 0xff, 0, -0, 0.22, 'bar', 'BAR', 'Bar', 'Foo', 'FOO', 'foo', 'FOOBAR', {}, []]
-        call assert_equal(['bar', 'BAR', 'Bar', 'Foo', 'FOO', 'foo', 'FOOBAR', -1, 0, 0, 0.22, 1.0e-15, 12, 18, 22, 255, 7, 9, [], {}], sort(copy(l), 1))
+        call assert_equal(['bar', 'BAR', 'Bar', 'Foo', 'FOO', 'foo', 'FOOBAR', -1, 0, 0, 0.22, 1.0e-15, 12, 18, 22, 255, 7, 9, [], {}], sort(copy(l), 'i'))
         call assert_equal(['bar', 'BAR', 'Bar', 'Foo', 'FOO', 'foo', 'FOOBAR', -1, 0, 0, 0.22, 1.0e-15, 12, 18, 22, 255, 7, 9, [], {}], sort(copy(l), 'i'))
         call assert_equal(['BAR', 'Bar', 'FOO', 'FOOBAR', 'Foo', 'bar', 'foo', -1, 0, 0, 0.22, 1.0e-15, 12, 18, 22, 255, 7, 9, [], {}], sort(copy(l)))
       endif
   END
   call CheckLegacyAndVim9Success(lines)
 
-  call assert_fails('call reverse("")', 'E899:')
+  call assert_fails('call reverse({})', 'E1252:')
   call assert_fails('call uniq([1, 2], {x, y -> []})', 'E745:')
   call assert_fails("call sort([1, 2], function('min'), 1)", "E1206:")
   call assert_fails("call sort([1, 2], function('invalid_func'))", "E700:")
   call assert_fails("call sort([1, 2], function('min'))", "E118:")
+
+  let lines =<< trim END
+    call sort(['a', 'b'], 0)
+  END
+  call CheckDefAndScriptFailure(lines, 'E1256: String or function required for argument 2')
+
+  let lines =<< trim END
+    call sort(['a', 'b'], 1)
+  END
+  call CheckDefAndScriptFailure(lines, 'E1256: String or function required for argument 2')
 endfunc
 
-" reduce a list or a blob
+" reduce a list, blob or string
 func Test_reduce()
   let lines =<< trim END
       call assert_equal(1, reduce([], LSTART acc, val LMIDDLE acc + val LEND, 1))
@@ -875,6 +934,20 @@ func Test_reduce()
 
       call assert_equal(0xff, reduce(0zff, LSTART acc, val LMIDDLE acc + val LEND))
       call assert_equal(2 * (2 * 0xaf + 0xbf) + 0xcf, reduce(0zAFBFCF, LSTART acc, val LMIDDLE 2 * acc + val LEND))
+
+      call assert_equal('x,y,z', 'xyz'->reduce(LSTART acc, val LMIDDLE acc .. ',' .. val LEND))
+      call assert_equal('', ''->reduce(LSTART acc, val LMIDDLE acc .. ',' .. val LEND, ''))
+      call assert_equal('あ,い,う,え,お,😊,💕', 'あいうえお😊💕'->reduce(LSTART acc, val LMIDDLE acc .. ',' .. val LEND))
+      call assert_equal('😊,あ,い,う,え,お,💕', 'あいうえお💕'->reduce(LSTART acc, val LMIDDLE acc .. ',' .. val LEND, '😊'))
+      call assert_equal('ऊ,ॠ,ॡ', reduce('ऊॠॡ', LSTART acc, val LMIDDLE acc .. ',' .. val LEND))
+      call assert_equal('c,à,t', reduce('càt', LSTART acc, val LMIDDLE acc .. ',' .. val LEND))
+      call assert_equal('Å,s,t,r,ö,m', reduce('Åström', LSTART acc, val LMIDDLE acc .. ',' .. val LEND))
+      call assert_equal('Å,s,t,r,ö,m', reduce('Åström', LSTART acc, val LMIDDLE acc .. ',' .. val LEND))
+      call assert_equal(',a,b,c', reduce('abc', LSTART acc, val LMIDDLE acc .. ',' .. val LEND, v:_null_string))
+
+      call assert_equal(0x7d, reduce([0x30, 0x25, 0x08, 0x61], 'or'))
+      call assert_equal(0x7d, reduce(0z30250861, 'or'))
+      call assert_equal('β', reduce('ββββ', 'matchstr'))
   END
   call CheckLegacyAndVim9Success(lines)
 
@@ -883,12 +956,26 @@ func Test_reduce()
 
   call assert_fails("call reduce([], { acc, val -> acc + val })", 'E998: Reduce of an empty List with no initial value')
   call assert_fails("call reduce(0z, { acc, val -> acc + val })", 'E998: Reduce of an empty Blob with no initial value')
+  call assert_fails("call reduce(v:_null_blob, { acc, val -> acc + val })", 'E998: Reduce of an empty Blob with no initial value')
+  call assert_fails("call reduce('', { acc, val -> acc + val })", 'E998: Reduce of an empty String with no initial value')
+  call assert_fails("call reduce(v:_null_string, { acc, val -> acc + val })", 'E998: Reduce of an empty String with no initial value')
 
-  call assert_fails("call reduce({}, { acc, val -> acc + val }, 1)", 'E897:')
-  call assert_fails("call reduce(0, { acc, val -> acc + val }, 1)", 'E897:')
-  call assert_fails("call reduce('', { acc, val -> acc + val }, 1)", 'E897:')
+  call assert_fails("call reduce({}, { acc, val -> acc + val }, 1)", 'E1098:')
+  call assert_fails("call reduce(0, { acc, val -> acc + val }, 1)", 'E1098:')
   call assert_fails("call reduce([1, 2], 'Xdoes_not_exist')", 'E117:')
-  call assert_fails("echo reduce(0z01, { acc, val -> 2 * acc + val }, '')", 'E39:')
+  call assert_fails("echo reduce(0z01, { acc, val -> 2 * acc + val }, '')", 'E1210:')
+
+  " call assert_fails("vim9 reduce(0, (acc, val) => (acc .. val), '')", 'E1252:')
+  " call assert_fails("vim9 reduce({}, (acc, val) => (acc .. val), '')", 'E1252:')
+  " call assert_fails("vim9 reduce(0.1, (acc, val) => (acc .. val), '')", 'E1252:')
+  " call assert_fails("vim9 reduce(function('tr'), (acc, val) => (acc .. val), '')", 'E1252:')
+  call assert_fails("call reduce('', { acc, val -> acc + val }, 1)", 'E1174:')
+  call assert_fails("call reduce('', { acc, val -> acc + val }, {})", 'E1174:')
+  call assert_fails("call reduce('', { acc, val -> acc + val }, 0.1)", 'E1174:')
+  call assert_fails("call reduce('', { acc, val -> acc + val }, function('tr'))", 'E1174:')
+  call assert_fails("call reduce('abc', { a, v -> a10}, '')", 'E121:')
+  call assert_fails("call reduce(0z0102, { a, v -> a10}, 1)", 'E121:')
+  call assert_fails("call reduce([1, 2], { a, v -> a10}, '')", 'E121:')
 
   let g:lut = [1, 2, 3, 4]
   func EvilRemove()
@@ -1031,6 +1118,7 @@ func Test_listdict_extend()
 
   let d = {'a': 'A', 'b': 'B'}
   call assert_fails("call extend(d, {'b': 0, 'c':'C'}, 'error')", 'E737:')
+  call assert_fails("call extend(d, {'b': 0}, [])", 'E730:')
   call assert_fails("call extend(d, {'b': 0, 'c':'C'}, 'xxx')", 'E475:')
   if has('float')
     call assert_fails("call extend(d, {'b': 0, 'c':'C'}, 1.2)", 'E475:')

@@ -1936,13 +1936,13 @@ int syn_check_group(const char *name, size_t len)
 /// @see syn_check_group
 static int syn_add_group(const char *name, size_t len)
 {
-  // Check that the name is ASCII letters, digits and underscore.
+  // Check that the name is valid (ASCII letters, digits, '_', '.', '@', '-').
   for (size_t i = 0; i < len; i++) {
     int c = (uint8_t)name[i];
     if (!vim_isprintc(c)) {
       emsg(_("E669: Unprintable character in group name"));
       return 0;
-    } else if (!ASCII_ISALNUM(c) && c != '_' && c != '.' && c != '@') {
+    } else if (!ASCII_ISALNUM(c) && c != '_' && c != '.' && c != '@' && c != '-') {
       // '.' and '@' are allowed characters for use with treesitter capture names.
       msg_source(HL_ATTR(HLF_W));
       emsg(_(e_highlight_group_name_invalid_char));

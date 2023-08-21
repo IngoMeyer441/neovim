@@ -239,6 +239,8 @@ func Test_printf_misc()
   let lines =<< trim END
       call assert_equal('123', printf('123'))
 
+      call assert_equal('', printf('%'))
+      call assert_equal('', printf('%.0d', 0))
       call assert_equal('123', printf('%d', 123))
       call assert_equal('123', printf('%i', 123))
       call assert_equal('123', printf('%D', 123))
@@ -419,6 +421,7 @@ func Test_printf_misc()
       call assert_equal('[00000あiう]', printf('[%010.7S]', 'あiう'))
 
       call assert_equal('1%', printf('%d%%', 1))
+      call assert_notequal('', printf('%p', "abc"))
   END
   call CheckLegacyAndVim9Success(lines)
 

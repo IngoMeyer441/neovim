@@ -698,10 +698,9 @@ func Test_colorcolumn_sbr()
   let lines =<< trim END
 	call setline(1, 'The quick brown fox jumped over the lazy dogs')
   END
-  call writefile(lines, 'Xtest_colorcolumn_srb', 'D')
-  let buf = RunVimInTerminal('-S Xtest_colorcolumn_srb', {'rows': 10,'columns': 40})
+  call writefile(lines, 'Xtest_colorcolumn_sbr', 'D')
+  let buf = RunVimInTerminal('-S Xtest_colorcolumn_sbr', {'rows': 10,'columns': 40})
   call term_sendkeys(buf, ":set co=40 showbreak=+++>\\  cc=40,41,43\<CR>")
-  call TermWait(buf)
   call VerifyScreenDump(buf, 'Test_colorcolumn_3', {})
 
   " clean up
@@ -864,17 +863,20 @@ func Test_highlight_default_colorscheme_restores_links()
   let hlTestHiPre = HighlightArgs('TestHi')
 
   " Test colorscheme
+  call assert_equal("\ndefault", execute('colorscheme'))
   hi clear
   if exists('syntax_on')
     syntax reset
   endif
   let g:colors_name = 'test'
+  call assert_equal("\ntest", execute('colorscheme'))
   hi link TestLink ErrorMsg
   hi TestHi ctermbg=green
 
   " Restore default highlighting
   colorscheme default
   " 'default' should work no matter if highlight group was cleared
+  call assert_equal("\ndefault", execute('colorscheme'))
   hi def link TestLink Identifier
   hi def TestHi ctermbg=red
   let hlTestLinkPost = HighlightArgs('TestLink')
