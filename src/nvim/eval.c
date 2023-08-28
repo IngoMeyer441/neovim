@@ -5994,6 +5994,13 @@ bool callback_from_typval(Callback *const callback, const typval_T *const arg)
   return true;
 }
 
+static int callback_depth = 0;
+
+int get_callback_depth(void)
+{
+  return callback_depth;
+}
+
 /// @return  whether the callback could be called.
 bool callback_call(Callback *const callback, const int argcount_in, typval_T *const argvars_in,
                    typval_T *const rettv)
@@ -6041,7 +6048,11 @@ bool callback_call(Callback *const callback, const int argcount_in, typval_T *co
   funcexe.fe_lastline = curwin->w_cursor.lnum;
   funcexe.fe_evaluate = true;
   funcexe.fe_partial = partial;
-  return call_func(name, -1, rettv, argcount_in, argvars_in, &funcexe);
+
+  callback_depth++;
+  int ret = call_func(name, -1, rettv, argcount_in, argvars_in, &funcexe);
+  callback_depth--;
+  return ret;
 }
 
 bool set_ref_in_callback(Callback *callback, int copyID, ht_stack_T **ht_stack,
@@ -6412,7 +6423,7 @@ char *save_tv_as_string(typval_T *tv, ptrdiff_t *const len, bool endnl, bool crl
     buf_T *buf = buflist_findnr((int)tv->vval.v_number);
     if (buf) {
       for (linenr_T lnum = 1; lnum <= buf->b_ml.ml_line_count; lnum++) {
-        for (char *p = ml_get_buf(buf, lnum, false); *p != NUL; p++) {
+        for (char *p = ml_get_buf(buf, lnum); *p != NUL; p++) {
           *len += 1;
         }
         *len += 1;
@@ -6430,7 +6441,7 @@ char *save_tv_as_string(typval_T *tv, ptrdiff_t *const len, bool endnl, bool crl
     char *ret = xmalloc((size_t)(*len) + 1);
     char *end = ret;
     for (linenr_T lnum = 1; lnum <= buf->b_ml.ml_line_count; lnum++) {
-      for (char *p = ml_get_buf(buf, lnum, false); *p != NUL; p++) {
+      for (char *p = ml_get_buf(buf, lnum); *p != NUL; p++) {
         *end++ = (*p == '\n') ? NUL : *p;
       }
       *end++ = '\n';
@@ -6482,7 +6493,7 @@ int buf_byteidx_to_charidx(buf_T *buf, linenr_T lnum, int byteidx)
     lnum = buf->b_ml.ml_line_count;
   }
 
-  char *str = ml_get_buf(buf, lnum, false);
+  char *str = ml_get_buf(buf, lnum);
 
   if (*str == NUL) {
     return 0;
@@ -6520,7 +6531,7 @@ int buf_charidx_to_byteidx(buf_T *buf, linenr_T lnum, int charidx)
     lnum = buf->b_ml.ml_line_count;
   }
 
-  char *str = ml_get_buf(buf, lnum, false);
+  char *str = ml_get_buf(buf, lnum);
 
   // Convert the character offset to a byte offset
   char *t = str;

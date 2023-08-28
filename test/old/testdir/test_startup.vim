@@ -295,9 +295,9 @@ func Test_q_arg()
   call writefile(lines, 'Xbadfile.c')
 
   let after =<< trim [CODE]
-    call writefile([&errorfile, string(getpos("."))], "Xtestout")
+    call writefile([&errorfile, string(getpos("."))], "XtestoutQarg")
     copen
-    w >> Xtestout
+    w >> XtestoutQarg
     qall
   [CODE]
 
@@ -305,30 +305,30 @@ func Test_q_arg()
   call assert_equal('errors.err', &errorfile)
   call writefile(["Xbadfile.c:4:12: error: expected ';' before '}' token"], 'errors.err')
   if RunVim([], after, '-q')
-    let lines = readfile('Xtestout')
+    let lines = readfile('XtestoutQarg')
     call assert_equal(['errors.err',
 	\              '[0, 4, 12, 0]',
 	\              "Xbadfile.c|4 col 12| error: expected ';' before '}' token"],
 	\             lines)
   endif
-  call delete('Xtestout')
+  call delete('XtestoutQarg')
   call delete('errors.err')
 
-  " Test with explicit argument '-q Xerrors' (with space).
-  call writefile(["Xbadfile.c:4:12: error: expected ';' before '}' token"], 'Xerrors')
-  if RunVim([], after, '-q Xerrors')
-    let lines = readfile('Xtestout')
-    call assert_equal(['Xerrors',
+  " Test with explicit argument '-q XerrorsQarg' (with space).
+  call writefile(["Xbadfile.c:4:12: error: expected ';' before '}' token"], 'XerrorsQarg')
+  if RunVim([], after, '-q XerrorsQarg')
+    let lines = readfile('XtestoutQarg')
+    call assert_equal(['XerrorsQarg',
 	\              '[0, 4, 12, 0]',
 	\              "Xbadfile.c|4 col 12| error: expected ';' before '}' token"],
 	\             lines)
   endif
-  call delete('Xtestout')
+  call delete('XtestoutQarg')
 
-  " Test with explicit argument '-qXerrors' (without space).
-  if RunVim([], after, '-qXerrors')
-    let lines = readfile('Xtestout')
-    call assert_equal(['Xerrors',
+  " Test with explicit argument '-qXerrorsQarg' (without space).
+  if RunVim([], after, '-qXerrorsQarg')
+    let lines = readfile('XtestoutQarg')
+    call assert_equal(['XerrorsQarg',
 	\              '[0, 4, 12, 0]',
 	\              "Xbadfile.c|4 col 12| error: expected ';' before '}' token"],
 	\             lines)
@@ -339,8 +339,8 @@ func Test_q_arg()
   call assert_equal(3, v:shell_error)
 
   call delete('Xbadfile.c')
-  call delete('Xtestout')
-  call delete('Xerrors')
+  call delete('XtestoutQarg')
+  call delete('XerrorsQarg')
 endfunc
 
 " Test the -V[N]{filename} argument to set the 'verbose' option to N
@@ -960,9 +960,9 @@ func Test_missing_vimrc()
   let cmd = GetVimCommandCleanTerm() . ' -u Xvimrc_missing -S Xafter'
   let buf = term_start(cmd, {'term_rows' : 10})
   call WaitForAssert({-> assert_equal("running", term_getstatus(buf))})
-  call term_wait(buf)
+  call TermWait(buf)
   call term_sendkeys(buf, "\n:")
-  call term_wait(buf)
+  call TermWait(buf)
   call WaitForAssert({-> assert_match(':', term_getline(buf, 10))})
   call StopVimInTerminal(buf)
   call assert_equal([], readfile('Xtestout'))

@@ -835,9 +835,13 @@ endfunc
 func Test_append()
   enew!
   split
-  call append(0, ["foo"])
-  call append(1, [])
-  call append(1, v:_null_list)
+  call assert_equal(0, append(1, []))
+  call assert_equal(0, append(1, v:_null_list))
+  call assert_equal(0, append(0, ["foo"]))
+  call assert_equal(0, append(1, []))
+  call assert_equal(0, append(1, v:_null_list))
+  call assert_equal(0, append(8, []))
+  call assert_equal(0, append(9, v:_null_list))
   call assert_equal(['foo', ''], getline(1, '$'))
   split
   only
@@ -2009,6 +2013,32 @@ func Test_setbufvar_options()
   bwipe!
 endfunc
 
+func Test_setbufvar_keep_window_title()
+  CheckRunVimInTerminal
+  if !has('title') || empty(&t_ts)
+    throw "Skipped: can't get/set title"
+  endif
+
+  let lines =<< trim END
+      set title
+      edit Xa.txt
+      let g:buf = bufadd('Xb.txt')
+      inoremap <F2> <C-R>=setbufvar(g:buf, '&autoindent', 1) ?? ''<CR>
+  END
+  call writefile(lines, 'Xsetbufvar')
+  let buf = RunVimInTerminal('-S Xsetbufvar', {})
+  call WaitForAssert({-> assert_match('Xa.txt', term_gettitle(buf))}, 1000)
+
+  call term_sendkeys(buf, "i\<F2>")
+  call TermWait(buf)
+  call term_sendkeys(buf, "\<Esc>")
+  call TermWait(buf)
+  call assert_match('Xa.txt', term_gettitle(buf))
+
+  call StopVimInTerminal(buf)
+  call delete('Xsetbufvar')
+endfunc
+
 func Test_redo_in_nested_functions()
   nnoremap g. :set opfunc=Operator<CR>g@
   function Operator( type, ... )
@@ -2563,6 +2593,81 @@ func Test_bufadd_bufload()
   bwipe XotherName
   call assert_equal(0, bufexists('someName'))
   call delete('XotherName')
+endfunc
+
+func Test_state()
+  CheckRunVimInTerminal
+
+  let getstate = ":echo 'state: ' .. g:state .. '; mode: ' .. g:mode\<CR>"
+
+  let lines =<< trim END
+	call setline(1, ['one', 'two', 'three'])
+	map ;; gg
+	set complete=.
+	func RunTimer()
+	  call timer_start(10, {id -> execute('let g:state = state()') .. execute('let g:mode = mode()')})
+	endfunc
+	au Filetype foobar let g:state = state()|let g:mode = mode()
+  END
+  call writefile(lines, 'XState')
+  let buf = RunVimInTerminal('-S XState', #{rows: 6})
+
+  " Using a ":" command Vim is busy, thus "S" is returned
+  call term_sendkeys(buf, ":echo 'state: ' .. state() .. '; mode: ' .. mode()\<CR>")
+  call WaitForAssert({-> assert_match('state: S; mode: n', term_getline(buf, 6))}, 1000)
+  call term_sendkeys(buf, ":\<CR>")
+
+  " Using a timer callback
+  call term_sendkeys(buf, ":call RunTimer()\<CR>")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: c; mode: n', term_getline(buf, 6))}, 1000)
+
+  " Halfway a mapping
+  call term_sendkeys(buf, ":call RunTimer()\<CR>;")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, ";")
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: mSc; mode: n', term_getline(buf, 6))}, 1000)
+
+  " A operator is pending
+  call term_sendkeys(buf, ":call RunTimer()\<CR>y")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, "y")
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: oSc; mode: n', term_getline(buf, 6))}, 1000)
+
+  " A register was specified
+  call term_sendkeys(buf, ":call RunTimer()\<CR>\"r")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, "yy")
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: oSc; mode: n', term_getline(buf, 6))}, 1000)
+
+  " Insert mode completion (bit slower on Mac)
+  call term_sendkeys(buf, ":call RunTimer()\<CR>Got\<C-N>")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, "\<Esc>")
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: aSc; mode: i', term_getline(buf, 6))}, 1000)
+
+  " Autocommand executing
+  call term_sendkeys(buf, ":set filetype=foobar\<CR>")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: xS; mode: n', term_getline(buf, 6))}, 1000)
+
+  " Todo: "w" - waiting for ch_evalexpr()
+
+  " messages scrolled
+  call term_sendkeys(buf, ":call RunTimer()\<CR>:echo \"one\\ntwo\\nthree\"\<CR>")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, "\<CR>")
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: Scs; mode: r', term_getline(buf, 6))}, 1000)
+
+  call StopVimInTerminal(buf)
+  call delete('XState')
 endfunc
 
 func Test_range()

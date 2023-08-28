@@ -44,6 +44,7 @@ func Test_profile_func()
     \ . ' --cmd "qall!"')
   call assert_equal(0, v:shell_error)
 
+  sleep 50m
   let lines = readfile('Xprofile_func.log')
 
   " - Foo1() is called 3 times but should be reported as called twice
@@ -584,7 +585,7 @@ func Test_profile_typed_func()
 	\ .. "endfunc\<CR>")
   call term_sendkeys(buf, ":profile func DoSomething\<CR>")
   call term_sendkeys(buf, ":call DoSomething()\<CR>")
-  call term_wait(buf, 200)
+  call TermWait(buf, 100)
   call StopVimInTerminal(buf)
   let lines = readfile('XprofileTypedFunc')
   call assert_equal("FUNCTION  DoSomething()", lines[0])

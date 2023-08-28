@@ -2,9 +2,11 @@
 #define NVIM_PLINES_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "nvim/buffer_defs.h"
-#include "nvim/vim.h"
+#include "nvim/marktree.h"
+#include "nvim/pos.h"
 
 /// Argument for lbr_chartabsize().
 typedef struct {
@@ -19,6 +21,7 @@ typedef struct {
   MarkTreeIter cts_iter[1];
 
   int cts_vcol;                  ///< virtual column at current position
+  int cts_max_head_vcol;         ///< see win_lbr_chartabsize()
 } chartabsize_T;
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS

@@ -232,7 +232,8 @@ static void insert_enter(InsertState *s)
   may_trigger_modechanged();
   stop_insert_mode = false;
 
-  // need to position cursor again when on a TAB
+  // need to position cursor again when on a TAB and
+  // when on a char with inline virtual text
   if (gchar_cursor() == TAB || curbuf->b_virt_text_inline > 0) {
     curwin->w_valid &= ~(VALID_WROW|VALID_WCOL|VALID_VIRTCOL);
   }
@@ -1355,6 +1356,11 @@ void ins_redraw(bool ready)
     curbuf->b_changed_invalid = false;
   }
 
+  // Trigger SafeState if nothing is pending.
+  may_trigger_safestate(ready
+                        && !ins_compl_active()
+                        && !pum_visible());
+
   pum_check_clear();
   show_cursor_info_later(false);
   if (must_redraw) {
@@ -1702,7 +1708,7 @@ void change_indent(int type, int amount, int round, int replaced, int call_chang
     curwin->w_cursor.col = (colnr_T)new_cursor_col;
   }
   curwin->w_set_curswant = true;
-  changed_cline_bef_curs();
+  changed_cline_bef_curs(curwin);
 
   // May have to adjust the start of the insert.
   if (State & MODE_INSERT) {
@@ -3466,7 +3472,8 @@ static bool ins_esc(long *count, int cmdchar, bool nomove)
 
   State = MODE_NORMAL;
   may_trigger_modechanged();
-  // need to position cursor again when on a TAB
+  // need to position cursor again when on a TAB and
+  // when on a char with inline virtual text
   if (gchar_cursor() == TAB || curbuf->b_virt_text_inline > 0) {
     curwin->w_valid &= ~(VALID_WROW|VALID_WCOL|VALID_VIRTCOL);
   }
@@ -3768,7 +3775,7 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
         // again when auto-formatting.
         if (has_format_option(FO_AUTO)
             && has_format_option(FO_WHITE_PAR)) {
-          char *ptr = ml_get_buf(curbuf, curwin->w_cursor.lnum, true);
+          char *ptr = ml_get_buf_mut(curbuf, curwin->w_cursor.lnum);
           int len;
 
           len = (int)strlen(ptr);
@@ -3988,82 +3995,6 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
     foldOpenCursor();
   }
   return did_backspace;
-}
-
-static void ins_mouse(int c)
-{
-  pos_T tpos;
-  win_T *old_curwin = curwin;
-
-  undisplay_dollar();
-  tpos = curwin->w_cursor;
-  if (do_mouse(NULL, c, BACKWARD, 1, 0)) {
-    win_T *new_curwin = curwin;
-
-    if (curwin != old_curwin && win_valid(old_curwin)) {
-      // Mouse took us to another window.  We need to go back to the
-      // previous one to stop insert there properly.
-      curwin = old_curwin;
-      curbuf = curwin->w_buffer;
-      if (bt_prompt(curbuf)) {
-        // Restart Insert mode when re-entering the prompt buffer.
-        curbuf->b_prompt_insert = 'A';
-      }
-    }
-    start_arrow(curwin == old_curwin ? &tpos : NULL);
-    if (curwin != new_curwin && win_valid(new_curwin)) {
-      curwin = new_curwin;
-      curbuf = curwin->w_buffer;
-    }
-    can_cindent = true;
-  }
-
-  // redraw status lines (in case another window became active)
-  redraw_statuslines();
-}
-
-static void ins_mousescroll(int dir)
-{
-  win_T *const old_curwin = curwin;
-  pos_T tpos = curwin->w_cursor;
-
-  if (mouse_row >= 0 && mouse_col >= 0) {
-    int row = mouse_row, col = mouse_col, grid = mouse_grid;
-
-    // find the window at the pointer coordinates
-    win_T *wp = mouse_find_win(&grid, &row, &col);
-    if (wp == NULL) {
-      return;
-    }
-    curwin = wp;
-    curbuf = curwin->w_buffer;
-  }
-  if (curwin == old_curwin) {
-    undisplay_dollar();
-  }
-
-  // Don't scroll the window in which completion is being done.
-  if (!pum_visible() || curwin != old_curwin) {
-    if (dir == MSCR_DOWN || dir == MSCR_UP) {
-      if (mod_mask & (MOD_MASK_SHIFT | MOD_MASK_CTRL)) {
-        scroll_redraw(dir, curwin->w_botline - curwin->w_topline);
-      } else if (p_mousescroll_vert > 0) {
-        scroll_redraw(dir, (linenr_T)p_mousescroll_vert);
-      }
-    } else {
-      mouse_scroll_horiz(dir);
-    }
-  }
-
-  curwin->w_redr_status = true;
-
-  curwin = old_curwin;
-  curbuf = curwin->w_buffer;
-
-  if (!equalpos(curwin->w_cursor, tpos)) {
-    start_arrow(&tpos);
-    can_cindent = true;
-  }
 }
 
 static void ins_left(void)

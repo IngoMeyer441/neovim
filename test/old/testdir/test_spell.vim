@@ -131,6 +131,26 @@ foobar/?
   set spell&
 endfunc
 
+func Test_spell_camelcase()
+  set spell spelloptions=camel
+  let words = [
+      \ 'UPPER',
+      \ 'lower',
+      \ 'mixedCase',
+      \ 'HTML',
+      \ 'XMLHttpRequest',
+      \ 'foo123bar',
+      \ '12345678',
+      \ 'HELLO123world',
+      \]
+
+  for word in words
+    call assert_equal(['', ''],  spellbadword(word))
+  endfor
+
+  set spell& spelloptions&
+endfunc
+
 func Test_spell_file_missing()
   let s:spell_file_missing = 0
   augroup TestSpellFileMissing
@@ -491,7 +511,7 @@ func Test_spellsuggest_option_expr()
   bwipe!
 endfunc
 
-" Test for 'spellsuggest' expr errrors
+" Test for 'spellsuggest' expr errors
 func Test_spellsuggest_expr_errors()
   " 'spellsuggest'
   func MySuggest()

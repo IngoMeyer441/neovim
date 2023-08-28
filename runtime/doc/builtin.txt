@@ -73,7 +73,8 @@ append({lnum}, {text})                                                *append()*
 		{lnum} can be zero to insert a line before the first one.
 		{lnum} is used like with |getline()|.
 		Returns 1 for failure ({lnum} out of range or out of memory),
-		0 for success.  Example: >vim
+		0 for success.  When {text} is an empty list zero is returned,
+		no matter the value of {lnum}.  Example: >vim
 			let failed = append(line('$'), "# THE END")
 			let failed = append(0, ["Chapter 1", "the beginning"])
 <
@@ -96,7 +97,8 @@ appendbufline({buf}, {lnum}, {text})                           *appendbufline()*
 		If {buf} is not a valid buffer or {lnum} is not valid, an
 		error message is given. Example: >vim
 			let failed = appendbufline(13, 0, "# THE START")
-<
+<		However, when {text} is an empty list then no error is given
+		for an invalid {lnum}, since {lnum} isn't actually used.
 
 argc([{winid}])                                                         *argc()*
 		The result is the number of files in the argument list.  See
@@ -2662,7 +2664,7 @@ getmatches([{win}])                                               *getmatches()*
 <
 
 getmousepos()                                                    *getmousepos()*
-		Returns a Dictionary with the last known position of the
+		Returns a |Dictionary| with the last known position of the
 		mouse.  This can be used in a mapping for a mouse click.  The
 		items are:
 			screenrow	screen row
@@ -3209,7 +3211,7 @@ has({feature})                                                           *has()*
 			clipboard	|clipboard| provider is available.
 			fname_case	Case in file names matters (for Darwin and MS-Windows
 					this is not present).
-		                        gui_running	Nvim has a GUI.
+			gui_running	Nvim has a GUI.
 			iconv		Can use |iconv()| for conversion.
 			linux		Linux system.
 			mac		MacOS system.
@@ -4753,6 +4755,7 @@ mode([expr])                                                            *mode()*
 		If [expr] is supplied and it evaluates to a non-zero Number or
 		a non-empty String (|non-zero-arg|), then the full mode is
 		returned, otherwise only the first letter is returned.
+		Also see |state()|.
 
 		   n	    Normal
 		   no	    Operator-pending
@@ -4947,7 +4950,7 @@ pathshorten({path} [, {len}])                                    *pathshorten()*
 		letters).  Leading '~' and '.' characters are kept.  Examples: >vim
 			echo pathshorten('~/.config/nvim/autoload/file1.vim')
 <			~/.c/n/a/file1.vim ~
-		>vim
+>vim
 			echo pathshorten('~/.config/nvim/autoload/file2.vim', 2)
 <			~/.co/nv/au/file2.vim ~
 		It doesn't matter if the path exists or not.
@@ -5740,7 +5743,7 @@ screenchar({row}, {col})                                          *screenchar()*
 		Returns -1 when row or col is out of range.
 
 screenchars({row}, {col})                                        *screenchars()*
-		The result is a List of Numbers.  The first number is the same
+		The result is a |List| of Numbers.  The first number is the same
 		as what |screenchar()| returns.  Further numbers are
 		composing characters on top of the base character.
 		This is mainly to be used for testing.
@@ -5907,7 +5910,7 @@ searchcount([{options}])                                         *searchcount()*
 		without the "S" flag in 'shortmess'.  This works even if
 		'shortmess' does contain the "S" flag.
 
-		This returns a Dictionary. The dictionary is empty if the
+		This returns a |Dictionary|. The dictionary is empty if the
 		previous pattern was not set and "pattern" was not specified.
 
 		  key		type		meaning ~
@@ -5989,7 +5992,7 @@ searchcount([{options}])                                         *searchcount()*
 			" search again
 			call searchcount()
 <
-		{options} must be a Dictionary. It can contain:
+		{options} must be a |Dictionary|. It can contain:
 		  key		type		meaning ~
 		  recompute	|Boolean|	if |TRUE|, recompute the count
 						like |n| or |N| was executed.
@@ -6212,9 +6215,10 @@ setbufline({buf}, {lnum}, {text})                                 *setbufline()*
 
 		To insert lines use |appendbufline()|.
 
-		{text} can be a string to set one line, or a list of strings
-		to set multiple lines.  If the list extends below the last
-		line then those lines are added.
+		{text} can be a string to set one line, or a List of strings
+		to set multiple lines.  If the List extends below the last
+		line then those lines are added.  If the List is empty then
+		nothing is changed and zero is returned.
 
 		For the use of {buf}, see |bufname()| above.
 
@@ -6373,7 +6377,8 @@ setline({lnum}, {text})                                              *setline()*
 		When {lnum} is just below the last line the {text} will be
 		added below the last line.
 		{text} can be any type or a List of any type, each item is
-		converted to a String.
+		converted to a String.  When {text} is an empty List then
+		nothing is changed and FALSE is returned.
 
 		If this succeeds, FALSE is returned.  If this fails (most likely
 		because {lnum} is invalid) TRUE is returned.
@@ -7214,7 +7219,7 @@ sort({list} [, {how} [, {dict}]])                                  *sort()* *E70
 			language collate en_US.UTF8
 			echo sort(['n', 'o', 'O', 'ö', 'p', 'z'], 'l')
 <			['n', 'o', 'O', 'ö', 'p', 'z'] ~
-		>vim
+>vim
 			" ö is sorted after z with Swedish locale.
 			language collate sv_SE.UTF8
 			echo sort(['n', 'o', 'O', 'ö', 'p', 'z'], 'l')
@@ -7367,6 +7372,36 @@ srand([{expr}])                                                        *srand()*
 			let seed = srand(userinput)
 			echo rand(seed)
 <
+
+state([{what}])                                                        *state()*
+		Return a string which contains characters indicating the
+		current state.  Mostly useful in callbacks that want to do
+		work that may not always be safe.  Roughly this works like:
+		- callback uses state() to check if work is safe to do.
+		  Yes: then do it right away.
+		  No:  add to work queue and add a |SafeState| autocommand.
+		- When SafeState is triggered and executes your autocommand,
+		  check with `state()` if the work can be done now, and if yes
+		  remove it from the queue and execute.
+		  Remove the autocommand if the queue is now empty.
+		Also see |mode()|.
+
+		When {what} is given only characters in this string will be
+		added.  E.g, this checks if the screen has scrolled: >vim
+			if state('s') == ''
+			   " screen has not scrolled
+<
+		These characters indicate the state, generally indicating that
+		something is busy:
+		    m	halfway a mapping, :normal command, feedkeys() or
+			stuffed command
+		    o	operator pending, e.g. after |d|
+		    a	Insert mode autocomplete active
+		    x	executing an autocommand
+		    S	not triggering SafeState, e.g. after |f| or a count
+		    c	callback invoked, including timer (repeats for
+			recursiveness up to "ccc")
+		    s	screen has scrolled for messages
 
 stdioopen({opts})                                                  *stdioopen()*
 		With |--headless| this opens stdin and stdout as a |channel|.
@@ -7923,7 +7958,6 @@ synconcealed({lnum}, {col})                                     *synconcealed()*
 			synconcealed(lnum, 4)   [1, 'X', 2]
 			synconcealed(lnum, 5)   [1, 'X', 2]
 			synconcealed(lnum, 6)   [0, '', 0]
-<
 
 synstack({lnum}, {col})                                             *synstack()*
 		Return a |List|, which is the stack of syntax items at the
@@ -8282,15 +8316,15 @@ type({expr})                                                            *type()*
 		The result is a Number representing the type of {expr}.
 		Instead of using the number directly, it is better to use the
 		v:t_ variable that has the value:
-		        Number:     0 (|v:t_number|)
-			String:     1 (|v:t_string|)
-			Funcref:    2 (|v:t_func|)
-			List:       3 (|v:t_list|)
-			Dictionary: 4 (|v:t_dict|)
-			Float:      5 (|v:t_float|)
-			Boolean:    6 (|v:true| and |v:false|)
-			Null:       7 (|v:null|)
-			Blob:      10 (|v:t_blob|)
+			Number:	    0  |v:t_number|
+			String:	    1  |v:t_string|
+			Funcref:    2  |v:t_func|
+			List:	    3  |v:t_list|
+			Dictionary: 4  |v:t_dict|
+			Float:	    5  |v:t_float|
+			Boolean:    6  |v:t_bool| (|v:false| and |v:true|)
+			Null:	    7  (|v:null|)
+			Blob:	   10  |v:t_blob|
 		For backward compatibility, this method can be used: >vim
 			if type(myvar) == type(0) | endif
 			if type(myvar) == type("") | endif
