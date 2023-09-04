@@ -2418,13 +2418,13 @@ void ml_add_deleted_len_buf(buf_T *buf, char *ptr, ssize_t len)
   if (len == -1 || len > maxlen) {
     len = maxlen;
   }
-  curbuf->deleted_bytes += (size_t)len + 1;
-  curbuf->deleted_bytes2 += (size_t)len + 1;
-  if (curbuf->update_need_codepoints) {
-    mb_utflen(ptr, (size_t)len, &curbuf->deleted_codepoints,
-              &curbuf->deleted_codeunits);
-    curbuf->deleted_codepoints++;  // NL char
-    curbuf->deleted_codeunits++;
+  buf->deleted_bytes += (size_t)len + 1;
+  buf->deleted_bytes2 += (size_t)len + 1;
+  if (buf->update_need_codepoints) {
+    mb_utflen(ptr, (size_t)len, &buf->deleted_codepoints,
+              &buf->deleted_codeunits);
+    buf->deleted_codepoints++;  // NL char
+    buf->deleted_codeunits++;
   }
 }
 
@@ -2523,7 +2523,7 @@ static int ml_delete_int(buf_T *buf, linenr_T lnum, bool message)
       set_keep_msg(_(no_lines_msg), 0);
     }
 
-    int i = ml_replace(1, "", true);
+    int i = ml_replace_buf(buf, 1, "", true);
     buf->b_ml.ml_flags |= ML_EMPTY;
 
     return i;
@@ -3934,6 +3934,11 @@ long ml_find_line_or_offset(buf_T *buf, linenr_T lnum, long *offp, bool no_ff)
   if (buf->b_ml.ml_usedchunks == -1
       || buf->b_ml.ml_chunksize == NULL
       || lnum < 0) {
+    // memline is currently empty. Although if it is loaded,
+    // it behaves like there is one empty line.
+    if (!ffdos && buf->b_ml.ml_mfp && (lnum == 1 || lnum == 2)) {
+      return lnum - 1;
+    }
     return -1;
   }
 

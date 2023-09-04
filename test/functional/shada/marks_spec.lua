@@ -3,6 +3,7 @@ local helpers = require('test.functional.helpers')(after_each)
 local meths, curwinmeths, curbufmeths, nvim_command, funcs, eq =
   helpers.meths, helpers.curwinmeths, helpers.curbufmeths, helpers.command,
   helpers.funcs, helpers.eq
+local feed = helpers.feed
 local exc_exec, exec_capture = helpers.exc_exec, helpers.exec_capture
 local expect_exit = helpers.expect_exit
 
@@ -247,5 +248,50 @@ describe('ShaDa support code', function()
     }
     eq('', funcs.system(argv))
     eq(0, exc_exec('rshada'))
+  end)
+
+  it('updates deleted marks with :delmarks', function()
+    nvim_command('edit ' .. testfilename)
+
+    nvim_command('mark A')
+    nvim_command('mark a')
+    -- create a change to set the '.' mark,
+    -- since it can't be set via :mark
+    feed('ggifoobar<esc>')
+    nvim_command('wshada')
+
+    reset()
+    nvim_command('edit ' .. testfilename)
+    nvim_command('normal! `A`a`.')
+    nvim_command('delmarks A a .')
+    nvim_command('wshada')
+
+    reset()
+    nvim_command('edit ' .. testfilename)
+    eq('Vim(normal):E20: Mark not set', exc_exec('normal! `A'))
+    eq('Vim(normal):E20: Mark not set', exc_exec('normal! `a'))
+    eq('Vim(normal):E20: Mark not set', exc_exec('normal! `.'))
+  end)
+
+  it('updates deleted marks with :delmarks!', function()
+    nvim_command('edit ' .. testfilename)
+
+    nvim_command('mark A')
+    nvim_command('mark a')
+    feed('ggifoobar<esc>')
+    nvim_command('wshada')
+
+    reset()
+    nvim_command('edit ' .. testfilename)
+    nvim_command('normal! `A`a`.')
+    nvim_command('delmarks!')
+    nvim_command('wshada')
+
+    reset()
+    nvim_command('edit ' .. testfilename)
+    eq('Vim(normal):E20: Mark not set', exc_exec('normal! `a'))
+    eq('Vim(normal):E20: Mark not set', exc_exec('normal! `.'))
+    -- Make sure that uppercase marks aren't deleted.
+    nvim_command('normal! `A')
   end)
 end)
