@@ -120,6 +120,8 @@ The following new APIs and features were added.
     indicator to see if a server supports a feature. Instead use
     `client.supports_method(<method>)`. It considers both the dynamic
     capabilities and static `server_capabilities`.
+  • Added a new `anchor_bias` option to |lsp-handlers| to aid in positioning of
+    floating windows.
 
 • Treesitter
   • Bundled parsers and queries (highlight, folds) for Markdown, Python, and
@@ -161,6 +163,9 @@ The following new APIs and features were added.
 
 • The |:terminal| command now accepts some |:command-modifiers| (specifically
   |:horizontal| and those that affect splitting a window).
+
+• |vim.lsp.util.locations_to_items()| sets the `user_data` of each item to the
+  original LSP `Location` or `LocationLink`.
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
