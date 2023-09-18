@@ -441,14 +441,15 @@ end
 --- In this case, add ``vim.bo.syntax = 'on'`` after the call to `start`.
 ---
 --- Example:
---- <pre>lua
+---
+--- ```lua
 --- vim.api.nvim_create_autocmd( 'FileType', { pattern = 'tex',
 ---     callback = function(args)
 ---         vim.treesitter.start(args.buf, 'latex')
 ---         vim.bo[args.buf].syntax = 'on'  -- only if additional legacy syntax is needed
 ---     end
 --- })
---- </pre>
+--- ```
 ---
 ---@param bufnr (integer|nil) Buffer to be highlighted (default: current buffer)
 ---@param lang (string|nil) Language of the parser (default: buffer filetype)
@@ -472,7 +473,7 @@ end
 --- Open a window that displays a textual representation of the nodes in the language tree.
 ---
 --- While in the window, press "a" to toggle display of anonymous nodes, "I" to toggle the
---- display of the source language of each node, "o" to toggle the query previewer, and press
+--- display of the source language of each node, "o" to toggle the query editor, and press
 --- <Enter> to jump to the node under the cursor in the source buffer.
 ---
 --- Can also be shown with `:InspectTree`. *:InspectTree*
@@ -494,17 +495,12 @@ function M.inspect_tree(opts)
   require('vim.treesitter.dev').inspect_tree(opts)
 end
 
---- Open a window for live editing of a treesitter query.
----
---- Can also be shown with `:PreviewQuery`. *:PreviewQuery*
-function M.preview_query()
-  require('vim.treesitter.dev').preview_query()
-end
-
 --- Returns the fold level for {lnum} in the current buffer. Can be set directly to 'foldexpr':
---- <pre>lua
+---
+--- ```lua
 --- vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
---- </pre>
+--- ```
+---
 ---@param lnum integer|nil Line number to calculate fold level for
 ---@return string
 function M.foldexpr(lnum)

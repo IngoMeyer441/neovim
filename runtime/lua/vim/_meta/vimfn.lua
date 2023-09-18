@@ -1630,9 +1630,9 @@ function vim.fn.executable(expr) end
 --- To execute a command in another window than the current one
 --- use `win_execute()`.
 ---
---- @param command any
---- @param silent? boolean
---- @return any
+--- @param command string|string[]
+--- @param silent? ''|'silent'|'silent!'
+--- @return string
 function vim.fn.execute(command, silent) end
 
 --- Returns the full path of {expr} if it is an executable and
@@ -6194,7 +6194,7 @@ function vim.fn.prevnonblank(lnum) end
 ---           *printf-$*
 --- In certain languages, error and informative messages are
 --- more readable when the order of words is different from the
---- corresponding message in English. To accomodate translations
+--- corresponding message in English. To accommodate translations
 --- having a different word order, positional arguments may be
 --- used to indicate this. For instance: >vim
 ---

@@ -1,23 +1,24 @@
 ---@defgroup vim.highlight
 ---
----@brief
----Nvim includes a function for highlighting a selection on yank.
+--- Nvim includes a function for highlighting a selection on yank.
 ---
----To enable it, add the following to your `init.vim`:
----<pre>vim
----    au TextYankPost * silent! lua vim.highlight.on_yank()
----</pre>
+--- To enable it, add the following to your `init.vim`:
 ---
----You can customize the highlight group and the duration of
----the highlight via:
----<pre>vim
----    au TextYankPost * silent! lua vim.highlight.on_yank {higroup="IncSearch", timeout=150}
----</pre>
+--- ```vim
+--- au TextYankPost * silent! lua vim.highlight.on_yank()
+--- ```
 ---
----If you want to exclude visual selections from highlighting on yank, use:
----<pre>vim
----    au TextYankPost * silent! lua vim.highlight.on_yank {on_visual=false}
----</pre>
+--- You can customize the highlight group and the duration of the highlight via:
+---
+--- ```vim
+--- au TextYankPost * silent! lua vim.highlight.on_yank {higroup="IncSearch", timeout=150}
+--- ```
+---
+--- If you want to exclude visual selections from highlighting on yank, use:
+---
+--- ```vim
+--- au TextYankPost * silent! lua vim.highlight.on_yank {on_visual=false}
+--- ```
 
 local api = vim.api
 
@@ -55,6 +56,9 @@ function M.range(bufnr, ns, higroup, start, finish, opts)
   local inclusive = opts.inclusive or false
   local priority = opts.priority or M.priorities.user
 
+  -- TODO: in case of 'v', 'V' (not block), this should calculate equivalent
+  -- bounds (row, col, end_row, end_col) as multiline regions are natively
+  -- supported now
   local region = vim.region(bufnr, start, finish, regtype, inclusive)
   for linenr, cols in pairs(region) do
     local end_row

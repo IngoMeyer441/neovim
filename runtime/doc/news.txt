@@ -89,6 +89,8 @@ The following new APIs and features were added.
 
 • Added inline virtual text support to |nvim_buf_set_extmark()|.
 
+• 'foldtext' now supports virtual text format. |fold-foldtext|
+
 • The terminal buffer now supports reflow (wrapped lines adapt when the buffer
   is resized horizontally). Note: Lines that are not visible and kept in
   |'scrollback'| are not reflown.
@@ -135,7 +137,7 @@ The following new APIs and features were added.
     `vim.treesitter.language.register`.
   • The `#set!` directive now supports `injection.self` and `injection.parent` for injecting either the current node's language
     or the parent LanguageTree's language, respectively.
-  • Added `vim.treesitter.preview_query()`, for live editing of treesitter
+  • Added `vim.treesitter.query.edit()`, for live editing of treesitter
     queries.
   • Improved error messages for query parsing.
 
@@ -221,6 +223,15 @@ The following changes to existing APIs or features add new behavior.
   "virtual_text" table, which gives users more control over how diagnostic
   virtual text is displayed.
 
+• Extmarks now fully support multi-line ranges, and a single extmark can be
+  used to highlight a range of arbitrary length. The |nvim_buf_set_extmark()|
+  API function already allowed you to define such ranges, but highlight regions
+  were not rendered consistently for a range that covers more than one line break.
+  This has now been fixed. Signs defined as part of a multi-line extmark also
+  apply to every line in the range, not just the first.
+  In addition, |nvim_buf_get_extmarks()| has gained an "overlap" option to
+  return such ranges even if they started before the specified position.
+
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
 
@@ -258,5 +269,8 @@ release.
   - |vim.lsp.for_each_buffer_client()|		Use |vim.lsp.get_clients()| instead.
 
 • `vim.loop` has been renamed to `vim.uv`.
+
+• vim.treesitter.languagetree functions:
+  - |LanguageTree:for_each_child()|	Use |LanguageTree:children()| (non-recursive) instead.
 
  vim:tw=78:ts=8:sw=2:et:ft=help:norl:

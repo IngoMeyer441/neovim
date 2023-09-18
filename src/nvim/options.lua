@@ -566,7 +566,7 @@ return {
         backups if you don't care about losing the file.
 
         Note that environment variables are not expanded.  If you want to use
-        $HOME you must expand it explicitly, e.g.: >
+        $HOME you must expand it explicitly, e.g.: >vim
         	:let &backupskip = escape(expand('$HOME'), '\') .. '/tmp/*'
 
         <	Note that the default also makes sure that "crontab -e" works (when a
@@ -3441,10 +3441,10 @@ return {
            n-v-c-sm:block,i-ci-ve:ver25-Cursor,r-cr-o:hor20
         			In Normal et al. modes, use a block cursor
         			with the default colors defined by the host
-        			terminal.  In Insert-likes modes, use
+        			terminal.  In Insert-like modes, use
         			a vertical bar cursor with colors from
-        			"Cursor" highlight group.  In Replace-likes
-        			modes, use a underline cursor with
+        			"Cursor" highlight group.  In Replace-like
+        			modes, use an underline cursor with
         			default colors.
            i-ci:ver30-iCursor-blinkwait300-blinkon200-blinkoff150
         			In Insert and Command-line Insert mode, use a

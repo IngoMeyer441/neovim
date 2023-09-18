@@ -2111,7 +2111,11 @@ M.funcs = {
 
     ]=],
     name = 'execute',
-    params = { { 'command', 'any' }, { 'silent', 'boolean' } },
+    params = {
+      { 'command', 'string|string[]' },
+      { 'silent', "''|'silent'|'silent!'" }
+    },
+    returns = 'string',
     signature = 'execute({command} [, {silent}])',
   },
   exepath = {
@@ -7472,7 +7476,7 @@ M.funcs = {
       					*printf-$*
       In certain languages, error and informative messages are
       more readable when the order of words is different from the
-      corresponding message in English. To accomodate translations
+      corresponding message in English. To accommodate translations
       having a different word order, positional arguments may be
       used to indicate this. For instance: >vim
 

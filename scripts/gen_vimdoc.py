@@ -440,7 +440,7 @@ def is_blank(text):
     return '' == clean_lines(text)
 
 
-def get_text(n, preformatted=False):
+def get_text(n):
     """Recursively concatenates all text in a node tree."""
     text = ''
     if n.nodeType == n.TEXT_NODE:
@@ -449,11 +449,13 @@ def get_text(n, preformatted=False):
         for node in n.childNodes:
             text += get_text(node)
         return '`{}`'.format(text)
+    if n.nodeName == 'sp': # space, used in "programlisting" nodes
+        return ' '
     for node in n.childNodes:
         if node.nodeType == node.TEXT_NODE:
             text += node.data
         elif node.nodeType == node.ELEMENT_NODE:
-            text += get_text(node, preformatted)
+            text += get_text(node)
     return text
 
 
@@ -571,7 +573,7 @@ def render_node(n, text, prefix='', indent='', width=text_width - indentation,
     # text += (int(not space_preceding) * ' ')
 
     if n.nodeName == 'preformatted':
-        o = get_text(n, preformatted=True)
+        o = get_text(n)
         ensure_nl = '' if o[-1] == '\n' else '\n'
         if o[0:4] == 'lua\n':
             text += '>lua{}{}\n<'.format(ensure_nl, o[3:-1])
@@ -581,7 +583,14 @@ def render_node(n, text, prefix='', indent='', width=text_width - indentation,
             text += o[4:-1]
         else:
             text += '>{}{}\n<'.format(ensure_nl, o)
+    elif n.nodeName == 'programlisting': # codeblock (```)
+        o = get_text(n)
+        text += '>'
+        if 'filename' in n.attributes:
+            filename = n.attributes['filename'].value
+            text += filename.lstrip('.')
 
+        text += '\n{}\n<'.format(textwrap.indent(o, ' ' * 4))
     elif is_inline(n):
         text = doc_wrap(get_text(n), prefix=prefix, indent=indent, width=width)
     elif n.nodeName == 'verbatim':
@@ -758,6 +767,27 @@ def para_as_map(parent, indent='', width=text_width - indentation, fmt_vimhelp=F
 
     return chunks, xrefs
 
+def is_program_listing(para):
+    """
+    Return True if `para` contains a "programlisting" (i.e. a Markdown code
+    block ```).
+
+    Sometimes a <para> element will have only a single "programlisting" child
+    node, but othertimes it will have extra whitespace around the
+    "programlisting" node.
+
+    @param para XML <para> node
+    @return True if <para> is a programlisting
+    """
+
+    # Remove any child text nodes that are only whitespace
+    children = [
+        n for n in para.childNodes
+        if n.nodeType != n.TEXT_NODE or n.data.strip() != ''
+    ]
+
+    return len(children) == 1 and children[0].nodeName == 'programlisting'
+
 def fmt_node_as_vimhelp(parent: Element, width=text_width - indentation, indent='',
                         fmt_vimhelp=False):
     """Renders (nested) Doxygen <para> nodes as Vim :help text.
@@ -785,6 +815,15 @@ def fmt_node_as_vimhelp(parent: Element, width=text_width - indentation, indent=
 
     for child in parent.childNodes:
         para, _ = para_as_map(child, indent, width, fmt_vimhelp)
+
+        # 'programlisting' blocks are Markdown code blocks. Do not include
+        # these as a separate paragraph, but append to the last non-empty line
+        # in the text
+        if is_program_listing(child):
+            while rendered_blocks and rendered_blocks[-1] == '':
+                rendered_blocks.pop()
+            rendered_blocks[-1] += ' ' + para['text']
+            continue
 
         # Generate text from the gathered items.
         chunks = [para['text']]

@@ -514,7 +514,10 @@ local directive_handlers = {
   -- Example: (#trim! @fold)
   -- TODO(clason): generalize to arbitrary whitespace removal
   ['trim!'] = function(match, _, bufnr, pred, metadata)
-    local node = match[pred[2]]
+    local capture_id = pred[2]
+    assert(type(capture_id) == 'number')
+
+    local node = match[capture_id]
     if not node then
       return
     end
@@ -526,9 +529,9 @@ local directive_handlers = {
       return
     end
 
-    while true do
+    while end_row >= start_row do
       -- As we only care when end_col == 0, always inspect one line above end_row.
-      local end_line = vim.api.nvim_buf_get_lines(bufnr, end_row - 1, end_row, true)[1]
+      local end_line = api.nvim_buf_get_lines(bufnr, end_row - 1, end_row, true)[1]
 
       if end_line ~= '' then
         break
@@ -539,7 +542,8 @@ local directive_handlers = {
 
     -- If this produces an invalid range, we just skip it.
     if start_row < end_row or (start_row == end_row and start_col <= end_col) then
-      metadata.range = { start_row, start_col, end_row, end_col }
+      metadata[capture_id] = metadata[capture_id] or {}
+      metadata[capture_id].range = { start_row, start_col, end_row, end_col }
     end
   end,
 }
@@ -692,7 +696,8 @@ end
 --- The iterator returns three values: a numeric id identifying the capture,
 --- the captured node, and metadata from any directives processing the match.
 --- The following example shows how to get captures by name:
---- <pre>lua
+---
+--- ```lua
 --- for id, node, metadata in query:iter_captures(tree:root(), bufnr, first, last) do
 ---   local name = query.captures[id] -- name of the capture in the query
 ---   -- typically useful info about the node:
@@ -700,14 +705,15 @@ end
 ---   local row1, col1, row2, col2 = node:range() -- range of the capture
 ---   -- ... use the info here ...
 --- end
---- </pre>
+--- ```
 ---
 ---@param node TSNode under which the search will occur
 ---@param source (integer|string) Source buffer or string to extract text from
 ---@param start integer Starting line for the search
 ---@param stop integer Stopping line for the search (end-exclusive)
 ---
----@return (fun(): integer, TSNode, TSMetadata): capture id, capture node, metadata
+---@return (fun(end_line: integer|nil): integer, TSNode, TSMetadata):
+---        capture id, capture node, metadata
 function Query:iter_captures(node, source, start, stop)
   if type(source) == 'number' and source == 0 then
     source = api.nvim_get_current_buf()
@@ -716,7 +722,7 @@ function Query:iter_captures(node, source, start, stop)
   start, stop = value_or_node_range(start, stop, node)
 
   local raw_iter = node:_rawquery(self.query, true, start, stop)
-  local function iter()
+  local function iter(end_line)
     local capture, captured_node, match = raw_iter()
     local metadata = {}
 
@@ -724,7 +730,10 @@ function Query:iter_captures(node, source, start, stop)
       local active = self:match_preds(match, match.pattern, source)
       match.active = active
       if not active then
-        return iter() -- tail call: try next match
+        if end_line and captured_node:range() > end_line then
+          return nil, captured_node, nil
+        end
+        return iter(end_line) -- tail call: try next match
       end
 
       self:apply_directives(match, match.pattern, source, metadata)
@@ -743,7 +752,8 @@ end
 --- If the query has more than one pattern, the capture table might be sparse
 --- and e.g. `pairs()` method should be used over `ipairs`.
 --- Here is an example iterating over all captures in every match:
---- <pre>lua
+---
+--- ```lua
 --- for pattern, match, metadata in cquery:iter_matches(tree:root(), bufnr, first, last) do
 ---   for id, node in pairs(match) do
 ---     local name = query.captures[id]
@@ -754,7 +764,7 @@ end
 ---     -- ... use the info here ...
 ---   end
 --- end
---- </pre>
+--- ```
 ---
 ---@param node TSNode under which the search will occur
 ---@param source (integer|string) Source buffer or string to search
@@ -824,11 +834,24 @@ end
 --- Omnifunc for completing node names and predicates in treesitter queries.
 ---
 --- Use via
---- <pre>lua
----   vim.bo.omnifunc = 'v:lua.vim.treesitter.query.omnifunc'
---- </pre>
+---
+--- ```lua
+--- vim.bo.omnifunc = 'v:lua.vim.treesitter.query.omnifunc'
+--- ```
+---
 function M.omnifunc(findstart, base)
   return require('vim.treesitter._query_linter').omnifunc(findstart, base)
+end
+
+--- Open a window for live editing of a treesitter query.
+---
+--- Can also be shown with `:EditQuery`. *:EditQuery*
+---
+--- Note that the editor opens a scratch buffer, and so queries aren't persisted on disk.
+---
+--- @param lang? string language to open the query editor for. If omitted, inferred from the current buffer's filetype.
+function M.edit(lang)
+  require('vim.treesitter.dev').edit_query(lang)
 end
 
 return M

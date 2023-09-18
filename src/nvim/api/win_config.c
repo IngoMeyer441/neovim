@@ -56,16 +56,19 @@
 /// this should not be used to specify arbitrary WM screen positions.
 ///
 /// Example (Lua): window-relative float
-/// <pre>lua
-///     vim.api.nvim_open_win(0, false,
-///       {relative='win', row=3, col=3, width=12, height=3})
-/// </pre>
+///
+/// ```lua
+/// vim.api.nvim_open_win(0, false,
+///   {relative='win', row=3, col=3, width=12, height=3})
+/// ```
 ///
 /// Example (Lua): buffer-relative float (travels as buffer is scrolled)
-/// <pre>lua
-///     vim.api.nvim_open_win(0, false,
-///       {relative='win', width=12, height=3, bufpos={100,10}})
-/// </pre>
+///
+/// ```lua
+/// vim.api.nvim_open_win(0, false,
+///   {relative='win', width=12, height=3, bufpos={100,10}})
+/// })
+/// ```
 ///
 /// @param buffer Buffer to display, or 0 for current buffer
 /// @param enter  Enter the window (make it the current window)
@@ -190,7 +193,8 @@ Window nvim_open_win(Buffer buffer, Boolean enter, Dict(float_config) *config, E
   }
   // autocmds in win_enter or win_set_buf below may close the window
   if (win_valid(wp) && buffer > 0) {
-    win_set_buf(wp, buf, fconfig.noautocmd, err);
+    Boolean noautocmd = !enter || fconfig.noautocmd;
+    win_set_buf(wp, buf, noautocmd, err);
   }
   if (!win_valid(wp)) {
     api_set_error(err, kErrorTypeException, "Window was closed immediately");
