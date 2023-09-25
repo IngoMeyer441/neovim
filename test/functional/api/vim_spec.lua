@@ -1350,12 +1350,59 @@ describe('API', function()
     end)
 
     it('nvim_get_vvar, nvim_set_vvar', function()
-      -- Set readonly v: var.
-      eq('Key is read-only: count',
-        pcall_err(request, 'nvim_set_vvar', 'count', 42))
-      -- Set writable v: var.
+      eq('Key is read-only: count', pcall_err(request, 'nvim_set_vvar', 'count', 42))
+      eq('Dictionary is locked', pcall_err(request, 'nvim_set_vvar', 'nosuchvar', 42))
       meths.set_vvar('errmsg', 'set by API')
       eq('set by API', meths.get_vvar('errmsg'))
+      meths.set_vvar('errmsg', 42)
+      eq('42', eval('v:errmsg'))
+      meths.set_vvar('oldfiles', { 'one', 'two' })
+      eq({ 'one', 'two' }, eval('v:oldfiles'))
+      meths.set_vvar('oldfiles', {})
+      eq({}, eval('v:oldfiles'))
+      eq('Setting v:oldfiles to value with wrong type', pcall_err(meths.set_vvar, 'oldfiles', 'a'))
+      eq({}, eval('v:oldfiles'))
+
+      feed('i foo foo foo<Esc>0/foo<CR>')
+      eq({1, 1}, meths.win_get_cursor(0))
+      eq(1, eval('v:searchforward'))
+      feed('n')
+      eq({1, 5}, meths.win_get_cursor(0))
+      meths.set_vvar('searchforward', 0)
+      eq(0, eval('v:searchforward'))
+      feed('n')
+      eq({1, 1}, meths.win_get_cursor(0))
+      meths.set_vvar('searchforward', 1)
+      eq(1, eval('v:searchforward'))
+      feed('n')
+      eq({1, 5}, meths.win_get_cursor(0))
+
+      local screen = Screen.new(60, 3)
+      screen:set_default_attr_ids({
+        [0] = {bold = true, foreground = Screen.colors.Blue},
+        [1] = {background = Screen.colors.Yellow},
+      })
+      screen:attach()
+      eq(1, eval('v:hlsearch'))
+      screen:expect{grid=[[
+         {1:foo} {1:^foo} {1:foo}                                                |
+        {0:~                                                           }|
+                                                                    |
+      ]]}
+      meths.set_vvar('hlsearch', 0)
+      eq(0, eval('v:hlsearch'))
+      screen:expect{grid=[[
+         foo ^foo foo                                                |
+        {0:~                                                           }|
+                                                                    |
+      ]]}
+      meths.set_vvar('hlsearch', 1)
+      eq(1, eval('v:hlsearch'))
+      screen:expect{grid=[[
+         {1:foo} {1:^foo} {1:foo}                                                |
+        {0:~                                                           }|
+                                                                    |
+      ]]}
     end)
 
     it('vim_set_var returns the old value', function()
@@ -2006,6 +2053,19 @@ describe('API', function()
   end)
 
   describe('nvim_out_write', function()
+    local screen
+
+    before_each(function()
+      screen = Screen.new(40, 8)
+      screen:attach()
+      screen:set_default_attr_ids({
+        [0] = {bold = true, foreground = Screen.colors.Blue},
+        [1] = {bold = true, foreground = Screen.colors.SeaGreen},
+        [2] = {bold = true, reverse = true},
+        [3] = {foreground = Screen.colors.Blue},
+      })
+    end)
+
     it('prints long messages correctly #20534', function()
       exec([[
         set more
@@ -2026,14 +2086,7 @@ describe('API', function()
       eq('\naaa\n' .. ('a'):rep(5002) .. '\naaa', meths.get_var('out'))
     end)
 
-    it('blank line in message works', function()
-      local screen = Screen.new(40, 8)
-      screen:attach()
-      screen:set_default_attr_ids({
-        [0] = {bold = true, foreground = Screen.colors.Blue},
-        [1] = {bold = true, foreground = Screen.colors.SeaGreen},
-        [2] = {bold = true, reverse = true},
-      })
+    it('blank line in message', function()
       feed([[:call nvim_out_write("\na\n")<CR>]])
       screen:expect{grid=[[
                                                 |
@@ -2055,6 +2108,20 @@ describe('API', function()
         b                                       |
                                                 |
         c                                       |
+        {1:Press ENTER or type command to continue}^ |
+      ]]}
+    end)
+
+    it('NUL bytes in message', function()
+      feed([[:lua vim.api.nvim_out_write('aaa\0bbb\0\0ccc\nddd\0\0\0eee\n')<CR>]])
+      screen:expect{grid=[[
+                                                |
+        {0:~                                       }|
+        {0:~                                       }|
+        {0:~                                       }|
+        {2:                                        }|
+        aaa{3:^@}bbb{3:^@^@}ccc                         |
+        ddd{3:^@^@^@}eee                            |
         {1:Press ENTER or type command to continue}^ |
       ]]}
     end)
@@ -2145,6 +2212,20 @@ describe('API', function()
         {2:Press ENTER or type command to continue}^ |
       ]])
       feed('<cr>')  -- exit the press ENTER screen
+    end)
+
+    it('NUL bytes in message', function()
+      nvim_async('err_write', 'aaa\0bbb\0\0ccc\nddd\0\0\0eee\n')
+      screen:expect{grid=[[
+                                                |
+        {0:~                                       }|
+        {0:~                                       }|
+        {0:~                                       }|
+        {3:                                        }|
+        {1:aaa^@bbb^@^@ccc}                         |
+        {1:ddd^@^@^@eee}                            |
+        {2:Press ENTER or type command to continue}^ |
+      ]]}
     end)
   end)
 

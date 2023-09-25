@@ -5572,7 +5572,7 @@ M.funcs = {
   jobstart = {
     args = { 1, 2 },
     desc = [=[
-      Note: Prefer |vim.system()| in Lua.
+      Note: Prefer |vim.system()| in Lua (unless using the `pty` option).
 
       Spawns {cmd} as a job.
       If {cmd} is a List it runs directly (no 'shell').
@@ -10973,7 +10973,7 @@ M.funcs = {
           echo strutf16len('😊')		" returns 2
           echo strutf16len('ą́')		" returns 1
           echo strutf16len('ą́', v:true)	" returns 3
-
+      <
     ]=],
     name = 'strutf16len',
     params = { { 'string', 'string' }, { 'countcc', '0|1' } },

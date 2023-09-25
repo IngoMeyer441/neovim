@@ -4528,7 +4528,7 @@ function vim.fn.jobresize(job, width, height) end
 --- @return any
 function vim.fn.jobsend(...) end
 
---- Note: Prefer |vim.system()| in Lua.
+--- Note: Prefer |vim.system()| in Lua (unless using the `pty` option).
 ---
 --- Spawns {cmd} as a job.
 --- If {cmd} is a List it runs directly (no 'shell').
@@ -9192,6 +9192,7 @@ function vim.fn.strtrans(string) end
 ---     echo strutf16len('😊')    " returns 2
 ---     echo strutf16len('ą́')    " returns 1
 ---     echo strutf16len('ą́', v:true)  " returns 3
+--- <
 ---
 --- @param string string
 --- @param countcc? 0|1

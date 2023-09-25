@@ -906,7 +906,7 @@ void handle_did_throw(void)
   if (messages != NULL) {
     do {
       msglist_T *next = messages->next;
-      emsg(messages->msg);
+      emsg_multiline(messages->msg, messages->multiline);
       xfree(messages->msg);
       xfree(messages->sfile);
       xfree(messages);
@@ -4591,7 +4591,9 @@ static void ex_cquit(exarg_T *eap)
   FUNC_ATTR_NORETURN
 {
   // this does not always pass on the exit code to the Manx compiler. why?
-  getout(eap->addr_count > 0 ? (int)eap->line2 : EXIT_FAILURE);
+  int status = eap->addr_count > 0 ? (int)eap->line2 : EXIT_FAILURE;
+  ui_call_error_exit(status);
+  getout(status);
 }
 
 /// Do preparations for "qall" and "wqall".

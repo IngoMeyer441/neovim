@@ -4,6 +4,7 @@ source shared.vim
 source check.vim
 source term_util.vim
 source screendump.vim
+source vim9.vim
 source load.vim
 
 func s:cleanup_buffers() abort
@@ -3430,6 +3431,31 @@ func Test_autocmd_vimgrep()
   augroup aucmd_vimgrep
     au!
   augroup END
+endfunc
+
+func Test_closing_autocmd_window()
+  let lines =<< trim END
+      edit Xa.txt
+      tabnew Xb.txt
+      autocmd BufEnter Xa.txt unhide 1
+      doautoall BufEnter
+  END
+  call CheckScriptFailure(lines, 'E814:')
+  au! BufEnter
+  bwipe Xa.txt
+  bwipe Xb.txt
+endfunc
+
+func Test_switch_window_in_autocmd_window()
+  edit Xa.txt
+  tabnew Xb.txt
+  autocmd BufEnter Xa.txt wincmd w
+  doautoall BufEnter
+  au! BufEnter
+  bwipe Xa.txt
+  call assert_false(bufexists('Xa.txt'))
+  bwipe Xb.txt
+  call assert_false(bufexists('Xb.txt'))
 endfunc
 
 func Test_bufwipeout_changes_window()
