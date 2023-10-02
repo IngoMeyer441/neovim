@@ -941,6 +941,15 @@ describe('completion', function()
     end)
   end)
 
+  it('cmdline completion supports various string options', function()
+    eq('auto', funcs.getcompletion('set foldcolumn=', 'cmdline')[2])
+    eq({'nosplit', 'split'}, funcs.getcompletion('set inccommand=', 'cmdline'))
+    eq({'ver:3,hor:6', 'hor:', 'ver:'}, funcs.getcompletion('set mousescroll=', 'cmdline'))
+    eq('BS', funcs.getcompletion('set termpastefilter=', 'cmdline')[2])
+    eq('SpecialKey', funcs.getcompletion('set winhighlight=', 'cmdline')[1])
+    eq('SpecialKey', funcs.getcompletion('set winhighlight=NonText:', 'cmdline')[1])
+  end)
+
   describe('from the commandline window', function()
     it('is cleared after CTRL-C', function ()
       feed('q:')
@@ -1029,93 +1038,6 @@ describe('completion', function()
       {1:Xpayn          }{2: }                                            |
       {1:Xinity         }{2: }d URL in BACKERS.md.                        |
       {3:-- Keyword Local completion (^N^P) }{4:match 1 of 7}             |
-    ]])
-  end)
-
-  -- oldtest: Test_ChangedP()
-  it('TextChangedI and TextChangedP autocommands', function()
-    curbufmeths.set_lines(0, 1, false, { 'foo', 'bar', 'foobar'})
-    source([[
-      set complete=. completeopt=menuone
-      let g:foo = []
-      autocmd! TextChanged * :call add(g:foo, "N")
-      autocmd! TextChangedI * :call add(g:foo, "I")
-      autocmd! TextChangedP * :call add(g:foo, "P")
-      call cursor(3, 1)
-    ]])
-
-    command('let g:foo = []')
-    feed('o')
-    poke_eventloop()
-    feed('<esc>')
-    eq({'I'}, eval('g:foo'))
-
-    command('let g:foo = []')
-    feed('S')
-    poke_eventloop()
-    feed('f')
-    poke_eventloop()
-    eq({'I', 'I'}, eval('g:foo'))
-    feed('<esc>')
-
-    command('let g:foo = []')
-    feed('S')
-    poke_eventloop()
-    feed('f')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    eq({'I', 'I', 'P'}, eval('g:foo'))
-    feed('<esc>')
-
-    command('let g:foo = []')
-    feed('S')
-    poke_eventloop()
-    feed('f')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    eq({'I', 'I', 'P', 'P'}, eval('g:foo'))
-    feed('<esc>')
-
-    command('let g:foo = []')
-    feed('S')
-    poke_eventloop()
-    feed('f')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    eq({'I', 'I', 'P', 'P', 'P'}, eval('g:foo'))
-    feed('<esc>')
-
-    command('let g:foo = []')
-    feed('S')
-    poke_eventloop()
-    feed('f')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    feed('<C-N>')
-    poke_eventloop()
-    feed('<C-N>')
-    eq({'I', 'I', 'P', 'P', 'P', 'P'}, eval('g:foo'))
-    feed('<esc>')
-
-    eq({'foo', 'bar', 'foobar', 'foo'}, eval('getline(1, "$")'))
-
-    source([[
-      au! TextChanged
-      au! TextChangedI
-      au! TextChangedP
-      set complete&vim completeopt&vim
     ]])
   end)
 

@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,6 @@
 #include "nvim/cursor.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
@@ -34,6 +34,7 @@
 #include "nvim/message.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os_defs.h"
@@ -402,6 +403,7 @@ int spell_check_sps(void)
       if (*s != NUL && !ascii_isdigit(*s)) {
         f = -1;
       }
+      // Note: Keep this in sync with p_sps_values.
     } else if (strcmp(buf, "best") == 0) {
       f = SPS_BEST;
     } else if (strcmp(buf, "fast") == 0) {
@@ -526,10 +528,10 @@ void spell_suggest(int count)
                      true, need_cap, true);
 
   if (GA_EMPTY(&sug.su_ga)) {
-    msg(_("Sorry, no suggestions"));
+    msg(_("Sorry, no suggestions"), 0);
   } else if (count > 0) {
     if (count > sug.su_ga.ga_len) {
-      smsg(_("Sorry, only %" PRId64 " suggestions"),
+      smsg(0, _("Sorry, only %" PRId64 " suggestions"),
            (int64_t)sug.su_ga.ga_len);
     }
   } else {
@@ -1480,9 +1482,9 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char *fword, bool soun
           int j;
 
           // print the stack of changes that brought us here
-          smsg("------ %s -------", fword);
+          smsg(0, "------ %s -------", fword);
           for (j = 0; j < depth; j++) {
-            smsg("%s", changename[j]);
+            smsg(0, "%s", changename[j]);
           }
         }
 #endif

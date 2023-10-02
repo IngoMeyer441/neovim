@@ -1,13 +1,15 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
+#include <string.h>
 
 #include "nvim/api/buffer.h"
 #include "nvim/api/deprecated.h"
 #include "nvim/api/extmark.h"
+#include "nvim/api/keysets.h"
 #include "nvim/api/options.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
@@ -518,6 +520,7 @@ static int64_t convert_index(int64_t index)
 /// @return         Option Information
 Dictionary nvim_get_option_info(String name, Error *err)
   FUNC_API_SINCE(7)
+  FUNC_API_DEPRECATED_SINCE(11)
 {
   return get_vimoption(name, OPT_GLOBAL, curbuf, curwin, err);
 }
@@ -531,6 +534,7 @@ Dictionary nvim_get_option_info(String name, Error *err)
 /// @param[out] err Error details, if any
 void nvim_set_option(uint64_t channel_id, String name, Object value, Error *err)
   FUNC_API_SINCE(1)
+  FUNC_API_DEPRECATED_SINCE(11)
 {
   set_option_to(channel_id, NULL, SREQ_GLOBAL, name, value, err);
 }
@@ -543,6 +547,7 @@ void nvim_set_option(uint64_t channel_id, String name, Object value, Error *err)
 /// @return         Option value (global)
 Object nvim_get_option(String name, Arena *arena, Error *err)
   FUNC_API_SINCE(1)
+  FUNC_API_DEPRECATED_SINCE(11)
 {
   return get_option_from(NULL, SREQ_GLOBAL, name, err);
 }
@@ -556,6 +561,7 @@ Object nvim_get_option(String name, Arena *arena, Error *err)
 /// @return Option value
 Object nvim_buf_get_option(Buffer buffer, String name, Arena *arena, Error *err)
   FUNC_API_SINCE(1)
+  FUNC_API_DEPRECATED_SINCE(11)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
 
@@ -577,6 +583,7 @@ Object nvim_buf_get_option(Buffer buffer, String name, Arena *arena, Error *err)
 /// @param[out] err   Error details, if any
 void nvim_buf_set_option(uint64_t channel_id, Buffer buffer, String name, Object value, Error *err)
   FUNC_API_SINCE(1)
+  FUNC_API_DEPRECATED_SINCE(11)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
 
@@ -596,6 +603,7 @@ void nvim_buf_set_option(uint64_t channel_id, Buffer buffer, String name, Object
 /// @return Option value
 Object nvim_win_get_option(Window window, String name, Arena *arena, Error *err)
   FUNC_API_SINCE(1)
+  FUNC_API_DEPRECATED_SINCE(11)
 {
   win_T *win = find_window_by_handle(window, err);
 
@@ -617,6 +625,7 @@ Object nvim_win_get_option(Window window, String name, Arena *arena, Error *err)
 /// @param[out] err Error details, if any
 void nvim_win_set_option(uint64_t channel_id, Window window, String name, Object value, Error *err)
   FUNC_API_SINCE(1)
+  FUNC_API_DEPRECATED_SINCE(11)
 {
   win_T *win = find_window_by_handle(window, err);
 
@@ -722,7 +731,7 @@ static void set_option_to(uint64_t channel_id, void *to, int type, String name, 
              "Option '%s' value is out of range", name.data, {
       return;
     });
-    optval = NUMBER_OPTVAL(value.data.integer);
+    optval = NUMBER_OPTVAL((OptInt)value.data.integer);
   } else {
     VALIDATE(value.type == kObjectTypeString, "Option '%s' value must be String", name.data, {
       return;

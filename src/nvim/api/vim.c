@@ -14,6 +14,7 @@
 #include "lauxlib.h"
 #include "nvim/api/buffer.h"
 #include "nvim/api/deprecated.h"
+#include "nvim/api/keysets.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/dispatch.h"
@@ -26,12 +27,13 @@
 #include "nvim/channel.h"
 #include "nvim/context.h"
 #include "nvim/cursor.h"
+#include "nvim/decoration.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
+#include "nvim/fold.h"
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
@@ -53,6 +55,7 @@
 #include "nvim/msgpack_rpc/unpacker.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os_defs.h"
@@ -151,6 +154,7 @@ Dictionary nvim_get_hl(Integer ns_id, Dict(get_highlight) *opts, Arena *arena, E
 ///                - cterm: cterm attribute map, like |highlight-args|. If not set,
 ///                         cterm attributes will match those from the attribute map
 ///                         documented above.
+///                - force: if true force update the highlight group when it exists.
 /// @param[out] err Error details, if any
 ///
 // TODO(bfredl): val should take update vs reset flag
@@ -166,6 +170,29 @@ void nvim_set_hl(Integer ns_id, String name, Dict(highlight) *val, Error *err)
   HlAttrs attrs = dict2hlattrs(val, true, &link_id, err);
   if (!ERROR_SET(err)) {
     ns_hl_def((NS)ns_id, hl_id, attrs, link_id, val);
+  }
+}
+
+/// Gets the active highlight namespace.
+///
+/// @param opts Optional parameters
+///           - winid: (number) |window-ID| for retrieving a window's highlight
+///             namespace. A value of -1 is returned when |nvim_win_set_hl_ns()|
+///             has not been called for the window (or was called with a namespace
+///             of -1).
+/// @param[out] err Error details, if any
+/// @return Namespace id, or -1
+Integer nvim_get_hl_ns(Dict(get_ns) *opts, Error *err)
+  FUNC_API_SINCE(12)
+{
+  if (HAS_KEY(opts, get_ns, winid)) {
+    win_T *win = find_window_by_handle(opts->winid, err);
+    if (!win) {
+      return 0;
+    }
+    return win->w_ns_hl;
+  } else {
+    return ns_hl_global;
   }
 }
 
@@ -1698,21 +1725,26 @@ static void write_msg(String message, bool to_err, bool writeln)
 {
   static StringBuilder out_line_buf = KV_INITIAL_VALUE;
   static StringBuilder err_line_buf = KV_INITIAL_VALUE;
+  StringBuilder *line_buf = to_err ? &err_line_buf : &out_line_buf;
 
-#define PUSH_CHAR(c, line_buf, msg) \
-  if (kv_max(line_buf) == 0) { \
-    kv_resize(line_buf, LINE_BUFFER_MIN_SIZE); \
+#define PUSH_CHAR(c) \
+  if (kv_max(*line_buf) == 0) { \
+    kv_resize(*line_buf, LINE_BUFFER_MIN_SIZE); \
   } \
   if (c == NL) { \
-    kv_push(line_buf, NUL); \
-    msg(line_buf.items); \
+    kv_push(*line_buf, NUL); \
+    if (to_err) { \
+      emsg(line_buf->items); \
+    } else { \
+      msg(line_buf->items, 0); \
+    } \
     msg_didout = true; \
-    kv_drop(line_buf, kv_size(line_buf)); \
-    kv_resize(line_buf, LINE_BUFFER_MIN_SIZE); \
+    kv_drop(*line_buf, kv_size(*line_buf)); \
+    kv_resize(*line_buf, LINE_BUFFER_MIN_SIZE); \
   } else if (c == NUL) { \
-    kv_push(line_buf, NL); \
+    kv_push(*line_buf, NL); \
   } else { \
-    kv_push(line_buf, c); \
+    kv_push(*line_buf, c); \
   }
 
   no_wait_return++;
@@ -1720,18 +1752,10 @@ static void write_msg(String message, bool to_err, bool writeln)
     if (got_int) {
       break;
     }
-    if (to_err) {
-      PUSH_CHAR(message.data[i], err_line_buf, emsg);
-    } else {
-      PUSH_CHAR(message.data[i], out_line_buf, msg);
-    }
+    PUSH_CHAR(message.data[i]);
   }
   if (writeln) {
-    if (to_err) {
-      PUSH_CHAR(NL, err_line_buf, emsg);
-    } else {
-      PUSH_CHAR(NL, out_line_buf, msg);
-    }
+    PUSH_CHAR(NL);
   }
   no_wait_return--;
   msg_end();

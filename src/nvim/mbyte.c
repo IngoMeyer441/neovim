@@ -31,6 +31,7 @@
 #include <iconv.h>
 #include <locale.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,7 @@
 #include "nvim/ascii.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval/typval.h"
@@ -59,7 +61,7 @@
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
 #include "nvim/os/os_defs.h"
@@ -1527,7 +1529,7 @@ void show_utf8(void)
   char *line = get_cursor_pos_ptr();
   int len = utfc_ptr2len(line);
   if (len == 0) {
-    msg("NUL");
+    msg("NUL", 0);
     return;
   }
 
@@ -1552,7 +1554,7 @@ void show_utf8(void)
     }
   }
 
-  msg(IObuff);
+  msg(IObuff, 0);
 }
 
 /// Return offset from "p" to the start of a character, including composing characters.
@@ -2828,4 +2830,15 @@ void f_charclass(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     return;
   }
   rettv->vval.v_number = mb_get_class(argvars[0].vval.v_string);
+}
+
+/// Function given to ExpandGeneric() to obtain the possible arguments of the
+/// encoding options.
+char *get_encoding_name(expand_T *xp FUNC_ATTR_UNUSED, int idx)
+{
+  if (idx >= (int)ARRAY_SIZE(enc_canon_table)) {
+    return NULL;
+  }
+
+  return (char *)enc_canon_table[idx].name;
 }

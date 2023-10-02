@@ -23,7 +23,6 @@
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/window.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
@@ -33,6 +32,7 @@
 #include "nvim/ex_getln.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
+#include "nvim/garray.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/help.h"
@@ -41,13 +41,14 @@
 #include "nvim/macros.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
-#include "nvim/memfile_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fs_defs.h"
 #include "nvim/os/input.h"
@@ -3132,7 +3133,7 @@ static void qf_list_entry(qfline_T *qfp, int qf_idx, bool cursel)
   }
 
   msg_putchar('\n');
-  msg_outtrans_attr(IObuff, cursel ? HL_ATTR(HLF_QFL) : qfFileAttr);
+  msg_outtrans(IObuff, cursel ? HL_ATTR(HLF_QFL) : qfFileAttr);
 
   if (qfp->qf_lnum != 0) {
     msg_puts_attr(":", qfSepAttr);
@@ -3308,7 +3309,7 @@ static void qf_msg(qf_info_T *qi, int which, char *lead)
     xstrlcat(buf, title, IOSIZE);
   }
   trunc_string(buf, buf, Columns - 1, IOSIZE);
-  msg(buf);
+  msg(buf, 0);
 }
 
 /// ":colder [count]": Up in the quickfix stack.
@@ -3367,7 +3368,7 @@ void qf_history(exarg_T *eap)
   }
 
   if (qf_stack_empty(qi)) {
-    msg(_("No entries"));
+    msg(_("No entries"), 0);
   } else {
     for (int i = 0; i < qi->qf_listcount; i++) {
       qf_msg(qi, i, i == qi->qf_curlist ? "> " : "  ");
@@ -4317,7 +4318,7 @@ static char *make_get_fullcmd(const char *makecmd, const char *fname)
   }
   msg_start();
   msg_puts(":!");
-  msg_outtrans(cmd);  // show what we are doing
+  msg_outtrans(cmd, 0);  // show what we are doing
 
   return cmd;
 }
@@ -5168,9 +5169,9 @@ static void vgr_display_fname(char *fname)
   msg_start();
   char *p = msg_strtrunc(fname, true);
   if (p == NULL) {
-    msg_outtrans(fname);
+    msg_outtrans(fname, 0);
   } else {
-    msg_outtrans(p);
+    msg_outtrans(p, 0);
     xfree(p);
   }
   msg_clr_eos();
@@ -5187,7 +5188,7 @@ static buf_T *vgr_load_dummy_buf(char *fname, char *dirname_start, char *dirname
   // indent scripts, a great speed improvement.
   char *save_ei = au_event_disable(",Filetype");
 
-  long save_mls = p_mls;
+  OptInt save_mls = p_mls;
   p_mls = 0;
 
   // Load file into a buffer, so that 'fileencoding' is detected,
@@ -5458,7 +5459,7 @@ static int vgr_process_files(win_T *wp, qf_info_T *qi, vgr_args_T *cmd_args, boo
 
     if (buf == NULL) {
       if (!got_int) {
-        smsg(_("Cannot open file \"%s\""), fname);
+        smsg(0, _("Cannot open file \"%s\""), fname);
       }
     } else {
       // Try for a match in all lines of the buffer.

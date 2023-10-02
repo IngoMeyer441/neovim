@@ -33,7 +33,6 @@
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/extmark.h"
-#include "nvim/extmark_defs.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
 #include "nvim/garray.h"
@@ -48,6 +47,7 @@
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fs_defs.h"
 #include "nvim/os/os.h"
@@ -764,7 +764,7 @@ static int diff_write_buffer(buf_T *buf, mmfile_t *m, linenr_T start, linenr_T e
     buf->b_diff_failed = true;
     if (p_verbose > 0) {
       verbose_enter();
-      smsg(_("Not enough memory to use internal diff for buffer \"%s\""),
+      smsg(0, _("Not enough memory to use internal diff for buffer \"%s\""),
            buf->b_fname);
       verbose_leave();
     }
@@ -2467,6 +2467,7 @@ int diffopt_changed(void)
 
   char *p = p_dip;
   while (*p != NUL) {
+    // Note: Keep this in sync with p_dip_values
     if (strncmp(p, "filler", 6) == 0) {
       p += 6;
       diff_flags_new |= DIFF_FILLER;
@@ -2513,6 +2514,7 @@ int diffopt_changed(void)
       p += 8;
       diff_flags_new |= DIFF_INTERNAL;
     } else if (strncmp(p, "algorithm:", 10) == 0) {
+      // Note: Keep this in sync with p_dip_algorithm_values.
       p += 10;
       if (strncmp(p, "myers", 5) == 0) {
         p += 5;

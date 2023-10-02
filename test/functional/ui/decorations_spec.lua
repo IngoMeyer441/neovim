@@ -521,6 +521,72 @@ describe('decorations providers', function()
     ]]}
   end)
 
+  it('virtual text works with wrapped lines', function()
+    insert(mulholland)
+    feed('ggJj3JjJ')
+    setup_provider [[
+      local hl = api.nvim_get_hl_id_by_name "ErrorMsg"
+      local test_ns = api.nvim_create_namespace "mulholland"
+      function on_do(event, ...)
+        if event == "line" then
+          local win, buf, line = ...
+          api.nvim_buf_set_extmark(buf, test_ns, line, 0, {
+            virt_text = {{string.rep('/', line+1), 'ErrorMsg'}};
+            virt_text_pos='eol';
+            ephemeral = true;
+          })
+          api.nvim_buf_set_extmark(buf, test_ns, line, 6, {
+            virt_text = {{string.rep('*', line+1), 'ErrorMsg'}};
+            virt_text_pos='overlay';
+            ephemeral = true;
+          })
+          api.nvim_buf_set_extmark(buf, test_ns, line, 39, {
+            virt_text = {{string.rep('!', line+1), 'ErrorMsg'}};
+            virt_text_win_col=20;
+            ephemeral = true;
+          })
+          api.nvim_buf_set_extmark(buf, test_ns, line, 40, {
+            virt_text = {{string.rep('?', line+1), 'ErrorMsg'}};
+            virt_text_win_col=10;
+            ephemeral = true;
+          })
+          api.nvim_buf_set_extmark(buf, test_ns, line, 40, {
+            virt_text = {{string.rep(';', line+1), 'ErrorMsg'}};
+            virt_text_pos='overlay';
+            ephemeral = true;
+          })
+          api.nvim_buf_set_extmark(buf, test_ns, line, 40, {
+            virt_text = {{'+'}, {string.rep(' ', line+1), 'ErrorMsg'}};
+            virt_text_pos='right_align';
+            ephemeral = true;
+          })
+        end
+      end
+    ]]
+
+    screen:expect{grid=[[
+      // jus{2:*} to see if th{2:!}re was an accident |
+      {2:;}n Mulholl{2:?}nd Drive {2:/}                 +{2: }|
+      try_st{2:**}t(); bufref_{2:!!}save_buf; switch_b|
+      {2:;;}fer(&sav{2:??}buf, buf); {2://}            +{2:  }|
+      posp ={2:***}tmark(mark,{2:!!!}lse);^ restore_buf|
+      {2:;;;}(&save_{2:???});  {2:///}                +{2:   }|
+      {1:~                                       }|
+                                              |
+    ]]}
+    command('setlocal breakindent breakindentopt=shift:2')
+    screen:expect{grid=[[
+      // jus{2:*} to see if th{2:!}re was an accident |
+        {2:;}n Mulho{2:?}land Drive {2:/}               +{2: }|
+      try_st{2:**}t(); bufref_{2:!!}save_buf; switch_b|
+        {2:;;}fer(&s{2:??}e_buf, buf); {2://}          +{2:  }|
+      posp ={2:***}tmark(mark,{2:!!!}lse);^ restore_buf|
+        {2:;;;}(&sav{2:???}uf);  {2:///}              +{2:   }|
+      {1:~                                       }|
+                                              |
+    ]]}
+  end)
+
   it('can highlight beyond EOL', function()
     insert(mulholland)
     setup_provider [[
@@ -1963,23 +2029,20 @@ describe('extmark decorations', function()
 
   it('works with double width char and rightleft', function()
     screen:try_resize(50, 3)
-    insert('abcdefghij口klmnop')
+    insert('abcdefghij口klmnopqrstu口vwx口yz')
     feed('0')
     command('set rightleft')
     screen:expect{grid=[[
-                                      ponmlk口jihgfedcb^a|
+                        zy口xwv口utsrqponmlk口jihgfedcb^a|
       {1:                                                 ~}|
                                                         |
     ]]}
     meths.buf_set_extmark(0, ns, 0, 2, { virt_text = {{'overlayed', 'Underlined'}}, virt_text_pos = 'overlay' })
+    meths.buf_set_extmark(0, ns, 0, 14, { virt_text = {{'古', 'Underlined'}}, virt_text_pos = 'overlay' })
+    meths.buf_set_extmark(0, ns, 0, 20, { virt_text = {{'\t', 'Underlined'}}, virt_text_pos = 'overlay' })
+    meths.buf_set_extmark(0, ns, 0, 29, { virt_text = {{'古', 'Underlined'}}, virt_text_pos = 'overlay' })
     screen:expect{grid=[[
-                                      ponmlk {28:deyalrevo}b^a|
-      {1:                                                 ~}|
-                                                        |
-    ]]}
-    meths.buf_set_extmark(0, ns, 0, 15, { virt_text = {{'古', 'Underlined'}}, virt_text_pos = 'overlay' })
-    screen:expect{grid=[[
-                                      po{28:古}lk {28:deyalrevo}b^a|
+                        zy {28:古}wv {28:     }qpon{28:古}k {28:deyalrevo}b^a|
       {1:                                                 ~}|
                                                         |
     ]]}

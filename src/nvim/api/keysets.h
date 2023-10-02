@@ -113,6 +113,7 @@ typedef struct {
   String style;
   Boolean noautocmd;
   Boolean fixed;
+  Boolean hide;
 } Dict(float_config);
 
 typedef struct {
@@ -169,6 +170,7 @@ typedef struct {
   Integer blend;
   Boolean fg_indexed;
   Boolean bg_indexed;
+  Boolean force;
 } Dict(highlight);
 
 typedef struct {
@@ -193,6 +195,11 @@ typedef struct {
   Boolean link;
   Boolean create;
 } Dict(get_highlight);
+
+typedef struct {
+  OptionalKeys is_set__get_ns_;
+  Window winid;
+} Dict(get_ns);
 
 typedef struct {
   OptionalKeys is_set__win_text_height_;

@@ -115,6 +115,19 @@ typedef enum {
   VAR_BLOB,         ///< Blob, .v_blob is used.
 } VarType;
 
+/// Type values for type().
+enum {
+  VAR_TYPE_NUMBER  = 0,
+  VAR_TYPE_STRING  = 1,
+  VAR_TYPE_FUNC    = 2,
+  VAR_TYPE_LIST    = 3,
+  VAR_TYPE_DICT    = 4,
+  VAR_TYPE_FLOAT   = 5,
+  VAR_TYPE_BOOL    = 6,
+  VAR_TYPE_SPECIAL = 7,
+  VAR_TYPE_BLOB    = 10,
+};
+
 /// Structure that holds an internal variable value
 typedef struct {
   VarType v_type;               ///< Variable type.
@@ -273,6 +286,12 @@ typedef struct {
   linenr_T sc_lnum;  ///< line number
 } sctx_T;
 
+/// Stores an identifier of a script or channel that last set an option.
+typedef struct {
+  sctx_T script_ctx;       /// script context where the option was last set
+  uint64_t channel_id;     /// Only used when script_id is SID_API_CLIENT.
+} LastSet;
+
 /// Maximum number of function arguments
 enum { MAX_FUNC_ARGS = 20, };
 /// Short variable name length
@@ -366,13 +385,5 @@ typedef struct list_stack_S {
   list_T *list;
   struct list_stack_S *prev;
 } list_stack_T;
-
-/// Structure representing one list item, used for sort array.
-typedef struct {
-  listitem_T *item;  ///< Sorted list item.
-  int idx;  ///< Sorted list item index.
-} ListSortItem;
-
-typedef int (*ListSorter)(const void *, const void *);
 
 #endif  // NVIM_EVAL_TYPVAL_DEFS_H

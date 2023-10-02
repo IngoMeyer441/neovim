@@ -113,6 +113,7 @@ error('Cannot require a meta file')
 --- @field style? string
 --- @field noautocmd? boolean
 --- @field fixed? boolean
+--- @field hide? boolean
 
 --- @class vim.api.keyset.get_autocmds
 --- @field event? any
@@ -135,6 +136,9 @@ error('Cannot require a meta file')
 --- @field name? string
 --- @field link? boolean
 --- @field create? boolean
+
+--- @class vim.api.keyset.get_ns
+--- @field winid? integer
 
 --- @class vim.api.keyset.highlight
 --- @field bold? boolean
@@ -165,6 +169,7 @@ error('Cannot require a meta file')
 --- @field blend? integer
 --- @field fg_indexed? boolean
 --- @field bg_indexed? boolean
+--- @field force? boolean
 
 --- @class vim.api.keyset.highlight_cterm
 --- @field bold? boolean

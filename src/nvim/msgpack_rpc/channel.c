@@ -24,6 +24,7 @@
 #include "nvim/event/rstream.h"
 #include "nvim/event/stream.h"
 #include "nvim/event/wstream.h"
+#include "nvim/globals.h"
 #include "nvim/log.h"
 #include "nvim/main.h"
 #include "nvim/map.h"
@@ -348,6 +349,7 @@ static void parse_msgpack(Channel *channel)
                  "id %" PRIu32 ". Ensure the client is properly synchronized",
                  channel->id, (unsigned)channel->rpc.client_type, p->request_id);
         chan_close_with_error(channel, buf, LOGLVL_ERR);
+        return;
       }
       frame->returned = true;
       frame->errored = (p->error.type != kObjectTypeNil);

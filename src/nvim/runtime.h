@@ -5,10 +5,12 @@
 
 #include "klib/kvec.h"
 #include "nvim/autocmd.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_eval_defs.h"
 #include "nvim/garray.h"
+#include "nvim/option_defs.h"
 #include "nvim/pos.h"
 #include "nvim/types.h"
 

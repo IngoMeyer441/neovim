@@ -17,7 +17,6 @@
 #include "nvim/diff.h"
 #include "nvim/edit.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/extmark.h"
 #include "nvim/extmark_defs.h"
@@ -32,7 +31,7 @@
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/normal.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
@@ -40,7 +39,6 @@
 #include "nvim/sign.h"
 #include "nvim/strings.h"
 #include "nvim/textobject.h"
-#include "nvim/undo_defs.h"
 #include "nvim/vim.h"
 
 // This file contains routines to maintain and manipulate marks.
@@ -881,7 +879,7 @@ static void show_one_mark(int c, char *arg, pos_T *p, char *name_arg, int curren
       did_title = false;
     } else {
       if (arg == NULL) {
-        msg(_("No marks set"));
+        msg(_("No marks set"), 0);
       } else {
         semsg(_("E283: No marks matching \"%s\""), arg);
       }
@@ -903,9 +901,9 @@ static void show_one_mark(int c, char *arg, pos_T *p, char *name_arg, int curren
       msg_putchar('\n');
       if (!got_int) {
         snprintf(IObuff, IOSIZE, " %c %6" PRIdLINENR " %4d ", c, p->lnum, p->col);
-        msg_outtrans(IObuff);
+        msg_outtrans(IObuff, 0);
         if (name != NULL) {
-          msg_outtrans_attr(name, current ? HL_ATTR(HLF_D) : 0);
+          msg_outtrans(name, current ? HL_ATTR(HLF_D) : 0);
         }
       }
     }
@@ -1033,10 +1031,9 @@ void ex_jumps(exarg_T *eap)
                i == curwin->w_jumplistidx ? '>' : ' ',
                i > curwin->w_jumplistidx ? i - curwin->w_jumplistidx : curwin->w_jumplistidx - i,
                curwin->w_jumplist[i].fmark.mark.lnum, curwin->w_jumplist[i].fmark.mark.col);
-      msg_outtrans(IObuff);
-      msg_outtrans_attr(name,
-                        curwin->w_jumplist[i].fmark.fnum == curbuf->b_fnum
-                        ? HL_ATTR(HLF_D) : 0);
+      msg_outtrans(IObuff, 0);
+      msg_outtrans(name,
+                   curwin->w_jumplist[i].fmark.fnum == curbuf->b_fnum ? HL_ATTR(HLF_D) : 0);
       xfree(name);
       os_breakcheck();
     }
@@ -1072,9 +1069,9 @@ void ex_changes(exarg_T *eap)
                i > curwin->w_changelistidx ? i - curwin->w_changelistidx : curwin->w_changelistidx - i,
                (long)curbuf->b_changelist[i].mark.lnum,
                curbuf->b_changelist[i].mark.col);
-      msg_outtrans(IObuff);
+      msg_outtrans(IObuff, 0);
       name = mark_line(&curbuf->b_changelist[i].mark, 17);
-      msg_outtrans_attr(name, HL_ATTR(HLF_D));
+      msg_outtrans(name, HL_ATTR(HLF_D));
       xfree(name);
       os_breakcheck();
     }

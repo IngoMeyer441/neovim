@@ -25,7 +25,6 @@
 #include "nvim/eval/decode.h"
 #include "nvim/eval/encode.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/fileio.h"
@@ -43,6 +42,7 @@
 #include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/fileio.h"
 #include "nvim/os/fs_defs.h"
 #include "nvim/os/os.h"
@@ -795,7 +795,7 @@ static int shada_read_file(const char *const file, const int flags)
 
   if (p_verbose > 1) {
     verbose_enter();
-    smsg(_("Reading ShaDa file \"%s\"%s%s%s%s"),
+    smsg(0, _("Reading ShaDa file \"%s\"%s%s%s%s"),
          fname,
          (flags & kShaDaWantInfo) ? _(" info") : "",
          (flags & kShaDaWantMarks) ? _(" marks") : "",
@@ -1564,15 +1564,14 @@ static ShaDaWriteResult shada_pack_entry(msgpack_packer *const packer, ShadaEntr
     break;
   }
   case kSDItemVariable: {
-    if (entry.data.global_var.value.v_type == VAR_TYPE_BLOB) {
+    if (entry.data.global_var.value.v_type == VAR_BLOB) {
       // Strings and Blobs both pack as msgpack BINs; differentiate them by
       // storing an additional VAR_TYPE_BLOB element alongside Blobs
       list_T *const list = tv_list_alloc(1);
       tv_list_append_number(list, VAR_TYPE_BLOB);
       entry.data.global_var.additional_elements = list;
     }
-    const size_t arr_size = 2 + (size_t)(
-                                         tv_list_len(entry.data.global_var.additional_elements));
+    const size_t arr_size = 2 + (size_t)(tv_list_len(entry.data.global_var.additional_elements));
     msgpack_pack_array(spacker, arr_size);
     const String varname = cstr_as_string(entry.data.global_var.name);
     PACK_BIN(varname);
@@ -2506,7 +2505,7 @@ static ShaDaWriteResult shada_write(ShaDaWriteDef *const sd_writer, ShaDaReadDef
   for (HistoryType i = 0; i < HIST_COUNT; i++) {
     long num_saved = get_shada_parameter(hist_type2char(i));
     if (num_saved == -1) {
-      num_saved = p_hi;
+      num_saved = (long)p_hi;
     }
     if (num_saved > 0) {
       dump_history = true;
@@ -3049,7 +3048,7 @@ shada_write_file_nomerge: {}
 
   if (p_verbose > 1) {
     verbose_enter();
-    smsg(_("Writing ShaDa file \"%s\""), fname);
+    smsg(0, _("Writing ShaDa file \"%s\""), fname);
     verbose_leave();
   }
 

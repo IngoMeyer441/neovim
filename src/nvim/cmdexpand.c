@@ -4,7 +4,6 @@
 // cmdexpand.c: functions for command-line completion
 
 #include <assert.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -49,6 +48,7 @@
 #include "nvim/menu.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/lang.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
@@ -68,9 +68,6 @@
 #include "nvim/usercmd.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
-
-/// Type used by ExpandGeneric()
-typedef char *(*CompleteListItemGetter)(expand_T *, int);
 
 /// Type used by call_user_expand_func
 typedef void *(*user_expand_func_T)(const char *, int, typval_T *);
@@ -107,6 +104,8 @@ static bool cmdline_fuzzy_completion_supported(const expand_T *const xp)
          && xp->xp_context != EXPAND_HELP
          && xp->xp_context != EXPAND_LUA
          && xp->xp_context != EXPAND_OLD_SETTING
+         && xp->xp_context != EXPAND_STRING_SETTING
+         && xp->xp_context != EXPAND_SETTING_SUBTRACT
          && xp->xp_context != EXPAND_OWNSYNTAX
          && xp->xp_context != EXPAND_PACKADD
          && xp->xp_context != EXPAND_RUNTIME
@@ -598,17 +597,17 @@ static void redraw_wildmenu(expand_T *xp, int num_matches, char **matches, int m
 
     // Tricky: wildmenu can be drawn either over a status line, or at empty
     // scrolled space in the message output
-    ScreenGrid *grid = (wild_menu_showing == WM_SCROLLED)
-                        ? &msg_grid_adj : &default_grid;
+    grid_line_start((wild_menu_showing == WM_SCROLLED) ? &msg_grid_adj : &default_grid, row);
 
-    grid_puts(grid, buf, -1, row, 0, attr);
+    grid_line_puts(0, buf, -1, attr);
     if (selstart != NULL && highlight) {
       *selend = NUL;
-      grid_puts(grid, selstart, -1, row, selstart_col, HL_ATTR(HLF_WM));
+      grid_line_puts(selstart_col, selstart, -1, HL_ATTR(HLF_WM));
     }
 
-    grid_fill(grid, row, row + 1, clen, Columns,
-              fillchar, fillchar, attr);
+    grid_line_fill(clen, Columns, fillchar, attr);
+
+    grid_line_flush();
   }
 
   win_redraw_last_status(topframe);
@@ -617,7 +616,7 @@ static void redraw_wildmenu(expand_T *xp, int num_matches, char **matches, int m
 
 /// Get the next or prev cmdline completion match. The index of the match is set
 /// in "xp->xp_selected"
-static char *get_next_or_prev_match(int mode, expand_T *xp, char *orig_save)
+static char *get_next_or_prev_match(int mode, expand_T *xp)
 {
   if (xp->xp_numfiles <= 0) {
     return NULL;
@@ -677,14 +676,14 @@ static char *get_next_or_prev_match(int mode, expand_T *xp, char *orig_save)
 
   // When wrapping around, return the original string, set findex to -1.
   if (findex < 0) {
-    if (orig_save == NULL) {
+    if (xp->xp_orig == NULL) {
       findex = xp->xp_numfiles - 1;
     } else {
       findex = -1;
     }
   }
   if (findex >= xp->xp_numfiles) {
-    if (orig_save == NULL) {
+    if (xp->xp_orig == NULL) {
       findex = 0;
     } else {
       findex = -1;
@@ -698,7 +697,7 @@ static char *get_next_or_prev_match(int mode, expand_T *xp, char *orig_save)
   }
   xp->xp_selected = findex;
 
-  return xstrdup(findex == -1 ? orig_save : xp->xp_files[findex]);
+  return xstrdup(findex == -1 ? xp->xp_orig : xp->xp_files[findex]);
 }
 
 /// Start the command-line expansion and get the matches.
@@ -805,8 +804,8 @@ static char *find_longest_match(expand_T *xp, int options)
 /// Return NULL for failure.
 ///
 /// "orig" is the originally expanded string, copied to allocated memory.  It
-/// should either be kept in orig_save or freed.  When "mode" is WILD_NEXT or
-/// WILD_PREV "orig" should be NULL.
+/// should either be kept in "xp->xp_orig" or freed.  When "mode" is WILD_NEXT
+/// or WILD_PREV "orig" should be NULL.
 ///
 /// Results are cached in xp->xp_files and xp->xp_numfiles, except when "mode"
 /// is WILD_EXPAND_FREE or WILD_ALL.
@@ -841,21 +840,20 @@ static char *find_longest_match(expand_T *xp, int options)
 char *ExpandOne(expand_T *xp, char *str, char *orig, int options, int mode)
 {
   char *ss = NULL;
-  static char *orig_save = NULL;      // kept value of orig
   int orig_saved = false;
 
   // first handle the case of using an old match
   if (mode == WILD_NEXT || mode == WILD_PREV
       || mode == WILD_PAGEUP || mode == WILD_PAGEDOWN
       || mode == WILD_PUM_WANT) {
-    return get_next_or_prev_match(mode, xp, orig_save);
+    return get_next_or_prev_match(mode, xp);
   }
 
   if (mode == WILD_CANCEL) {
-    ss = xstrdup(orig_save ? orig_save : "");
+    ss = xstrdup(xp->xp_orig ? xp->xp_orig : "");
   } else if (mode == WILD_APPLY) {
     ss = xstrdup(xp->xp_selected == -1
-                 ? (orig_save ? orig_save : "")
+                 ? (xp->xp_orig ? xp->xp_orig : "")
                  : xp->xp_files[xp->xp_selected]);
   }
 
@@ -863,7 +861,7 @@ char *ExpandOne(expand_T *xp, char *str, char *orig, int options, int mode)
   if (xp->xp_numfiles != -1 && mode != WILD_ALL && mode != WILD_LONGEST) {
     FreeWild(xp->xp_numfiles, xp->xp_files);
     xp->xp_numfiles = -1;
-    XFREE_CLEAR(orig_save);
+    XFREE_CLEAR(xp->xp_orig);
 
     // The entries from xp_files may be used in the PUM, remove it.
     if (compl_match_array != NULL) {
@@ -877,8 +875,8 @@ char *ExpandOne(expand_T *xp, char *str, char *orig, int options, int mode)
   }
 
   if (xp->xp_numfiles == -1 && mode != WILD_APPLY && mode != WILD_CANCEL) {
-    xfree(orig_save);
-    orig_save = orig;
+    xfree(xp->xp_orig);
+    xp->xp_orig = orig;
     orig_saved = true;
 
     ss = ExpandOne_start(mode, xp, str, options);
@@ -927,7 +925,7 @@ char *ExpandOne(expand_T *xp, char *str, char *orig, int options, int mode)
     ExpandCleanup(xp);
   }
 
-  // Free "orig" if it wasn't stored in "orig_save".
+  // Free "orig" if it wasn't stored in "xp->xp_orig".
   if (!orig_saved) {
     xfree(orig);
   }
@@ -952,6 +950,7 @@ void ExpandCleanup(expand_T *xp)
     FreeWild(xp->xp_numfiles, xp->xp_files);
     xp->xp_numfiles = -1;
   }
+  XFREE_CLEAR(xp->xp_orig);
 }
 
 /// Display one line of completion matches. Multiple matches are displayed in
@@ -971,12 +970,12 @@ static void showmatches_oneline(expand_T *xp, char **matches, int numMatches, in
   int lastlen = 999;
   for (int j = linenr; j < numMatches; j += lines) {
     if (xp->xp_context == EXPAND_TAGS_LISTFILES) {
-      msg_outtrans_attr(matches[j], HL_ATTR(HLF_D));
+      msg_outtrans(matches[j], HL_ATTR(HLF_D));
       p = matches[j] + strlen(matches[j]) + 1;
       msg_advance(maxlen + 1);
       msg_puts(p);
       msg_advance(maxlen + 3);
-      msg_outtrans_long_attr(p + 2, HL_ATTR(HLF_D));
+      msg_outtrans_long(p + 2, HL_ATTR(HLF_D));
       break;
     }
     for (int i = maxlen - lastlen; --i >= 0;) {
@@ -1013,7 +1012,7 @@ static void showmatches_oneline(expand_T *xp, char **matches, int numMatches, in
       isdir = false;
       p = SHOW_MATCH(j);
     }
-    lastlen = msg_outtrans_attr(p, isdir ? dir_attr : 0);
+    lastlen = msg_outtrans(p, isdir ? dir_attr : 0);
   }
   if (msg_col > 0) {  // when not wrapped around
     msg_clr_eos();
@@ -2599,7 +2598,7 @@ static int ExpandOther(char *pat, expand_T *xp, regmatch_T *rmp, char ***matches
     { EXPAND_MENUNAMES, get_menu_names, false, true },
     { EXPAND_SYNTAX, get_syntax_name, true, true },
     { EXPAND_SYNTIME, get_syntime_arg, true, true },
-    { EXPAND_HIGHLIGHT, (ExpandFunc)get_highlight_name, true, false },
+    { EXPAND_HIGHLIGHT, get_highlight_name, true, false },
     { EXPAND_EVENTS, expand_get_event_name, true, false },
     { EXPAND_AUGROUP, expand_get_augroup_name, true, false },
     { EXPAND_SIGN, get_sign_name, true, true },
@@ -2694,8 +2693,7 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
     return OK;
   }
   if (xp->xp_context == EXPAND_OLD_SETTING) {
-    ExpandOldSetting(numMatches, matches);
-    return OK;
+    return ExpandOldSetting(numMatches, matches);
   }
   if (xp->xp_context == EXPAND_BUFFERS) {
     return ExpandBufnames(pat, numMatches, matches, options);
@@ -2765,6 +2763,10 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
   if (xp->xp_context == EXPAND_SETTINGS
       || xp->xp_context == EXPAND_BOOL_SETTINGS) {
     ret = ExpandSettings(xp, &regmatch, pat, numMatches, matches, fuzzy);
+  } else if (xp->xp_context == EXPAND_STRING_SETTING) {
+    ret = ExpandStringSetting(xp, &regmatch, numMatches, matches);
+  } else if (xp->xp_context == EXPAND_SETTING_SUBTRACT) {
+    ret = ExpandSettingSubtract(xp, &regmatch, numMatches, matches);
   } else if (xp->xp_context == EXPAND_MAPPINGS) {
     ret = ExpandMappings(pat, &regmatch, numMatches, matches);
   } else if (xp->xp_context == EXPAND_USER_DEFINED) {
@@ -2788,9 +2790,8 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
 /// program.  Matching strings are copied into an array, which is returned.
 ///
 /// @param func  returns a string from the list
-static void ExpandGeneric(const char *const pat, expand_T *xp, regmatch_T *regmatch,
-                          char ***matches, int *numMatches, CompleteListItemGetter func,
-                          int escaped)
+void ExpandGeneric(const char *const pat, expand_T *xp, regmatch_T *regmatch, char ***matches,
+                   int *numMatches, CompleteListItemGetter func, bool escaped)
 {
   const bool fuzzy = cmdline_fuzzy_complete(pat);
   *matches = NULL;
@@ -2863,6 +2864,7 @@ static void ExpandGeneric(const char *const pat, expand_T *xp, regmatch_T *regma
   // in the specified order.
   const bool sort_matches = !fuzzy
                             && xp->xp_context != EXPAND_MENUNAMES
+                            && xp->xp_context != EXPAND_STRING_SETTING
                             && xp->xp_context != EXPAND_MENUS
                             && xp->xp_context != EXPAND_SCRIPTNAMES;
 
@@ -3221,8 +3223,7 @@ void globpath(char *path, char *file, garray_T *ga, int expand_options, bool dir
 
       char **p;
       int num_p = 0;
-      (void)ExpandFromContext(&xpc, buf, &p, &num_p,
-                              WILD_SILENT | expand_options);
+      (void)ExpandFromContext(&xpc, buf, &p, &num_p, WILD_SILENT | expand_options);
       if (num_p > 0) {
         ExpandEscape(&xpc, buf, num_p, p, WILD_SILENT | expand_options);
 

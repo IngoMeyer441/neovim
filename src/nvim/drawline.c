@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +26,6 @@
 #include "nvim/eval.h"
 #include "nvim/extmark_defs.h"
 #include "nvim/fold.h"
-#include "nvim/garray.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
@@ -38,6 +38,7 @@
 #include "nvim/memory.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/plines.h"
 #include "nvim/pos.h"
 #include "nvim/quickfix.h"
@@ -207,6 +208,16 @@ static void margin_columns_win(win_T *wp, int *left_col, int *right_col)
   prev_col_off = cur_col_off;
 }
 
+/// If one half of a double-width char will be overwritten,
+/// change the other half to a space so that grid redraws properly.
+static void line_check_overwrite(schar_T *dest, int cells, int maxcells, bool rl)
+{
+  assert(cells > 0);
+  if (cells < maxcells && dest[rl ? -cells + 1 : cells] == 0) {
+    dest[rl ? -cells : cells] = schar_from_ascii(' ');
+  }
+}
+
 /// Put a single char from an UTF-8 buffer into a line buffer.
 ///
 /// Handles composing chars and arabic shaping state.
@@ -216,12 +227,17 @@ static int line_putchar(buf_T *buf, LineState *s, schar_T *dest, int maxcells, b
   int cells = utf_ptr2cells(p);
   int c_len = utfc_ptr2len(p);
   int u8c, u8cc[MAX_MCO];
+  assert(maxcells > 0);
   if (cells > maxcells) {
     return -1;
   }
   u8c = utfc_ptr2char(p, u8cc);
   if (*p == TAB) {
     cells = MIN(tabstop_padding(vcol, buf->b_p_ts, buf->b_p_vts_array), maxcells);
+  }
+
+  line_check_overwrite(dest, cells, maxcells, rl);
+  if (*p == TAB) {
     for (int c = 0; c < cells; c++) {
       dest[rl ? -c : c] = schar_from_ascii(' ');
     }
@@ -304,8 +320,9 @@ static void draw_virt_text(win_T *wp, buf_T *buf, int col_off, int *end_col, int
       kv_push(win_extmark_arr, m);
     }
     if (kv_size(item->decor.virt_text)) {
+      int vcol = wp->w_p_rl ? col_off - item->draw_col : item->draw_col - col_off;
       col = draw_virt_text_item(buf, item->draw_col, item->decor.virt_text,
-                                item->decor.hl_mode, max_col, item->draw_col - col_off, wp->w_p_rl);
+                                item->decor.hl_mode, max_col, vcol, wp->w_p_rl);
     }
     item->draw_col = INT_MIN;  // deactivate
     if (item->decor.virt_text_pos == kVTEndOfLine && do_eol) {
@@ -356,13 +373,15 @@ static int draw_virt_text_item(buf_T *buf, int col, VirtText vt, HlMode hl_mode,
       attr = virt_attr;
     }
     schar_T dummy[2];
-    bool rl_overwrote_double_width = linebuf_char[col] == 0;
+    int maxcells = rl ? col - max_col : max_col - col;
     int cells = line_putchar(buf, &s, through ? dummy : &linebuf_char[col],
-                             rl ? col - max_col : max_col - col, rl, vcol);
+                             maxcells, rl, vcol);
     // If we failed to emit a char, we still need to put a space and advance.
     if (cells < 1) {
-      linebuf_char[col] = schar_from_ascii(' ');
+      assert(!through);
       cells = 1;
+      line_check_overwrite(&linebuf_char[col], cells, maxcells, rl);
+      linebuf_char[col] = schar_from_ascii(' ');
     }
     for (int c = 0; c < cells; c++) {
       linebuf_attr[col] = attr;
@@ -371,13 +390,6 @@ static int draw_virt_text_item(buf_T *buf, int col, VirtText vt, HlMode hl_mode,
       } else {
         col++;
       }
-    }
-    // If one half of a double-width char is overwritten,
-    // change the other half to a space so that grid redraws properly,
-    // but don't advance the current column.
-    if ((rl && col > max_col && rl_overwrote_double_width)
-        || (!rl && col < max_col && linebuf_char[col] == 0)) {
-      linebuf_char[col] = schar_from_ascii(' ');
     }
     vcol += cells;
   }
@@ -1814,7 +1826,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
          || (number_only && wlv.draw_state > WL_STC))
         && wlv.filler_todo <= 0) {
       draw_virt_text(wp, buf, win_col_offset, &wlv.col, wp->w_p_rl ? -1 : grid->cols, wlv.row);
-      grid_put_linebuf(grid, wlv.row, 0, wlv.col, -grid->cols, wp->w_p_rl, wp, bg_attr, false);
+      win_put_linebuf(wp, wlv.row, 0, wlv.col, -grid->cols, bg_attr, false);
       // Pretend we have finished updating the window.  Except when
       // 'cursorcolumn' is set.
       if (wp->w_p_cuc) {
@@ -2945,7 +2957,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
                             wp->w_p_rl ? -1 : grid->cols, 0, wp->w_p_rl);
       }
       draw_virt_text(wp, buf, win_col_offset, &wlv.col, wp->w_p_rl ? -1 : grid->cols, wlv.row);
-      grid_put_linebuf(grid, wlv.row, 0, wlv.col, grid->cols, wp->w_p_rl, wp, bg_attr, false);
+      win_put_linebuf(wp, wlv.row, 0, wlv.col, grid->cols, bg_attr, false);
       wlv.row++;
 
       // Update w_cline_height and w_cline_folded if the cursor line was
@@ -3218,7 +3230,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
         draw_virt_text(wp, buf, win_col_offset, &draw_col, wp->w_p_rl ? -1 : grid->cols, wlv.row);
       }
 
-      grid_put_linebuf(grid, wlv.row, 0, draw_col, grid->cols, wp->w_p_rl, wp, bg_attr, wrap);
+      win_put_linebuf(wp, wlv.row, 0, draw_col, grid->cols, bg_attr, wrap);
       if (wrap) {
         ScreenGrid *current_grid = grid;
         int current_row = wlv.row, dummy_col = 0;  // dummy_col unused
@@ -3285,4 +3297,38 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
   xfree(wlv.p_extra_free);
   xfree(wlv.saved_p_extra_free);
   return wlv.row;
+}
+
+static void win_put_linebuf(win_T *wp, int row, int coloff, int endcol, int clear_width,
+                            int bg_attr, bool wrap)
+{
+  ScreenGrid *grid = &wp->w_grid;
+
+  // Take care of putting "<<<" on the first line for 'smoothscroll'.
+  if (row == 0 && wp->w_skipcol > 0
+      // do not overwrite the 'showbreak' text with "<<<"
+      && *get_showbreak_value(wp) == NUL
+      // do not overwrite the 'listchars' "precedes" text with "<<<"
+      && !(wp->w_p_list && wp->w_p_lcs_chars.prec != 0)) {
+    int off = 0;
+    if (wp->w_p_nu && wp->w_p_rnu) {
+      // do not overwrite the line number, change "123 text" to "123<<<xt".
+      while (off < grid->cols && ascii_isdigit(schar_get_ascii(linebuf_char[off]))) {
+        off++;
+      }
+    }
+
+    for (int i = 0; i < 3 && off < grid->cols; i++) {
+      if (off + 1 < grid->cols && linebuf_char[off + 1] == NUL) {
+        // When the first half of a double-width character is
+        // overwritten, change the second half to a space.
+        linebuf_char[off + 1] = schar_from_ascii(' ');
+      }
+      linebuf_char[off] = schar_from_ascii('<');
+      linebuf_attr[off] = HL_ATTR(HLF_AT);
+      off++;
+    }
+  }
+
+  grid_put_linebuf(grid, row, coloff, 0, endcol, clear_width, wp->w_p_rl, bg_attr, wrap, false);
 }

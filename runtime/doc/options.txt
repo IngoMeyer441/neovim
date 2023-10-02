@@ -52,14 +52,16 @@ achieve special effects.  These options come in three forms:
 			  'lines'
 			Warning: This may have a lot of side effects.
 
-						*:set-args* *E487* *E521*
+						*:set-args* *:set=* *E487* *E521*
 :se[t] {option}={value}		or
 :se[t] {option}:{value}
 			Set string or number option to {value}.
 			For numeric options the value can be given in decimal,
 			hex (preceded with 0x) or octal (preceded with '0').
 			The old value can be inserted by typing 'wildchar' (by
-			default this is a <Tab>).  See |cmdline-completion|.
+			default this is a <Tab>).  Many string options with
+			fixed syntax also support completing known values.
+			See |cmdline-completion| and |complete-set-option|.
 			White space between {option} and '=' is allowed and
 			will be ignored.  White space between '=' and {value}
 			is not allowed.
@@ -93,6 +95,9 @@ achieve special effects.  These options come in three forms:
 			When the option is a list of flags, {value} must be
 			exactly as they appear in the option.  Remove flags
 			one by one to avoid problems.
+			The individual values from a comma separated list or
+			list of flags can be inserted by typing 'wildchar'.
+			See |complete-set-option|.
 			Also see |:set-args| above.
 
 The {option} arguments to ":set" may be repeated.  For example: >
@@ -4909,9 +4914,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 			*'scrollbind'* *'scb'* *'noscrollbind'* *'noscb'*
 'scrollbind' 'scb'	boolean	(default off)
 			local to window
-	See also |scroll-binding|.  When this option is set, the current
-	window scrolls as other scrollbind windows (windows that also have
-	this option set) scroll.  This option is useful for viewing the
+	See also |scroll-binding|.  When this option is set, scrolling the
+	current window also scrolls other scrollbind windows (windows that
+	also have this option set).  This option is useful for viewing the
 	differences between two versions of a file, see 'diff'.
 	See |'scrollopt'| for options that determine how this option should be
 	interpreted.
@@ -5383,22 +5388,17 @@ A jump table for the options with a short description can be found at |Q_op|.
 	function to get the effective shiftwidth value.
 
 					*'shortmess'* *'shm'* *E1336*
-'shortmess' 'shm'	string	(default "filnxtToOCF")
+'shortmess' 'shm'	string	(default "ltToOCF")
 			global
 	This option helps to avoid all the |hit-enter| prompts caused by file
 	messages, for example  with CTRL-G, and to avoid some other messages.
 	It is a list of flags:
 	 flag	meaning when present	~
-	  i	use "[noeol]" instead of "[Incomplete last line]"	*shm-i*
 	  l	use "999L, 888B" instead of "999 lines, 888 bytes"	*shm-l*
 	  m	use "[+]" instead of "[Modified]"			*shm-m*
-	  n	use "[New]" instead of "[New File]"			*shm-n*
 	  r	use "[RO]" instead of "[readonly]"			*shm-r*
 	  w	use "[w]" instead of "written" for file write message	*shm-w*
 		and "[a]" instead of "appended" for ':w >> file' command
-	  x	use "[dos]" instead of "[dos format]", "[unix]"		*shm-x*
-		instead of "[unix format]" and "[mac]" instead of "[mac
-		format]"
 	  a	all of the above abbreviations				*shm-a*
 
 	  o	overwrite message for writing a file with subsequent	*shm-o*

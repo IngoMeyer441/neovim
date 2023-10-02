@@ -20,7 +20,6 @@
 #include "nvim/channel.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/vars.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
@@ -33,13 +32,11 @@
 #include "nvim/highlight_defs.h"
 #include "nvim/macros.h"
 #include "nvim/mark.h"
-#include "nvim/memline_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/normal.h"
-#include "nvim/option.h"
-#include "nvim/optionstr.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/os_defs.h"
 #include "nvim/path.h"
 #include "nvim/pos.h"
@@ -443,7 +440,7 @@ int buf_write_all(buf_T *buf, int forceit)
                       false, forceit, true, false));
   if (curbuf != old_curbuf) {
     msg_source(HL_ATTR(HLF_W));
-    msg(_("Warning: Entered other buffer unexpectedly (check autocommands)"));
+    msg(_("Warning: Entered other buffer unexpectedly (check autocommands)"), 0);
   }
   return retval;
 }
@@ -454,6 +451,10 @@ void ex_listdo(exarg_T *eap)
   win_T *wp;
   tabpage_T *tp;
   char *save_ei = NULL;
+
+  // Temporarily override SHM_OVER and SHM_OVERALL to avoid that file
+  // message overwrites output from the command.
+  msg_listdo_overwrite++;
 
   if (eap->cmdidx != CMD_windo && eap->cmdidx != CMD_tabdo) {
     // Don't do syntax HL autocommands.  Skipping the syntax file is a
@@ -518,9 +519,7 @@ void ex_listdo(exarg_T *eap)
       if (qf_size == 0 || (size_t)eap->line1 > qf_size) {
         buf = NULL;
       } else {
-        save_clear_shm_value();
         ex_cc(eap);
-        restore_shm_value();
 
         buf = curbuf;
         i = (int)eap->line1 - 1;
@@ -547,9 +546,7 @@ void ex_listdo(exarg_T *eap)
         if (curwin->w_arg_idx != i || !editing_arg_idx(curwin)) {
           // Clear 'shm' to avoid that the file message overwrites
           // any output from the command.
-          save_clear_shm_value();
           do_argfile(eap, i);
-          restore_shm_value();
         }
         if (curwin->w_arg_idx != i) {
           break;
@@ -612,11 +609,8 @@ void ex_listdo(exarg_T *eap)
           break;
         }
 
-        // Go to the next buffer.  Clear 'shm' to avoid that the file
-        // message overwrites any output from the command.
-        save_clear_shm_value();
+        // Go to the next buffer.
         goto_buffer(eap, DOBUF_FIRST, FORWARD, next_fnum);
-        restore_shm_value();
 
         // If autocommands took us elsewhere, quit here.
         if (curbuf->b_fnum != next_fnum) {
@@ -633,11 +627,7 @@ void ex_listdo(exarg_T *eap)
 
         size_t qf_idx = qf_get_cur_idx(eap);
 
-        // Clear 'shm' to avoid that the file message overwrites
-        // any output from the command.
-        save_clear_shm_value();
         ex_cnext(eap);
-        restore_shm_value();
 
         // If jumping to the next quickfix entry fails, quit here.
         if (qf_get_cur_idx(eap) == qf_idx) {
@@ -664,6 +654,7 @@ void ex_listdo(exarg_T *eap)
     listcmd_busy = false;
   }
 
+  msg_listdo_overwrite--;
   if (save_ei != NULL) {
     buf_T *bnext;
     aco_save_T aco;

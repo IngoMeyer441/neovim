@@ -979,6 +979,19 @@ nvim_get_hl_id_by_name({name})                      *nvim_get_hl_id_by_name()*
 
     similar to |hlID()|, but allocates a new ID if not present.
 
+nvim_get_hl_ns({*opts})                                     *nvim_get_hl_ns()*
+    Gets the active highlight namespace.
+
+    Parameters: ~
+      • {opts}  Optional parameters
+                • winid: (number) |window-ID| for retrieving a window's
+                  highlight namespace. A value of -1 is returned when
+                  |nvim_win_set_hl_ns()| has not been called for the window
+                  (or was called with a namespace of -1).
+
+    Return: ~
+        Namespace id, or -1
+
 nvim_get_keymap({mode})                                    *nvim_get_keymap()*
     Gets a list of global (non-buffer-local) |mapping| definitions.
 
@@ -1458,6 +1471,8 @@ nvim_set_hl({ns_id}, {name}, {*val})                           *nvim_set_hl()*
                  • cterm: cterm attribute map, like |highlight-args|. If not
                    set, cterm attributes will match those from the attribute
                    map documented above.
+                 • force: if true force update the highlight group when it
+                   exists.
 
 nvim_set_hl_ns({ns_id})                                     *nvim_set_hl_ns()*
     Set active namespace for highlights defined with |nvim_set_hl()|. This can
@@ -3179,6 +3194,7 @@ nvim_open_win({buffer}, {enter}, {*config})                  *nvim_open_win()*
                     fire from calling this function.
                   • fixed: If true when anchor is NW or SW, the float window
                     would be kept fixed even if the window would be truncated.
+                  • hide: If true the floating window will be hidden.
 
     Return: ~
         Window handle, or 0 on error

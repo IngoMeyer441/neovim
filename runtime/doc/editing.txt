@@ -356,7 +356,9 @@ as a wildcard when "[" is in the 'isfname' option.  A simple way to avoid this
 is to use "path\[[]abc]", this matches the file "path\[abc]".
 
 					*starstar-wildcard*
-Expanding "**" is possible on Unix, Win32, macOS and a few other systems.
+Expanding "**" is possible on Unix, Win32, macOS and a few other systems (but
+it may depend on your 'shell' setting. It's known to work correctly for zsh; for
+bash this requires at least bash version >= 4.X).
 This allows searching a directory tree.  This goes up to 100 directories deep.
 Note there are some commands where this works slightly differently, see
 |file-searching|.
@@ -539,10 +541,10 @@ set to "dos", otherwise it is set to "unix".  When 'fileformats' includes
 "mac".
 
 If the 'fileformat' option is set to "dos" on non-MS-Windows systems the
-message "[dos format]" is shown to remind you that something unusual is
-happening.  On MS-Windows systems you get the message "[unix format]" if
-'fileformat' is set to "unix".  On all systems but the Macintosh you get the
-message "[mac format]" if 'fileformat' is set to "mac".
+message "[dos]" is shown to remind you that something unusual is happening.  On
+MS-Windows systems you get the message "[unix]" if 'fileformat' is set to
+"unix".  On all systems you get the message "[mac]" if 'fileformat' is set to
+"mac".
 
 If the 'fileformats' option is empty and DOS format is used, but while reading
 a file some lines did not end in <CR><NL>, "[CR missing]" will be included in
@@ -820,12 +822,10 @@ by the shell before executing the find program.
 When there is an argument list you can see which file you are editing in the
 title of the window (if there is one and 'title' is on) and with the file
 message you get with the "CTRL-G" command.  You will see something like
-	(file 4 of 11)
-If 'shortmess' contains 'f' it will be
 	(4 of 11)
 If you are not really editing the file at the current position in the argument
 list it will be
-	(file (4) of 11)
+	((4) of 11)
 This means that you are position 4 in the argument list, but not editing the
 fourth file in the argument list.  This happens when you do ":e file".
 
@@ -1058,14 +1058,14 @@ lost the original file.
 
 						*DOS-format-write*
 If the 'fileformat' is "dos", <CR><NL> is used for <EOL>.  This is default
-for Windows. On other systems the message "[dos format]" is shown to
+for Windows. On other systems the message "[dos]" is shown to
 remind you that an unusual <EOL> was used.
 						*Unix-format-write*
 If the 'fileformat' is "unix", <NL> is used for <EOL>.  On Windows
-the message "[unix format]" is shown.
+the message "[unix]" is shown.
 						*Mac-format-write*
-If the 'fileformat' is "mac", <CR> is used for <EOL>.  On non-Mac systems the
-message "[mac format]" is shown.
+If the 'fileformat' is "mac", <CR> is used for <EOL>.  The
+message "[mac]" is shown.
 
 See also |file-formats| and the 'fileformat' and 'fileformats' options.
 
@@ -1077,6 +1077,13 @@ when the filesystem supports it.
 will get the ACL info of the original file.
    The ACL info is also used to check if a file is read-only (when opening the
 file).
+
+				*xattr* *E1506* *E1507* *E1508* *E1509*
+xattr stands for Extended Attributes  It is an advanced way to save metadata
+alongside the file in the filesystem.  It depends on the actual filesystem
+being used and Vim supports it only on a Linux system.
+   Vim attempts to preserve the extended attribute info when writing a file.
+The backup file will get the extended attribute of the original file.
 
 						*read-only-share*
 When MS-Windows shares a drive on the network it can be marked as read-only.

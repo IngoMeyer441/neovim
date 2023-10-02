@@ -37,6 +37,7 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/fs_defs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
@@ -352,8 +353,7 @@ static int check_mtime(buf_T *buf, FileInfo *file_info)
     msg_scroll = true;  // Don't overwrite messages here.
     msg_silent = 0;     // Must give this prompt.
     // Don't use emsg() here, don't want to flush the buffers.
-    msg_attr(_("WARNING: The file has been changed since reading it!!!"),
-             HL_ATTR(HLF_E));
+    msg(_("WARNING: The file has been changed since reading it!!!"), HL_ATTR(HLF_E));
     if (ask_yesno(_("Do you really want to write to it"), true) == 'n') {
       return FAIL;
     }
@@ -913,6 +913,9 @@ static int buf_write_make_backup(char *fname, bool append, FileInfo *file_info_o
             && os_chown(*backupp, (uv_uid_t)-1, (uv_gid_t)file_info_old->stat.st_gid) != 0) {
           os_setperm(*backupp, ((int)perm & 0707) | (((int)perm & 07) << 3));
         }
+# ifdef HAVE_XATTR
+        os_copy_xattr(fname, *backupp);
+# endif
 #endif
 
         // copy the file
@@ -929,6 +932,9 @@ static int buf_write_make_backup(char *fname, bool append, FileInfo *file_info_o
                         (double)file_info_old->stat.st_mtim.tv_sec);
 #endif
         os_set_acl(*backupp, acl);
+#ifdef HAVE_XATTR
+        os_copy_xattr(fname, *backupp);
+#endif
         *err = set_err(NULL);
         break;
       }
@@ -1634,6 +1640,12 @@ restore_backup:
       end = 0;
     }
 
+    if (!backup_copy) {
+#ifdef HAVE_XATTR
+      os_copy_xattr(backup, wfname);
+#endif
+    }
+
 #ifdef UNIX
     // When creating a new file, set its owner/group to that of the original
     // file.  Get the new device and inode number.
@@ -1721,7 +1733,7 @@ restore_backup:
         // This may take a while, if we were interrupted let the user
         // know we got the message.
         if (got_int) {
-          msg(_(e_interr));
+          msg(_(e_interr), 0);
           ui_flush();
         }
 
@@ -1766,11 +1778,11 @@ restore_backup:
       xstrlcat(IObuff, _("[Device]"), IOSIZE);
       insert_space = true;
     } else if (newfile) {
-      xstrlcat(IObuff, new_file_message(), IOSIZE);
+      xstrlcat(IObuff, _("[New]"), IOSIZE);
       insert_space = true;
     }
     if (no_eol) {
-      msg_add_eol();
+      xstrlcat(IObuff, _("[noeol]"), IOSIZE);
       insert_space = true;
     }
     // may add [unix/dos/mac]
@@ -1786,7 +1798,7 @@ restore_backup:
       }
     }
 
-    set_keep_msg(msg_trunc_attr(IObuff, false, 0), 0);
+    set_keep_msg(msg_trunc(IObuff, false, 0), 0);
   }
 
   // When written everything correctly: reset 'modified'.  Unless not
@@ -1797,8 +1809,8 @@ restore_backup:
     unchanged(buf, true, false);
     const varnumber_T changedtick = buf_get_changedtick(buf);
     if (buf->b_last_changedtick + 1 == changedtick) {
-      // b:changedtick may be incremented in unchanged() but that
-      // should not trigger a TextChanged event.
+      // b:changedtick may be incremented in unchanged() but that should not
+      // trigger a TextChanged event.
       buf->b_last_changedtick = changedtick;
     }
     u_unchanged(buf);

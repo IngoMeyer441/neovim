@@ -10,25 +10,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "klib/kvec.h"
+#include "nvim/api/keysets.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor_shape.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/eval/vars.h"
-#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/garray.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/grid_defs.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/lua/executor.h"
@@ -37,6 +37,7 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/time.h"
 #include "nvim/runtime.h"
 #include "nvim/strings.h"
@@ -799,11 +800,10 @@ int lookup_color(const int idx, const bool foreground, TriState *const boldp)
 void set_hl_group(int id, HlAttrs attrs, Dict(highlight) *dict, int link_id)
 {
   int idx = id - 1;  // Index is ID minus one.
-
   bool is_default = attrs.rgb_ae_attr & HL_DEFAULT;
 
   // Return if "default" was used and the group already has settings
-  if (is_default && hl_has_settings(idx, true)) {
+  if (is_default && hl_has_settings(idx, true) && !dict->force) {
     return;
   }
 
@@ -1524,7 +1524,7 @@ static void highlight_list_one(const int id)
     didh = true;
     msg_puts_attr("links to", HL_ATTR(HLF_D));
     msg_putchar(' ');
-    msg_outtrans(hl_table[hl_table[id - 1].sg_link - 1].sg_name);
+    msg_outtrans(hl_table[hl_table[id - 1].sg_link - 1].sg_name, 0);
   }
 
   if (!didh) {
@@ -1657,7 +1657,7 @@ static bool highlight_list_arg(const int id, bool didh, const int type, int iarg
       msg_puts_attr(name, HL_ATTR(HLF_D));
       msg_puts_attr("=", HL_ATTR(HLF_D));
     }
-    msg_outtrans(ts);
+    msg_outtrans(ts, 0);
   }
   return didh;
 }
@@ -1787,7 +1787,7 @@ bool syn_list_header(const bool did_header, const int outlen, const int id, bool
     if (got_int) {
       return true;
     }
-    msg_outtrans(hl_table[id - 1].sg_name);
+    msg_outtrans(hl_table[id - 1].sg_name, 0);
     name_col = msg_col;
     endcol = 15;
   } else if ((ui_has(kUIMessages) || msg_silent) && !force_newline) {
@@ -2283,10 +2283,10 @@ static void highlight_list_two(int cnt, int attr)
 }
 
 /// Function given to ExpandGeneric() to obtain the list of group names.
-const char *get_highlight_name(expand_T *const xp, int idx)
+char *get_highlight_name(expand_T *const xp, int idx)
   FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  return get_highlight_name_ext(xp, idx, true);
+  return (char *)get_highlight_name_ext(xp, idx, true);
 }
 
 /// Obtain a highlight group name.

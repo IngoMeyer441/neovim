@@ -31,8 +31,6 @@ typedef union {
 
 typedef handle_T NS;
 
-typedef struct expand expand_T;
-
 typedef uint64_t proftime_T;
 
 typedef enum {
@@ -51,5 +49,7 @@ typedef struct Decoration Decoration;
 #  define ORDER_BIG_ENDIAN
 # endif
 #endif
+
+typedef int64_t OptInt;
 
 #endif  // NVIM_TYPES_H

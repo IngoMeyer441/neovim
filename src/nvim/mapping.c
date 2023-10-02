@@ -4,14 +4,16 @@
 // mapping.c: Code for mappings and abbreviations.
 
 #include <assert.h>
-#include <inttypes.h>
 #include <lauxlib.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "nvim/api/keysets.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
@@ -19,6 +21,7 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -37,11 +40,14 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/pos.h"
 #include "nvim/regexp.h"
+#include "nvim/regexp_defs.h"
 #include "nvim/runtime.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
+#include "nvim/types.h"
 #include "nvim/vim.h"
 
 /// List used for abbreviations.
@@ -877,9 +883,9 @@ static int buf_do_map(int maptype, MapArguments *args, int mode, bool is_abbrev,
       // print entries
       if (!did_it && !did_local) {
         if (is_abbrev) {
-          msg(_("No abbreviation found"));
+          msg(_("No abbreviation found"), 0);
         } else {
-          msg(_("No mapping found"));
+          msg(_("No mapping found"), 0);
         }
       }
       goto theend;  // listing finished
@@ -2504,7 +2510,7 @@ void ex_map(exarg_T *eap)
   // If we are in a secure mode we print the mappings for security reasons.
   if (secure) {
     secure = 2;
-    msg_outtrans(eap->cmd);
+    msg_outtrans(eap->cmd, 0);
     msg_putchar('\n');
   }
   do_exmap(eap, false);

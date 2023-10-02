@@ -8,11 +8,13 @@
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/assert.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/func_attr.h"
 #include "nvim/lua/converter.h"
 #include "nvim/macros.h"
+#include "nvim/map.h"
 #include "nvim/types.h"
 #include "nvim/usercmd.h"
 

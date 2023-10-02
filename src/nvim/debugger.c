@@ -11,13 +11,12 @@
 #include <string.h>
 
 #include "nvim/ascii.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/debugger.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_getln.h"
@@ -35,7 +34,6 @@
 #include "nvim/pos.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
-#include "nvim/types.h"
 #include "nvim/vim.h"
 
 /// batch mode debugging: don't save and restore typeahead.
@@ -102,27 +100,27 @@ void do_debug(char *cmd)
   debug_mode = true;
 
   if (!debug_did_msg) {
-    msg(_("Entering Debug mode.  Type \"cont\" to continue."));
+    msg(_("Entering Debug mode.  Type \"cont\" to continue."), 0);
   }
   if (debug_oldval != NULL) {
-    smsg(_("Oldval = \"%s\""), debug_oldval);
+    smsg(0, _("Oldval = \"%s\""), debug_oldval);
     xfree(debug_oldval);
     debug_oldval = NULL;
   }
   if (debug_newval != NULL) {
-    smsg(_("Newval = \"%s\""), debug_newval);
+    smsg(0, _("Newval = \"%s\""), debug_newval);
     xfree(debug_newval);
     debug_newval = NULL;
   }
   char *sname = estack_sfile(ESTACK_NONE);
   if (sname != NULL) {
-    msg(sname);
+    msg(sname, 0);
   }
   xfree(sname);
   if (SOURCING_LNUM != 0) {
-    smsg(_("line %" PRId64 ": %s"), (int64_t)SOURCING_LNUM, cmd);
+    smsg(0, _("line %" PRId64 ": %s"), (int64_t)SOURCING_LNUM, cmd);
   } else {
-    smsg(_("cmd: %s"), cmd);
+    smsg(0, _("cmd: %s"), cmd);
   }
 
   // Repeat getting a command and executing it.
@@ -345,14 +343,14 @@ static void do_checkbacktracelevel(void)
 {
   if (debug_backtrace_level < 0) {
     debug_backtrace_level = 0;
-    msg(_("frame is zero"));
+    msg(_("frame is zero"), 0);
   } else {
     char *sname = estack_sfile(ESTACK_NONE);
     int max = get_maxbacktrace_level(sname);
 
     if (debug_backtrace_level > max) {
       debug_backtrace_level = max;
-      smsg(_("frame at highest level: %d"), max);
+      smsg(0, _("frame at highest level: %d"), max);
     }
     xfree(sname);
   }
@@ -371,9 +369,9 @@ static void do_showbacktrace(char *cmd)
         *next = NUL;
       }
       if (i == max - debug_backtrace_level) {
-        smsg("->%d %s", max - i, cur);
+        smsg(0, "->%d %s", max - i, cur);
       } else {
-        smsg("  %d %s", max - i, cur);
+        smsg(0, "  %d %s", max - i, cur);
       }
       i++;
       if (next == NULL) {
@@ -386,9 +384,9 @@ static void do_showbacktrace(char *cmd)
   }
 
   if (SOURCING_LNUM != 0) {
-    smsg(_("line %" PRId64 ": %s"), (int64_t)SOURCING_LNUM, cmd);
+    smsg(0, _("line %" PRId64 ": %s"), (int64_t)SOURCING_LNUM, cmd);
   } else {
-    smsg(_("cmd: %s"), cmd);
+    smsg(0, _("cmd: %s"), cmd);
   }
 }
 
@@ -432,7 +430,7 @@ void dbg_check_breakpoint(exarg_T *eap)
       } else {
         p = "";
       }
-      smsg(_("Breakpoint in \"%s%s\" line %" PRId64),
+      smsg(0, _("Breakpoint in \"%s%s\" line %" PRId64),
            p,
            debug_breakpoint_name + (*p == NUL ? 0 : 3),
            (int64_t)debug_breakpoint_lnum);
@@ -719,7 +717,7 @@ void ex_breakdel(exarg_T *eap)
 void ex_breaklist(exarg_T *eap)
 {
   if (GA_EMPTY(&dbg_breakp)) {
-    msg(_("No breakpoints defined"));
+    msg(_("No breakpoints defined"), 0);
     return;
   }
 
@@ -729,13 +727,13 @@ void ex_breaklist(exarg_T *eap)
       home_replace(NULL, bp->dbg_name, NameBuff, MAXPATHL, true);
     }
     if (bp->dbg_type != DBG_EXPR) {
-      smsg(_("%3d  %s %s  line %" PRId64),
+      smsg(0, _("%3d  %s %s  line %" PRId64),
            bp->dbg_nr,
            bp->dbg_type == DBG_FUNC ? "func" : "file",
            bp->dbg_type == DBG_FUNC ? bp->dbg_name : NameBuff,
            (int64_t)bp->dbg_lnum);
     } else {
-      smsg(_("%3d  expr %s"), bp->dbg_nr, bp->dbg_name);
+      smsg(0, _("%3d  expr %s"), bp->dbg_nr, bp->dbg_name);
     }
   }
 }

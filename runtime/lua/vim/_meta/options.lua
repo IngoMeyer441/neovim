@@ -5113,9 +5113,9 @@ vim.o.scbk = vim.o.scrollback
 vim.bo.scrollback = vim.o.scrollback
 vim.bo.scbk = vim.bo.scrollback
 
---- See also `scroll-binding`.  When this option is set, the current
---- window scrolls as other scrollbind windows (windows that also have
---- this option set) scroll.  This option is useful for viewing the
+--- See also `scroll-binding`.  When this option is set, scrolling the
+--- current window also scrolls other scrollbind windows (windows that
+--- also have this option set).  This option is useful for viewing the
 --- differences between two versions of a file, see 'diff'.
 --- See `'scrollopt'` for options that determine how this option should be
 --- interpreted.
@@ -5666,16 +5666,11 @@ vim.bo.sw = vim.bo.shiftwidth
 --- messages, for example  with CTRL-G, and to avoid some other messages.
 --- It is a list of flags:
 ---  flag	meaning when present	~
----   i	use "[noeol]" instead of "[Incomplete last line]"	*shm-i*
 ---   l	use "999L, 888B" instead of "999 lines, 888 bytes"	*shm-l*
 ---   m	use "[+]" instead of "[Modified]"			*shm-m*
----   n	use "[New]" instead of "[New File]"			*shm-n*
 ---   r	use "[RO]" instead of "[readonly]"			*shm-r*
 ---   w	use "[w]" instead of "written" for file write message	*shm-w*
 --- 	and "[a]" instead of "appended" for ':w >> file' command
----   x	use "[dos]" instead of "[dos format]", "[unix]"		*shm-x*
---- 	instead of "[unix format]" and "[mac]" instead of "[mac
---- 	format]"
 ---   a	all of the above abbreviations				*shm-a*
 ---
 ---   o	overwrite message for writing a file with subsequent	*shm-o*
@@ -5719,7 +5714,7 @@ vim.bo.sw = vim.bo.shiftwidth
 ---     shm=at	Abbreviation, and truncate message when necessary.
 ---
 --- @type string
-vim.o.shortmess = "filnxtToOCF"
+vim.o.shortmess = "ltToOCF"
 vim.o.shm = vim.o.shortmess
 vim.go.shortmess = vim.o.shortmess
 vim.go.shm = vim.go.shortmess

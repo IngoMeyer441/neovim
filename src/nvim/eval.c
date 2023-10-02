@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "auto/config.h"
 #include "nvim/api/private/converter.h"
@@ -20,6 +21,7 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/cmdhist.h"
 #include "nvim/cursor.h"
 #include "nvim/edit.h"
@@ -30,7 +32,6 @@
 #include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
-#include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
 #include "nvim/event/process.h"
 #include "nvim/ex_cmds.h"
@@ -60,7 +61,7 @@
 #include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fileio.h"
 #include "nvim/os/fs_defs.h"
@@ -5731,7 +5732,7 @@ void get_user_input(const typval_T *const argvars, typval_T *const rettv, const 
       p = lastnl + 1;
       msg_start();
       msg_clr_eos();
-      msg_puts_attr_len(prompt, p - prompt, echo_attr);
+      msg_puts_len(prompt, p - prompt, echo_attr);
       msg_didout = false;
       msg_starthere();
     }
@@ -5922,7 +5923,7 @@ void get_system_output_as_rettv(typval_T *argvars, typval_T *rettv, bool retlist
   if (p_verbose > 3) {
     char *cmdstr = shell_argv_to_str(argv);
     verbose_enter_scroll();
-    smsg(_("Executing command: \"%s\""), cmdstr);
+    smsg(0, _("Executing command: \"%s\""), cmdstr);
     msg_puts("\n\n");
     verbose_leave_scroll();
     xfree(cmdstr);
@@ -8018,7 +8019,7 @@ void ex_echo(exarg_T *eap)
       char *tofree = encode_tv2echo(&rettv, NULL);
       if (*tofree != NUL) {
         msg_ext_set_kind("echo");
-        msg_multiline_attr(tofree, echo_attr, true, &need_clear);
+        msg_multiline(tofree, echo_attr, true, &need_clear);
       }
       xfree(tofree);
     }
@@ -8102,7 +8103,7 @@ void ex_execute(exarg_T *eap)
 
     if (eap->cmdidx == CMD_echomsg) {
       msg_ext_set_kind("echomsg");
-      msg_attr(ga.ga_data, echo_attr);
+      msg(ga.ga_data, echo_attr);
     } else if (eap->cmdidx == CMD_echoerr) {
       // We don't want to abort following commands, restore did_emsg.
       int save_did_emsg = did_emsg;

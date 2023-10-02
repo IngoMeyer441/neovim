@@ -35,6 +35,8 @@ local redraw_flags={
 local list_flags={
   comma='P_COMMA',
   onecomma='P_ONECOMMA',
+  commacolon='P_COMMA|P_COLON',
+  onecommacolon='P_ONECOMMA|P_COLON',
   flags='P_FLAGLIST',
   flagscomma='P_COMMA|P_FLAGLIST',
 }
@@ -166,6 +168,9 @@ local function dump_option(i, o)
   if o.cb then
     w('    .opt_did_set_cb=' .. o.cb)
   end
+  if o.expand_cb then
+    w('    .opt_expand_cb=' .. o.expand_cb)
+  end
   if o.enable_if then
     w('#else')
     w('    .var=NULL')
@@ -188,7 +193,19 @@ local function dump_option(i, o)
   w('  },')
 end
 
-w('static vimoption_T options[] = {')
+w([[
+#include "nvim/ex_getln.h"
+#include "nvim/insexpand.h"
+#include "nvim/mapping.h"
+#include "nvim/ops.h"
+#include "nvim/option.h"
+#include "nvim/optionstr.h"
+#include "nvim/quickfix.h"
+#include "nvim/runtime.h"
+#include "nvim/tag.h"
+#include "nvim/window.h"
+
+static vimoption_T options[] = {]])
 for i, o in ipairs(options.options) do
   dump_option(i, o)
 end

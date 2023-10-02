@@ -12,6 +12,7 @@
 
 #include "nvim/ascii.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/cmdhist.h"
 #include "nvim/eval/typval.h"
 #include "nvim/ex_cmds.h"
@@ -22,7 +23,7 @@
 #include "nvim/macros.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/pos.h"
 #include "nvim/regexp.h"
 #include "nvim/strings.h"
@@ -610,7 +611,7 @@ void ex_history(exarg_T *eap)
   char *arg = eap->arg;
 
   if (hislen == 0) {
-    msg(_("'history' option is zero"));
+    msg(_("'history' option is zero"), 0);
     return;
   }
 
@@ -672,7 +673,7 @@ void ex_history(exarg_T *eap)
           } else {
             xstrlcat(IObuff, hist[i].hisstr, IOSIZE);
           }
-          msg_outtrans(IObuff);
+          msg_outtrans(IObuff, 0);
         }
         if (i == idx) {
           break;

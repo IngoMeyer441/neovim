@@ -20,7 +20,6 @@
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
@@ -42,6 +41,8 @@
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
@@ -55,7 +56,6 @@
 #include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/tag.h"
-#include "nvim/types.h"
 #include "nvim/ui.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -719,7 +719,7 @@ void do_tag(char *tag, int type, int count, int forceit, int verbose)
       // Only when going to try the next match, report that the previous
       // file didn't exist.  Otherwise an emsg() is given below.
       if (nofile_fname != NULL && error_cur_match != cur_match) {
-        smsg(_("File \"%s\" does not exist"), nofile_fname);
+        smsg(0, _("File \"%s\" does not exist"), nofile_fname);
       }
 
       ic = (matches[cur_match][0] & MT_IC_OFF);
@@ -736,11 +736,7 @@ void do_tag(char *tag, int type, int count, int forceit, int verbose)
         }
         if ((num_matches > prev_num_matches || new_tag)
             && num_matches > 1) {
-          if (ic) {
-            msg_attr(IObuff, HL_ATTR(HLF_W));
-          } else {
-            msg(IObuff);
-          }
+          msg(IObuff, ic ? HL_ATTR(HLF_W) : 0);
           msg_scroll = true;  // Don't overwrite this message.
         } else {
           give_warning(IObuff, ic);
@@ -847,13 +843,10 @@ static void print_tag_list(int new_tag, int use_tagstack, int num_matches, char 
                  mt_names[matches[i][0] & MT_MASK]);
     msg_puts(IObuff);
     if (tagp.tagkind != NULL) {
-      msg_outtrans_len(tagp.tagkind,
-                       (int)(tagp.tagkind_end - tagp.tagkind));
+      msg_outtrans_len(tagp.tagkind, (int)(tagp.tagkind_end - tagp.tagkind), 0);
     }
     msg_advance(13);
-    msg_outtrans_len_attr(tagp.tagname,
-                          (int)(tagp.tagname_end - tagp.tagname),
-                          HL_ATTR(HLF_T));
+    msg_outtrans_len(tagp.tagname, (int)(tagp.tagname_end - tagp.tagname), HL_ATTR(HLF_T));
     msg_putchar(' ');
     taglen_advance(taglen);
 
@@ -861,7 +854,7 @@ static void print_tag_list(int new_tag, int use_tagstack, int num_matches, char 
     // it and put "..." in the middle
     p = tag_full_fname(&tagp);
     if (p != NULL) {
-      msg_outtrans_attr(p, HL_ATTR(HLF_D));
+      msg_outtrans(p, HL_ATTR(HLF_D));
       XFREE_CLEAR(p);
     }
     if (msg_col > 0) {
@@ -1149,9 +1142,8 @@ void do_tags(exarg_T *eap)
                    tagstack[i].cur_match + 1,
                    tagstack[i].tagname,
                    tagstack[i].fmark.mark.lnum);
-      msg_outtrans(IObuff);
-      msg_outtrans_attr(name, tagstack[i].fmark.fnum == curbuf->b_fnum
-                        ? HL_ATTR(HLF_D) : 0);
+      msg_outtrans(IObuff, 0);
+      msg_outtrans(name, tagstack[i].fmark.fnum == curbuf->b_fnum ? HL_ATTR(HLF_D) : 0);
       xfree(name);
     }
   }
@@ -2219,7 +2211,7 @@ static void findtags_in_file(findtags_state_T *st, int flags, char *buf_ffname)
 
   if (p_verbose >= 5) {
     verbose_enter();
-    smsg(_("Searching tags file %s"), st->tag_fname);
+    smsg(0, _("Searching tags file %s"), st->tag_fname);
     verbose_leave();
   }
   st->did_open = true;   // remember that we found at least one file
@@ -3019,7 +3011,7 @@ static int jumpto_tag(const char *lbuf_arg, int forceit, int keep_help)
           // Only give a message when really guessed, not when 'ic'
           // is set and match found while ignoring case.
           if (found == 2 || !save_p_ic) {
-            msg(_("E435: Couldn't find tag, just guessing!"));
+            msg(_("E435: Couldn't find tag, just guessing!"), 0);
             if (!msg_scrolled && msg_silent == 0) {
               ui_flush();
               os_delay(1010L, true);
@@ -3287,7 +3279,7 @@ static int add_tag_field(dict_T *dict, const char *field_name, const char *start
   if (tv_dict_find(dict, field_name, -1) != NULL) {
     if (p_verbose > 0) {
       verbose_enter();
-      smsg(_("Duplicate field name: %s"), field_name);
+      smsg(0, _("Duplicate field name: %s"), field_name);
       verbose_leave();
     }
     return FAIL;

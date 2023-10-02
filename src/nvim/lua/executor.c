@@ -7,6 +7,8 @@
 #include <lua.h>
 #include <lualib.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <tree_sitter/api.h>
 #include <uv.h>
@@ -17,8 +19,8 @@
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/change.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
@@ -48,7 +50,7 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/msgpack_rpc/channel.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/fileio.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
@@ -59,7 +61,6 @@
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/usercmd.h"
-#include "nvim/version.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
 
@@ -953,11 +954,11 @@ static void nlua_print_event(void **argv)
       }
       break;
     }
-    msg(str + start);
+    msg(str + start, 0);
     msg_didout = true;  // Make blank lines work properly
   }
   if (len && str[len - 1] == NUL) {  // Last was newline
-    msg("");
+    msg("", 0);
   }
   xfree(str);
 }
