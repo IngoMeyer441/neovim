@@ -53,6 +53,8 @@ Defaults					            *nvim-defaults*
 - 'hlsearch' is enabled
 - 'include' defaults to "". The C ftplugin sets it to "^\\s*#\\s*include"
 - 'incsearch' is enabled
+- 'isfname' does not include ":" (on Windows). Drive letters are handled
+  correctly without it. (Use |gF| for filepaths suffixed with ":line:col").
 - 'joinspaces' is disabled
 - 'langnoremap' is enabled
 - 'langremap' is disabled
@@ -138,6 +140,11 @@ nvim_terminal:
 
 nvim_cmdwin:
 - CmdwinEnter: Limits syntax sync to maxlines=1 in the |cmdwin|.
+
+nvim_swapfile:
+- SwapExists: Skips the swapfile prompt (sets |v:swapchoice| to "e") when the
+  swapfile is owned by a running Nvim process. Shows |W325| "Ignoring
+  swapfile…" message.
 
 ==============================================================================
 New Features						       *nvim-features*

@@ -169,33 +169,26 @@ If you want to keep the changed buffer without saving it, switch on the
 2. Editing a file					*edit-a-file*
 
 							*:e* *:edit* *reload*
-:e[dit] [++opt] [+cmd]	Edit the current file.  This is useful to re-edit the
+:e[dit][!] [++opt] [+cmd]
+			Edit the current file.  This is useful to re-edit the
 			current file, when it has been changed outside of Vim.
-			This fails when changes have been made to the current
-			buffer and 'autowriteall' isn't set or the file can't
-			be written.
-			Also see |++opt| and |+cmd|.
-
 							*:edit!* *discard*
-:e[dit]! [++opt] [+cmd]
-			Edit the current file always.  Discard any changes to
-			the current buffer.  This is useful if you want to
-			start all over again.
+			If [!] is given, unsaved changes in the current buffer
+			are discarded. Without [!] the command fails if there
+			are unsaved changes, unless 'autowriteall' is set and
+			the file can be written.
 			Also see |++opt| and |+cmd|.
 
 							*:edit_f*
-:e[dit] [++opt] [+cmd] {file}
+:e[dit][!] [++opt] [+cmd] {file}
 			Edit {file}.
-			This fails when changes have been made to the current
-			buffer, unless 'hidden' is set or 'autowriteall' is
-			set and the file can be written.
+							*:edit!_f*
+			If [!] is given, unsaved changes in the current buffer
+			are discarded. Without [!] the command fails if there
+			are unsaved changes, unless 'hidden' is set or
+			'autowriteall' is set and the file can be written.
 			Also see |++opt| and |+cmd|.
 
-							*:edit!_f*
-:e[dit]! [++opt] [+cmd] {file}
-			Edit {file} always.  Discard any changes to the
-			current buffer.
-			Also see |++opt| and |+cmd|.
 							*:edit_#* *:e#*
 :e[dit] [++opt] [+cmd] #[count]
 			Edit the [count]th buffer (as shown by |:files|).
@@ -357,8 +350,8 @@ is to use "path\[[]abc]", this matches the file "path\[abc]".
 
 					*starstar-wildcard*
 Expanding "**" is possible on Unix, Win32, macOS and a few other systems (but
-it may depend on your 'shell' setting. It's known to work correctly for zsh; for
-bash this requires at least bash version >= 4.X).
+it may depend on your 'shell' setting on Unix and macOS. It's known to work
+correctly for zsh; for bash this requires at least bash version >= 4.X).
 This allows searching a directory tree.  This goes up to 100 directories deep.
 Note there are some commands where this works slightly differently, see
 |file-searching|.
@@ -1078,8 +1071,8 @@ will get the ACL info of the original file.
    The ACL info is also used to check if a file is read-only (when opening the
 file).
 
-				*xattr* *E1506* *E1507* *E1508* *E1509*
-xattr stands for Extended Attributes  It is an advanced way to save metadata
+					*xattr* *E1506* *E1508* *E1509*
+xattr stands for Extended Attributes.  It is an advanced way to save metadata
 alongside the file in the filesystem.  It depends on the actual filesystem
 being used and Vim supports it only on a Linux system.
    Vim attempts to preserve the extended attribute info when writing a file.
@@ -1224,10 +1217,10 @@ MULTIPLE WINDOWS AND BUFFERS				*window-exit*
 							*:confirm* *:conf*
 :conf[irm] {command}	Execute {command}, and use a dialog when an
 			operation has to be confirmed.  Can be used on the
-			|:q|, |:qa| and |:w| commands (the latter to override
-			a read-only setting), and any other command that can
-			fail in such a way, such as |:only|, |:buffer|,
-			|:bdelete|, etc.
+			|:edit|, |:q|, |:qa| and |:w| commands (the latter to
+			override a read-only setting), and any commands that
+			can fail because of unsaved changes, such as |:only|,
+			|:buffer|, |:bdelete|, etc.
 
 Examples: >
   :confirm w foo

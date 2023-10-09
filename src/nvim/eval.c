@@ -1226,7 +1226,7 @@ fail:
 ///
 /// @return [allocated] NULL when calling function fails, allocated string
 ///                     otherwise.
-char *call_func_retstr(const char *const func, int argc, typval_T *argv)
+void *call_func_retstr(const char *const func, int argc, typval_T *argv)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_MALLOC
 {
   typval_T rettv;
@@ -1299,7 +1299,7 @@ int eval_foldexpr(win_T *wp, int *cp)
       // If the result is a string, check if there is a non-digit before
       // the number.
       char *s = tv.vval.v_string;
-      if (!ascii_isdigit(*s) && *s != '-') {
+      if (*s != NUL && !ascii_isdigit(*s) && *s != '-') {
         *cp = (uint8_t)(*s++);
       }
       retval = atol(s);
@@ -8094,13 +8094,6 @@ void ex_execute(exarg_T *eap)
   }
 
   if (ret != FAIL && ga.ga_data != NULL) {
-    if (eap->cmdidx == CMD_echomsg || eap->cmdidx == CMD_echoerr) {
-      // Mark the already saved text as finishing the line, so that what
-      // follows is displayed on a new line when scrolling back at the
-      // more prompt.
-      msg_sb_eol();
-    }
-
     if (eap->cmdidx == CMD_echomsg) {
       msg_ext_set_kind("echomsg");
       msg(ga.ga_data, echo_attr);
@@ -8297,7 +8290,7 @@ void option_last_set_msg(LastSet last_set)
     msg_puts(p);
     if (last_set.script_ctx.sc_lnum > 0) {
       msg_puts(_(line_msg));
-      msg_outnum((long)last_set.script_ctx.sc_lnum);
+      msg_outnum(last_set.script_ctx.sc_lnum);
     }
     if (should_free) {
       xfree(p);

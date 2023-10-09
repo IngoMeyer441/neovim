@@ -32,6 +32,7 @@
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
 #include "nvim/macros.h"
+#include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/message.h"
@@ -1312,7 +1313,6 @@ bool scrolldown(long line_count, int byfold)
     }
     if (col > width2 && width2 > 0) {
       row += (int)col / width2;
-      col = col % width2;
     }
     if (row >= curwin->w_height_inner) {
       curwin->w_curswant = curwin->w_virtcol - (row - curwin->w_height_inner + 1) * width2;
@@ -1517,7 +1517,6 @@ void adjust_skipcol(void)
   }
   if (col > width2) {
     row += (int)col / width2;
-    col = col % width2;
   }
   if (row >= curwin->w_height_inner) {
     if (curwin->w_skipcol == 0) {
@@ -2455,11 +2454,11 @@ int onepage(Direction dir, long count)
           if (curwin->w_topfill == loff.fill) {
             curwin->w_topline--;
             curwin->w_topfill = 0;
+            curwin->w_valid &= ~(VALID_WROW|VALID_CROW);
           }
           comp_botline(curwin);
           curwin->w_cursor.lnum = curwin->w_botline - 1;
-          curwin->w_valid &=
-            ~(VALID_WCOL | VALID_CHEIGHT | VALID_WROW | VALID_CROW);
+          curwin->w_valid &= ~(VALID_WCOL|VALID_CHEIGHT|VALID_WROW|VALID_CROW);
         } else {
           curwin->w_topline = loff.lnum;
           curwin->w_topfill = loff.fill;
@@ -2684,6 +2683,15 @@ void halfpage(bool flag, linenr_T Prenum)
 
 void do_check_cursorbind(void)
 {
+  static win_T *prev_curwin = NULL;
+  static pos_T prev_cursor = { 0, 0, 0 };
+
+  if (curwin == prev_curwin && equalpos(curwin->w_cursor, prev_cursor)) {
+    return;
+  }
+  prev_curwin = curwin;
+  prev_cursor = curwin->w_cursor;
+
   linenr_T line    = curwin->w_cursor.lnum;
   colnr_T col      = curwin->w_cursor.col;
   colnr_T coladd   = curwin->w_cursor.coladd;
@@ -2699,7 +2707,7 @@ void do_check_cursorbind(void)
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     curwin = wp;
     curbuf = curwin->w_buffer;
-    // skip original window  and windows with 'noscrollbind'
+    // skip original window and windows with 'nocursorbind'
     if (curwin != old_curwin && curwin->w_p_crb) {
       if (curwin->w_p_diff) {
         curwin->w_cursor.lnum =

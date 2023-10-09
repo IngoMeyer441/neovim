@@ -40,6 +40,7 @@ describe('fileio', function()
     os.remove('Xtest_startup_file1')
     os.remove('Xtest_startup_file1~')
     os.remove('Xtest_startup_file2')
+    os.remove('Xtest_startup_file2~')
     os.remove('Xtest_тест.md')
     os.remove('Xtest-u8-int-max')
     os.remove('Xtest-overwrite-forced')
@@ -136,7 +137,7 @@ describe('fileio', function()
   it('backup with full path with spaces', function()
     skip(is_ci('cirrus'))
     clear()
-    mkdir('Xtest_backup with spaces')
+    mkdir('Xtest_backupdir with spaces')
     command('set backup')
     command('set backupdir=Xtest_backupdir\\ with\\ spaces//')
     command('write Xtest_startup_file1')
@@ -258,8 +259,8 @@ describe('fileio', function()
     screen:expect([[
       {2:WARNING: The file has been changed since}|
       {2: reading it!!!}                          |
-      {3:Do you really want to write to it (y/n)^?}|
-                                              |
+      {3:Do you really want to write to it (y/n)?}|
+      ^                                        |
     ]])
 
     feed("n")

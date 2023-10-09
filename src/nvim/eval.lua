@@ -1542,6 +1542,7 @@ M.funcs = {
   count = {
     args = { 2, 4 },
     base = 1,
+    tags = { 'E706' },
     desc = [=[
       Return the number of times an item with value {expr} appears
       in |String|, |List| or |Dictionary| {comp}.
@@ -7380,7 +7381,6 @@ M.funcs = {
       precision, the argument(s) to be used must also be specified
       using a {n$} positional argument specifier. See |printf-$|.
 
-
       The conversion specifiers and their meanings are:
 
       		*printf-d* *printf-b* *printf-B* *printf-o* *printf-x* *printf-X*
@@ -7570,6 +7570,14 @@ M.funcs = {
       	echo printf("%1$d at width %2$d is: %01$*2$.3$d", 1, 2)
       <	E1505: Invalid format specifier:
       	%1$d at width %2$d is: %01$*2$.3$d
+
+      					*E1507*
+      This internal error indicates that the logic to parse a
+      positional format argument ran into a problem that couldn't be
+      otherwise reported.  Please file a bug against Vim if you run
+      into this, copying the exact format string and parameters that
+      were used.
+
     ]=],
     name = 'printf',
     params = { { 'fmt', 'any' }, { 'expr1', 'any' } },
@@ -11121,8 +11129,8 @@ M.funcs = {
       	user	user name
       	host	host name
       	fname	original file name
-      	pid	PID of the Vim process that created the swap
-      		file
+      	pid	PID of the Nvim process that created the swap
+      		file, or zero if not running.
       	mtime	last modification time in seconds
       	inode	Optional: INODE number of the file
       	dirty	1 if file was modified, 0 if not

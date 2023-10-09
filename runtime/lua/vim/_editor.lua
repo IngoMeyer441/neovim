@@ -548,6 +548,9 @@ function vim.region(bufnr, pos1, pos2, regtype, inclusive)
       else
         c2 = #bufline + 1
       end
+    elseif regtype == 'V' then -- linewise selection, always return whole line
+      c1 = 0
+      c2 = -1
     else
       c1 = (l == pos1[1]) and pos1[2] or 0
       c2 = (l == pos2[1]) and (pos2[2] + (inclusive and 1 or 0)) or -1
@@ -1147,10 +1150,27 @@ function vim._init_default_autocmds()
       end
     end,
   })
+
   vim.api.nvim_create_autocmd({ 'CmdwinEnter' }, {
     pattern = '[:>]',
     group = vim.api.nvim_create_augroup('nvim_cmdwin', {}),
     command = 'syntax sync minlines=1 maxlines=1',
+  })
+
+  vim.api.nvim_create_autocmd({ 'SwapExists' }, {
+    pattern = '*',
+    group = vim.api.nvim_create_augroup('nvim_swapfile', {}),
+    callback = function()
+      local info = vim.fn.swapinfo(vim.v.swapname)
+      local user = vim.uv.os_get_passwd().username
+      local iswin = 1 == vim.fn.has('win32')
+      if info.error or info.pid <= 0 or (not iswin and info.user ~= user) then
+        vim.v.swapchoice = '' -- Show the prompt.
+        return
+      end
+      vim.v.swapchoice = 'e' -- Choose "(E)dit".
+      vim.notify(('W325: Ignoring swapfile from Nvim process %d'):format(info.pid))
+    end,
   })
 end
 

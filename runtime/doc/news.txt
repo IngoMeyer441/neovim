@@ -68,6 +68,10 @@ The following changes may require adaptations in user config or plugins.
 • Float window support hide and show by setting `hide` on `nvim_open_win` and
   `nvim_win_set_config`.
 
+• |vim.lsp.util.parse_snippet()| will now strictly follow the snippet grammar
+  defined by LSP, and hence previously parsed snippets might now be considered
+  invalid input.
+
 ==============================================================================
 NEW FEATURES                                                    *news-features*
 
@@ -109,6 +113,12 @@ The following new APIs and features were added.
 
 • Builtin TUI can now recognize "super" (|<D-|) and "meta" (|<T-|) modifiers in a
   terminal emulator that supports |tui-csiu|.
+
+• Editor
+  • By default, the swapfile "ATTENTION" |E325| dialog is skipped if the
+    swapfile is owned by a running Nvim process, instead of prompting. If you
+    always want the swapfile dialog, delete the default SwapExists handler:
+    `autocmd! nvim_swapfile`. |default-autocmds|
 
 • LSP
   • LSP method names are available in |vim.lsp.protocol.Methods|.
@@ -193,6 +203,8 @@ The following changes to existing APIs or features add new behavior.
   option, which allows for rendering e.g., diagnostic severities differently.
 
 • Defaults:
+  • On Windows 'isfname' does not include ":". Drive letters are handled
+    correctly without it. (Use |gF| for filepaths suffixed with ":line:col").
   • 'comments' includes "fb:•".
   • 'shortmess' includes the "C" flag.
   • Automatic linting of treesitter query files (see |ft-query-plugin|).

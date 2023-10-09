@@ -587,7 +587,7 @@ ArrayOf(String) nvim__get_runtime(Array pat, Boolean all, Dict(runtime) *opts, E
   FUNC_API_SINCE(8)
   FUNC_API_FAST
 {
-  VALIDATE((!opts->do_source || nlua_is_deferred_safe()), "%s", "'do_source' used in fast callback",
+  VALIDATE(!opts->do_source || nlua_is_deferred_safe(), "%s", "'do_source' used in fast callback",
            {});
   if (ERROR_SET(err)) {
     return (Array)ARRAY_DICT_INIT;
@@ -940,6 +940,12 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
   if (status == FAIL) {
     goto fail;
   }
+
+  // Set last_changedtick to avoid triggering a TextChanged autocommand right
+  // after it was added.
+  buf->b_last_changedtick = buf_get_changedtick(buf);
+  buf->b_last_changedtick_i = buf_get_changedtick(buf);
+  buf->b_last_changedtick_pum = buf_get_changedtick(buf);
 
   // Only strictly needed for scratch, but could just as well be consistent
   // and do this now. buffer is created NOW, not when it latter first happen
