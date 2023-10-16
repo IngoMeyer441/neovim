@@ -1,4 +1,4 @@
---- @meta
+--- @meta _
 -- THIS FILE IS GENERATED
 -- DO NOT EDIT
 error('Cannot require a meta file')
@@ -3242,6 +3242,8 @@ function vim.fn.getmatches(win) end
 ---   wincol    column inside "winid"
 ---   line    text line inside "winid"
 ---   column    text column inside "winid"
+---   coladd    offset (in screen columns) from the
+---       start of the clicked char
 --- All numbers are 1-based.
 ---
 --- If not over a window, e.g. when in the command line, then only
@@ -8055,7 +8057,7 @@ function vim.fn.shellescape(string, special) end
 --- will be assumed.
 ---
 --- @param col? integer
---- @return any
+--- @return integer
 function vim.fn.shiftwidth(col) end
 
 --- @param name string
@@ -10098,6 +10100,8 @@ function vim.fn.virtcol(expr, list, winid) end
 --- The result is a Number, which is the byte index of the
 --- character in window {winid} at buffer line {lnum} and virtual
 --- column {col}.
+---
+--- If buffer line {lnum} is an empty line, 0 is returned.
 ---
 --- If {col} is greater than the last virtual column in line
 --- {lnum}, then the byte index of the character at the last

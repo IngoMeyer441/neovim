@@ -156,8 +156,9 @@ static void wildescape(expand_T *xp, const char *str, int numfiles, char **files
     // and wildmatch characters, except '~'.
     for (int i = 0; i < numfiles; i++) {
       // for ":set path=" we need to escape spaces twice
-      if (xp->xp_backslash == XP_BS_THREE) {
-        p = vim_strsave_escaped(files[i], " ");
+      if (xp->xp_backslash & XP_BS_THREE) {
+        char *pat = (xp->xp_backslash & XP_BS_COMMA) ? " ," : " ";
+        p = vim_strsave_escaped(files[i], pat);
         xfree(files[i]);
         files[i] = p;
 #if defined(BACKSLASH_IN_FILENAME)
@@ -165,6 +166,14 @@ static void wildescape(expand_T *xp, const char *str, int numfiles, char **files
         xfree(files[i]);
         files[i] = p;
 #endif
+      } else if (xp->xp_backslash & XP_BS_COMMA) {
+        if (vim_strchr(files[i], ',') != NULL) {
+          p = vim_strsave_escaped(files[i], ",");
+          if (p != NULL) {
+            xfree(files[i]);
+            files[i] = p;
+          }
+        }
       }
 #ifdef BACKSLASH_IN_FILENAME
       p = vim_strsave_fnameescape(files[i], vse_what);
@@ -890,7 +899,6 @@ char *ExpandOne(expand_T *xp, char *str, char *orig, int options, int mode)
 
   // Concatenate all matching names.  Unless interrupted, this can be slow
   // and the result probably won't be used.
-  // TODO(philix): use xstpcpy instead of strcat in a loop (ExpandOne)
   if (mode == WILD_ALL && xp->xp_numfiles > 0 && !got_int) {
     size_t len = 0;
     for (int i = 0; i < xp->xp_numfiles; i++) {
@@ -905,18 +913,19 @@ char *ExpandOne(expand_T *xp, char *str, char *orig, int options, int mode)
     }
     ss = xmalloc(len);
     *ss = NUL;
+    char *ssp = ss;
     for (int i = 0; i < xp->xp_numfiles; i++) {
       if (i > 0) {
         if (xp->xp_prefix == XP_PREFIX_NO) {
-          STRCAT(ss, "no");
+          ssp = xstpcpy(ssp, "no");
         } else if (xp->xp_prefix == XP_PREFIX_INV) {
-          STRCAT(ss, "inv");
+          ssp = xstpcpy(ssp, "inv");
         }
       }
-      STRCAT(ss, xp->xp_files[i]);
+      ssp = xstpcpy(ssp, xp->xp_files[i]);
 
       if (i != xp->xp_numfiles - 1) {
-        STRCAT(ss, (options & WILD_USE_NL) ? "\n" : " ");
+        ssp = xstpcpy(ssp, (options & WILD_USE_NL) ? "\n" : " ");
       }
     }
   }
@@ -1558,6 +1567,20 @@ static void set_context_for_wildcard_arg(exarg_T *eap, const char *arg, bool use
   }
 }
 
+/// Set the completion context for the "++opt=arg" argument.  Always returns NULL.
+static const char *set_context_in_argopt(expand_T *xp, const char *arg)
+{
+  char *p = vim_strchr(arg, '=');
+  if (p == NULL) {
+    xp->xp_pattern = (char *)arg;
+  } else {
+    xp->xp_pattern = p + 1;
+  }
+
+  xp->xp_context = EXPAND_ARGOPT;
+  return NULL;
+}
+
 /// Set the completion context for the :filter command. Returns a pointer to the
 /// next command after the :filter command.
 static const char *set_context_in_filter_cmd(expand_T *xp, const char *arg)
@@ -2107,10 +2130,9 @@ static const char *set_context_by_cmdname(const char *cmd, cmdidx_T cmdidx, expa
     set_context_in_runtime_cmd(xp, arg);
     break;
 
-#ifdef HAVE_WORKING_LIBINTL
   case CMD_language:
     return set_context_in_lang_cmd(xp, arg);
-#endif
+
   case CMD_profile:
     set_context_in_profile_cmd(xp, arg);
     break;
@@ -2229,13 +2251,23 @@ static const char *set_one_cmd_context(expand_T *xp, const char *buff)
 
   const char *arg = skipwhite(p);
 
-  // Skip over ++argopt argument
-  if ((ea.argt & EX_ARGOPT) && *arg != NUL && strncmp(arg, "++", 2) == 0) {
-    p = arg;
-    while (*p && !ascii_isspace(*p)) {
-      MB_PTR_ADV(p);
+  // Does command allow "++argopt" argument?
+  if (ea.argt & EX_ARGOPT) {
+    while (*arg != NUL && strncmp(arg, "++", 2) == 0) {
+      p = arg + 2;
+      while (*p && !ascii_isspace(*p)) {
+        MB_PTR_ADV(p);
+      }
+
+      // Still touching the command after "++"?
+      if (*p == NUL) {
+        if (ea.argt & EX_ARGOPT) {
+          return set_context_in_argopt(xp, arg + 2);
+        }
+      }
+
+      arg = skipwhite(p);
     }
-    arg = skipwhite(p);
   }
 
   if (ea.cmdidx == CMD_write || ea.cmdidx == CMD_update) {
@@ -2440,15 +2472,23 @@ static int expand_files_and_dirs(expand_T *xp, char *pat, char ***matches, int *
     pat = xstrdup(pat);
     for (int i = 0; pat[i]; i++) {
       if (pat[i] == '\\') {
-        if (xp->xp_backslash == XP_BS_THREE
+        if (xp->xp_backslash & XP_BS_THREE
             && pat[i + 1] == '\\'
             && pat[i + 2] == '\\'
             && pat[i + 3] == ' ') {
           STRMOVE(pat + i, pat + i + 3);
-        }
-        if (xp->xp_backslash == XP_BS_ONE
-            && pat[i + 1] == ' ') {
+        } else if (xp->xp_backslash & XP_BS_ONE
+                   && pat[i + 1] == ' ') {
           STRMOVE(pat + i, pat + i + 1);
+        } else if ((xp->xp_backslash & XP_BS_COMMA)
+                   && pat[i + 1] == '\\'
+                   && pat[i + 2] == ',') {
+          STRMOVE(pat + i, pat + i + 2);
+#ifdef BACKSLASH_IN_FILENAME
+        } else if ((xp->xp_backslash & XP_BS_COMMA)
+                   && pat[i + 1] == ',') {
+          STRMOVE(pat + i, pat + i + 1);
+#endif
         }
       }
     }
@@ -2603,10 +2643,8 @@ static int ExpandOther(char *pat, expand_T *xp, regmatch_T *rmp, char ***matches
     { EXPAND_AUGROUP, expand_get_augroup_name, true, false },
     { EXPAND_SIGN, get_sign_name, true, true },
     { EXPAND_PROFILE, get_profile_name, true, true },
-#ifdef HAVE_WORKING_LIBINTL
     { EXPAND_LANGUAGE, get_lang_arg, true, false },
     { EXPAND_LOCALES, get_locales, true, false },
-#endif
     { EXPAND_ENV_VARS, get_env_name, true, true },
     { EXPAND_USER, get_users, true, false },
     { EXPAND_ARGLIST, get_arglist_name, true, false },
@@ -2769,6 +2807,8 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
     ret = ExpandSettingSubtract(xp, &regmatch, numMatches, matches);
   } else if (xp->xp_context == EXPAND_MAPPINGS) {
     ret = ExpandMappings(pat, &regmatch, numMatches, matches);
+  } else if (xp->xp_context == EXPAND_ARGOPT) {
+    ret = expand_argopt(pat, xp, &regmatch, matches, numMatches);
   } else if (xp->xp_context == EXPAND_USER_DEFINED) {
     ret = ExpandUserDefined(pat, xp, &regmatch, matches, numMatches);
   } else {
@@ -2866,7 +2906,8 @@ void ExpandGeneric(const char *const pat, expand_T *xp, regmatch_T *regmatch, ch
                             && xp->xp_context != EXPAND_MENUNAMES
                             && xp->xp_context != EXPAND_STRING_SETTING
                             && xp->xp_context != EXPAND_MENUS
-                            && xp->xp_context != EXPAND_SCRIPTNAMES;
+                            && xp->xp_context != EXPAND_SCRIPTNAMES
+                            && xp->xp_context != EXPAND_ARGOPT;
 
   // <SNR> functions should be sorted to the end.
   const bool funcsort = xp->xp_context == EXPAND_EXPRESSION

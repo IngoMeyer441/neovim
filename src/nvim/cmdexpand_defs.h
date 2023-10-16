@@ -17,7 +17,8 @@ enum { EXPAND_BUF_LEN = 256, };
 
 /// used for completion on the command line
 typedef struct expand {
-  char *xp_pattern;             ///< start of item to expand
+  char *xp_pattern;             ///< start of item to expand, guaranteed
+                                ///< to be part of xp_line
   int xp_context;               ///< type of expansion
   size_t xp_pattern_len;        ///< bytes in xp_pattern before cursor
   xp_prefix_T xp_prefix;
@@ -40,9 +41,10 @@ typedef struct expand {
 
 /// values for xp_backslash
 enum {
-  XP_BS_NONE  = 0,  ///< nothing special for backslashes
-  XP_BS_ONE   = 1,  ///< uses one backslash before a space
-  XP_BS_THREE = 2,  ///< uses three backslashes before a space
+  XP_BS_NONE  = 0,    ///< nothing special for backslashes
+  XP_BS_ONE   = 0x1,  ///< uses one backslash before a space
+  XP_BS_THREE = 0x2,  ///< uses three backslashes before a space
+  XP_BS_COMMA = 0x4,  ///< commas need to be escaped with a backslash
 };
 
 /// values for xp_context when doing command line completion
@@ -103,6 +105,7 @@ enum {
   EXPAND_RUNTIME,
   EXPAND_STRING_SETTING,
   EXPAND_SETTING_SUBTRACT,
+  EXPAND_ARGOPT,
   EXPAND_CHECKHEALTH,
   EXPAND_LUA,
 };

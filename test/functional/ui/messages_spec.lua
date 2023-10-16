@@ -333,6 +333,36 @@ describe('ui/ext_messages', function()
     ]]}
   end)
 
+  it(':echoerr multiline', function()
+    exec_lua([[vim.g.multi = table.concat({ "bork", "fail" }, "\n")]])
+    feed(':echoerr g:multi<cr>')
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]], messages={{
+      content = {{ "bork\nfail", 2 }},
+      kind = "echoerr"
+    }}}
+
+    feed(':messages<cr>')
+    screen:expect{grid=[[
+      ^                         |
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+      {1:~                        }|
+    ]], messages={{
+      content = {{ "Press ENTER or type command to continue", 4 }},
+      kind = "return_prompt"
+    }}, msg_history={{
+      content = {{ "bork\nfail", 2 }},
+      kind = "echoerr"
+    }}}
+  end)
+
   it('shortmess-=S', function()
     command('set shortmess-=S')
     feed('iline 1\nline 2<esc>')
@@ -1029,6 +1059,53 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
                    links to Comment]],
        exec_capture('syntax list vimComment'))
     -- luacheck: pop
+  end)
+
+  it('no empty line after :silent #12099', function()
+    exec([[
+      func T1()
+        silent !echo
+        echo "message T1"
+      endfunc
+      func T2()
+        silent lua print("lua message")
+        echo "message T2"
+      endfunc
+      func T3()
+        silent call nvim_out_write("api message\n")
+        echo "message T3"
+      endfunc
+    ]])
+    feed(':call T1()<CR>')
+    screen:expect{grid=[[
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      message T1                                                  |
+    ]]}
+    feed(':call T2()<CR>')
+    screen:expect{grid=[[
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      message T2                                                  |
+    ]]}
+    feed(':call T3()<CR>')
+    screen:expect{grid=[[
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+      message T3                                                  |
+    ]]}
   end)
 
   it('supports ruler with laststatus=0', function()
