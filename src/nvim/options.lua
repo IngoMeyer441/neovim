@@ -1370,6 +1370,7 @@ return {
         	|i_CTRL-X_CTRL-D|
         ]	tag completion
         t	same as "]"
+        f	scan the buffer names (as opposed to buffer contents)
 
         Unloaded buffers are not loaded, thus their autocmds |:autocmd| are
         not executed, this may lead to unexpected completions from some files
@@ -6824,6 +6825,7 @@ return {
     },
     {
       abbreviation = 'sd',
+      cb = 'did_set_shada',
       defaults = {
         if_true = "!,'100,<50,s10,h",
         doc = [[for
@@ -9472,6 +9474,7 @@ return {
     },
     {
       abbreviation = 'wc',
+      cb = 'did_set_wildchar',
       defaults = {
         if_true = imacros('TAB'),
         doc = '<Tab>',
@@ -9483,6 +9486,8 @@ return {
         The character is not recognized when used inside a macro.  See
         'wildcharm' for that.
         Some keys will not work, such as CTRL-C, <CR> and Enter.
+        <Esc> can be used, but hitting it twice in a row will still exit
+        command-line as a failsafe measure.
         Although 'wc' is a number option, you can set it to a special key: >
         	:set wc=<Tab>
         <
@@ -9495,6 +9500,7 @@ return {
     },
     {
       abbreviation = 'wcm',
+      cb = 'did_set_wildchar',
       defaults = { if_true = 0 },
       desc = [=[
         'wildcharm' works exactly like 'wildchar', except that it is
