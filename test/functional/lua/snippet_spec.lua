@@ -48,6 +48,10 @@ describe('vim.snippet', function()
     )
   end)
 
+  it('adds indentation based on the start of snippet lines', function()
+    test_success({ 'if $1 then', '  $0', 'end' }, { 'if  then', '  ', 'end' })
+  end)
+
   it('replaces tabs with spaces when expandtab is set', function()
     test_success(
       { 'function $1($2)', '\t$0', 'end' },
@@ -153,5 +157,18 @@ describe('vim.snippet', function()
 
   it('errors with multiple $0 tabstops', function()
     test_fail('function $1() { $0 }$0', 'multiple $0 tabstops')
+  end)
+
+  it('cancels session when deleting the snippet', function()
+    test_success({ 'local function $1()', '  $0', 'end' }, { 'local function ()', '  ', 'end' })
+    feed('<esc>Vjjd')
+    eq(false, exec_lua('return vim.snippet.active()'))
+  end)
+
+  it('cancels session when leaving snippet region', function()
+    feed('i<cr>')
+    test_success({ 'local function $1()', '  $0', 'end' }, { '', 'local function ()', '  ', 'end' })
+    feed('<esc>k')
+    eq(false, exec_lua('return vim.snippet.active()'))
   end)
 end)

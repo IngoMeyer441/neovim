@@ -2534,12 +2534,10 @@ static const char *did_set_showtabline(optset_T *args FUNC_ATTR_UNUSED)
 static const char *did_set_smoothscroll(optset_T *args FUNC_ATTR_UNUSED)
 {
   win_T *win = (win_T *)args->os_win;
-  if (win->w_p_sms) {
-    return NULL;
+  if (!win->w_p_sms) {
+    win->w_skipcol = 0;
   }
 
-  win->w_skipcol = 0;
-  changed_line_abv_curs_win(win);
   return NULL;
 }
 
@@ -2746,11 +2744,13 @@ static const char *did_set_winwidth(optset_T *args)
 static const char *did_set_wrap(optset_T *args)
 {
   win_T *win = (win_T *)args->os_win;
-
-  // If 'wrap' is set, set w_leftcol to zero.
+  // Set w_leftcol or w_skipcol to zero.
   if (win->w_p_wrap) {
     win->w_leftcol = 0;
+  } else {
+    win->w_skipcol = 0;
   }
+
   return NULL;
 }
 /// Check the bounds of numeric options.
@@ -4681,7 +4681,7 @@ void copy_winopt(winopt_T *from, winopt_T *to)
   to->wo_ve = copy_option_val(from->wo_ve);
   to->wo_ve_flags = from->wo_ve_flags;
   to->wo_nuw = from->wo_nuw;
-  to->wo_rl  = from->wo_rl;
+  to->wo_rl = from->wo_rl;
   to->wo_rlc = copy_option_val(from->wo_rlc);
   to->wo_sbr = copy_option_val(from->wo_sbr);
   to->wo_stl = copy_option_val(from->wo_stl);

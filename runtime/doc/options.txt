@@ -52,7 +52,7 @@ achieve special effects.  These options come in three forms:
 			  'lines'
 			Warning: This may have a lot of side effects.
 
-						*:set-args* *:set=* *E487* *E521*
+					    *:set-args* *:set=* *E487* *E521*
 :se[t] {option}={value}		or
 :se[t] {option}:{value}
 			Set string or number option to {value}.
@@ -137,7 +137,7 @@ backslash.  To include a backslash you have to use two.  Effectively this
 means that the number of backslashes in an option value is halved (rounded
 down).
 In options 'path', 'cdpath', and 'tags', spaces have to be preceded with three
-backslashes instead becuase they can be separated by either commas or spaces.
+backslashes instead because they can be separated by either commas or spaces.
 Comma-separated options like 'backupdir' and 'tags' will also require commas
 to be escaped with two backslashes, whereas this is not needed for
 non-comma-separated ones like 'makeprg'.
@@ -1214,6 +1214,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	current working directory to the |$HOME| directory like in Unix.
 	When off, those commands just print the current directory name.
 	On Unix this option has no effect.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 					*'cdpath'* *'cd'* *E344* *E346*
 'cdpath' 'cd'		string	(default equivalent to $CDPATH or ",,")
@@ -4095,7 +4097,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 <	If you have less than 512 Mbyte |:mkspell| may fail for some
 	languages, no matter what you set 'mkspellmem' to.
 
-	This option cannot be set from a |modeline| or in the |sandbox|.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 				*'modeline'* *'ml'* *'nomodeline'* *'noml'*
 'modeline' 'ml'		boolean	(default on (off for root))
@@ -4475,6 +4478,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 	Directories used to find packages.
 	See |packages| and |packages-runtimepath|.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 						*'paragraphs'* *'para'*
 'paragraphs' 'para'	string	(default "IPLPPPQPP TPHPLIPpLpItpplpipbp")
@@ -4487,6 +4492,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 	Expression which is evaluated to apply a patch to a file and generate
 	the resulting new version of the file.  See |diff-patchexpr|.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 					*'patchmode'* *'pm'* *E205* *E206*
 'patchmode' 'pm'	string	(default "")
@@ -5382,6 +5389,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	When 'shellxquote' is set to "(" then the characters listed in this
 	option will be escaped with a '^' character.  This makes it possible
 	to execute most external commands with cmd.exe.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 						*'shellxquote'* *'sxq'*
 'shellxquote' 'sxq'	string	(default "", Windows: "\"")
@@ -6224,7 +6233,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	This option controls the behavior when switching between buffers.
 	This option is checked, when
 	- jumping to errors with the |quickfix| commands (|:cc|, |:cn|, |:cp|,
-	  etc.)
+	  etc.).
 	- jumping to a tag using the |:stag| command.
 	- opening a file using the |CTRL-W_f| or |CTRL-W_F| command.
 	- jumping to a buffer using a buffer split command (e.g.  |:sbuffer|,
@@ -6429,6 +6438,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	function and an example.  The value can be the name of a function, a
 	|lambda| or a |Funcref|. See |option-value-function| for more
 	information.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 						*'taglength'* *'tl'*
 'taglength' 'tl'	number	(default 0)
@@ -6817,6 +6828,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Setting 'verbosefile' to a new value is like making it empty first.
 	The difference with |:redir| is that verbose messages are not
 	displayed when 'verbosefile' is set.
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
 
 						*'viewdir'* *'vdir'*
 'viewdir' 'vdir'	string	(default "$XDG_STATE_HOME/nvim/view//")

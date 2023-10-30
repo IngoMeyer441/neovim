@@ -1034,9 +1034,12 @@ Integer nvim_open_term(Buffer buffer, DictionaryOf(LuaRef) opts, Error *err)
   topts.write_cb = term_write;
   topts.resize_cb = term_resize;
   topts.close_cb = term_close;
-  Terminal *term = terminal_open(buf, topts);
-  terminal_check_size(term);
-  chan->term = term;
+  channel_incref(chan);
+  terminal_open(&chan->term, buf, topts);
+  if (chan->term != NULL) {
+    terminal_check_size(chan->term);
+  }
+  channel_decref(chan);
   return (Integer)chan->id;
 }
 
@@ -2197,8 +2200,8 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
     }
     if (statuscol_lnum) {
       HlPriId line = { 0 };
-      HlPriId cul  = { 0 };
-      HlPriId num  = { 0 };
+      HlPriId cul = { 0 };
+      HlPriId num = { 0 };
       linenr_T lnum = statuscol_lnum;
       int num_signs = buf_get_signattrs(wp->w_buffer, lnum, sattrs, &num, &line, &cul);
       decor_redraw_signs(wp->w_buffer, lnum - 1, &num_signs, sattrs, &num, &line, &cul);

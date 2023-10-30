@@ -159,19 +159,28 @@ static char dollar_command[2] = { '$', 0 };
 
 static void save_dbg_stuff(struct dbg_stuff *dsp)
 {
-  dsp->trylevel       = trylevel;             trylevel = 0;
-  dsp->force_abort    = force_abort;          force_abort = false;
-  dsp->caught_stack   = caught_stack;         caught_stack = NULL;
-  dsp->vv_exception   = v_exception(NULL);
-  dsp->vv_throwpoint  = v_throwpoint(NULL);
+  dsp->trylevel = trylevel;
+  trylevel = 0;
+  dsp->force_abort = force_abort;
+  force_abort = false;
+  dsp->caught_stack = caught_stack;
+  caught_stack = NULL;
+  dsp->vv_exception = v_exception(NULL);
+  dsp->vv_throwpoint = v_throwpoint(NULL);
 
   // Necessary for debugging an inactive ":catch", ":finally", ":endtry".
-  dsp->did_emsg       = did_emsg;             did_emsg     = false;
-  dsp->got_int        = got_int;              got_int      = false;
-  dsp->did_throw      = did_throw;            did_throw    = false;
-  dsp->need_rethrow   = need_rethrow;         need_rethrow = false;
-  dsp->check_cstack   = check_cstack;         check_cstack = false;
-  dsp->current_exception = current_exception; current_exception = NULL;
+  dsp->did_emsg = did_emsg;
+  did_emsg = false;
+  dsp->got_int = got_int;
+  got_int = false;
+  dsp->did_throw = did_throw;
+  did_throw = false;
+  dsp->need_rethrow = need_rethrow;
+  need_rethrow = false;
+  dsp->check_cstack = check_cstack;
+  check_cstack = false;
+  dsp->current_exception = current_exception;
+  current_exception = NULL;
 }
 
 static void restore_dbg_stuff(struct dbg_stuff *dsp)
@@ -3370,6 +3379,7 @@ static linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, int 
         fmark_T *fm = mark_get(curbuf, curwin, NULL, flag, *cmd);
         cmd++;
         if (fm != NULL && fm->fnum != curbuf->handle) {
+          (void)mark_move_to(fm, 0);
           // Jumped to another file.
           lnum = curwin->w_cursor.lnum;
         } else {
