@@ -13,8 +13,8 @@ include(ExternalProject)
 include(CheckCCompilerFlag)
 
 include(Deps)
-include(Util)
 include(Find)
+include(Util)
 
 set_default_buildtype()
 get_property(isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -56,11 +56,6 @@ else()
 endif()
 
 option(USE_EXISTING_SRC_DIR "Skip download of deps sources in case of existing source directory." OFF)
-
-find_package(Git)
-if(NOT Git_FOUND)
-  message(FATAL_ERROR "Git is required to apply patches.")
-endif()
 
 # If the macOS deployment target is not set manually (via $MACOSX_DEPLOYMENT_TARGET),
 # fall back to local system version. Needs to be done here and in top-level CMakeLists.txt.

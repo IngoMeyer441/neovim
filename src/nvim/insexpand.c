@@ -474,7 +474,7 @@ bool check_compl_option(bool dict_opt)
       vim_beep(BO_COMPL);
       setcursor();
       ui_flush();
-      os_delay(2004L, false);
+      os_delay(2004, false);
     }
     return false;
   }
@@ -2735,7 +2735,8 @@ static int info_add_completion_info(list_T *li)
   // Skip the element with the CP_ORIGINAL_TEXT flag at the beginning, in case of
   // forward completion, or at the end, in case of backward completion.
   match = forward ? match->cp_next
-                  : (compl_no_select ? match->cp_prev : match->cp_prev->cp_prev);
+                  : (compl_no_select && match_at_original_text(match)
+                     ? match->cp_prev : match->cp_prev->cp_prev);
 
   while (match != NULL && !match_at_original_text(match)) {
     dict_T *di = tv_dict_alloc();
@@ -2985,7 +2986,7 @@ static void get_next_include_file_completion(int compl_type)
                        ((compl_type == CTRL_X_PATH_DEFINES
                          && !(compl_cont_status & CONT_SOL))
                         ? FIND_DEFINE : FIND_ANY),
-                       1L, ACTION_EXPAND, 1, MAXLNUM);
+                       1, ACTION_EXPAND, 1, MAXLNUM);
 }
 
 /// Get the next set of words matching "compl_pattern" in dictionary or
@@ -3207,7 +3208,7 @@ static int get_next_default_completion(ins_compl_next_state_T *st, pos_T *start_
                                               compl_direction, compl_pattern);
     } else {
       found_new_match = searchit(NULL, st->ins_buf, st->cur_match_pos,
-                                 NULL, compl_direction, compl_pattern, 1L,
+                                 NULL, compl_direction, compl_pattern, 1,
                                  SEARCH_KEEP + SEARCH_NFMSG, RE_LAST, NULL);
     }
     msg_silent--;

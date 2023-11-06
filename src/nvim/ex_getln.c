@@ -453,7 +453,7 @@ static void may_do_incsearch_highlighting(int firstc, int count, incsearch_state
     ui_flush();
     emsg_off++;            // So it doesn't beep if bad expr
     // Set the time limit to half a second.
-    tm = profile_setlimit(500L);
+    tm = profile_setlimit(500);
     if (!p_hls) {
       search_flags += SEARCH_KEEP;
     }
@@ -715,12 +715,8 @@ static uint8_t *command_line_enter(int firstc, int count, int indent, bool clear
   ExpandInit(&s->xpc);
   ccline.xpc = &s->xpc;
 
-  if (curwin->w_p_rl && *curwin->w_p_rlc == 's'
-      && (s->firstc == '/' || s->firstc == '?')) {
-    cmdmsg_rl = true;
-  } else {
-    cmdmsg_rl = false;
-  }
+  cmdmsg_rl = (curwin->w_p_rl && *curwin->w_p_rlc == 's'
+               && (s->firstc == '/' || s->firstc == '?'));
 
   msg_grid_validate();
 
@@ -1564,11 +1560,7 @@ static int command_line_erase_chars(CommandLineState *s)
 
     XFREE_CLEAR(ccline.cmdbuff);        // no commandline to return
     if (!cmd_silent && !ui_has(kUICmdline)) {
-      if (cmdmsg_rl) {
-        msg_col = Columns;
-      } else {
-        msg_col = 0;
-      }
+      msg_col = 0;
       msg_putchar(' ');                             // delete ':'
     }
     s->is_state.search_start = s->is_state.save_cursor;
@@ -2664,7 +2656,7 @@ static int command_line_changed(CommandLineState *s)
     }
   }
 
-  if (cmdmsg_rl || (p_arshape && !p_tbidi)) {
+  if (p_arshape && !p_tbidi) {
     // Always redraw the whole command line to fix shaping and
     // right-left typing.  Not efficient, but it works.
     // Do it only when there are no characters left to read
@@ -2755,7 +2747,7 @@ char *getcmdline_prompt(const int firstc, const char *const prompt, const int at
   int msg_silent_saved = msg_silent;
   msg_silent = 0;
 
-  char *const ret = (char *)command_line_enter(firstc, 1L, 0, false);
+  char *const ret = (char *)command_line_enter(firstc, 1, 0, false);
 
   if (did_save_ccline) {
     restore_cmdline(&save_ccline);
@@ -2955,7 +2947,7 @@ char *getexline(int c, void *cookie, int indent, bool do_concat)
     (void)vgetc();
   }
 
-  return getcmdline(c, 1L, indent, do_concat);
+  return getcmdline(c, 1, indent, do_concat);
 }
 
 bool cmdline_overstrike(void)
@@ -3863,18 +3855,10 @@ void cursorcmd(void)
     return;
   }
 
-  if (cmdmsg_rl) {
-    msg_row = cmdline_row + (ccline.cmdspos / (Columns - 1));
-    msg_col = Columns - (ccline.cmdspos % (Columns - 1)) - 1;
-    if (msg_row <= 0) {
-      msg_row = Rows - 1;
-    }
-  } else {
-    msg_row = cmdline_row + (ccline.cmdspos / Columns);
-    msg_col = ccline.cmdspos % Columns;
-    if (msg_row >= Rows) {
-      msg_row = Rows - 1;
-    }
+  msg_row = cmdline_row + (ccline.cmdspos / Columns);
+  msg_col = ccline.cmdspos % Columns;
+  if (msg_row >= Rows) {
+    msg_row = Rows - 1;
   }
 
   msg_cursor_goto(msg_row, msg_col);
@@ -3886,11 +3870,7 @@ void gotocmdline(bool clr)
     return;
   }
   msg_start();
-  if (cmdmsg_rl) {
-    msg_col = Columns - 1;
-  } else {
-    msg_col = 0;  // always start in column 0
-  }
+  msg_col = 0;  // always start in column 0
   if (clr) {  // clear the bottom line(s)
     msg_clr_eos();  // will reset clear_cmdline
   }

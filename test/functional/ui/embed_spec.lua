@@ -5,7 +5,12 @@ local Screen = require('test.functional.ui.screen')
 
 local feed = helpers.feed
 local eq = helpers.eq
+local neq = helpers.neq
 local clear = helpers.clear
+local ok = helpers.ok
+local funcs = helpers.funcs
+local nvim_prog = helpers.nvim_prog
+local retry = helpers.retry
 
 local function test_embed(ext_linegrid)
   local screen
@@ -131,5 +136,53 @@ describe('--embed UI', function()
       {1:~                                       }|
       {2:-- INSERT --}                            |
     ]]}
+  end)
+end)
+
+describe('--embed --listen UI', function()
+  it('waits for connection on listening address', function()
+    helpers.skip(helpers.is_os('win'))
+    clear()
+    local child_server = assert(helpers.new_pipename())
+    uv.fs_unlink(child_server)
+    funcs.jobstart({nvim_prog, '--embed', '--listen', child_server, '--clean'})
+    retry(nil, nil, function() neq(nil, uv.fs_stat(child_server)) end)
+
+    local child_session = helpers.connect(child_server)
+
+    local info_ok, api_info = child_session:request('nvim_get_api_info')
+    ok(info_ok)
+    eq(2, #api_info)
+    ok(api_info[1] > 2, 'channel_id > 2', api_info[1])
+
+    child_session:request('nvim_exec2', [[
+      let g:evs = []
+      autocmd UIEnter * call add(g:evs, $"UIEnter:{v:event.chan}")
+      autocmd VimEnter * call add(g:evs, "VimEnter")
+    ]], {})
+
+    -- VimEnter and UIEnter shouldn't be triggered until after attach
+    local var_ok, var = child_session:request('nvim_get_var', 'evs')
+    ok(var_ok)
+    eq({}, var)
+
+    local child_screen = Screen.new(40, 6)
+    child_screen:attach(nil, child_session)
+    child_screen:expect{grid=[[
+      ^                                        |
+      {1:~                                       }|
+      {1:~                                       }|
+      {1:~                                       }|
+      {2:[No Name]             0,0-1          All}|
+                                              |
+    ]], attr_ids={
+      [1] = {foreground = Screen.colors.Blue, bold = true};
+      [2] = {reverse = true, bold = true};
+    }}
+
+    -- VimEnter and UIEnter should now be triggered
+    var_ok, var = child_session:request('nvim_get_var', 'evs')
+    ok(var_ok)
+    eq({'VimEnter', ('UIEnter:%d'):format(api_info[1])}, var)
   end)
 end)

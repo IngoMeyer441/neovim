@@ -454,8 +454,8 @@ void eval_init(void)
   set_vim_var_dict(VV_EVENT, tv_dict_alloc_lock(VAR_FIXED));
   set_vim_var_list(VV_ERRORS, tv_list_alloc(kListLenUnknown));
   set_vim_var_nr(VV_STDERR,   CHAN_STDERR);
-  set_vim_var_nr(VV_SEARCHFORWARD, 1L);
-  set_vim_var_nr(VV_HLSEARCH, 1L);
+  set_vim_var_nr(VV_SEARCHFORWARD, 1);
+  set_vim_var_nr(VV_HLSEARCH, 1);
   set_vim_var_nr(VV_COUNT1, 1);
   set_vim_var_nr(VV_TYPE_NUMBER, VAR_TYPE_NUMBER);
   set_vim_var_nr(VV_TYPE_STRING, VAR_TYPE_STRING);
@@ -6629,14 +6629,14 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     }
 
     // Get the line number.
-    pos.lnum = (linenr_T)tv_list_find_nr(l, 0L, &error);
+    pos.lnum = (linenr_T)tv_list_find_nr(l, 0, &error);
     if (error || pos.lnum <= 0 || pos.lnum > curbuf->b_ml.ml_line_count) {
       // Invalid line number.
       return NULL;
     }
 
     // Get the column number.
-    pos.col = (colnr_T)tv_list_find_nr(l, 1L, &error);
+    pos.col = (colnr_T)tv_list_find_nr(l, 1, &error);
     if (error) {
       return NULL;
     }
@@ -6648,7 +6648,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     }
 
     // We accept "$" for the column number: last column.
-    listitem_T *li = tv_list_find(l, 1L);
+    listitem_T *li = tv_list_find(l, 1);
     if (li != NULL && TV_LIST_ITEM_TV(li)->v_type == VAR_STRING
         && TV_LIST_ITEM_TV(li)->vval.v_string != NULL
         && strcmp(TV_LIST_ITEM_TV(li)->vval.v_string, "$") == 0) {
@@ -6663,7 +6663,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     pos.col--;
 
     // Get the virtual offset.  Defaults to zero.
-    pos.coladd = (colnr_T)tv_list_find_nr(l, 2L, &error);
+    pos.coladd = (colnr_T)tv_list_find_nr(l, 2, &error);
     if (error) {
       pos.coladd = 0;
     }
@@ -7229,12 +7229,11 @@ void set_vim_var_dict(const VimVarIndex idx, dict_T *const val)
 /// Set v:variable to tv.
 ///
 /// @param[in]  idx  Index of variable to set.
-/// @param[in,out]  val  Value to set to. Reference count will be incremented.
-///                      Also keys of the dictionary will be made read-only.
+/// @param[in]  val  Value to set to. Will be copied.
 void set_vim_var_tv(const VimVarIndex idx, typval_T *const tv)
 {
   tv_clear(&vimvars[idx].vv_di.di_tv);
-  vimvars[idx].vv_di.di_tv = *tv;
+  tv_copy(tv, &vimvars[idx].vv_di.di_tv);
 }
 
 /// Set the v:argv list.
