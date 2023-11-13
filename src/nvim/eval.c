@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // eval.c: Expression evaluation.
 
 #include <assert.h>
@@ -89,6 +86,8 @@
 // TODO(ZyX-I): Remove DICT_MAXNEST, make users be non-recursive instead
 
 #define DICT_MAXNEST 100        // maximum nesting of lists and dicts
+
+#define MAX_CALLBACK_DEPTH 20
 
 static const char *e_missbrac = N_("E111: Missing ']'");
 static const char *e_list_end = N_("E697: Missing end of List ']': %s");
@@ -1633,7 +1632,7 @@ char *get_lval(char *const name, typval_T *const rettv, lval_T *const lp, const 
         if (len == -1) {
           lp->ll_newkey = xstrdup(key);
         } else {
-          lp->ll_newkey = xstrnsave(key, (size_t)len);
+          lp->ll_newkey = xmemdupz(key, (size_t)len);
         }
         tv_clear(&var1);
         break;
@@ -1966,7 +1965,7 @@ bool next_for_item(void *fi_void, char *arg)
     typval_T tv;
     tv.v_type = VAR_STRING;
     tv.v_lock = VAR_FIXED;
-    tv.vval.v_string = xstrnsave(fi->fi_string + fi->fi_byte_idx, (size_t)len);
+    tv.vval.v_string = xmemdupz(fi->fi_string + fi->fi_byte_idx, (size_t)len);
     fi->fi_byte_idx += len;
     const int result
       = ex_let_vars(arg, &tv, true, fi->fi_semicolon, fi->fi_varcount, false, NULL) == OK;
@@ -2241,7 +2240,7 @@ int pattern_match(const char *pat, const char *text, bool ic)
   regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
   if (regmatch.regprog != NULL) {
     regmatch.rm_ic = ic;
-    matches = vim_regexec_nl(&regmatch, text, (colnr_T)0);
+    matches = vim_regexec_nl(&regmatch, text, 0);
     vim_regfree(regmatch.regprog);
   }
   p_cpo = save_cpo;
@@ -4893,7 +4892,7 @@ static int get_literal_key(char **arg, typval_T *tv)
   }
   for (p = *arg; ASCII_ISALNUM(*p) || *p == '_' || *p == '-'; p++) {}
   tv->v_type = VAR_STRING;
-  tv->vval.v_string = xstrnsave(*arg, (size_t)(p - *arg));
+  tv->vval.v_string = xmemdupz(*arg, (size_t)(p - *arg));
 
   *arg = skipwhite(p);
   return OK;
@@ -5242,7 +5241,7 @@ static void filter_map_string(const char *str, filtermap_T filtermap, typval_T *
     typval_T tv = {
       .v_type = VAR_STRING,
       .v_lock = VAR_UNLOCKED,
-      .vval.v_string = xstrnsave(p, (size_t)len),
+      .vval.v_string = xmemdupz(p, (size_t)len),
     };
 
     vimvars[VV_KEY].vv_nr = idx;
@@ -6064,7 +6063,7 @@ bool callback_call(Callback *const callback, const int argcount_in, typval_T *co
                    typval_T *const rettv)
   FUNC_ATTR_NONNULL_ALL
 {
-  if (callback_depth > p_mfd) {
+  if (callback_depth > MAX_CALLBACK_DEPTH) {
     emsg(_(e_command_too_recursive));
     return false;
   }
@@ -7483,7 +7482,7 @@ char *char_from_string(const char *str, varnumber_T index)
   if (nbyte >= slen) {
     return NULL;
   }
-  return xstrnsave(str + nbyte, (size_t)utf_ptr2len(str + nbyte));
+  return xmemdupz(str + nbyte, (size_t)utf_ptr2len(str + nbyte));
 }
 
 /// Get the byte index for character index "idx" in string "str" with length
@@ -7544,7 +7543,7 @@ char *string_slice(const char *str, varnumber_T first, varnumber_T last, bool ex
   if (start_byte >= (ssize_t)slen || end_byte <= start_byte) {
     return NULL;
   }
-  return xstrnsave(str + start_byte, (size_t)(end_byte - start_byte));
+  return xmemdupz(str + start_byte, (size_t)(end_byte - start_byte));
 }
 
 /// Handle:
@@ -8586,13 +8585,13 @@ repeat:
       // find end of pattern
       p = vim_strchr(s, sep);
       if (p != NULL) {
-        char *const pat = xstrnsave(s, (size_t)(p - s));
+        char *const pat = xmemdupz(s, (size_t)(p - s));
         s = p + 1;
         // find end of substitution
         p = vim_strchr(s, sep);
         if (p != NULL) {
-          char *const sub = xstrnsave(s, (size_t)(p - s));
-          char *const str = xstrnsave(*fnamep, *fnamelen);
+          char *const sub = xmemdupz(s, (size_t)(p - s));
+          char *const str = xmemdupz(*fnamep, *fnamelen);
           *usedlen = (size_t)(p + 1 - src);
           s = do_string_sub(str, pat, sub, NULL, flags);
           *fnamep = s;
@@ -8794,7 +8793,7 @@ typval_T eval_call_provider(char *provider, char *method, list_T *arguments, boo
     return (typval_T){
       .v_type = VAR_NUMBER,
       .v_lock = VAR_UNLOCKED,
-      .vval.v_number = (varnumber_T)0
+      .vval.v_number = 0
     };
   }
 

@@ -1,5 +1,4 @@
-#ifndef NVIM_BUFFER_H
-#define NVIM_BUFFER_H
+#pragma once
 
 #include <assert.h>
 #include <stdbool.h>
@@ -138,7 +137,5 @@ static inline void buf_inc_changedtick(buf_T *const buf)
 static inline bool buf_is_empty(buf_T *buf)
 {
   return buf->b_ml.ml_line_count == 1
-         && *ml_get_buf(buf, (linenr_T)1) == '\0';
+         && *ml_get_buf(buf, 1) == '\0';
 }
-
-#endif  // NVIM_BUFFER_H

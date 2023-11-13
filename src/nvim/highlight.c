@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // highlight.c: low level code for UI and syntax highlighting
 
 #include <assert.h>
@@ -323,6 +320,23 @@ int hl_get_ui_attr(int ns_id, int idx, int final_id, bool optional)
                                    .id1 = idx, .id2 = final_id });
 }
 
+/// Apply 'winblend' to highlight attributes.
+///
+/// @param wp    The window to get 'winblend' value from.
+/// @param attr  The original attribute code.
+///
+/// @return      The attribute code with 'winblend' applied.
+int hl_apply_winblend(win_T *wp, int attr)
+{
+  HlEntry entry = attr_entry(attr);
+  // if blend= attribute is not set, 'winblend' value overrides it.
+  if (entry.attr.hl_blend == -1 && wp->w_p_winbl > 0) {
+    entry.attr.hl_blend = (int)wp->w_p_winbl;
+    attr = get_attr_entry(entry);
+  }
+  return attr;
+}
+
 void update_window_hl(win_T *wp, bool invalid)
 {
   int ns_id = wp->w_ns_hl;
@@ -332,7 +346,7 @@ void update_window_hl(win_T *wp, bool invalid)
     wp->w_ns_hl_active = ns_id;
 
     wp->w_ns_hl_attr = *(NSHlAttr *)pmap_get(int)(&ns_hl_attr, ns_id);
-    if (!wp->w_ns_hl_attr) {  // -V547
+    if (!wp->w_ns_hl_attr) {
       // No specific highlights, use the defaults.
       wp->w_ns_hl_attr = highlight_attr;
     }
@@ -358,13 +372,8 @@ void update_window_hl(win_T *wp, bool invalid)
     wp->w_hl_attr_normal = float_win ? HL_ATTR(HLF_NFLOAT) : 0;
   }
 
-  // if blend= attribute is not set, 'winblend' value overrides it.
-  if (wp->w_floating && wp->w_p_winbl > 0) {
-    HlEntry entry = attr_entry(wp->w_hl_attr_normal);
-    if (entry.attr.hl_blend == -1) {
-      entry.attr.hl_blend = (int)wp->w_p_winbl;
-      wp->w_hl_attr_normal = get_attr_entry(entry);
-    }
+  if (wp->w_floating) {
+    wp->w_hl_attr_normal = hl_apply_winblend(wp, wp->w_hl_attr_normal);
   }
 
   wp->w_float_config.shadow = false;
@@ -374,10 +383,10 @@ void update_window_hl(win_T *wp, bool invalid)
       if (wp->w_float_config.border_hl_ids[i]) {
         attr = hl_get_ui_attr(ns_id, HLF_BORDER,
                               wp->w_float_config.border_hl_ids[i], false);
-        HlAttrs a = syn_attr2entry(attr);
-        if (a.hl_blend) {
-          wp->w_float_config.shadow = true;
-        }
+      }
+      attr = hl_apply_winblend(wp, attr);
+      if (syn_attr2entry(attr).hl_blend > 0) {
+        wp->w_float_config.shadow = true;
       }
       wp->w_float_config.border_attr[i] = attr;
     }
@@ -395,13 +404,8 @@ void update_window_hl(win_T *wp, bool invalid)
     wp->w_hl_attr_normalnc = hl_def[HLF_INACTIVE];
   }
 
-  // if blend= attribute is not set, 'winblend' value overrides it.
-  if (wp->w_floating && wp->w_p_winbl > 0) {
-    HlEntry entry = attr_entry(wp->w_hl_attr_normalnc);
-    if (entry.attr.hl_blend == -1) {
-      entry.attr.hl_blend = (int)wp->w_p_winbl;
-      wp->w_hl_attr_normalnc = get_attr_entry(entry);
-    }
+  if (wp->w_floating) {
+    wp->w_hl_attr_normalnc = hl_apply_winblend(wp, wp->w_hl_attr_normalnc);
   }
 }
 

@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // arglist.c: functions for dealing with the argument list
 
 #include <assert.h>
@@ -393,7 +390,7 @@ static void arglist_del_files(garray_T *alist_ga)
 
     bool didone = false;
     for (int match = 0; match < ARGCOUNT; match++) {
-      if (vim_regexec(&regmatch, alist_name(&ARGLIST[match]), (colnr_T)0)) {
+      if (vim_regexec(&regmatch, alist_name(&ARGLIST[match]), 0)) {
         didone = true;
         xfree(ARGLIST[match].ae_fname);
         memmove(ARGLIST + match, ARGLIST + match + 1,

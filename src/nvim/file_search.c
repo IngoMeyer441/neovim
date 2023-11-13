@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // File searching functions for 'path', 'tags' and 'cdpath' options.
 //
 // External visible functions:
@@ -293,7 +290,7 @@ void *vim_findfile_init(char *path, char *filename, char *stopdirs, int level, i
       xstrlcpy(ff_expand_buffer, rel_fname, len + 1);
       search_ctx->ffsc_start_dir = FullName_save(ff_expand_buffer, false);
     } else {
-      search_ctx->ffsc_start_dir = xstrnsave(rel_fname, len);
+      search_ctx->ffsc_start_dir = xmemdupz(rel_fname, len);
     }
     if (*++path != NUL) {
       path++;
@@ -1547,7 +1544,7 @@ void do_autocmd_dirchanged(char *new_dir, CdScope scope, CdCause cause, bool pre
   } else {
     tv_dict_add_str(dict, S_LEN("cwd"), new_dir);
   }
-  tv_dict_add_str(dict, S_LEN("scope"), buf);  // -V614
+  tv_dict_add_str(dict, S_LEN("scope"), buf);
   tv_dict_add_bool(dict, S_LEN("changed_window"), cause == kCdCauseWindow);
   tv_dict_set_keys_readonly(dict);
 

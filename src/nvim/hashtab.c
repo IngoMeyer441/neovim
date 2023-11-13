@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 /// @file hashtab.c
 ///
 /// Handling of a hashtable with Vim-specific properties.
@@ -411,7 +408,7 @@ hash_T hash_hash(const char *key)
   hash_T hash = (uint8_t)(*key);
 
   if (hash == 0) {
-    return (hash_T)0;
+    return 0;
   }
 
   // A simplistic algorithm that appears to do very well.

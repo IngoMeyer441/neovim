@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // drawscreen.c: Code for updating all the windows on the screen.
 // This is the top level, drawline.c is the middle and grid.c/screen.c the lower level.
 
@@ -725,6 +722,7 @@ static void win_redr_bordertext(win_T *wp, VirtText vt, int col)
     if (text == NULL) {
       break;
     }
+    attr = hl_apply_winblend(wp, attr);
     col += grid_line_puts(col, text, -1, attr);
   }
 }

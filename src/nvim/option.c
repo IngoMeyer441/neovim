@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // User-settable options. Checklist for adding a new option:
 // - Put it in options.lua
 // - For a global option: Add a variable for it in option_defs.h.
@@ -630,7 +627,7 @@ void set_init_3(void)
 
   size_t len = 0;
   char *p = (char *)invocation_path_tail(p_sh, &len);
-  p = xstrnsave(p, len);
+  p = xmemdupz(p, len);
 
   {
     //
@@ -2686,7 +2683,7 @@ static const char *did_set_winblend(optset_T *args)
   if (value != old_value) {
     win->w_p_winbl = MAX(MIN(win->w_p_winbl, 100), 0);
     win->w_hl_needs_update = true;
-    check_blending(curwin);
+    check_blending(win);
   }
 
   return NULL;
@@ -5468,7 +5465,7 @@ static bool match_str(char *const str, regmatch_T *const regmatch, char **const 
                       const char *const fuzzystr, fuzmatch_str_T *const fuzmatch)
 {
   if (!fuzzy) {
-    if (vim_regexec(regmatch, str, (colnr_T)0)) {
+    if (vim_regexec(regmatch, str, 0)) {
       if (!test_only) {
         matches[idx] = xstrdup(str);
       }
@@ -5536,7 +5533,7 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, char *fuzzystr, int *numM
           count++;
         }
       } else if (!fuzzy && options[opt_idx].shortname != NULL
-                 && vim_regexec(regmatch, options[opt_idx].shortname, (colnr_T)0)) {
+                 && vim_regexec(regmatch, options[opt_idx].shortname, 0)) {
         // Compare against the abbreviated option name (for regular
         // expression match). Fuzzy matching (previous if) already
         // matches against both the expanded and abbreviated names.
@@ -5709,7 +5706,7 @@ int ExpandSettingSubtract(expand_T *xp, regmatch_T *regmatch, int *numMatches, c
         continue;
       }
 
-      if (!vim_regexec(regmatch, item, (colnr_T)0)) {
+      if (!vim_regexec(regmatch, item, 0)) {
         continue;
       }
 
@@ -5749,7 +5746,7 @@ int ExpandSettingSubtract(expand_T *xp, regmatch_T *regmatch, int *numMatches, c
       // If more than one flags, split the flags up and expose each
       // character as individual choice.
       for (char *flag = option_val; *flag != NUL; flag++) {
-        (*matches)[count++] = xstrnsave(flag, 1);
+        (*matches)[count++] = xmemdupz(flag, 1);
       }
     }
 

@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // mapping.c: Code for mappings and abbreviations.
 
 #include <assert.h>
@@ -123,6 +120,8 @@ static const char e_mapping_already_exists_for_str[]
   = N_("E227: Mapping already exists for %s");
 static const char e_entries_missing_in_mapset_dict_argument[]
   = N_("E460: Entries missing in mapset() dict argument");
+static const char e_illegal_map_mode_string_str[]
+  = N_("E1276: Illegal map mode string: '%s'");
 
 /// Get the start of the hashed map list for "state" and first character "c".
 mapblock_T *get_maphash_list(int state, int c)
@@ -1337,7 +1336,7 @@ int ExpandMappings(char *pat, regmatch_T *regmatch, int *numMatches, char ***mat
     bool match;
     int score = 0;
     if (!fuzzy) {
-      match = vim_regexec(regmatch, p, (colnr_T)0);
+      match = vim_regexec(regmatch, p, 0);
     } else {
       score = fuzzy_match_str(p, pat);
       match = (score != 0);
@@ -1383,7 +1382,7 @@ int ExpandMappings(char *pat, regmatch_T *regmatch, int *numMatches, char ***mat
       bool match;
       int score = 0;
       if (!fuzzy) {
-        match = vim_regexec(regmatch, p, (colnr_T)0);
+        match = vim_regexec(regmatch, p, 0);
       } else {
         score = fuzzy_match_str(p, pat);
         match = (score != 0);
@@ -1652,7 +1651,7 @@ char *eval_map_expr(mapblock_T *mp, int c)
     Array args = ARRAY_DICT_INIT;
     Object ret = nlua_call_ref(mp->m_luaref, NULL, args, true, &err);
     if (ret.type == kObjectTypeString) {
-      p = xstrndup(ret.data.string.data, ret.data.string.size);
+      p = string_to_cstr(ret.data.string);
     }
     api_free_object(ret);
     if (err.type != kErrorTypeNone) {
@@ -2070,17 +2069,18 @@ void f_hasmapto(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 ///
 /// @param mp            The maphash that contains the mapping information
 /// @param buffer_value  The "buffer" value
+/// @param abbr          True if abbreviation
 /// @param compatible    True for compatible with old maparg() dict
 ///
 /// @return  A Dictionary.
 static Dictionary mapblock_fill_dict(const mapblock_T *const mp, const char *lhsrawalt,
-                                     const int buffer_value, const bool compatible)
+                                     const int buffer_value, const bool abbr, const bool compatible)
   FUNC_ATTR_NONNULL_ARG(1)
 {
   Dictionary dict = ARRAY_DICT_INIT;
   char *const lhs = str2special_save(mp->m_keys, compatible, !compatible);
   char *const mapmode = map_mode_to_chars(mp->m_mode);
-  varnumber_T noremap_value;
+  int noremap_value;
 
   if (compatible) {
     // Keep old compatible behavior
@@ -2112,14 +2112,17 @@ static Dictionary mapblock_fill_dict(const mapblock_T *const mp, const char *lhs
   PUT(dict, "script", INTEGER_OBJ(mp->m_noremap == REMAP_SCRIPT ? 1 : 0));
   PUT(dict, "expr", INTEGER_OBJ(mp->m_expr ? 1 : 0));
   PUT(dict, "silent", INTEGER_OBJ(mp->m_silent ? 1 : 0));
-  PUT(dict, "sid", INTEGER_OBJ((varnumber_T)mp->m_script_ctx.sc_sid));
-  PUT(dict, "lnum", INTEGER_OBJ((varnumber_T)mp->m_script_ctx.sc_lnum));
-  PUT(dict, "buffer", INTEGER_OBJ((varnumber_T)buffer_value));
+  PUT(dict, "sid", INTEGER_OBJ(mp->m_script_ctx.sc_sid));
+  PUT(dict, "scriptversion", INTEGER_OBJ(1));
+  PUT(dict, "lnum", INTEGER_OBJ(mp->m_script_ctx.sc_lnum));
+  PUT(dict, "buffer", INTEGER_OBJ(buffer_value));
   PUT(dict, "nowait", INTEGER_OBJ(mp->m_nowait ? 1 : 0));
   if (mp->m_replace_keycodes) {
     PUT(dict, "replace_keycodes", INTEGER_OBJ(1));
   }
   PUT(dict, "mode", CSTR_AS_OBJ(mapmode));
+  PUT(dict, "abbr", INTEGER_OBJ(abbr ? 1 : 0));
+  PUT(dict, "mode_bits", INTEGER_OBJ(mp->m_mode));
 
   return dict;
 }
@@ -2192,7 +2195,7 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
     if (mp != NULL && (rhs != NULL || rhs_lua != LUA_NOREF)) {
       Dictionary dict = mapblock_fill_dict(mp,
                                            did_simplify ? keys_simplified : NULL,
-                                           buffer_local, true);
+                                           buffer_local, abbr, true);
       (void)object_to_vim(DICTIONARY_OBJ(dict), rettv, NULL);
       api_free_dictionary(dict);
     } else {
@@ -2205,21 +2208,99 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
   xfree(alt_keys_buf);
 }
 
+/// Get the mapping mode from the mode string.
+/// It may contain multiple characters, eg "nox", or "!", or ' '
+/// Return 0 if there is an error.
+static int get_map_mode_string(const char *const mode_string, const bool abbr)
+{
+  const char *p = mode_string;
+  const int MASK_V = MODE_VISUAL | MODE_SELECT;
+  const int MASK_MAP = MODE_VISUAL | MODE_SELECT | MODE_NORMAL | MODE_OP_PENDING;
+  const int MASK_BANG = MODE_INSERT | MODE_CMDLINE;
+
+  if (*p == NUL) {
+    p = " ";  // compatibility
+  }
+  int mode = 0;
+  int modec;
+  while ((modec = (uint8_t)(*p++))) {
+    int tmode;
+    switch (modec) {
+    case 'i':
+      tmode = MODE_INSERT; break;
+    case 'l':
+      tmode = MODE_LANGMAP; break;
+    case 'c':
+      tmode = MODE_CMDLINE; break;
+    case 'n':
+      tmode = MODE_NORMAL; break;
+    case 'x':
+      tmode = MODE_VISUAL; break;
+    case 's':
+      tmode = MODE_SELECT; break;
+    case 'o':
+      tmode = MODE_OP_PENDING; break;
+    case 't':
+      tmode = MODE_TERMINAL; break;
+    case 'v':
+      tmode = MASK_V; break;
+    case '!':
+      tmode = MASK_BANG; break;
+    case ' ':
+      tmode = MASK_MAP; break;
+    default:
+      return 0;  // error, unknown mode character
+    }
+    mode |= tmode;
+  }
+  if ((abbr && (mode & ~MASK_BANG) != 0)
+      || (!abbr && (mode & (mode - 1)) != 0  // more than one bit set
+          && (
+              // false if multiple bits set in mode and mode is fully
+              // contained in one mask
+              !(((mode & MASK_BANG) != 0 && (mode & ~MASK_BANG) == 0)
+                || ((mode & MASK_MAP) != 0 && (mode & ~MASK_MAP) == 0))))) {
+    return 0;
+  }
+
+  return mode;
+}
+
 /// "mapset()" function
 void f_mapset(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
+  const char *which;
   char buf[NUMBUFLEN];
-  const char *which = tv_get_string_buf_chk(&argvars[0], buf);
-  if (which == NULL) {
-    return;
-  }
-  const int mode = get_map_mode((char **)&which, 0);
-  const bool is_abbr = tv_get_number(&argvars[1]) != 0;
+  int is_abbr;
+  dict_T *d;
 
-  if (tv_check_for_dict_arg(argvars, 2) == FAIL) {
+  // If first arg is a dict, then that's the only arg permitted.
+  const bool dict_only = argvars[0].v_type == VAR_DICT;
+
+  if (dict_only) {
+    d = argvars[0].vval.v_dict;
+    which = tv_dict_get_string(d, "mode", false);
+    is_abbr = (int)tv_dict_get_bool(d, "abbr", -1);
+    if (which == NULL || is_abbr < 0) {
+      emsg(_(e_entries_missing_in_mapset_dict_argument));
+      return;
+    }
+  } else {
+    which = tv_get_string_buf_chk(&argvars[0], buf);
+    if (which == NULL) {
+      return;
+    }
+    is_abbr = (int)tv_get_bool(&argvars[1]);
+    if (tv_check_for_dict_arg(argvars, 2) == FAIL) {
+      return;
+    }
+    d = argvars[2].vval.v_dict;
+  }
+  const int mode = get_map_mode_string(which, is_abbr);
+  if (mode == 0) {
+    semsg(_(e_illegal_map_mode_string_str), which);
     return;
   }
-  dict_T *d = argvars[2].vval.v_dict;
 
   // Get the values in the same order as above in get_maparg().
   char *lhs = tv_dict_get_string(d, "lhs", false);
@@ -2278,6 +2359,59 @@ void f_mapset(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
   map_add(curbuf, map_table, abbr_table, lhsraw, &args, noremap, mode, is_abbr,
           sid, lnum, false);
+}
+
+/// "maplist()" function
+void f_maplist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  const int flags = REPTERM_FROM_PART | REPTERM_DO_LT;
+  const bool abbr = argvars[0].v_type != VAR_UNKNOWN && tv_get_bool(&argvars[0]);
+
+  tv_list_alloc_ret(rettv, kListLenUnknown);
+
+  // Do it twice: once for global maps and once for local maps.
+  for (int buffer_local = 0; buffer_local <= 1; buffer_local++) {
+    for (int hash = 0; hash < 256; hash++) {
+      mapblock_T *mp;
+      if (abbr) {
+        if (hash > 0) {  // there is only one abbr list
+          break;
+        }
+        if (buffer_local) {
+          mp = curbuf->b_first_abbr;
+        } else {
+          mp = first_abbr;
+        }
+      } else if (buffer_local) {
+        mp = curbuf->b_maphash[hash];
+      } else {
+        mp = maphash[hash];
+      }
+      for (; mp; mp = mp->m_next) {
+        if (mp->m_simplified) {
+          continue;
+        }
+
+        char *keys_buf = NULL;
+        bool did_simplify = false;
+
+        char *lhs = str2special_save(mp->m_keys, true, false);
+        (void)replace_termcodes(lhs, strlen(lhs), &keys_buf, 0, flags, &did_simplify,
+                                CPO_TO_CPO_FLAGS);
+        xfree(lhs);
+
+        Dictionary dict = mapblock_fill_dict(mp,
+                                             did_simplify ? keys_buf : NULL,
+                                             buffer_local, abbr, true);
+        typval_T d = TV_INITIAL_VALUE;
+        (void)object_to_vim(DICTIONARY_OBJ(dict), &d, NULL);
+        assert(d.v_type == VAR_DICT);
+        tv_list_append_dict(rettv->vval.v_list, d.vval.v_dict);
+        api_free_dictionary(dict);
+        xfree(keys_buf);
+      }
+    }
+  }
 }
 
 /// "maparg()" function
@@ -2593,30 +2727,21 @@ void modify_keymap(uint64_t channel_id, Buffer buffer, bool is_unmap, String mod
     goto fail_and_free;
   }
 
-  bool is_abbrev = false;
-  if (mode.size > 2) {
-    api_set_error(err, kErrorTypeValidation, "Shortname is too long: %s", mode.data);
-    goto fail_and_free;
-  } else if (mode.size == 2) {
-    if ((mode.data[0] != '!' && mode.data[0] != 'i' && mode.data[0] != 'c')
-        || mode.data[1] != 'a') {
-      api_set_error(err, kErrorTypeValidation, "Shortname is too long: %s", mode.data);
-      goto fail_and_free;
-    }
-    is_abbrev = true;
+  char *p = mode.size > 0 ? mode.data : "m";
+  bool forceit = *p == '!';
+  // integer value of the mapping mode, to be passed to do_map()
+  int mode_val = get_map_mode(&p, forceit);
+  if (forceit) {
+    assert(p == mode.data);
+    p++;
   }
-  int mode_val;  // integer value of the mapping mode, to be passed to do_map()
-  char *p = (mode.size) ? mode.data : "m";
-  if (*p == '!') {
-    mode_val = get_map_mode(&p, true);  // mapmode-ic
-  } else {
-    mode_val = get_map_mode(&p, false);
-    if (mode_val == (MODE_VISUAL | MODE_SELECT | MODE_NORMAL | MODE_OP_PENDING) && mode.size > 0) {
-      // get_map_mode() treats unrecognized mode shortnames as ":map".
-      // This is an error unless the given shortname was empty string "".
-      api_set_error(err, kErrorTypeValidation, "Invalid mode shortname: \"%s\"", p);
-      goto fail_and_free;
-    }
+  bool is_abbrev = (mode_val & (MODE_INSERT | MODE_CMDLINE)) != 0 && *p == 'a';
+  if (is_abbrev) {
+    p++;
+  }
+  if (mode.size > 0 && (size_t)(p - mode.data) != mode.size) {
+    api_set_error(err, kErrorTypeValidation, "Invalid mode shortname: \"%s\"", mode.data);
+    goto fail_and_free;
   }
 
   if (parsed_args.lhs_len == 0) {
@@ -2706,7 +2831,8 @@ ArrayOf(Dictionary) keymap_array(String mode, buf_T *buf)
       // Check for correct mode
       if (int_mode & current_maphash->m_mode) {
         ADD(mappings,
-            DICTIONARY_OBJ(mapblock_fill_dict(current_maphash, NULL, buffer_value, false)));
+            DICTIONARY_OBJ(mapblock_fill_dict(current_maphash, NULL,
+                                              buffer_value, false, false)));
       }
     }
   }

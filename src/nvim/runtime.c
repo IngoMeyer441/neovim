@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 /// @file runtime.c
 ///
 /// Management of runtime files (including packages)
@@ -2136,7 +2133,7 @@ int do_source(char *fname, int check_other, int is_vimrc, int *ret_sid)
   cookie.finished = false;
 
   // Check if this script has a breakpoint.
-  cookie.breakpoint = dbg_find_breakpoint(true, fname_exp, (linenr_T)0);
+  cookie.breakpoint = dbg_find_breakpoint(true, fname_exp, 0);
   cookie.fname = fname_exp;
   cookie.dbg_tick = debug_tick;
 
@@ -2495,7 +2492,7 @@ void f_getscriptinfo(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       continue;
     }
 
-    if (filterpat && !vim_regexec(&regmatch, si->sn_name, (colnr_T)0)) {
+    if (filterpat && !vim_regexec(&regmatch, si->sn_name, 0)) {
       continue;
     }
 

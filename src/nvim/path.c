@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -736,7 +733,7 @@ static size_t do_path_expand(garray_T *gap, const char *path, size_t wildoff, in
            || starts_with_dot
            || ((flags & EW_DODOT)
                && name[1] != NUL
-               && (name[1] != '.' || name[2] != NUL)))  // -V557
+               && (name[1] != '.' || name[2] != NUL)))
           && ((regmatch.regprog != NULL && vim_regexec(&regmatch, name, 0))
               || ((flags & EW_NOTWILD)
                   && path_fnamencmp(path + (s - buf), name, (size_t)(e - s)) == 0))) {
@@ -995,7 +992,7 @@ static void uniquefy_paths(garray_T *gap, char *pattern)
     if (pattern[0] == '*' && pattern[1] == '*'
         && vim_ispathsep_nocolon(pattern[2])
         && path_cutoff != NULL
-        && vim_regexec(&regmatch, path_cutoff, (colnr_T)0)
+        && vim_regexec(&regmatch, path_cutoff, 0)
         && is_unique(path_cutoff, gap, i)) {
       sort_again = true;
       memmove(path, path_cutoff, strlen(path_cutoff) + 1);
@@ -1004,7 +1001,7 @@ static void uniquefy_paths(garray_T *gap, char *pattern)
       // unique path.  We start at the end of the path. */
       pathsep_p = path + len - 1;
       while (find_previous_pathsep(path, &pathsep_p)) {
-        if (vim_regexec(&regmatch, pathsep_p + 1, (colnr_T)0)
+        if (vim_regexec(&regmatch, pathsep_p + 1, 0)
             && is_unique(pathsep_p + 1, gap, i)
             && path_cutoff != NULL && pathsep_p + 1 >= path_cutoff) {
           sort_again = true;
@@ -1374,7 +1371,7 @@ static int expand_backtick(garray_T *gap, char *pat, int flags)
   int cnt = 0;
 
   // Create the command: lop off the backticks.
-  char *cmd = xstrnsave(pat + 1, strlen(pat) - 2);
+  char *cmd = xmemdupz(pat + 1, strlen(pat) - 2);
 
   if (*cmd == '=') {          // `={expr}`: Expand expression
     buffer = eval_to_string(cmd + 1, true);

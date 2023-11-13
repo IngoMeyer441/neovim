@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // Make sure extern symbols are exported on Windows
 #ifdef WIN32
 # define EXTERN __declspec(dllexport)
@@ -413,14 +410,7 @@ int main(int argc, char **argv)
 
   open_script_files(&params);
 
-  // Default mappings (incl. menus) & autocommands
-  Error err = ERROR_INIT;
-  Object o = NLUA_EXEC_STATIC("return vim._init_defaults()",
-                              (Array)ARRAY_DICT_INIT, &err);
-  assert(!ERROR_SET(&err));
-  api_clear_error(&err);
-  assert(o.type == kObjectTypeNil);
-  api_free_object(o);
+  nlua_init_defaults();
 
   TIME_MSG("init default mappings & autocommands");
 
@@ -610,7 +600,7 @@ int main(int argc, char **argv)
   // scrollbind, sync the scrollbind now.
   if (curwin->w_p_diff && curwin->w_p_scb) {
     update_topline(curwin);
-    check_scrollbind((linenr_T)0, 0);
+    check_scrollbind(0, 0);
     TIME_MSG("diff scrollbinding");
   }
 
@@ -873,7 +863,7 @@ void preserve_exit(const char *errmsg)
 static int get_number_arg(const char *p, int *idx, int def)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  if (ascii_isdigit(p[*idx])) {  // -V522
+  if (ascii_isdigit(p[*idx])) {
     def = atoi(&(p[*idx]));
     while (ascii_isdigit(p[*idx])) {
       *idx = *idx + 1;

@@ -23,7 +23,6 @@ env:
   LOG_DIR: ${{ github.workspace }}/build/log
   NVIM_LOG_FILE: ${{ github.workspace }}/build/.nvimlog
   TSAN_OPTIONS: log_path=${{ github.workspace }}/build/log/tsan
-  UBSAN_OPTIONS: log_path=${{ github.workspace }}/build/log/ubsan
   VALGRIND_LOG: ${{ github.workspace }}/build/log/valgrind-%p.log
   # TEST_FILE: test/functional/core/startup_spec.lua
   # TEST_FILTER: foo
@@ -135,6 +134,13 @@ jobs:
 
       - name: Create log dir
         run: mkdir -p "$LOG_DIR"
+
+      # FIXME(dundargoc): this workaround is needed for macos as the python3
+      # provider tests suddenly started to become extremely flaky, and this
+      # removes the flakiness for some reason.
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
       - if: ${{ matrix.test != 'unittest' }}
         name: Set up interpreter packages

@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
@@ -70,7 +67,7 @@ getkey:
         update_screen();
         setcursor();  // put cursor back where it belongs
       }
-      // Flush screen updates before blocking
+      // Flush screen updates before blocking.
       ui_flush();
       // Call `os_inchar` directly to block for events or user input without
       // consuming anything from `input_buffer`(os/input.c) or calling the

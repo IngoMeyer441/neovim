@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // ex_docmd.c: functions for executing an Ex command line.
 
 #include <assert.h>
@@ -1127,7 +1124,7 @@ static void get_wincmd_addr_type(const char *arg, exarg_T *eap)
   case 'd':
   case Ctrl_D:
     // window size or any count
-    eap->addr_type = ADDR_OTHER;  // -V1037
+    eap->addr_type = ADDR_OTHER;
     break;
 
   case Ctrl_HAT:
@@ -2033,7 +2030,7 @@ static char *do_one_cmd(char **cmdlinep, int flags, cstack_T *cstack, LineGetter
     while (ASCII_ISALNUM(*p)) {
       p++;
     }
-    p = xstrnsave(ea.cmd, (size_t)(p - ea.cmd));
+    p = xmemdupz(ea.cmd, (size_t)(p - ea.cmd));
     int ret = apply_autocmds(EVENT_CMDUNDEFINED, p, p, true, NULL);
     xfree(p);
     // If the autocommands did something and didn't cause an error, try
@@ -3124,7 +3121,7 @@ int cmd_exists(const char *const name)
   // For ":2match" and ":3match" we need to skip the number.
   exarg_T ea;
   ea.cmd = (char *)((*name == '2' || *name == '3') ? name + 1 : name);
-  ea.cmdidx = (cmdidx_T)0;
+  ea.cmdidx = 0;
   ea.flags = 0;
   int full = false;
   char *p = find_ex_command(&ea, &full);
@@ -3155,7 +3152,7 @@ void f_fullcommand(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   exarg_T ea;
   ea.cmd = (*name == '2' || *name == '3') ? name + 1 : name;
-  ea.cmdidx = (cmdidx_T)0;
+  ea.cmdidx = 0;
   ea.flags = 0;
   char *p = find_ex_command(&ea, NULL);
   if (p == NULL || ea.cmdidx == CMD_SIZE) {
@@ -3177,7 +3174,7 @@ cmdidx_T excmd_get_cmdidx(const char *cmd, size_t len)
   cmdidx_T idx;
 
   if (!one_letter_cmd(cmd, &idx)) {
-    for (idx = (cmdidx_T)0; (int)idx < CMD_SIZE; idx = (cmdidx_T)((int)idx + 1)) {
+    for (idx = 0; (int)idx < CMD_SIZE; idx = (cmdidx_T)((int)idx + 1)) {
       if (strncmp(cmdnames[(int)idx].cmd_name, cmd, len) == 0) {
         break;
       }
@@ -5554,13 +5551,13 @@ static void ex_read(exarg_T *eap)
       return;
     }
     i = readfile(curbuf->b_ffname, curbuf->b_fname,
-                 eap->line2, (linenr_T)0, (linenr_T)MAXLNUM, eap, 0, false);
+                 eap->line2, 0, (linenr_T)MAXLNUM, eap, 0, false);
   } else {
     if (vim_strchr(p_cpo, CPO_ALTREAD) != NULL) {
-      (void)setaltfname(eap->arg, eap->arg, (linenr_T)1);
+      (void)setaltfname(eap->arg, eap->arg, 1);
     }
     i = readfile(eap->arg, NULL,
-                 eap->line2, (linenr_T)0, (linenr_T)MAXLNUM, eap, 0, false);
+                 eap->line2, 0, (linenr_T)MAXLNUM, eap, 0, false);
   }
   if (i != OK) {
     if (!aborting()) {
@@ -6632,7 +6629,7 @@ static void ex_checkpath(exarg_T *eap)
 {
   find_pattern_in_path(NULL, 0, 0, false, false, CHECK_PATH, 1,
                        eap->forceit ? ACTION_SHOW_ALL : ACTION_SHOW,
-                       (linenr_T)1, (linenr_T)MAXLNUM);
+                       1, (linenr_T)MAXLNUM);
 }
 
 /// ":psearch"
@@ -7121,7 +7118,7 @@ char *eval_vars(char *src, const char *srcstart, size_t *usedlen, linenr_T *lnum
     }
     result = NULL;
   } else {
-    result = xstrnsave(result, resultlen);
+    result = xmemdupz(result, resultlen);
   }
   xfree(resultbuf);
   return result;

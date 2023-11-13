@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // mark.c: functions for setting marks and jumping to them
 
 #include <assert.h>
@@ -676,7 +673,7 @@ static void fname2fnum(xfmark_T *fm)
   char *p = path_shorten_fname(NameBuff, IObuff);
 
   // buflist_new() will call fmarks_check_names()
-  (void)buflist_new(NameBuff, p, (linenr_T)1, 0);
+  (void)buflist_new(NameBuff, p, 1, 0);
 }
 
 // Check all file marks for a name that matches the file name in buf.

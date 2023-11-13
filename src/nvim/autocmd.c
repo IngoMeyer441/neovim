@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // autocmd.c: Autocommand related functions
 
 #include <assert.h>
@@ -1031,7 +1028,7 @@ int autocmd_register(int64_t id, event_T event, const char *pat, int patlen, int
     }
 
     ap->refcount = 0;
-    ap->pat = xstrnsave(pat, (size_t)patlen);
+    ap->pat = xmemdupz(pat, (size_t)patlen);
     ap->patlen = patlen;
 
     // need to initialize last_mode for the first ModeChanged autocmd
@@ -2514,7 +2511,7 @@ static int arg_augroup_get(char **argp)
     return AUGROUP_ALL;
   }
 
-  char *group_name = xstrnsave(arg, (size_t)(p - arg));
+  char *group_name = xmemdupz(arg, (size_t)(p - arg));
   int group = augroup_find(group_name);
   if (group == AUGROUP_ERROR) {
     group = AUGROUP_ALL;  // no match, use all groups
@@ -2594,7 +2591,7 @@ void do_autocmd_uienter(uint64_t chanid, bool attached)
 void do_autocmd_focusgained(bool gained)
 {
   static bool recursive = false;
-  static Timestamp last_time = (time_t)0;
+  static Timestamp last_time = 0;
 
   if (recursive) {
     return;  // disallow recursion

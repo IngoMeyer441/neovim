@@ -130,7 +130,7 @@ The following new APIs and features were added.
 
 • LSP
   • LSP method names are available in |vim.lsp.protocol.Methods|.
-  • Implemented LSP inlay hints: |vim.lsp.inlay_hint()|
+  • Implemented LSP inlay hints: |lsp-inlay_hint|
     https://microsoft.github.io/language-server-protocol/specification/#textDocument_inlayHint
   • Implemented pull diagnostic textDocument/diagnostic: |vim.lsp.diagnostic.on_diagnostic()|
     https://microsoft.github.io/language-server-protocol/specification/#textDocument_diagnostic
@@ -205,6 +205,12 @@ The following new APIs and features were added.
 • Added |vim.base64.encode()| and |vim.base64.decode()| for encoding and decoding
   strings using Base64 encoding.
 
+• The |TermResponse| autocommand event can be used with |v:termresponse| to
+  read escape sequence responses from the terminal.
+
+• A clipboard provider which uses OSC 52 to copy the selection to the system
+  clipboard is now bundled by default. |clipboard-osc52|
+
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
 
@@ -271,6 +277,9 @@ The following changes to existing APIs or features add new behavior.
   return such ranges even if they started before the specified position.
 
 • Extmarks can opt-out of precise undo tracking using the new "undo_restore"
+  flag to |nvim_buf_set_extmark()|
+
+• Extmarks can be automatically hidden or removed using the new "invalidate"
   flag to |nvim_buf_set_extmark()|
 
 • LSP hover and signature help now use Treesitter for highlighting of Markdown

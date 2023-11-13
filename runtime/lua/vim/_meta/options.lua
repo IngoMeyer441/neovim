@@ -2217,10 +2217,8 @@ vim.bo.ft = vim.bo.filetype
 ---
 --- Example:
 --- ```
----     :set fillchars=stl:^,stlnc:=,vert:│,fold:·,diff:-
+---     :set fillchars=stl:\ ,stlnc:\ ,vert:│,fold:·,diff:-
 --- ```
---- This is similar to the default, except that these characters will also
---- be used when there is highlighting.
 ---
 --- For the "stl", "stlnc", "foldopen", "foldclose" and "foldsep" items
 --- single-byte and multibyte characters are supported.  But double-width
@@ -2530,8 +2528,9 @@ vim.bo.formatlistpat = vim.o.formatlistpat
 vim.bo.flp = vim.bo.formatlistpat
 
 --- This is a sequence of letters which describes how automatic
---- formatting is to be done.  See `fo-table`.  Commas can be inserted for
---- readability.
+--- formatting is to be done.
+--- See `fo-table` for possible values and `gq` for how to format text.
+--- Commas can be inserted for readability.
 --- To avoid problems with flags that are added in the future, use the
 --- "+=" and "-=" feature of ":set" `add-option-flags`.
 ---
@@ -4038,7 +4037,6 @@ vim.go.mat = vim.go.matchtime
 --- Increasing this limit above 200 also changes the maximum for Ex
 --- command recursion, see `E169`.
 --- See also `:function`.
---- Also used for maximum depth of callback functions.
 ---
 --- @type integer
 vim.o.maxfuncdepth = 100

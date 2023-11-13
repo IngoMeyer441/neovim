@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // ops.c: implementation of various operators: op_shift, op_delete, op_tilde,
 //        op_change, op_yank, do_put, do_join
 
@@ -1366,7 +1363,7 @@ bool get_spec_reg(int regname, char **argp, bool *allocated, bool errmsg)
     cnt = find_ident_under_cursor(argp, (regname == Ctrl_W
                                          ? (FIND_IDENT|FIND_STRING)
                                          : FIND_STRING));
-    *argp = cnt ? xstrnsave(*argp, cnt) : NULL;
+    *argp = cnt ? xmemdupz(*argp, cnt) : NULL;
     *allocated = true;
     return true;
 
@@ -2404,7 +2401,7 @@ void op_insert(oparg_T *oap, int count1)
     }
     int ins_len = (int)strlen(firstline) - pre_textlen - offset;
     if (pre_textlen >= 0 && ins_len > 0) {
-      char *ins_text = xstrnsave(firstline, (size_t)ins_len);
+      char *ins_text = xmemdupz(firstline, (size_t)ins_len);
       // block handled here
       if (u_save(oap->start.lnum, (linenr_T)(oap->end.lnum + 1)) == OK) {
         block_insert(oap, ins_text, (oap->op_type == OP_INSERT), &bd);
@@ -2471,7 +2468,7 @@ int op_change(oparg_T *oap)
   const bool save_finish_op = finish_op;
   finish_op = false;
 
-  retval = edit(NUL, false, (linenr_T)1);
+  retval = edit(NUL, false, 1);
 
   finish_op = save_finish_op;
 
@@ -3110,7 +3107,7 @@ void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
         MB_PTR_ADV(p);
       }
       ptr = xstrdup(p);
-      ml_append(curwin->w_cursor.lnum, ptr, (colnr_T)0, false);
+      ml_append(curwin->w_cursor.lnum, ptr, 0, false);
       xfree(ptr);
 
       oldp = get_cursor_line_ptr();
@@ -3118,7 +3115,7 @@ void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
       if (dir == FORWARD && *p != NUL) {
         MB_PTR_ADV(p);
       }
-      ptr = xstrnsave(oldp, (size_t)(p - oldp));
+      ptr = xmemdupz(oldp, (size_t)(p - oldp));
       ml_replace(curwin->w_cursor.lnum, ptr, false);
       nr_lines++;
       dir = FORWARD;
@@ -3254,8 +3251,7 @@ void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
 
       // add a new line
       if (curwin->w_cursor.lnum > curbuf->b_ml.ml_line_count) {
-        if (ml_append(curbuf->b_ml.ml_line_count, "",
-                      (colnr_T)1, false) == FAIL) {
+        if (ml_append(curbuf->b_ml.ml_line_count, "", 1, false) == FAIL) {
           break;
         }
         nr_lines++;
@@ -3529,7 +3525,7 @@ void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
           STRCPY(newp, y_array[y_size - 1]);
           STRCAT(newp, ptr);
           // insert second line
-          ml_append(lnum, newp, (colnr_T)0, false);
+          ml_append(lnum, newp, 0, false);
           new_lnum++;
           xfree(newp);
 
@@ -3547,7 +3543,7 @@ void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
 
         for (; i < y_size; i++) {
           if ((y_type != kMTCharWise || i < y_size - 1)) {
-            if (ml_append(lnum, y_array[i], (colnr_T)0, false) == FAIL) {
+            if (ml_append(lnum, y_array[i], 0, false) == FAIL) {
               goto error;
             }
             new_lnum++;
@@ -3838,7 +3834,7 @@ void ex_display(exarg_T *eap)
             n -= 2;
           }
           for (p = yb->y_array[j];
-               *p != NUL && (n -= ptr2cells(p)) >= 0; p++) {  // -V1019
+               *p != NUL && (n -= ptr2cells(p)) >= 0; p++) {
             clen = utfc_ptr2len(p);
             msg_outtrans_len(p, clen, 0);
             p += clen - 1;
@@ -4130,7 +4126,7 @@ int do_join(size_t count, int insert_space, int save_undo, int use_formatoptions
     // what is added if it is inside these spaces.
     const int spaces_removed = (int)((curr - curr_start) - spaces[t]);
     linenr_T lnum = curwin->w_cursor.lnum + t;
-    colnr_T mincol = (colnr_T)0;
+    colnr_T mincol = 0;
     linenr_T lnum_amount = -t;
     colnr_T col_amount = (colnr_T)(cend - newp - spaces_removed);
 
@@ -4703,7 +4699,7 @@ int do_addsub(int op_type, pos_T *pos, int length, linenr_T Prenum1)
     if (do_unsigned && negative) {
       if (subtract) {
         // sticking at zero.
-        n = (uvarnumber_T)0;
+        n = 0;
       } else {
         // sticking at 2^64 - 1.
         n = (uvarnumber_T)(-1);
@@ -6734,7 +6730,7 @@ static void set_clipboard(int name, yankreg_T *reg)
 
   list_T *args = tv_list_alloc(3);
   tv_list_append_list(args, lines);
-  tv_list_append_string(args, &regtype, 1);  // -V614
+  tv_list_append_string(args, &regtype, 1);
   tv_list_append_string(args, ((char[]) { (char)name }), 1);
 
   (void)eval_call_provider("clipboard", "set", args, true);

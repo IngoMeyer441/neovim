@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -561,7 +558,7 @@ static int expand_set_opt_string(optexpand_T *args, char **values, size_t numVal
         continue;
       }
     }
-    if (vim_regexec(regmatch, *val, (colnr_T)0)) {
+    if (vim_regexec(regmatch, *val, 0)) {
       (*matches)[count++] = xstrdup(*val);
     }
   }
@@ -635,7 +632,7 @@ static int expand_set_opt_listflag(optexpand_T *args, char *flags, int *numMatch
         // existing flag. Just skip it to avoid duplicate.
         continue;
       }
-      (*matches)[count++] = xstrnsave(flag, 1);
+      (*matches)[count++] = xmemdupz(flag, 1);
     }
   }
 
@@ -1569,6 +1566,9 @@ const char *did_set_iconstring(optset_T *args)
 /// The 'inccommand' option is changed.
 const char *did_set_inccommand(optset_T *args FUNC_ATTR_UNUSED)
 {
+  if (cmdpreview) {
+    return e_invarg;
+  }
   return did_set_opt_strings(p_icm, p_icm_values, false);
 }
 

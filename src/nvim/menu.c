@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // Code for menus.  Used for the GUI and 'wildmenu'.
 // GUI/Motif support by Robert Webb
 
@@ -1313,7 +1310,7 @@ static char *menu_text(const char *str, int *mnemonic, char **actext)
       *actext = xstrdup(p + 1);
     }
     assert(p >= str);
-    text = xstrnsave(str, (size_t)(p - str));
+    text = xmemdupz(str, (size_t)(p - str));
   } else {
     text = xstrdup(str);
   }
@@ -1736,7 +1733,7 @@ void ex_menutranslate(exarg_T *eap)
       from = xstrdup(from);
       from_noamp = menu_text(from, NULL, NULL);
       assert(arg >= to);
-      to = xstrnsave(to, (size_t)(arg - to));
+      to = xmemdupz(to, (size_t)(arg - to));
       menu_translate_tab_and_shift(from);
       menu_translate_tab_and_shift(to);
       menu_unescape_name(from);

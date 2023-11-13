@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // syntax.c: code for syntax highlighting
 
 #include <assert.h>
@@ -238,8 +235,6 @@ static keyentry_T dumkey;
 #define KE2HIKEY(kp)  ((kp)->keyword)
 #define HIKEY2KE(p)   ((keyentry_T *)((p) - (dumkey.keyword - (char *)&dumkey)))
 #define HI2KE(hi)      HIKEY2KE((hi)->hi_key)
-
-// -V:HI2KE:782
 
 // To reduce the time spent in keepend(), remember at which level in the state
 // stack the first item with "keepend" is present.  When "-1", there is no
@@ -758,7 +753,7 @@ static int syn_match_linecont(linenr_T lnum)
 
   regmatch.rmm_ic = syn_block->b_syn_linecont_ic;
   regmatch.regprog = syn_block->b_syn_linecont_prog;
-  int r = syn_regexec(&regmatch, lnum, (colnr_T)0,
+  int r = syn_regexec(&regmatch, lnum, 0,
                       IF_SYN_TIME(&syn_block->b_syn_linecont_time));
   syn_block->b_syn_linecont_prog = regmatch.regprog;
 
@@ -5049,7 +5044,7 @@ static int get_id_list(char **const arg, const int keylen, int16_t **const list,
           regmatch.rm_ic = true;
           id = 0;
           for (int i = highlight_num_groups(); --i >= 0;) {
-            if (vim_regexec(&regmatch, highlight_group_name(i), (colnr_T)0)) {
+            if (vim_regexec(&regmatch, highlight_group_name(i), 0)) {
               if (round == 2) {
                 // Got more items than expected; can happen
                 // when adding items that match:
@@ -5059,7 +5054,7 @@ static int get_id_list(char **const arg, const int keylen, int16_t **const list,
                   xfree(retval);
                   round = 1;
                 } else {
-                  retval[count] = (int16_t)(i + 1);  // -V522
+                  retval[count] = (int16_t)(i + 1);
                 }
               }
               count++;

@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // ex_cmds.c: some functions for command line commands
 
 #include <assert.h>
@@ -670,7 +667,7 @@ void ex_sort(exarg_T *eap)
       // Copy the line into a buffer, it may become invalid in
       // ml_append(). And it's needed for "unique".
       STRCPY(sortbuf1, s);
-      if (ml_append(lnum++, sortbuf1, (colnr_T)0, false) == FAIL) {
+      if (ml_append(lnum++, sortbuf1, 0, false) == FAIL) {
         break;
       }
       new_count += (bcount_t)bytelen;
@@ -762,7 +759,7 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
   }
   for (extra = 0, l = line1; l <= line2; l++) {
     char *str = xstrdup(ml_get(l + extra));
-    ml_append(dest + l - line1, str, (colnr_T)0, false);
+    ml_append(dest + l - line1, str, 0, false);
     xfree(str);
     if (dest < line1) {
       extra++;
@@ -900,7 +897,7 @@ void ex_copy(linenr_T line1, linenr_T line2, linenr_T n)
     // need to use xstrdup() because the line will be unlocked within
     // ml_append()
     char *p = xstrdup(ml_get(line1));
-    ml_append(curwin->w_cursor.lnum, p, (colnr_T)0, false);
+    ml_append(curwin->w_cursor.lnum, p, 0, false);
     xfree(p);
 
     // situation 2: skip already copied lines
@@ -1214,7 +1211,7 @@ static void do_filter(linenr_T line1, linenr_T line2, exarg_T *eap, char *cmd, b
 
   if (do_out) {
     if (otmp != NULL) {
-      if (readfile(otmp, NULL, line2, (linenr_T)0, (linenr_T)MAXLNUM, eap,
+      if (readfile(otmp, NULL, line2, 0, (linenr_T)MAXLNUM, eap,
                    READ_FILTER, false) != OK) {
         if (!aborting()) {
           msg_putchar('\n');
@@ -1682,7 +1679,7 @@ int do_write(exarg_T *eap)
   if (other) {
     if (vim_strchr(p_cpo, CPO_ALTWRITE) != NULL
         || eap->cmdidx == CMD_saveas) {
-      alt_buf = setaltfname(ffname, fname, (linenr_T)1);
+      alt_buf = setaltfname(ffname, fname, 1);
     } else {
       alt_buf = buflist_findname(ffname);
     }
@@ -2243,7 +2240,7 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
     oldwin = NULL;
   }
 
-  if ((command != NULL || newlnum > (linenr_T)0)
+  if ((command != NULL || newlnum > 0)
       && *get_vim_var_str(VV_SWAPCOMMAND) == NUL) {
     // Set v:swapcommand for the SwapExists autocommands.
     const size_t len = (command != NULL) ? strlen(command) + 3 : 30;
@@ -2816,7 +2813,7 @@ void ex_append(exarg_T *eap)
       if (p == NULL) {
         p = eap->nextcmd + strlen(eap->nextcmd);
       }
-      theline = xstrnsave(eap->nextcmd, (size_t)(p - eap->nextcmd));
+      theline = xmemdupz(eap->nextcmd, (size_t)(p - eap->nextcmd));
       if (*p != NUL) {
         p++;
       }
@@ -2858,7 +2855,7 @@ void ex_append(exarg_T *eap)
     }
 
     did_undo = true;
-    ml_append(lnum, theline, (colnr_T)0, false);
+    ml_append(lnum, theline, 0, false);
     if (empty) {
       // there are no marks below the inserted lines
       appended_lines(lnum, 1);
@@ -3524,7 +3521,7 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
            || lnum <= curwin->w_botline);
        lnum++) {
     int nmatch = vim_regexec_multi(&regmatch, curwin, curbuf, lnum,
-                                   (colnr_T)0, NULL, NULL);
+                                   0, NULL, NULL);
     if (nmatch) {
       colnr_T copycol;
       colnr_T matchcol;

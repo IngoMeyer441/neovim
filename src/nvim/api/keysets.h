@@ -1,5 +1,4 @@
-#ifndef NVIM_API_KEYSETS_H
-#define NVIM_API_KEYSETS_H
+#pragma once
 
 #include "nvim/api/private/defs.h"
 
@@ -32,6 +31,7 @@ typedef struct {
   Boolean virt_text_hide;
   Boolean hl_eol;
   String hl_mode;
+  Boolean invalidate;
   Boolean ephemeral;
   Integer priority;
   Boolean right_gravity;
@@ -313,5 +313,3 @@ typedef struct {
 typedef struct {
   Boolean output;
 } Dict(exec_opts);
-
-#endif  // NVIM_API_KEYSETS_H

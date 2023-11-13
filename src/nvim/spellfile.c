@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // spellfile.c: code for reading and writing spell files.
 //
 // See spell.c for information about spell checking.
@@ -1692,7 +1689,7 @@ static int spell_read_tree(FILE *fd, uint8_t **bytsp, int *bytsp_len, idx_T **id
   if (len < 0) {
     return SP_TRUNCERROR;
   }
-  if ((size_t)len >= SIZE_MAX / sizeof(int)) {  // -V547
+  if ((size_t)len >= SIZE_MAX / sizeof(int)) {
     // Invalid length, multiply with sizeof(int) would overflow.
     return SP_FORMERROR;
   }
@@ -3438,7 +3435,7 @@ static int store_aff_word(spellinfo_T *spin, char *word, char *afflist, afffile_
               && (ae->ae_chop == NULL
                   || strlen(ae->ae_chop) < wordlen)
               && (ae->ae_prog == NULL
-                  || vim_regexec_prog(&ae->ae_prog, false, word, (colnr_T)0))
+                  || vim_regexec_prog(&ae->ae_prog, false, word, 0))
               && (((condit & CONDIT_CFIX) == 0)
                   == ((condit & CONDIT_AFF) == 0
                       || ae->ae_flags == NULL
@@ -4344,7 +4341,7 @@ static int write_vim_spell(spellinfo_T *spin, char *fname)
   // <HEADER>: <fileID> <versionnr>
   // <fileID>
   size_t fwv = fwrite(VIMSPELLMAGIC, VIMSPELLMAGICL, 1, fd);
-  if (fwv != (size_t)1) {
+  if (fwv != 1) {
     // Catch first write error, don't try writing more.
     goto theend;
   }
@@ -4702,7 +4699,7 @@ theend:
     retval = FAIL;
   }
 
-  if (fwv != (size_t)1) {
+  if (fwv != 1) {
     retval = FAIL;
   }
   if (retval == FAIL) {
@@ -5181,7 +5178,7 @@ static void sug_write(spellinfo_T *spin, char *fname)
   spell_message(spin, IObuff);
 
   // <SUGHEADER>: <fileID> <versionnr> <timestamp>
-  if (fwrite(VIMSUGMAGIC, VIMSUGMAGICL, (size_t)1, fd) != 1) {  // <fileID>
+  if (fwrite(VIMSUGMAGIC, VIMSUGMAGICL, 1, fd) != 1) {  // <fileID>
     emsg(_(e_write));
     goto theend;
   }

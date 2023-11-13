@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // spellsuggest.c: functions for spelling suggestions
 
 #include <assert.h>
@@ -566,7 +563,7 @@ void spell_suggest(int count)
       }
       vim_snprintf(IObuff, IOSIZE, "%2d", i + 1);
       if (cmdmsg_rl) {
-        rl_mirror_ascii(IObuff);
+        rl_mirror_ascii(IObuff, NULL);
       }
       msg_puts(IObuff);
 
@@ -592,7 +589,7 @@ void spell_suggest(int count)
         }
         if (cmdmsg_rl) {
           // Mirror the numbers, but keep the leading space.
-          rl_mirror_ascii(IObuff + 1);
+          rl_mirror_ascii(IObuff + 1, NULL);
         }
         msg_advance(30);
         msg_puts(IObuff);
@@ -1173,7 +1170,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char *fword, bool soun
   // word).
   int depth = 0;
   trystate_T *sp = &stack[0];
-  CLEAR_POINTER(sp);  // -V1086
+  CLEAR_POINTER(sp);
   sp->ts_curi = 1;
 
   if (soundfold) {
@@ -3146,7 +3143,7 @@ static void add_suggestion(suginfo_T *su, garray_T *gap, const char *goodword, i
   if (i < 0) {
     // Add a suggestion.
     stp = GA_APPEND_VIA_PTR(suggest_T, gap);
-    stp->st_word = xstrnsave(goodword, (size_t)goodlen);
+    stp->st_word = xmemdupz(goodword, (size_t)goodlen);
     stp->st_wordlen = goodlen;
     stp->st_score = score;
     stp->st_altscore = altscore;

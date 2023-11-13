@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // User defined function support
 
 #include <assert.h>
@@ -963,7 +960,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rett
   funccall_T *fc = create_funccal(fp, rettv);
   fc->fc_level = ex_nesting_level;
   // Check if this function has a breakpoint.
-  fc->fc_breakpoint = dbg_find_breakpoint(false, fp->uf_name, (linenr_T)0);
+  fc->fc_breakpoint = dbg_find_breakpoint(false, fp->uf_name, 0);
   fc->fc_dbg_tick = debug_tick;
   // Set up fields for closure.
   ga_init(&fc->fc_ufuncs, sizeof(ufunc_T *), 1);
@@ -1214,7 +1211,7 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rett
 
   if (func_or_func_caller_profiling) {
     call_start = profile_end(call_start);
-    call_start = profile_sub_wait(wait_start, call_start);  // -V614
+    call_start = profile_sub_wait(wait_start, call_start);
     fp->uf_tm_total = profile_add(fp->uf_tm_total, call_start);
     fp->uf_tm_self = profile_self(fp->uf_tm_self, call_start,
                                   fp->uf_tm_children);
@@ -1400,7 +1397,7 @@ void free_all_functions(void)
   // Clean up the current_funccal chain and the funccal stack.
   while (current_funccal != NULL) {
     tv_clear(current_funccal->fc_rettv);
-    cleanup_function_call(current_funccal);  // -V595
+    cleanup_function_call(current_funccal);
     if (current_funccal == NULL && funccal_stack != NULL) {
       restore_funccal();
     }
@@ -1625,7 +1622,7 @@ int call_func(const char *funcname, int len, typval_T *rettv, int argcount_in, t
   if (fp == NULL) {
     // Make a copy of the name, if it comes from a funcref variable it could
     // be changed or deleted in the called function.
-    name = xstrnsave(funcname, (size_t)len);
+    name = xmemdupz(funcname, (size_t)len);
     fname = fname_trans_sid(name, fname_buf, &tofree, &error);
   }
 
@@ -2089,7 +2086,7 @@ char *save_function_name(char **name, bool skip, int flags, funcdict_T *fudi)
   if (strncmp(p, "<lambda>", 8) == 0) {
     p += 8;
     (void)getdigits(&p, false, 0);
-    saved = xstrndup(*name, (size_t)(p - *name));
+    saved = xmemdupz(*name, (size_t)(p - *name));
     if (fudi != NULL) {
       CLEAR_POINTER(fudi);
     }
@@ -2573,12 +2570,12 @@ void ex_function(exarg_T *eap)
         if (strncmp(p, "trim", 4) == 0) {
           // Ignore leading white space.
           p = skipwhite(p + 4);
-          heredoc_trimmed = xstrnsave(theline, (size_t)(skipwhite(theline) - theline));
+          heredoc_trimmed = xmemdupz(theline, (size_t)(skipwhite(theline) - theline));
         }
         if (*p == NUL) {
           skip_until = xstrdup(".");
         } else {
-          skip_until = xstrnsave(p, (size_t)(skiptowhite(p) - p));
+          skip_until = xmemdupz(p, (size_t)(skiptowhite(p) - p));
         }
         do_concat = false;
         is_heredoc = true;
@@ -2598,7 +2595,7 @@ void ex_function(exarg_T *eap)
             if (strncmp(p, "trim", 4) == 0) {
               // Ignore leading white space.
               p = skipwhite(p + 4);
-              heredoc_trimmed = xstrnsave(theline, (size_t)(skipwhite(theline) - theline));
+              heredoc_trimmed = xmemdupz(theline, (size_t)(skipwhite(theline) - theline));
               continue;
             }
             if (strncmp(p, "eval", 4) == 0) {
@@ -2608,7 +2605,7 @@ void ex_function(exarg_T *eap)
             }
             break;
           }
-          skip_until = xstrnsave(p, (size_t)(skiptowhite(p) - p));
+          skip_until = xmemdupz(p, (size_t)(skiptowhite(p) - p));
           do_concat = false;
           is_heredoc = true;
         }

@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // Various routines dealing with allocation and deallocation of memory.
 
 #include <assert.h>
@@ -17,6 +14,7 @@
 #include "nvim/buffer_updates.h"
 #include "nvim/context.h"
 #include "nvim/decoration_provider.h"
+#include "nvim/drawline.h"
 #include "nvim/eval.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
@@ -818,6 +816,7 @@ void free_all_mem(void)
   check_quickfix_busy();
 
   decor_free_all_mem();
+  drawline_free_all_mem();
 
   ui_free_all_mem();
   nlua_free_all_mem();

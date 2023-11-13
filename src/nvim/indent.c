@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -731,7 +728,7 @@ int get_number_indent(linenr_T lnum)
 
     // vim_regexec() expects a pointer to a line.  This lets us
     // start matching for the flp beyond any comment leader...
-    if (vim_regexec(&regmatch, ml_get(lnum) + lead_len, (colnr_T)0)) {
+    if (vim_regexec(&regmatch, ml_get(lnum) + lead_len, 0)) {
       pos.lnum = lnum;
       pos.col = (colnr_T)(*regmatch.endp - ml_get(lnum));
       pos.coladd = 0;
@@ -960,7 +957,7 @@ void ex_retab(exarg_T *eap)
     return;
   }
   while (ascii_isdigit(*(eap->arg)) || *(eap->arg) == ',') {
-    (eap->arg)++;
+    eap->arg++;
   }
 
   // This ensures that either new_vts_array and new_ts_str are freshly
@@ -970,7 +967,7 @@ void ex_retab(exarg_T *eap)
     new_vts_array = curbuf->b_p_vts_array;
     new_ts_str = NULL;
   } else {
-    new_ts_str = xstrnsave(new_ts_str, (size_t)(eap->arg - new_ts_str));
+    new_ts_str = xmemdupz(new_ts_str, (size_t)(eap->arg - new_ts_str));
   }
   for (lnum = eap->line1; !got_int && lnum <= eap->line2; lnum++) {
     char *ptr = ml_get(lnum);

@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <ctype.h>
 #include <inttypes.h>
@@ -228,7 +225,7 @@ void do_window(int nchar, int Prenum, int xchar)
 
     if (!curbuf_locked() && win_split(0, 0) == OK) {
       (void)buflist_getfile(Prenum == 0 ? curwin->w_alt_fnum : Prenum,
-                            (linenr_T)0, GETF_ALT, false);
+                            0, GETF_ALT, false);
     }
     break;
 
@@ -586,7 +583,7 @@ wingotofile:
     }
 
     // Make a copy, if the line was changed it will be freed.
-    ptr = xstrnsave(ptr, len);
+    ptr = xmemdupz(ptr, len);
 
     find_pattern_in_path(ptr, 0, len, true, Prenum == 0,
                          type, Prenum1, ACTION_SPLIT, 1, MAXLNUM);
@@ -6713,7 +6710,7 @@ void win_set_inner_size(win_T *wp, bool valid_cursor)
         // call win_new_height() recursively.
         validate_cursor();
       }
-      if (wp->w_height_inner != prev_height) {  // -V547
+      if (wp->w_height_inner != prev_height) {
         return;  // Recursive call already changed the size, bail out.
       }
       if (wp->w_wrow != wp->w_prev_fraction_row) {

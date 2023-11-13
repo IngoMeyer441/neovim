@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // getchar.c: Code related to getting a character from the user or a script
 // file, manipulations with redo buffer and stuff buffer.
 
@@ -1723,7 +1720,7 @@ static void getchar_common(typval_T *argvars, typval_T *rettv)
       // getchar(): blocking wait.
       // TODO(bfredl): deduplicate shared logic with state_enter ?
       if (!char_avail()) {
-        // flush output before waiting
+        // Flush screen updates before blocking.
         ui_flush();
         (void)os_inchar(NULL, 0, -1, typebuf.tb_change_cnt, main_loop.events);
         if (!multiqueue_empty(main_loop.events)) {

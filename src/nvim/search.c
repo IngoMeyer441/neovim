@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // search.c: code for normal mode searching commands
 
 #include <assert.h>
@@ -1171,7 +1168,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char *pat, int count, in
       // Get the offset, so we know how long it is.
       if (!cmd_silent
           && (spats[0].off.line || spats[0].off.end || spats[0].off.off)) {
-        p = off_buf;  // -V507
+        p = off_buf;
         *p++ = (char)dirc;
         if (spats[0].off.end) {
           *p++ = 'e';
@@ -1629,7 +1626,7 @@ static bool find_rawstring_end(char *linep, pos_T *startpos, pos_T *endpos)
   for (p = linep + startpos->col + 1; *p && *p != '('; p++) {}
 
   size_t delim_len = (size_t)((p - linep) - startpos->col - 1);
-  char *delim_copy = xstrnsave(linep + startpos->col + 1, delim_len);
+  char *delim_copy = xmemdupz(linep + startpos->col + 1, delim_len);
   bool found = false;
   for (lnum = startpos->lnum; lnum <= endpos->lnum; lnum++) {
     char *line = ml_get(lnum);
@@ -3635,7 +3632,7 @@ void find_pattern_in_path(char *ptr, Direction dir, size_t len, bool whole, bool
 
   while (true) {
     if (incl_regmatch.regprog != NULL
-        && vim_regexec(&incl_regmatch, line, (colnr_T)0)) {
+        && vim_regexec(&incl_regmatch, line, 0)) {
       char *p_fname = (curr_fname == curbuf->b_fname)
                         ? curbuf->b_ffname : curr_fname;
 
@@ -3810,7 +3807,7 @@ void find_pattern_in_path(char *ptr, Direction dir, size_t len, bool whole, bool
 search_line:
       define_matched = false;
       if (def_regmatch.regprog != NULL
-          && vim_regexec(&def_regmatch, line, (colnr_T)0)) {
+          && vim_regexec(&def_regmatch, line, 0)) {
         // Pattern must be first identifier after 'define', so skip
         // to that position before checking for match of pattern.  Also
         // don't let it match beyond the end of this identifier.

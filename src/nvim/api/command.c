@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -419,7 +416,7 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
         VALIDATE_EXP(!string_iswhite(elem.data.string), "command arg", "non-whitespace", NULL, {
           goto end;
         });
-        data_str = xstrndup(elem.data.string.data, elem.data.string.size);
+        data_str = string_to_cstr(elem.data.string);
         break;
       default:
         VALIDATE_EXP(false, "command arg", "valid type", api_typename(elem.type), {

@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // undo.c: multi level undo facility
 
 // The saved lines are stored in a list of lists (one for each buffer):
@@ -1088,7 +1085,7 @@ static u_entry_T *unserialize_uep(bufinfo_T *bi, bool *error, const char *file_n
 
   char **array = NULL;
   if (uep->ue_size > 0) {
-    if ((size_t)uep->ue_size < SIZE_MAX / sizeof(char *)) {  // -V547
+    if ((size_t)uep->ue_size < SIZE_MAX / sizeof(char *)) {
       array = xmalloc(sizeof(char *) * (size_t)uep->ue_size);
       memset(array, 0, sizeof(char *) * (size_t)uep->ue_size);
     }
@@ -1514,7 +1511,7 @@ void u_read_undo(char *name, const uint8_t *hash, const char *orig_name FUNC_ATT
   // sequence numbers of the headers.
   // When there are no headers uhp_table is NULL.
   if (num_head > 0) {
-    if ((size_t)num_head < SIZE_MAX / sizeof(*uhp_table)) {  // -V547
+    if ((size_t)num_head < SIZE_MAX / sizeof(*uhp_table)) {
       uhp_table = xmalloc((size_t)num_head * sizeof(*uhp_table));
     }
   }
@@ -2358,9 +2355,9 @@ static void u_undoredo(int undo, bool do_buf_event)
         // If the file is empty, there is an empty line 1 that we
         // should get rid of, by replacing it with the new line
         if (empty_buffer && lnum == 0) {
-          ml_replace((linenr_T)1, uep->ue_array[i], true);
+          ml_replace(1, uep->ue_array[i], true);
         } else {
-          ml_append(lnum, uep->ue_array[i], (colnr_T)0, false);
+          ml_append(lnum, uep->ue_array[i], 0, false);
         }
         xfree(uep->ue_array[i]);
       }
@@ -3029,7 +3026,7 @@ void u_undoline(void)
 
   // first save the line for the 'u' command
   if (u_savecommon(curbuf, curbuf->b_u_line_lnum - 1,
-                   curbuf->b_u_line_lnum + 1, (linenr_T)0, false) == FAIL) {
+                   curbuf->b_u_line_lnum + 1, 0, false) == FAIL) {
     return;
   }
 

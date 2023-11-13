@@ -554,6 +554,12 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---                 the extmark end position (if it exists) will be shifted in
 ---                 when new text is inserted (true for right, false for
 ---                 left). Defaults to false.
+---               • undo_restore : Restore the exact position of the mark if
+---                 text around the mark was deleted and then restored by
+---                 undo. Defaults to true.
+---               • invalidate : boolean that indicates whether to hide the
+---                 extmark if the entirety of its range is deleted. If
+---                 "undo_restore" is false, the extmark is deleted instead.
 ---               • priority: a priority value for the highlight group or sign
 ---                 attribute. For example treesitter highlighting uses a
 ---                 value of 100.
@@ -1812,7 +1818,7 @@ function vim.api.nvim_set_current_win(window) end
 --- `nvim_buf_set_extmark()` can be called to add marks on a per-window or
 --- per-lines basis. Use the `ephemeral` key to only use the mark for the
 --- current screen redraw (the callback will be called again for the next
---- redraw ).
+--- redraw).
 --- Note: this function should not be called often. Rather, the callbacks
 --- themselves can be used to throttle unneeded callbacks. the `on_start`
 --- callback can return `false` to disable the provider until the next redraw.
@@ -2058,6 +2064,17 @@ function vim.api.nvim_ui_set_focus(gained) end
 --- @param name string
 --- @param value any
 function vim.api.nvim_ui_set_option(name, value) end
+
+--- Tells Nvim when a terminal event has occurred.
+--- The following terminal events are supported:
+---
+--- • "osc_response": The terminal sent a OSC response sequence to Nvim. The
+---   payload is the received OSC sequence.
+---
+---
+--- @param event string Event name
+--- @param value any
+function vim.api.nvim_ui_term_event(event, value) end
 
 --- @param width integer
 --- @param height integer

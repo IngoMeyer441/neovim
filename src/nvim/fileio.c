@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // fileio.c: read from and write to a file
 
 #include <assert.h>
@@ -935,7 +932,7 @@ retry:
 
         if (conv_restlen > 0) {
           // Insert unconverted bytes from previous line.
-          memmove(ptr, conv_rest, (size_t)conv_restlen);  // -V614
+          memmove(ptr, conv_rest, (size_t)conv_restlen);
           ptr += conv_restlen;
           size -= conv_restlen;
         }
@@ -1993,7 +1990,7 @@ static char *next_fenc(char **pp, bool *alloced)
     r = enc_canonize(*pp);
     *pp += strlen(*pp);
   } else {
-    r = xstrnsave(*pp, (size_t)(p - *pp));
+    r = xmemdupz(*pp, (size_t)(p - *pp));
     *pp = p + 1;
     p = enc_canonize(r);
     xfree(r);
@@ -3132,7 +3129,7 @@ void buf_reload(buf_T *buf, int orig_mode, bool reload_options)
     savebuf = NULL;
   } else {
     // Allocate a buffer without putting it in the buffer list.
-    savebuf = buflist_new(NULL, NULL, (linenr_T)1, BLN_DUMMY);
+    savebuf = buflist_new(NULL, NULL, 1, BLN_DUMMY);
     set_bufref(&bufref, savebuf);
     if (savebuf != NULL && buf == curbuf) {
       // Open the memline.
@@ -3153,7 +3150,7 @@ void buf_reload(buf_T *buf, int orig_mode, bool reload_options)
   if (saved == OK) {
     curbuf->b_flags |= BF_CHECK_RO;           // check for RO again
     keep_filetype = true;                     // don't detect 'filetype'
-    if (readfile(buf->b_ffname, buf->b_fname, (linenr_T)0, (linenr_T)0,
+    if (readfile(buf->b_ffname, buf->b_fname, 0, 0,
                  (linenr_T)MAXLNUM, &ea, flags, false) != OK) {
       if (!aborting()) {
         semsg(_("E321: Could not reload \"%s\""), buf->b_fname);
@@ -3583,10 +3580,10 @@ bool match_file_pat(char *pattern, regprog_T **prog, char *fname, char *sfname, 
   // 3. the tail of the file name, when the pattern has no '/'.
   if (regmatch.regprog != NULL
       && ((allow_dirs
-           && (vim_regexec(&regmatch, fname, (colnr_T)0)
+           && (vim_regexec(&regmatch, fname, 0)
                || (sfname != NULL
-                   && vim_regexec(&regmatch, sfname, (colnr_T)0))))
-          || (!allow_dirs && vim_regexec(&regmatch, tail, (colnr_T)0)))) {
+                   && vim_regexec(&regmatch, sfname, 0))))
+          || (!allow_dirs && vim_regexec(&regmatch, tail, 0)))) {
     result = true;
   }
 

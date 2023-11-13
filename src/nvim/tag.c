@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // Code to handle tags and the tag stack
 
 #include <assert.h>
@@ -340,7 +337,7 @@ void do_tag(char *tag, int type, int count, int forceit, int verbose)
 
   // Don't add a tag to the tagstack if 'tagstack' has been reset.
   assert(tag != NULL);
-  if (!p_tgst && *tag != NUL) {  // -V522
+  if (!p_tgst && *tag != NUL) {
     use_tagstack = false;
     new_tag = true;
     if (g_do_tagpreview != 0) {
@@ -707,7 +704,7 @@ void do_tag(char *tag, int type, int count, int forceit, int verbose)
             && tagp2.user_data) {
           XFREE_CLEAR(tagstack[tagstackidx].user_data);
           tagstack[tagstackidx].user_data =
-            xstrnsave(tagp2.user_data, (size_t)(tagp2.user_data_end - tagp2.user_data));
+            xmemdupz(tagp2.user_data, (size_t)(tagp2.user_data_end - tagp2.user_data));
         }
 
         tagstackidx++;
@@ -1903,13 +1900,13 @@ static bool findtags_match_tag(findtags_state_T *st, tagptrs_T *tagpp, findtags_
   if (!match && st->orgpat->regmatch.regprog != NULL) {
     char cc = *tagpp->tagname_end;
     *tagpp->tagname_end = NUL;
-    match = vim_regexec(&st->orgpat->regmatch, tagpp->tagname, (colnr_T)0);
+    match = vim_regexec(&st->orgpat->regmatch, tagpp->tagname, 0);
     if (match) {
       margs->matchoff = (int)(st->orgpat->regmatch.startp[0] - tagpp->tagname);
       if (st->orgpat->regmatch.rm_ic) {
         st->orgpat->regmatch.rm_ic = false;
         margs->match_no_ic = vim_regexec(&st->orgpat->regmatch,
-                                         tagpp->tagname, (colnr_T)0);
+                                         tagpp->tagname, 0);
         st->orgpat->regmatch.rm_ic = true;
       }
     }
@@ -2932,7 +2929,7 @@ static int jumpto_tag(const char *lbuf_arg, int forceit, int keep_help)
   if (getfile_result == GETFILE_UNUSED) {
     // Careful: getfile() may trigger autocommands and call jumpto_tag()
     // recursively.
-    getfile_result = getfile(0, fname, NULL, true, (linenr_T)0, forceit);
+    getfile_result = getfile(0, fname, NULL, true, 0, forceit);
   }
   keep_help_flag = false;
 
@@ -3021,7 +3018,7 @@ static int jumpto_tag(const char *lbuf_arg, int forceit, int keep_help)
         }
       }
       p_ws = save_p_ws;
-      p_ic = save_p_ic;  // -V519
+      p_ic = save_p_ic;
       p_scs = save_p_scs;
 
       // A search command may have positioned the cursor beyond the end

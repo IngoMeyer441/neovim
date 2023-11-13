@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <fcntl.h>
 #include <float.h>
@@ -358,6 +355,7 @@ static void api_wrapper(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   if (!object_to_vim(result, rettv, &err)) {
+    assert(ERROR_SET(&err));
     semsg(_("Error converting the call result: %s"), err.msg);
   }
 
@@ -1024,7 +1022,7 @@ static void f_ctxget(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   Dictionary ctx_dict = ctx_to_dict(ctx);
   Error err = ERROR_INIT;
-  object_to_vim(DICTIONARY_OBJ(ctx_dict), rettv, &err);
+  (void)object_to_vim(DICTIONARY_OBJ(ctx_dict), rettv, &err);
   api_free_dictionary(ctx_dict);
   api_clear_error(&err);
 }
@@ -1090,14 +1088,16 @@ static void f_ctxset(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     return;
   }
 
-  int save_did_emsg = did_emsg;
+  const int save_did_emsg = did_emsg;
   did_emsg = false;
 
   Dictionary dict = vim_to_object(&argvars[0]).data.dictionary;
   Context tmp = CONTEXT_INIT;
-  ctx_from_dict(dict, &tmp);
+  Error err = ERROR_INIT;
+  ctx_from_dict(dict, &tmp, &err);
 
-  if (did_emsg) {
+  if (ERROR_SET(&err)) {
+    semsg("%s", err.msg);
     ctx_free(&tmp);
   } else {
     ctx_free(ctx);
@@ -1105,6 +1105,7 @@ static void f_ctxset(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   api_free_dictionary(dict);
+  api_clear_error(&err);
   did_emsg = save_did_emsg;
 }
 
@@ -2911,6 +2912,9 @@ static void f_wait(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   bool error = false;
   const int called_emsg_before = called_emsg;
 
+  // Flush screen updates before blocking.
+  ui_flush();
+
   LOOP_PROCESS_EVENTS_UNTIL(&main_loop, main_loop.events, timeout,
                             eval_expr_typval(&expr, false, &argv, 0, &exprval) != OK
                             || tv_get_number_chk(&exprval, &error)
@@ -4187,6 +4191,7 @@ static void f_jobwait(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   ui_busy_start();
+  ui_flush();
   list_T *args = argvars[0].vval.v_list;
   Channel **jobs = xcalloc((size_t)tv_list_len(args), sizeof(*jobs));
   MultiQueue *waiting_jobs = multiqueue_new_parent(loop_on_put, &main_loop);
@@ -4802,7 +4807,7 @@ static void f_min(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "mkdir()" function
 static void f_mkdir(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  int prot = 0755;  // -V536
+  int prot = 0755;
 
   rettv->vval.v_number = FAIL;
   if (check_secure()) {
@@ -5668,7 +5673,7 @@ static void read_file_or_blob(typval_T *argvars, typval_T *rettv, bool always_bl
         }
         if (prevlen == 0) {
           assert(len < INT_MAX);
-          s = xstrnsave(start, len);
+          s = xmemdupz(start, len);
         } else {
           // Change "prev" buffer to be the right size.  This way
           // the bytes are only copied once, and very long lines are
@@ -5724,9 +5729,9 @@ static void read_file_or_blob(typval_T *argvars, typval_T *rettv, bool always_bl
             // have to shuffle buf to close gap
             int adjust_prevlen = 0;
 
-            if (dest < buf) {  // -V782
+            if (dest < buf) {
               // adjust_prevlen must be 1 or 2.
-              adjust_prevlen = (int)(buf - dest);  // -V782
+              adjust_prevlen = (int)(buf - dest);
               dest = buf;
             }
             if (readlen > p - buf + 1) {
@@ -6304,7 +6309,7 @@ static void reduce_string(typval_T *argvars, typval_T *expr, typval_T *rettv)
     *rettv = (typval_T){
       .v_type = VAR_STRING,
       .v_lock = VAR_UNLOCKED,
-      .vval.v_string = xstrnsave(p, (size_t)len),
+      .vval.v_string = xmemdupz(p, (size_t)len),
     };
     p += len;
   } else if (tv_check_for_string_arg(argvars, 2) == FAIL) {
@@ -6320,7 +6325,7 @@ static void reduce_string(typval_T *argvars, typval_T *expr, typval_T *rettv)
     argv[1] = (typval_T){
       .v_type = VAR_STRING,
       .v_lock = VAR_UNLOCKED,
-      .vval.v_string = xstrnsave(p, (size_t)len),
+      .vval.v_string = xmemdupz(p, (size_t)len),
     };
 
     const int r = eval_expr_typval(expr, true, argv, 2, rettv);
@@ -6749,6 +6754,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   if (!object_to_vim(result, rettv, &err)) {
+    assert(ERROR_SET(&err));
     semsg(_("Error converting the call result: %s"), err.msg);
   }
 

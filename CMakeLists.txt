@@ -168,7 +168,10 @@ foreach(CFGNAME ${CMAKE_CONFIGURATION_TYPES})
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CFGNAME} ${CMAKE_BINARY_DIR}/lib)
 endforeach()
 
-find_program(LUA_PRG NAMES luajit lua5.1 lua5.2 lua)
+if(NOT PREFER_LUA)
+  find_program(LUA_PRG NAMES luajit)
+endif()
+find_program(LUA_PRG NAMES lua5.1 lua5.2 lua)
 if(NOT LUA_PRG)
   message(FATAL_ERROR "Failed to find a Lua 5.1-compatible interpreter")
 endif()
@@ -225,11 +228,16 @@ add_glob_target(
   TOUCH_STRATEGY SINGLE)
 add_dependencies(lintlua-luacheck lua-dev-deps)
 
-# Don't use add_glob_target as .styluaignore won't be respected.
-# https://github.com/JohnnyMorganz/StyLua/issues/751
-add_custom_target(lintlua-stylua
-  COMMAND ${STYLUA_PRG} --color=always --check .
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+add_glob_target(
+  TARGET lintlua-stylua
+  COMMAND ${STYLUA_PRG}
+  FLAGS --color=always --check --respect-ignores
+  GLOB_DIRS runtime/
+  GLOB_PAT *.lua
+  EXCLUDE
+    /runtime/lua/vim/_meta
+  TOUCH_STRATEGY SINGLE)
+
 add_custom_target(lintlua)
 add_dependencies(lintlua lintlua-luacheck lintlua-stylua)
 
@@ -286,13 +294,18 @@ ExternalProject_Add(uncrustify
   CMAKE_CACHE_ARGS ${DEPS_CMAKE_CACHE_ARGS}
   EXCLUDE_FROM_ALL TRUE)
 
-ExternalProject_Add(lua-dev-deps
-  URL https://github.com/neovim/deps/raw/5a1f71cceb24990a0b15fd9a472a5f549f019248/opt/lua-dev-deps.tar.gz
-  URL_HASH SHA256=27db2495f5eddc7fc191701ec9b291486853530c6125609d3197d03481e8d5a2
-  DOWNLOAD_NO_PROGRESS TRUE
-  DOWNLOAD_DIR ${DEPS_DOWNLOAD_DIR}/lua-dev-deps
-  SOURCE_DIR ${DEPS_SHARE_DIR}
-  CONFIGURE_COMMAND ""
-  BUILD_COMMAND ""
-  INSTALL_COMMAND ""
-  EXCLUDE_FROM_ALL TRUE)
+option(USE_BUNDLED_BUSTED "Use bundled luarocks" ON)
+if(USE_BUNDLED_BUSTED)
+  ExternalProject_Add(lua-dev-deps
+    URL https://github.com/neovim/deps/raw/5a1f71cceb24990a0b15fd9a472a5f549f019248/opt/lua-dev-deps.tar.gz
+    URL_HASH SHA256=27db2495f5eddc7fc191701ec9b291486853530c6125609d3197d03481e8d5a2
+    DOWNLOAD_NO_PROGRESS TRUE
+    DOWNLOAD_DIR ${DEPS_DOWNLOAD_DIR}/lua-dev-deps
+    SOURCE_DIR ${DEPS_SHARE_DIR}
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    EXCLUDE_FROM_ALL TRUE)
+else()
+  add_custom_target(lua-dev-deps)
+endif()

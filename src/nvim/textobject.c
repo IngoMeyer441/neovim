@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // textobject.c: functions for text objects
 
 #include <stdbool.h>
@@ -1146,7 +1143,7 @@ again:
     if (do_searchpair("<[^ \t>/!]\\+\\%(\\_s\\_[^>]\\{-}[^/]>\\|$\\|\\_s\\=>\\)",
                       "",
                       "</[^>]*>", BACKWARD, NULL, 0,
-                      NULL, (linenr_T)0, 0) <= 0) {
+                      NULL, 0, 0) <= 0) {
       curwin->w_cursor = old_pos;
       goto theend;
     }
@@ -1172,7 +1169,7 @@ again:
            "<%.*s\\>\\%%(\\_s\\_[^>]\\{-}\\_[^/]>\\|\\_s\\?>\\)\\c", len, p);
   snprintf(epat, epat_len, "</%.*s>\\c", len, p);
 
-  const int r = do_searchpair(spat, "", epat, FORWARD, NULL, 0, NULL, (linenr_T)0, 0);
+  const int r = do_searchpair(spat, "", epat, FORWARD, NULL, 0, NULL, 0, 0);
 
   xfree(spat);
   xfree(epat);

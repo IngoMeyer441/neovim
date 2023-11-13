@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // Handling of regular expressions: vim_regcomp(), vim_regexec(), vim_regsub()
 
 // By default: do not create debugging logs or files related to regular
@@ -1004,7 +1001,7 @@ static int64_t getoctchrs(void)
   int c;
   int i;
 
-  for (i = 0; i < 3 && nr < 040; i++) {  // -V536
+  for (i = 0; i < 3 && nr < 040; i++) {
     c = (uint8_t)regparse[0];
     if (c < '0' || c > '7') {
       break;
@@ -2301,7 +2298,7 @@ char *reg_submatch(int no)
         }
         len += rsm.sm_mmatch->endpos[no].col;
         if (round == 2) {
-          retval[len] = NUL;  // -V595
+          retval[len] = NUL;
         }
         len++;
       }
@@ -2583,7 +2580,6 @@ static void init_regexec_multi(regmmatch_T *rmp, win_T *win, buf_T *buf, linenr_
 #define UPPER           47      //      Match uppercase char
 #define NUPPER          48      //      Match non-uppercase char
 #define LAST_NL         NUPPER + ADD_NL
-// -V:WITH_NL:560
 #define WITH_NL(op)     ((op) >= FIRST_NL && (op) <= LAST_NL)
 
 #define MOPEN           80   // -89 Mark this point in input as start of
@@ -7287,7 +7283,7 @@ static int bt_regexec_both(uint8_t *line, colnr_T startcol, proftime_T *tm, int 
 
   if (REG_MULTI) {
     prog = (bt_regprog_T *)rex.reg_mmatch->regprog;
-    line = (uint8_t *)reg_getline((linenr_T)0);
+    line = (uint8_t *)reg_getline(0);
     rex.reg_startpos = rex.reg_mmatch->startpos;
     rex.reg_endpos = rex.reg_mmatch->endpos;
   } else {
@@ -7396,7 +7392,7 @@ static int bt_regexec_both(uint8_t *line, colnr_T startcol, proftime_T *tm, int 
       // if not currently on the first line, get it again
       if (rex.lnum != 0) {
         rex.lnum = 0;
-        rex.line = (uint8_t *)reg_getline((linenr_T)0);
+        rex.line = (uint8_t *)reg_getline(0);
       }
       if (rex.line[col] == NUL) {
         break;
@@ -9818,7 +9814,7 @@ static int nfa_regatom(void)
   case Magic('|'):
   case Magic('&'):
   case Magic(')'):
-    semsg(_(e_misplaced), (char)no_Magic(c));  // -V1037
+    semsg(_(e_misplaced), (char)no_Magic(c));
     return FAIL;
 
   case Magic('='):
@@ -12911,7 +12907,7 @@ skip_add:
     if (state->c == NFA_ZSTART) {
       subidx = 0;
       sub = &subs->norm;
-    } else if (state->c >= NFA_ZOPEN && state->c <= NFA_ZOPEN9) {  // -V560
+    } else if (state->c >= NFA_ZOPEN && state->c <= NFA_ZOPEN9) {
       subidx = state->c - NFA_ZOPEN;
       sub = &subs->synt;
     } else {
@@ -12966,7 +12962,7 @@ skip_add:
       break;
     }
     // "subs" may have changed, need to set "sub" again.
-    if (state->c >= NFA_ZOPEN && state->c <= NFA_ZOPEN9) {  // -V560
+    if (state->c >= NFA_ZOPEN && state->c <= NFA_ZOPEN9) {
       sub = &subs->synt;
     } else {
       sub = &subs->norm;
@@ -13016,7 +13012,7 @@ skip_add:
     if (state->c == NFA_ZEND) {
       subidx = 0;
       sub = &subs->norm;
-    } else if (state->c >= NFA_ZCLOSE && state->c <= NFA_ZCLOSE9) {  // -V560
+    } else if (state->c >= NFA_ZCLOSE && state->c <= NFA_ZCLOSE9) {
       subidx = state->c - NFA_ZCLOSE;
       sub = &subs->synt;
     } else {
@@ -13054,7 +13050,7 @@ skip_add:
       break;
     }
     // "subs" may have changed, need to set "sub" again.
-    if (state->c >= NFA_ZCLOSE && state->c <= NFA_ZCLOSE9) {  // -V560
+    if (state->c >= NFA_ZCLOSE && state->c <= NFA_ZCLOSE9) {
       sub = &subs->synt;
     } else {
       sub = &subs->norm;
@@ -15242,7 +15238,7 @@ static int nfa_regexec_both(uint8_t *line, colnr_T startcol, proftime_T *tm, int
 
   if (REG_MULTI) {
     prog = (nfa_regprog_T *)rex.reg_mmatch->regprog;
-    line = (uint8_t *)reg_getline((linenr_T)0);  // relative to the cursor
+    line = (uint8_t *)reg_getline(0);  // relative to the cursor
     rex.reg_startpos = rex.reg_mmatch->startpos;
     rex.reg_endpos = rex.reg_mmatch->endpos;
   } else {

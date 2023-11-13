@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // help.c: functions for Vim help
 
 #include <stdbool.h>
@@ -823,7 +820,7 @@ void fix_help_buffer(void)
                 }
                 convert_setup(&vc, NULL, NULL);
 
-                ml_append(lnum, cp, (colnr_T)0, false);
+                ml_append(lnum, cp, 0, false);
                 if (cp != IObuff) {
                   xfree(cp);
                 }

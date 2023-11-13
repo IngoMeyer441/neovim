@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <stdbool.h>
 #include <string.h>
@@ -127,7 +124,7 @@ char *stdpaths_get_xdg_var(const XDGVarType idx)
       ret = "/tmp/";
     }
     size_t len = strlen(ret);
-    ret = xstrndup(ret, len >= 2 ? len - 1 : 0);  // Trim trailing slash.
+    ret = xmemdupz(ret, len >= 2 ? len - 1 : 0);  // Trim trailing slash.
   }
 
   return ret;

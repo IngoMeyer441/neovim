@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // spell.c: code for spell checking
 //
 // See spellfile.c for the Vim spell file format.
@@ -2257,7 +2254,7 @@ static void use_midword(slang_T *lp, win_T *wp)
       wp->w_s->b_spell_ismw[c] = true;
     } else if (wp->w_s->b_spell_ismw_mb == NULL) {
       // First multi-byte char in "b_spell_ismw_mb".
-      wp->w_s->b_spell_ismw_mb = xstrnsave(p, (size_t)l);
+      wp->w_s->b_spell_ismw_mb = xmemdupz(p, (size_t)l);
     } else {
       // Append multi-byte chars to "b_spell_ismw_mb".
       const int n = (int)strlen(wp->w_s->b_spell_ismw_mb);
@@ -3322,7 +3319,7 @@ void spell_dump_compl(char *pat, int ic, Direction *dir, int dumpflags_arg)
 
   if (do_region && region_names != NULL && pat == NULL) {
     vim_snprintf(IObuff, IOSIZE, "/regions=%s", region_names);
-    ml_append(lnum++, IObuff, (colnr_T)0, false);
+    ml_append(lnum++, IObuff, 0, false);
   } else {
     do_region = false;
   }
@@ -3337,7 +3334,7 @@ void spell_dump_compl(char *pat, int ic, Direction *dir, int dumpflags_arg)
 
     if (pat == NULL) {
       vim_snprintf(IObuff, IOSIZE, "# file: %s", slang->sl_fname);
-      ml_append(lnum++, IObuff, (colnr_T)0, false);
+      ml_append(lnum++, IObuff, 0, false);
     }
 
     // When matching with a pattern and there are no prefixes only use
@@ -3506,7 +3503,7 @@ static void dump_word(slang_T *slang, char *word, char *pat, Direction *dir, int
       }
     }
 
-    ml_append(lnum, p, (colnr_T)0, false);
+    ml_append(lnum, p, 0, false);
   } else if (((dumpflags & DUMPFLAG_ICASE)
               ? mb_strnicmp(p, pat, strlen(pat)) == 0
               : strncmp(p, pat, strlen(pat)) == 0)

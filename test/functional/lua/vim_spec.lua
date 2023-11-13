@@ -2438,6 +2438,12 @@ describe('lua stdlib', function()
     end)
 
     it('allows removing on_key listeners', function()
+      -- Create some unused namespaces
+      meths.create_namespace('unused1')
+      meths.create_namespace('unused2')
+      meths.create_namespace('unused3')
+      meths.create_namespace('unused4')
+
       insert([[hello world]])
 
       exec_lua [[
@@ -2553,7 +2559,6 @@ describe('lua stdlib', function()
       ]])
     end)
 
-
     it('should not block other events', function()
       eq({time = true, wait_result = true}, exec_lua[[
         start_time = get_time()
@@ -2595,6 +2600,7 @@ describe('lua stdlib', function()
         }
       ]])
     end)
+
     it('should work with vim.defer_fn', function()
       eq({time = true, wait_result = true}, exec_lua[[
         start_time = get_time()

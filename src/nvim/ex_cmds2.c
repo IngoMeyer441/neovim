@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 /// @file ex_cmds2.c
 ///
 /// Some more functions for command line commands
@@ -436,7 +433,7 @@ int buf_write_all(buf_T *buf, int forceit)
   buf_T *old_curbuf = curbuf;
 
   retval = (buf_write(buf, buf->b_ffname, buf->b_fname,
-                      (linenr_T)1, buf->b_ml.ml_line_count, NULL,
+                      1, buf->b_ml.ml_line_count, NULL,
                       false, forceit, true, false));
   if (curbuf != old_curbuf) {
     msg_source(HL_ATTR(HLF_W));

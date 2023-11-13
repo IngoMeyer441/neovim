@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // message.c: functions for displaying messages on the command line
 
 #include <assert.h>
@@ -2116,7 +2113,7 @@ static void msg_puts_display(const char *str, int maxlen, int attr, int recurse)
       msg_ext_last_attr = attr;
     }
     // Concat pieces with the same highlight
-    size_t len = strnlen(str, (size_t)maxlen);  // -V781
+    size_t len = strnlen(str, (size_t)maxlen);
     ga_concat_len(&msg_ext_last_chunk, str, len);
     msg_ext_cur_len += len;
     return;
@@ -2284,7 +2281,7 @@ bool message_filtered(const char *msg)
     return false;
   }
 
-  bool match = vim_regexec(&cmdmod.cmod_filter_regmatch, msg, (colnr_T)0);
+  bool match = vim_regexec(&cmdmod.cmod_filter_regmatch, msg, 0);
   return cmdmod.cmod_filter_force ? match : !match;
 }
 

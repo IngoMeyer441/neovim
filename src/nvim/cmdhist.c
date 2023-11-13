@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // cmdhist.c: Functions for the history of the command-line.
 
 #include <assert.h>
@@ -463,7 +460,7 @@ static int del_history_entry(int histype, char *str)
     if (hisptr->hisstr == NULL) {
       break;
     }
-    if (vim_regexec(&regmatch, hisptr->hisstr, (colnr_T)0)) {
+    if (vim_regexec(&regmatch, hisptr->hisstr, 0)) {
       found = true;
       hist_free_entry(hisptr);
     } else {

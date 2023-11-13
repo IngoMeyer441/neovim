@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // Most of the routines in this file perform screen (grid) manipulations. The
 // given operation is performed physically on the screen. The corresponding
 // change is also made to the internal screen image. In this way, the editor
@@ -477,14 +474,21 @@ void grid_line_mirror(void)
   if (grid_line_first >= grid_line_last) {
     return;
   }
+  linebuf_mirror(&grid_line_first, &grid_line_last, grid_line_maxcol);
+}
 
-  size_t n = (size_t)(grid_line_last - grid_line_first);
-  int mirror = grid_line_maxcol - 1;  // Mirrors are more fun than television.
+void linebuf_mirror(int *firstp, int *lastp, int maxcol)
+{
+  int first = *firstp;
+  int last = *lastp;
+
+  size_t n = (size_t)(last - first);
+  int mirror = maxcol - 1;  // Mirrors are more fun than television.
   schar_T *scratch_char = (schar_T *)linebuf_scratch;
-  memcpy(scratch_char + grid_line_first, linebuf_char + grid_line_first, n * sizeof(schar_T));
-  for (int col = grid_line_first; col < grid_line_last; col++) {
+  memcpy(scratch_char + first, linebuf_char + first, n * sizeof(schar_T));
+  for (int col = first; col < last; col++) {
     int rev = mirror - col;
-    if (col + 1 < grid_line_last && scratch_char[col + 1] == 0) {
+    if (col + 1 < last && scratch_char[col + 1] == 0) {
       linebuf_char[rev - 1] = scratch_char[col];
       linebuf_char[rev] = 0;
       col++;
@@ -495,20 +499,19 @@ void grid_line_mirror(void)
 
   // for attr and vcol: assumes doublewidth chars are self-consistent
   sattr_T *scratch_attr = (sattr_T *)linebuf_scratch;
-  memcpy(scratch_attr + grid_line_first, linebuf_attr + grid_line_first, n * sizeof(sattr_T));
-  for (int col = grid_line_first; col < grid_line_last; col++) {
+  memcpy(scratch_attr + first, linebuf_attr + first, n * sizeof(sattr_T));
+  for (int col = first; col < last; col++) {
     linebuf_attr[mirror - col] = scratch_attr[col];
   }
 
   colnr_T *scratch_vcol = (colnr_T *)linebuf_scratch;
-  memcpy(scratch_vcol + grid_line_first, linebuf_vcol + grid_line_first, n * sizeof(colnr_T));
-  for (int col = grid_line_first; col < grid_line_last; col++) {
+  memcpy(scratch_vcol + first, linebuf_vcol + first, n * sizeof(colnr_T));
+  for (int col = first; col < last; col++) {
     linebuf_vcol[mirror - col] = scratch_vcol[col];
   }
 
-  int grid_line_last_copy = grid_line_last;
-  grid_line_last = grid_line_maxcol - grid_line_first;
-  grid_line_first = grid_line_maxcol - grid_line_last_copy;
+  *lastp = maxcol - first;
+  *firstp = maxcol - last;
 }
 
 /// End a group of grid_line_puts calls and send the screen buffer to the UI layer.
@@ -698,10 +701,10 @@ void grid_put_linebuf(ScreenGrid *grid, int row, int coloff, int col, int endcol
       }
     }
     col = endcol + 1;
-    endcol = (clear_width > 0 ? clear_width : -clear_width);
+    endcol = clear_width;
   }
 
-  if (p_arshape && !p_tbidi) {
+  if (p_arshape && !p_tbidi && endcol > col) {
     line_do_arabic_shape(linebuf_char + col, endcol - col);
   }
 
