@@ -3307,7 +3307,7 @@ return {
     },
     {
       abbreviation = 'fs',
-      defaults = { if_true = false },
+      defaults = { if_true = true },
       desc = [=[
         When on, the OS function fsync() will be called after saving a file
         (|:write|, |writefile()|, …), |swap-file|, |undo-persistence| and |shada-file|.
@@ -7590,12 +7590,6 @@ return {
                         number (maximum 9), e.g. "yes:3"
            "number"	display signs in the 'number' column. If the number
         		column is not present, then behaves like "auto".
-
-        Note regarding "orphaned signs": with signcolumn numbers higher than
-        1, deleting lines will also remove the associated signs automatically,
-        in contrast to the default Vim behavior of keeping and grouping them.
-        This is done in order for the signcolumn appearance not appear weird
-        during line deletion.
       ]=],
       expand_cb = 'expand_set_signcolumn',
       full_name = 'signcolumn',
@@ -8808,6 +8802,21 @@ return {
       scope = { 'global' },
       type = 'string',
       varname = 'p_tpf',
+    },
+    {
+      defaults = { if_true = true },
+      desc = [=[
+        If the host terminal supports it, buffer all screen updates
+        made during a redraw cycle so that each screen is displayed in
+        the terminal all at once. This can prevent tearing or flickering
+        when the terminal updates faster than Nvim can redraw.
+      ]=],
+      full_name = 'termsync',
+      redraw = { 'ui_option' },
+      scope = { 'global' },
+      short_desc = N_('synchronize redraw output with the host terminal'),
+      type = 'bool',
+      varname = 'p_termsync',
     },
     {
       defaults = { if_true = false },

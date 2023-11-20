@@ -83,18 +83,18 @@ int linetabsize_col(int startcol, char *s)
 /// @param len
 ///
 /// @return Number of characters the string will take on the screen.
-unsigned win_linetabsize(win_T *wp, linenr_T lnum, char *line, colnr_T len)
+int win_linetabsize(win_T *wp, linenr_T lnum, char *line, colnr_T len)
 {
   chartabsize_T cts;
   init_chartabsize_arg(&cts, wp, lnum, 0, line, line);
   win_linetabsize_cts(&cts, len);
   clear_chartabsize_arg(&cts);
-  return (unsigned)cts.cts_vcol;
+  return cts.cts_vcol;
 }
 
 /// Return the number of cells line "lnum" of window "wp" will take on the
 /// screen, taking into account the size of a tab and inline virtual text.
-unsigned linetabsize(win_T *wp, linenr_T lnum)
+int linetabsize(win_T *wp, linenr_T lnum)
 {
   return win_linetabsize(wp, lnum, ml_get_buf(wp->w_buffer, lnum), (colnr_T)MAXCOL);
 }
@@ -167,9 +167,7 @@ int lbr_chartabsize(chartabsize_T *cts)
 /// @return The number of characters take up on the screen.
 int lbr_chartabsize_adv(chartabsize_T *cts)
 {
-  int retval;
-
-  retval = lbr_chartabsize(cts);
+  int retval = lbr_chartabsize(cts);
   MB_PTR_ADV(cts->cts_ptr);
   return retval;
 }
@@ -399,14 +397,13 @@ static int win_nolbr_chartabsize(chartabsize_T *cts, int *headp)
   win_T *wp = cts->cts_win;
   char *s = cts->cts_ptr;
   colnr_T col = cts->cts_vcol;
-  int n;
 
   if ((*s == TAB) && (!wp->w_p_list || wp->w_p_lcs_chars.tab1)) {
     return tabstop_padding(col,
                            wp->w_buffer->b_p_ts,
                            wp->w_buffer->b_p_vts_array);
   }
-  n = ptr2cells(s);
+  int n = ptr2cells(s);
 
   // Add one cell for a double-width character in the last column of the
   // window, displayed with a ">".

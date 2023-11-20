@@ -65,12 +65,10 @@
 #include "nvim/os/stdpaths_defs.h"
 #include "nvim/path.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/runtime.h"
 #include "nvim/shada.h"
-#include "nvim/sign.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
@@ -218,8 +216,6 @@ void early_init(mparm_T *paramp)
   TIME_MSG("inits 1");
 
   set_lang_var();               // set v:lang and v:ctype
-
-  init_signs();
 }
 
 #ifdef MAKE_LIB
@@ -699,7 +695,7 @@ void getout(int exitval)
     for (const tabpage_T *tp = first_tabpage; tp != NULL; tp = next_tp) {
       next_tp = tp->tp_next;
       FOR_ALL_WINDOWS_IN_TAB(wp, tp) {
-        if (wp->w_buffer == NULL) {
+        if (wp->w_buffer == NULL || !buf_valid(wp->w_buffer)) {
           // Autocmd must have close the buffer already, skip.
           continue;
         }
@@ -1749,7 +1745,6 @@ static void create_windows(mparm_T *parmp)
 static void edit_buffers(mparm_T *parmp, char *cwd)
 {
   int arg_idx;                          // index in argument list
-  int i;
   bool advance = true;
   win_T *win;
   char *p_shm_save = NULL;
@@ -1765,7 +1760,7 @@ static void edit_buffers(mparm_T *parmp, char *cwd)
   }
 
   arg_idx = 1;
-  for (i = 1; i < parmp->window_count; i++) {
+  for (int i = 1; i < parmp->window_count; i++) {
     if (cwd != NULL) {
       os_chdir(cwd);
     }
@@ -1869,7 +1864,6 @@ static void exe_pre_commands(mparm_T *parmp)
 {
   char **cmds = parmp->pre_commands;
   int cnt = parmp->n_pre_commands;
-  int i;
 
   if (cnt <= 0) {
     return;
@@ -1878,7 +1872,7 @@ static void exe_pre_commands(mparm_T *parmp)
   curwin->w_cursor.lnum = 0;     // just in case..
   estack_push(ETYPE_ARGS, _("pre-vimrc command line"), 0);
   current_sctx.sc_sid = SID_CMDARG;
-  for (i = 0; i < cnt; i++) {
+  for (int i = 0; i < cnt; i++) {
     do_cmdline_cmd(cmds[i]);
   }
   estack_pop();
@@ -1889,8 +1883,6 @@ static void exe_pre_commands(mparm_T *parmp)
 // Execute "+", "-c" and "-S" arguments.
 static void exe_commands(mparm_T *parmp)
 {
-  int i;
-
   // We start commands on line 0, make "vim +/pat file" match a
   // pattern on line 1.  But don't move the cursor when an autocommand
   // with g`" was used.
@@ -1901,7 +1893,7 @@ static void exe_commands(mparm_T *parmp)
   estack_push(ETYPE_ARGS, "command line", 0);
   current_sctx.sc_sid = SID_CARG;
   current_sctx.sc_seq = 0;
-  for (i = 0; i < parmp->n_commands; i++) {
+  for (int i = 0; i < parmp->n_commands; i++) {
     do_cmdline_cmd(parmp->commands[i]);
     if (parmp->cmds_tofree[i]) {
       xfree(parmp->commands[i]);

@@ -101,7 +101,6 @@ void internal_format(int textwidth, int second_indent, int flags, bool format_on
     int wantcol;                        // column at textwidth border
     int foundcol;                       // column for start of spaces
     int end_foundcol = 0;               // column for start of word
-    colnr_T len;
     colnr_T virtcol;
     int orig_col = 0;
     char *saved_text = NULL;
@@ -420,7 +419,6 @@ void internal_format(int textwidth, int second_indent, int flags, bool format_on
             for (int i = 0; i < padding; i++) {
               ins_str(" ");
             }
-            changed_bytes(curwin->w_cursor.lnum, leader_len);
           } else {
             (void)set_indent(second_indent, SIN_CHANGED);
           }
@@ -438,7 +436,7 @@ void internal_format(int textwidth, int second_indent, int flags, bool format_on
       // Check if cursor is not past the NUL off the line, cindent
       // may have added or removed indent.
       curwin->w_cursor.col += startcol;
-      len = (colnr_T)strlen(get_cursor_line_ptr());
+      colnr_T len = (colnr_T)strlen(get_cursor_line_ptr());
       if (curwin->w_cursor.col > len) {
         curwin->w_cursor.col = len;
       }
@@ -518,10 +516,8 @@ static bool ends_in_white(linenr_T lnum)
 static bool same_leader(linenr_T lnum, int leader1_len, char *leader1_flags, int leader2_len,
                         char *leader2_flags)
 {
-  int idx1 = 0, idx2 = 0;
-  char *p;
-  char *line1;
-  char *line2;
+  int idx1 = 0;
+  int idx2 = 0;
 
   if (leader1_len == 0) {
     return leader2_len == 0;
@@ -533,7 +529,7 @@ static bool same_leader(linenr_T lnum, int leader1_len, char *leader1_flags, int
   // If first leader has 's' flag, the lines can only be joined if there is
   // some text after it and the second line has the 'm' flag.
   if (leader1_flags != NULL) {
-    for (p = leader1_flags; *p && *p != ':'; p++) {
+    for (char *p = leader1_flags; *p && *p != ':'; p++) {
       if (*p == COM_FIRST) {
         return leader2_len == 0;
       }
@@ -560,9 +556,9 @@ static bool same_leader(linenr_T lnum, int leader1_len, char *leader1_flags, int
 
   // Get current line and next line, compare the leaders.
   // The first line has to be saved, only one line can be locked at a time.
-  line1 = xstrdup(ml_get(lnum));
+  char *line1 = xstrdup(ml_get(lnum));
   for (idx1 = 0; ascii_iswhite(line1[idx1]); idx1++) {}
-  line2 = ml_get(lnum + 1);
+  char *line2 = ml_get(lnum + 1);
   for (idx2 = 0; idx2 < leader2_len; idx2++) {
     if (!ascii_iswhite(line2[idx2])) {
       if (line1[idx1++] != line2[idx2]) {
@@ -585,7 +581,6 @@ static bool same_leader(linenr_T lnum, int leader1_len, char *leader1_flags, int
 ///          false when the previous line is in the same paragraph.
 static bool paragraph_start(linenr_T lnum)
 {
-  char *p;
   int leader_len = 0;                // leader len of current line
   char *leader_flags = NULL;         // flags for leader of current line
   int next_leader_len = 0;           // leader len of next line
@@ -594,7 +589,7 @@ static bool paragraph_start(linenr_T lnum)
   if (lnum <= 1) {
     return true;                // start of the file
   }
-  p = ml_get(lnum - 1);
+  char *p = ml_get(lnum - 1);
   if (*p == NUL) {
     return true;                // after empty line
   }
@@ -630,9 +625,7 @@ static bool paragraph_start(linenr_T lnum)
 /// @param prev_line   may start in previous line
 void auto_format(bool trailblank, bool prev_line)
 {
-  colnr_T len;
-  char *linep, *plinep;
-  int cc;
+  char *linep;
 
   if (!has_format_option(FO_AUTO)) {
     return;
@@ -652,7 +645,7 @@ void auto_format(bool trailblank, bool prev_line)
   int wasatend = (pos.col == (colnr_T)strlen(old));
   if (*old != NUL && !trailblank && wasatend) {
     dec_cursor();
-    cc = gchar_cursor();
+    int cc = gchar_cursor();
     if (!WHITECHAR(cc) && curwin->w_cursor.col > 0
         && has_format_option(FO_ONE_LETTER)) {
       dec_cursor();
@@ -703,9 +696,9 @@ void auto_format(bool trailblank, bool prev_line)
   // formatted.
   if (!wasatend && has_format_option(FO_WHITE_PAR)) {
     linep = get_cursor_line_ptr();
-    len = (colnr_T)strlen(linep);
+    colnr_T len = (colnr_T)strlen(linep);
     if (curwin->w_cursor.col == len) {
-      plinep = xstrnsave(linep, (size_t)len + 2);
+      char *plinep = xstrnsave(linep, (size_t)len + 2);
       plinep[len] = ' ';
       plinep[len + 1] = NUL;
       ml_replace(curwin->w_cursor.lnum, plinep, false);

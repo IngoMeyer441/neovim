@@ -2566,8 +2566,8 @@ nvim_buf_get_extmark_by_id({buffer}, {ns_id}, {id}, {opts})
 
                                                      *nvim_buf_get_extmarks()*
 nvim_buf_get_extmarks({buffer}, {ns_id}, {start}, {end}, {*opts})
-    Gets |extmarks| in "traversal order" from a |charwise| region defined by
-    buffer positions (inclusive, 0-indexed |api-indexing|).
+    Gets |extmarks| (including |signs|) in "traversal order" from a |charwise|
+    region defined by buffer positions (inclusive, 0-indexed |api-indexing|).
 
     Region can be given as (row,col) tuples, or valid extmark ids (whose
     positions define the bounds). 0 and -1 are understood as (0,0) and (-1,-1)
@@ -3598,12 +3598,13 @@ nvim_ui_set_option({name}, {value})                     *nvim_ui_set_option()*
         |RPC| only
 
 nvim_ui_term_event({event}, {value})                    *nvim_ui_term_event()*
-    Tells Nvim when a terminal event has occurred.
+    Tells Nvim when a terminal event has occurred
 
     The following terminal events are supported:
 
-    • "osc_response": The terminal sent a OSC response sequence to Nvim. The
-      payload is the received OSC sequence.
+    • "termresponse": The terminal sent an OSC or DCS response sequence to
+      Nvim. The payload is the received response. Sets |v:termresponse| and
+      fires |TermResponse|.
 
     Attributes: ~
         |RPC| only

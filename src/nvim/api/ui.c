@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <msgpack/pack.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,7 +121,6 @@ void remote_ui_disconnect(uint64_t channel_id)
 
   // Destroy `ui`.
   XFREE_CLEAR(ui->term_name);
-  XFREE_CLEAR(ui->term_background);
   xfree(ui);
 }
 
@@ -348,15 +348,6 @@ static void ui_set_option(UI *ui, bool init, String name, Object value, Error *e
     return;
   }
 
-  if (strequal(name.data, "term_background")) {
-    VALIDATE_T("term_background", kObjectTypeString, value.type, {
-      return;
-    });
-    set_tty_background(value.data.string.data);
-    ui->term_background = string_to_cstr(value.data.string);
-    return;
-  }
-
   if (strequal(name.data, "stdin_fd")) {
     VALIDATE_T("stdin_fd", kObjectTypeInteger, value.type, {
       return;
@@ -522,12 +513,13 @@ void nvim_ui_pum_set_bounds(uint64_t channel_id, Float width, Float height, Floa
   ui->pum_pos = true;
 }
 
-/// Tells Nvim when a terminal event has occurred.
+/// Tells Nvim when a terminal event has occurred
 ///
 /// The following terminal events are supported:
 ///
-///   - "osc_response": The terminal sent a OSC response sequence to Nvim. The
-///                     payload is the received OSC sequence.
+///   - "termresponse": The terminal sent an OSC or DCS response sequence to
+///                     Nvim. The payload is the received response. Sets
+///                     |v:termresponse| and fires |TermResponse|.
 ///
 /// @param channel_id
 /// @param event Event name
@@ -536,14 +528,14 @@ void nvim_ui_pum_set_bounds(uint64_t channel_id, Float width, Float height, Floa
 void nvim_ui_term_event(uint64_t channel_id, String event, Object value, Error *err)
   FUNC_API_SINCE(12) FUNC_API_REMOTE_ONLY
 {
-  if (strequal("osc_response", event.data)) {
+  if (strequal("termresponse", event.data)) {
     if (value.type != kObjectTypeString) {
-      api_set_error(err, kErrorTypeValidation, "osc_response must be a string");
+      api_set_error(err, kErrorTypeValidation, "termresponse must be a string");
       return;
     }
 
-    const String osc_response = value.data.string;
-    set_vim_var_string(VV_TERMRESPONSE, osc_response.data, (ptrdiff_t)osc_response.size);
+    const String termresponse = value.data.string;
+    set_vim_var_string(VV_TERMRESPONSE, termresponse.data, (ptrdiff_t)termresponse.size);
     apply_autocmds_group(EVENT_TERMRESPONSE, NULL, NULL, false, AUGROUP_ALL, NULL, NULL, &value);
   }
 }

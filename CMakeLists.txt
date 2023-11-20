@@ -247,8 +247,6 @@ add_glob_target(
   FLAGS -x -a
   GLOB_DIRS scripts
   GLOB_PAT *.sh
-  EXCLUDE
-    scripts/pvscheck.sh
   TOUCH_STRATEGY SINGLE)
 
 add_custom_target(lintcommit
@@ -286,15 +284,15 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
 ExternalProject_Add(uncrustify
-  URL https://github.com/uncrustify/uncrustify/archive/uncrustify-0.77.1.tar.gz
-  URL_HASH SHA256=414bbc9f7860eb18a53074f9af14ed04638a633b2216a73f2629291300d37c1b
+  URL https://github.com/uncrustify/uncrustify/archive/7edc1c53c5278206da1cef8714fdc7bd9d903137.tar.gz
+  URL_HASH SHA256=65cf56f482373fd3cb88ad35426465e09739bbe4262271a3a79b59e4dab2a407
   DOWNLOAD_NO_PROGRESS TRUE
   DOWNLOAD_DIR ${DEPS_DOWNLOAD_DIR}/uncrustify
   CMAKE_ARGS ${DEPS_CMAKE_ARGS}
   CMAKE_CACHE_ARGS ${DEPS_CMAKE_CACHE_ARGS}
   EXCLUDE_FROM_ALL TRUE)
 
-option(USE_BUNDLED_BUSTED "Use bundled luarocks" ON)
+option(USE_BUNDLED_BUSTED "Use bundled busted" ON)
 if(USE_BUNDLED_BUSTED)
   ExternalProject_Add(lua-dev-deps
     URL https://github.com/neovim/deps/raw/5a1f71cceb24990a0b15fd9a472a5f549f019248/opt/lua-dev-deps.tar.gz

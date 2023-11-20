@@ -1785,6 +1785,31 @@ describe('TUI', function()
       {3:-- TERMINAL --}                                    |
     ]])
   end)
+
+  it('supports hiding cursor', function()
+    child_session:request('nvim_command',
+                          "let g:id = jobstart([v:progpath, '--clean', '--headless'])")
+    feed_data(':call jobwait([g:id])\n')
+    screen:expect([[
+                                                        |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name]                                         }|
+      :call jobwait([g:id])                             |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    feed_data('\003')
+    screen:expect([[
+      {1: }                                                 |
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {4:~                                                 }|
+      {5:[No Name]                                         }|
+      Type  :qa  and press <Enter> to exit Nvim         |
+      {3:-- TERMINAL --}                                    |
+    ]])
+  end)
 end)
 
 describe('TUI', function()
@@ -2557,7 +2582,7 @@ describe('TUI bg color', function()
                                                         |
       {3:-- TERMINAL --}                                    |
     ]])
-    feed_data('\027]11;rgb:ffff/ffff/ffff\007')
+    feed_data('\027]11;rgb:ffff/ffff/ffff\027\\')
     screen:expect{any='did OptionSet, yay!'}
 
     feed_data(':echo "new_bg=".&background\n')
@@ -2610,7 +2635,7 @@ describe('TUI bg color', function()
     ]])
     -- Send a background response with the Pt portion split.
     feed_data('\027]11;rgba:ffff/fff')
-    feed_data('f/ffff/8000\007')
+    feed_data('f/ffff/8000\027\\')
     screen:expect{any='did OptionSet, yay!'}
 
     feed_data(':echo "new_bg=".&background\n')
@@ -2643,7 +2668,7 @@ describe('TUI bg color', function()
                                                         |
       {3:-- TERMINAL --}                                    |
     ]])
-    feed_data('\027]11;rgba:ffff/foo/ffff/8000\007')
+    feed_data('\027]11;rgba:ffff/foo/ffff/8000\027\\')
     screen:expect_unchanged()
 
     feed_data(':echo "new_bg=".&background\n')

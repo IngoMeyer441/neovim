@@ -4,22 +4,20 @@
 #include <string.h>
 #include <uv.h>
 
+#include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
-#include "nvim/charset.h"
 #include "nvim/event/defs.h"
-#include "nvim/log.h"
 #include "nvim/macros.h"
 #include "nvim/main.h"
 #include "nvim/map.h"
 #include "nvim/memory.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/os.h"
+#include "nvim/strings.h"
 #include "nvim/tui/input.h"
 #include "nvim/tui/input_defs.h"
 #include "nvim/tui/tui.h"
-#include "nvim/types.h"
 #include "nvim/ui_client.h"
 #ifdef MSWIN
 # include "nvim/os/os_win_console.h"
@@ -124,8 +122,7 @@ void tinput_init(TermInput *input, Loop *loop)
   input->loop = loop;
   input->paste = 0;
   input->in_fd = STDIN_FILENO;
-  input->waiting_for_bg_response = 0;
-  input->extkeys_type = kExtkeysNone;
+  input->key_encoding = kKeyEncodingLegacy;
   input->ttimeout = (bool)p_ttimeout;
   input->ttimeoutlen = p_ttm;
   input->key_buffer = rbuffer_new(KEY_BUFFER_SIZE);
@@ -447,40 +444,11 @@ static void tk_getkeys(TermInput *input, bool force)
     } else if (key.type == TERMKEY_TYPE_MOUSE) {
       forward_mouse_event(input, &key);
     } else if (key.type == TERMKEY_TYPE_UNKNOWN_CSI) {
-      // There is no specified limit on the number of parameters a CSI sequence can contain, so just
-      // allocate enough space for a large upper bound
-      long args[16];
-      size_t nargs = 16;
-      unsigned long cmd;
-      if (termkey_interpret_csi(input->tk, &key, args, &nargs, &cmd) == TERMKEY_RES_KEY) {
-        uint8_t intermediate = (cmd >> 16) & 0xFF;
-        uint8_t initial = (cmd >> 8) & 0xFF;
-        uint8_t command = cmd & 0xFF;
-
-        // Currently unused
-        (void)intermediate;
-
-        if (input->waiting_for_csiu_response > 0) {
-          if (initial == '?' && command == 'u') {
-            // The first (and only) argument contains the current progressive
-            // enhancement flags. Only enable CSI u mode if the first bit
-            // (disambiguate escape codes) is not already set
-            if (nargs > 0 && (args[0] & 0x1) == 0) {
-              input->extkeys_type = kExtkeysCSIu;
-            } else {
-              input->extkeys_type = kExtkeysNone;
-            }
-          } else if (initial == '?' && command == 'c') {
-            // Received Primary Device Attributes response
-            input->waiting_for_csiu_response = 0;
-            tui_enable_extkeys(input->tui_data);
-          } else {
-            input->waiting_for_csiu_response--;
-          }
-        }
-      }
-    } else if (key.type == TERMKEY_TYPE_OSC) {
-      handle_osc_event(input, &key);
+      handle_unknown_csi(input, &key);
+    } else if (key.type == TERMKEY_TYPE_OSC || key.type == TERMKEY_TYPE_DCS) {
+      handle_term_response(input, &key);
+    } else if (key.type == TERMKEY_TYPE_MODEREPORT) {
+      handle_modereport(input, &key);
     }
   }
 
@@ -579,147 +547,116 @@ static HandleState handle_bracketed_paste(TermInput *input)
   return kNotApplicable;
 }
 
-static void set_bg(char *bgvalue)
+/// Handle an OSC or DCS response sequence from the terminal.
+static void handle_term_response(TermInput *input, const TermKeyKey *key)
+  FUNC_ATTR_NONNULL_ALL
 {
-  if (ui_client_attached) {
-    MAXSIZE_TEMP_ARRAY(args, 2);
-    ADD_C(args, CSTR_AS_OBJ("term_background"));
-    ADD_C(args, CSTR_AS_OBJ(bgvalue));
-    rpc_send_event(ui_client_channel_id, "nvim_ui_set_option", args);
-  }
-}
-
-// During startup, tui.c requests the background color (see `ext.get_bg`).
-//
-// Here in input.c, we watch for the terminal response `\e]11;COLOR\a`.  If
-// COLOR matches `rgb:RRRR/GGGG/BBBB/AAAA` where R, G, B, and A are hex digits,
-// then compute the luminance[1] of the RGB color and classify it as light/dark
-// accordingly. Note that the color components may have anywhere from one to
-// four hex digits, and require scaling accordingly as values out of 4, 8, 12,
-// or 16 bits. Also note the A(lpha) component is optional, and is parsed but
-// ignored in the calculations.
-//
-// [1] https://en.wikipedia.org/wiki/Luma_%28video%29
-HandleState handle_background_color(TermInput *input)
-{
-  if (input->waiting_for_bg_response <= 0) {
-    return kNotApplicable;
-  }
-  size_t count = 0;
-  size_t component = 0;
-  size_t header_size = 0;
-  size_t num_components = 0;
-  size_t buf_size = rbuffer_size(input->read_stream.buffer);
-  uint16_t rgb[] = { 0, 0, 0 };
-  uint16_t rgb_max[] = { 0, 0, 0 };
-  bool eat_backslash = false;
-  bool done = false;
-  bool bad = false;
-  if (buf_size >= 9
-      && !rbuffer_cmp(input->read_stream.buffer, "\x1b]11;rgb:", 9)) {
-    header_size = 9;
-    num_components = 3;
-  } else if (buf_size >= 10
-             && !rbuffer_cmp(input->read_stream.buffer, "\x1b]11;rgba:", 10)) {
-    header_size = 10;
-    num_components = 4;
-  } else if (buf_size < 10
-             && !rbuffer_cmp(input->read_stream.buffer,
-                             "\x1b]11;rgba", buf_size)) {
-    // An incomplete sequence was found, waiting for the next input.
-    return kIncomplete;
-  } else {
-    input->waiting_for_bg_response--;
-    if (input->waiting_for_bg_response == 0) {
-      DLOG("did not get a response for terminal background query");
-    }
-    return kNotApplicable;
-  }
-  RBUFFER_EACH(input->read_stream.buffer, c, i) {
-    count = i + 1;
-    // Skip the header.
-    if (i < header_size) {
-      continue;
-    }
-    if (eat_backslash) {
-      done = true;
-      break;
-    } else if (c == '\x07') {
-      done = true;
-      break;
-    } else if (c == '\x1b') {
-      eat_backslash = true;
-    } else if (bad) {
-      // ignore
-    } else if ((c == '/') && (++component < num_components)) {
-      // work done in condition
-    } else if (ascii_isxdigit(c)) {
-      if (component < 3 && rgb_max[component] != 0xffff) {
-        rgb_max[component] = (uint16_t)((rgb_max[component] << 4) | 0xf);
-        rgb[component] = (uint16_t)((rgb[component] << 4) | hex2nr(c));
-      }
-    } else {
-      bad = true;
-    }
-  }
-  if (done && !bad && rgb_max[0] && rgb_max[1] && rgb_max[2]) {
-    rbuffer_consumed(input->read_stream.buffer, count);
-    double r = (double)rgb[0] / (double)rgb_max[0];
-    double g = (double)rgb[1] / (double)rgb_max[1];
-    double b = (double)rgb[2] / (double)rgb_max[2];
-    double luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);  // CCIR 601
-    bool is_dark = luminance < 0.5;
-    char *bgvalue = is_dark ? "dark" : "light";
-    DLOG("bg response: %s", bgvalue);
-    ui_client_bg_response = is_dark ? kTrue : kFalse;
-    set_bg(bgvalue);
-    input->waiting_for_bg_response = 0;
-  } else if (!done && !bad) {
-    // An incomplete sequence was found, waiting for the next input.
-    return kIncomplete;
-  } else {
-    input->waiting_for_bg_response = 0;
-    rbuffer_consumed(input->read_stream.buffer, count);
-    DLOG("failed to parse bg response");
-    return kNotApplicable;
-  }
-  return kComplete;
-}
-
-static void handle_osc_event(TermInput *input, const TermKeyKey *key)
-{
-  assert(input);
-
   const char *str = NULL;
   if (termkey_interpret_string(input->tk, key, &str) == TERMKEY_RES_KEY) {
     assert(str != NULL);
 
-    // Send an event to nvim core. This will update the v:termresponse variable and fire the
-    // TermResponse event
+    // Send an event to nvim core. This will update the v:termresponse variable
+    // and fire the TermResponse event
     MAXSIZE_TEMP_ARRAY(args, 2);
-    ADD_C(args, STATIC_CSTR_AS_OBJ("osc_response"));
+    ADD_C(args, STATIC_CSTR_AS_OBJ("termresponse"));
 
-    // libtermkey strips the OSC bytes from the response. We add it back in so that downstream
-    // consumers of v:termresponse can differentiate between OSC and CSI events.
+    // libtermkey strips the OSC/DCS bytes from the response. We add it back in
+    // so that downstream consumers of v:termresponse can differentiate between
+    // the two.
     StringBuilder response = KV_INITIAL_VALUE;
-    kv_printf(response, "\x1b]%s", str);
+    switch (key->type) {
+    case TERMKEY_TYPE_OSC:
+      kv_printf(response, "\x1b]%s", str);
+      break;
+    case TERMKEY_TYPE_DCS:
+      kv_printf(response, "\x1bP%s", str);
+      break;
+    default:
+      // Key type already checked for OSC/DCS in termkey_interpret_string
+      UNREACHABLE;
+    }
+
     ADD_C(args, STRING_OBJ(cbuf_as_string(response.items, response.size)));
     rpc_send_event(ui_client_channel_id, "nvim_ui_term_event", args);
     kv_destroy(response);
   }
 }
 
+/// Handle a mode report (DECRPM) sequence from the terminal.
+static void handle_modereport(TermInput *input, const TermKeyKey *key)
+  FUNC_ATTR_NONNULL_ALL
+{
+  int initial;
+  int mode;
+  int value;
+  if (termkey_interpret_modereport(input->tk, key, &initial, &mode, &value) == TERMKEY_RES_KEY) {
+    (void)initial;  // Unused
+    tui_handle_term_mode(input->tui_data, (TermMode)mode, (TermModeState)value);
+  }
+}
+
+/// Handle a CSI sequence from the terminal that is unrecognized by libtermkey.
+static void handle_unknown_csi(TermInput *input, const TermKeyKey *key)
+  FUNC_ATTR_NONNULL_ALL
+{
+  // There is no specified limit on the number of parameters a CSI sequence can
+  // contain, so just allocate enough space for a large upper bound
+  long args[16];
+  size_t nargs = 16;
+  unsigned long cmd;
+  if (termkey_interpret_csi(input->tk, key, args, &nargs, &cmd) != TERMKEY_RES_KEY) {
+    return;
+  }
+
+  uint8_t intermediate = (cmd >> 16) & 0xFF;
+  uint8_t initial = (cmd >> 8) & 0xFF;
+  uint8_t command = cmd & 0xFF;
+
+  // Currently unused
+  (void)intermediate;
+
+  switch (command) {
+  case 'u':
+    switch (initial) {
+    case '?':
+      // Kitty keyboard protocol query response.
+      if (input->waiting_for_kkp_response) {
+        input->waiting_for_kkp_response = false;
+        input->key_encoding = kKeyEncodingKitty;
+        tui_set_key_encoding(input->tui_data);
+      }
+
+      break;
+    }
+    break;
+  case 'c':
+    switch (initial) {
+    case '?':
+      // Primary Device Attributes response
+      if (input->waiting_for_kkp_response) {
+        input->waiting_for_kkp_response = false;
+
+        // Enable the fallback key encoding (if any)
+        tui_set_key_encoding(input->tui_data);
+      }
+
+      break;
+    }
+    break;
+  default:
+    break;
+  }
+}
+
 static void handle_raw_buffer(TermInput *input, bool force)
 {
   HandleState is_paste = kNotApplicable;
-  HandleState is_bc = kNotApplicable;
 
   do {
     if (!force
         && (handle_focus_event(input)
-            || (is_paste = handle_bracketed_paste(input)) != kNotApplicable
-            || (is_bc = handle_background_color(input)) != kNotApplicable)) {
-      if (is_paste == kIncomplete || is_bc == kIncomplete) {
+            || (is_paste = handle_bracketed_paste(input)) != kNotApplicable)) {
+      if (is_paste == kIncomplete) {
         // Wait for the next input, leaving it in the raw buffer due to an
         // incomplete sequence.
         return;

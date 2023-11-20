@@ -29,7 +29,6 @@
 #include "nvim/os/os.h"
 #include "nvim/os/shell.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
 #include "nvim/regexp.h"
 #include "nvim/strings.h"
 #include "nvim/vim.h"
@@ -1501,11 +1500,10 @@ void addfile(garray_T *gap, char *f, int flags)
 void simplify_filename(char *filename)
 {
   int components = 0;
-  char *p, *tail, *start;
   bool stripping_disabled = false;
   bool relative = true;
 
-  p = filename;
+  char *p = filename;
 #ifdef BACKSLASH_IN_FILENAME
   if (p[0] != NUL && p[1] == ':') {        // skip "x:"
     p += 2;
@@ -1518,7 +1516,7 @@ void simplify_filename(char *filename)
       p++;
     } while (vim_ispathsep(*p));
   }
-  start = p;        // remember start after "c:/" or "/" or "///"
+  char *start = p;        // remember start after "c:/" or "/" or "///"
 
   do {
     // At this point "p" is pointing to the char following a single "/"
@@ -1534,7 +1532,7 @@ void simplify_filename(char *filename)
         // and there is no trailing path separator, either strip "/." if
         // we are after "start", or strip "." if we are at the beginning
         // of an absolute path name.
-        tail = p + 1;
+        char *tail = p + 1;
         if (p[1] != NUL) {
           while (vim_ispathsep(*tail)) {
             MB_PTR_ADV(tail);
@@ -1547,21 +1545,20 @@ void simplify_filename(char *filename)
     } else if (p[0] == '.' && p[1] == '.'
                && (vim_ispathsep(p[2]) || p[2] == NUL)) {
       // Skip to after ".." or "../" or "..///".
-      tail = p + 2;
+      char *tail = p + 2;
       while (vim_ispathsep(*tail)) {
         MB_PTR_ADV(tail);
       }
 
       if (components > 0) {             // strip one preceding component
         bool do_strip = false;
-        char saved_char;
 
         // Don't strip for an erroneous file name.
         if (!stripping_disabled) {
           // If the preceding component does not exist in the file
           // system, we strip it.  On Unix, we don't accept a symbolic
           // link that refers to a non-existent file.
-          saved_char = p[-1];
+          char saved_char = p[-1];
           p[-1] = NUL;
           FileInfo file_info;
           if (!os_fileinfo_link(filename, &file_info)) {
@@ -1983,12 +1980,11 @@ bool same_directory(char *f1, char *f2)
 int pathcmp(const char *p, const char *q, int maxlen)
 {
   int i, j;
-  int c1, c2;
   const char *s = NULL;
 
   for (i = 0, j = 0; maxlen < 0 || (i < maxlen && j < maxlen);) {
-    c1 = utf_ptr2char(p + i);
-    c2 = utf_ptr2char(q + j);
+    int c1 = utf_ptr2char(p + i);
+    int c2 = utf_ptr2char(q + j);
 
     // End of "p": check if "q" also ends or just has a slash.
     if (c1 == NUL) {
@@ -2030,8 +2026,8 @@ int pathcmp(const char *p, const char *q, int maxlen)
     return 0;
   }
 
-  c1 = utf_ptr2char(s + i);
-  c2 = utf_ptr2char(s + i + utfc_ptr2len(s + i));
+  int c1 = utf_ptr2char(s + i);
+  int c2 = utf_ptr2char(s + i + utfc_ptr2len(s + i));
   // ignore a trailing slash, but not "//" or ":/"
   if (c2 == NUL
       && i > 0
@@ -2186,12 +2182,7 @@ int expand_wildcards_eval(char **pat, int *num_file, char ***file, int flags)
 ///                      NULL or points to "".
 int expand_wildcards(int num_pat, char **pat, int *num_files, char ***files, int flags)
 {
-  int retval;
-  int i, j;
-  char *p;
-  int non_suf_match;            // number without matching suffix
-
-  retval = gen_expand_wildcards(num_pat, pat, num_files, files, flags);
+  int retval = gen_expand_wildcards(num_pat, pat, num_files, files, flags);
 
   // When keeping all matches, return here
   if ((flags & EW_KEEPALL) || retval == FAIL) {
@@ -2200,18 +2191,16 @@ int expand_wildcards(int num_pat, char **pat, int *num_files, char ***files, int
 
   // Remove names that match 'wildignore'.
   if (*p_wig) {
-    char *ffname;
-
     // check all files in (*files)[]
     assert(*num_files == 0 || *files != NULL);
-    for (i = 0; i < *num_files; i++) {
-      ffname = FullName_save((*files)[i], false);
+    for (int i = 0; i < *num_files; i++) {
+      char *ffname = FullName_save((*files)[i], false);
       assert((*files)[i] != NULL);
       assert(ffname != NULL);
       if (match_file_list(p_wig, (*files)[i], ffname)) {
         // remove this matching file from the list
         xfree((*files)[i]);
-        for (j = i; j + 1 < *num_files; j++) {
+        for (int j = i; j + 1 < *num_files; j++) {
           (*files)[j] = (*files)[j + 1];
         }
         (*num_files)--;
@@ -2225,12 +2214,12 @@ int expand_wildcards(int num_pat, char **pat, int *num_files, char ***files, int
   // Skip when interrupted, the result probably won't be used.
   assert(*num_files == 0 || *files != NULL);
   if (*num_files > 1 && !got_int) {
-    non_suf_match = 0;
-    for (i = 0; i < *num_files; i++) {
+    int non_suf_match = 0;            // number without matching suffix
+    for (int i = 0; i < *num_files; i++) {
       if (!match_suffix((*files)[i])) {
         // Move the name without matching suffix to the front of the list.
-        p = (*files)[i];
-        for (j = i; j > non_suf_match; j--) {
+        char *p = (*files)[i];
+        for (int j = i; j > non_suf_match; j--) {
           (*files)[j] = (*files)[j - 1];
         }
         (*files)[non_suf_match++] = p;

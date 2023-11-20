@@ -474,10 +474,6 @@ EXTERN buf_T *curbuf INIT( = NULL);    // currently active buffer
 #define FOR_ALL_BUF_WININFO(buf, wip) \
   for ((wip) = (buf)->b_wininfo; (wip) != NULL; (wip) = (wip)->wi_next)   // NOLINT
 
-// Iterate through all the signs placed in a buffer
-#define FOR_ALL_SIGNS_IN_BUF(buf, sign) \
-  for ((sign) = (buf)->b_signlist; (sign) != NULL; (sign) = (sign)->se_next)   // NOLINT
-
 // List of files being edited (global argument list).  curwin->w_alist points
 // to this when the window is using the global argument list.
 EXTERN alist_T global_alist;    // global argument list
@@ -1026,10 +1022,12 @@ EXTERN const char e_highlight_group_name_too_long[] INIT(= N_("E1249: Highlight 
 
 EXTERN const char e_invalid_line_number_nr[] INIT(= N_("E966: Invalid line number: %ld"));
 
-EXTERN char e_stray_closing_curly_str[]
+EXTERN const char e_stray_closing_curly_str[]
 INIT(= N_("E1278: Stray '}' without a matching '{': %s"));
-EXTERN char e_missing_close_curly_str[]
+EXTERN const char e_missing_close_curly_str[]
 INIT(= N_("E1279: Missing '}': %s"));
+
+EXTERN const char e_val_too_large[] INIT(= N_("E1510: Value too large: %s"));
 
 EXTERN const char e_undobang_cannot_redo_or_move_branch[]
 INIT(= N_("E5767: Cannot use :undo! to redo or move to a different undo branch"));

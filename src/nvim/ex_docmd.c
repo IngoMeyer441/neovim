@@ -83,6 +83,7 @@
 #include "nvim/usercmd.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
+#include "nvim/winfloat.h"
 
 static const char e_ambiguous_use_of_user_defined_command[]
   = N_("E464: Ambiguous use of user-defined command");
@@ -333,16 +334,12 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
   linenr_T *breakpoint = NULL;          // ptr to breakpoint field in cookie
   int *dbg_tick = NULL;                 // ptr to dbg_tick field in cookie
   struct dbg_stuff debug_saved;         // saved things for debug mode
-  int initial_trylevel;
-  msglist_T **saved_msg_list = NULL;
   msglist_T *private_msg_list;
 
   // "fgetline" and "cookie" passed to do_one_cmd()
   char *(*cmd_getline)(int, void *, int, bool);
   void *cmd_cookie;
   struct loop_cookie cmd_loop_cookie;
-  void *real_cookie;
-  int getline_is_func;
   static int call_depth = 0;            // recursiveness
 
   // For every pair of do_cmdline()/do_one_cmd() calls, use an extra memory
@@ -351,7 +348,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
   // combine the messages stored by an earlier invocation of do_one_cmd()
   // with the command name of the later one.  This would happen when
   // BufWritePost autocommands are executed after a write error.
-  saved_msg_list = msg_list;
+  msglist_T **saved_msg_list = msg_list;
   msg_list = &private_msg_list;
   private_msg_list = NULL;
 
@@ -371,10 +368,10 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
 
   ga_init(&lines_ga, (int)sizeof(wcmd_T), 10);
 
-  real_cookie = getline_cookie(fgetline, cookie);
+  void *real_cookie = getline_cookie(fgetline, cookie);
 
   // Inside a function use a higher nesting level.
-  getline_is_func = getline_equal(fgetline, cookie, get_func_line);
+  bool getline_is_func = getline_equal(fgetline, cookie, get_func_line);
   if (getline_is_func && ex_nesting_level == func_level(real_cookie)) {
     ex_nesting_level++;
   }
@@ -406,7 +403,7 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
     CLEAR_FIELD(debug_saved);
   }
 
-  initial_trylevel = trylevel;
+  int initial_trylevel = trylevel;
 
   // "did_throw" will be set to true when an exception is being thrown.
   did_throw = false;
@@ -836,8 +833,8 @@ int do_cmdline(char *cmdline, LineGetter fgetline, void *cookie, int flags)
 
   // Cleanup if "cs_emsg_silent_list" remains.
   if (cstack.cs_emsg_silent_list != NULL) {
-    eslist_T *elem, *temp;
-    for (elem = cstack.cs_emsg_silent_list; elem != NULL; elem = temp) {
+    eslist_T *temp;
+    for (eslist_T *elem = cstack.cs_emsg_silent_list; elem != NULL; elem = temp) {
       temp = elem->next;
       xfree(elem);
     }
@@ -3555,7 +3552,7 @@ static linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, int 
         if (i == '-') {
           lnum -= n;
         } else {
-          if (n >= INT32_MAX - lnum) {
+          if (lnum >= 0 && n >= INT32_MAX - lnum) {
             *errormsg = _(e_line_number_out_of_range);
             goto error;
           }
@@ -5328,8 +5325,6 @@ static void ex_edit(exarg_T *eap)
 /// @param old_curwin  curwin before doing a split or NULL
 void do_exedit(exarg_T *eap, win_T *old_curwin)
 {
-  int n;
-
   // ":vi" command ends Ex mode.
   if (exmode_active && (eap->cmdidx == CMD_visual
                         || eap->cmdidx == CMD_view)) {
@@ -5380,7 +5375,7 @@ void do_exedit(exarg_T *eap, win_T *old_curwin)
     if (*eap->arg != NUL && text_or_buf_locked()) {
       return;
     }
-    n = readonlymode;
+    int n = readonlymode;
     if (eap->cmdidx == CMD_view || eap->cmdidx == CMD_sview) {
       readonlymode = true;
     } else if (eap->cmdidx == CMD_enew) {
@@ -5428,7 +5423,7 @@ void do_exedit(exarg_T *eap, win_T *old_curwin)
     if (eap->do_ecmd_cmd != NULL) {
       do_cmdline_cmd(eap->do_ecmd_cmd);
     }
-    n = curwin->w_arg_idx_invalid;
+    int n = curwin->w_arg_idx_invalid;
     check_arg_idx(curwin);
     if (n != curwin->w_arg_idx_invalid) {
       maketitle();
@@ -6498,8 +6493,7 @@ static void ex_normal(exarg_T *eap)
 
     // Count the number of characters to be escaped.
     int l;
-    char *p;
-    for (p = eap->arg; *p != NUL; p++) {
+    for (char *p = eap->arg; *p != NUL; p++) {
       for (l = utfc_ptr2len(p) - 1; l > 0; l--) {
         if (*++p == (char)K_SPECIAL) {  // trailbyte K_SPECIAL
           len += 2;
@@ -6509,7 +6503,7 @@ static void ex_normal(exarg_T *eap)
     if (len > 0) {
       arg = xmalloc(strlen(eap->arg) + (size_t)len + 1);
       len = 0;
-      for (p = eap->arg; *p != NUL; p++) {
+      for (char *p = eap->arg; *p != NUL; p++) {
         arg[len++] = *p;
         for (l = utfc_ptr2len(p) - 1; l > 0; l--) {
           arg[len++] = *++p;

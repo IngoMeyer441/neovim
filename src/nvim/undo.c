@@ -2931,8 +2931,6 @@ static void u_freebranch(buf_T *buf, u_header_T *uhp, u_header_T **uhpp)
 /// @param uhpp  if not NULL reset when freeing this header
 static void u_freeentries(buf_T *buf, u_header_T *uhp, u_header_T **uhpp)
 {
-  u_entry_T *uep, *nuep;
-
   // Check for pointers to the header that become invalid now.
   if (buf->b_u_curhead == uhp) {
     buf->b_u_curhead = NULL;
@@ -2944,7 +2942,8 @@ static void u_freeentries(buf_T *buf, u_header_T *uhp, u_header_T **uhpp)
     *uhpp = NULL;
   }
 
-  for (uep = uhp->uh_entry; uep != NULL; uep = nuep) {
+  u_entry_T *nuep;
+  for (u_entry_T *uep = uhp->uh_entry; uep != NULL; uep = nuep) {
     nuep = uep->ue_next;
     u_freeentry(uep, uep->ue_size);
   }
@@ -2981,7 +2980,7 @@ void u_clearall(buf_T *buf)
   buf->b_u_line_lnum = 0;
 }
 
-/// save the line "lnum" for the "U" command
+/// Save the line "lnum" for the "U" command.
 void u_saveline(buf_T *buf, linenr_T lnum)
 {
   if (lnum == buf->b_u_line_lnum) {      // line is already saved

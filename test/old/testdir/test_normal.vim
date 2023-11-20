@@ -1923,6 +1923,8 @@ func Test_normal24_rot13()
 endfunc
 
 func Test_normal25_tag()
+  CheckFeature quickfix
+
   " Testing for CTRL-] g CTRL-] g]
   " CTRL-W g] CTRL-W CTRL-] CTRL-W g CTRL-]
   h
@@ -4160,6 +4162,11 @@ func Test_normal33_g_cmd_nonblank()
   exe "normal 0g\<kEnd>"
   call assert_equal(11, col('.'))
   bw!
+endfunc
+
+func Test_normal34_zet_large()
+  " shouldn't cause overflow
+  norm! z9765405999999999999
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

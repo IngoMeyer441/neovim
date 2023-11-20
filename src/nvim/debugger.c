@@ -505,7 +505,6 @@ static typval_T *eval_expr_no_emsg(struct debuggy *const bp)
 static int dbg_parsearg(char *arg, garray_T *gap)
 {
   char *p = arg;
-  char *q;
   bool here = false;
 
   ga_grow(gap, 1);
@@ -561,7 +560,7 @@ static int dbg_parsearg(char *arg, garray_T *gap)
     // Expand the file name in the same way as do_source().  This means
     // doing it twice, so that $DIR/file gets expanded when $DIR is
     // "~/dir".
-    q = expand_env_save(p);
+    char *q = expand_env_save(p);
     if (q == NULL) {
       return FAIL;
     }
@@ -651,7 +650,6 @@ static void update_has_expr_breakpoint(void)
 /// ":breakdel" and ":profdel".
 void ex_breakdel(exarg_T *eap)
 {
-  struct debuggy *bp, *bpi;
   int todel = -1;
   bool del_all = false;
   linenr_T best_lnum = 0;
@@ -678,9 +676,9 @@ void ex_breakdel(exarg_T *eap)
     if (dbg_parsearg(eap->arg, gap) == FAIL) {
       return;
     }
-    bp = &DEBUGGY(gap, gap->ga_len);
+    struct debuggy *bp = &DEBUGGY(gap, gap->ga_len);
     for (int i = 0; i < gap->ga_len; i++) {
-      bpi = &DEBUGGY(gap, i);
+      struct debuggy *bpi = &DEBUGGY(gap, i);
       if (bp->dbg_type == bpi->dbg_type
           && strcmp(bp->dbg_name, bpi->dbg_name) == 0
           && (bp->dbg_lnum == bpi->dbg_lnum

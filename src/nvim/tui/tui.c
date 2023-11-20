@@ -34,6 +34,7 @@
 #include "nvim/tui/input.h"
 #include "nvim/tui/terminfo.h"
 #include "nvim/tui/tui.h"
+#include "nvim/types.h"
 #include "nvim/ugrid.h"
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
@@ -75,9 +76,6 @@ struct TUIData {
   unibi_var_t params[9];
   char buf[OUTBUF_SIZE];
   size_t bufpos;
-  char norm[CNORM_COMMAND_MAX_SIZE];
-  char invis[CNORM_COMMAND_MAX_SIZE];
-  size_t normlen, invislen;
   TermInput input;
   uv_loop_t write_loop;
   unibi_term *ut;
@@ -104,6 +102,7 @@ struct TUIData {
   bool mouse_enabled;
   bool mouse_move_enabled;
   bool title_enabled;
+  bool sync_output;
   bool busy, is_invisible, want_invisible;
   bool cork, overflow;
   bool set_cursor_color_as_str;
@@ -133,11 +132,9 @@ struct TUIData {
     int reset_scroll_region;
     int set_cursor_style, reset_cursor_style;
     int save_title, restore_title;
-    int get_bg;
     int set_underline_style;
     int set_underline_color;
-    int enable_extended_keys, disable_extended_keys;
-    int get_extkeys;
+    int sync;
   } unibi_ext;
   char *space_buf;
   bool stopped;
@@ -184,38 +181,85 @@ void tui_start(TUIData **tui_p, int *width, int *height, char **term)
   *term = tui->term;
 }
 
-void tui_enable_extkeys(TUIData *tui)
+void tui_set_key_encoding(TUIData *tui)
+  FUNC_ATTR_NONNULL_ALL
 {
-  TermInput input = tui->input;
-  unibi_term *ut = tui->ut;
-
-  switch (input.extkeys_type) {
-  case kExtkeysCSIu:
-    tui->unibi_ext.enable_extended_keys = (int)unibi_add_ext_str(ut, "ext.enable_extended_keys",
-                                                                 "\x1b[>1u");
-    tui->unibi_ext.disable_extended_keys = (int)unibi_add_ext_str(ut, "ext.disable_extended_keys",
-                                                                  "\x1b[<1u");
+  switch (tui->input.key_encoding) {
+  case kKeyEncodingKitty:
+    out(tui, S_LEN("\x1b[>1u"));
     break;
-  case kExtkeysXterm:
-    tui->unibi_ext.enable_extended_keys = (int)unibi_add_ext_str(ut, "ext.enable_extended_keys",
-                                                                 "\x1b[>4;2m");
-    tui->unibi_ext.disable_extended_keys = (int)unibi_add_ext_str(ut, "ext.disable_extended_keys",
-                                                                  "\x1b[>4;0m");
+  case kKeyEncodingXterm:
+    out(tui, S_LEN("\x1b[>4;2m"));
     break;
-  default:
+  case kKeyEncodingLegacy:
     break;
   }
-
-  unibi_out_ext(tui, tui->unibi_ext.enable_extended_keys);
 }
 
-static size_t unibi_pre_fmt_str(TUIData *tui, unsigned unibi_index, char *buf, size_t len)
+static void tui_reset_key_encoding(TUIData *tui)
+  FUNC_ATTR_NONNULL_ALL
 {
-  const char *str = unibi_get_str(tui->ut, unibi_index);
-  if (!str) {
-    return 0U;
+  switch (tui->input.key_encoding) {
+  case kKeyEncodingKitty:
+    out(tui, S_LEN("\x1b[<1u"));
+    break;
+  case kKeyEncodingXterm:
+    out(tui, S_LEN("\x1b[>4;0m"));
+    break;
+  case kKeyEncodingLegacy:
+    break;
   }
-  return unibi_run(str, tui->params, buf, len);
+}
+
+/// Request the terminal's mode (DECRQM).
+///
+/// @see handle_modereport
+static void tui_request_term_mode(TUIData *tui, TermMode mode)
+  FUNC_ATTR_NONNULL_ALL
+{
+  // 5 bytes for \x1b[?$p, 1 byte for null terminator, 6 bytes for mode digits (more than enough)
+  char buf[12];
+  int len = snprintf(buf, sizeof(buf), "\x1b[?%d$p", (int)mode);
+  assert((len > 0) && (len < (int)sizeof(buf)));
+  out(tui, buf, (size_t)len);
+}
+
+/// Handle a mode report (DECRPM) from the terminal.
+void tui_handle_term_mode(TUIData *tui, TermMode mode, TermModeState state)
+  FUNC_ATTR_NONNULL_ALL
+{
+  switch (state) {
+  case kTermModeNotRecognized:
+  case kTermModePermanentlySet:
+  case kTermModePermanentlyReset:
+    // If the mode is not recognized, or if the terminal emulator does not allow it to be changed,
+    // then there is nothing to do
+    break;
+  case kTermModeSet:
+  case kTermModeReset:
+    // The terminal supports changing the given mode
+    switch (mode) {
+    case kTermModeSynchronizedOutput:
+      // Ref: https://gist.github.com/christianparpart/d8a62cc1ab659194337d73e399004036
+      tui->unibi_ext.sync = (int)unibi_add_ext_str(tui->ut, "Sync",
+                                                   "\x1b[?2026%?%p1%{1}%-%tl%eh%;");
+    }
+  }
+}
+
+/// Query the terminal emulator to see if it supports Kitty's keyboard protocol.
+///
+/// Write CSI ? u followed by a primary device attributes request (CSI c). If
+/// a primary device attributes response is received without first receiving an
+/// answer to the progressive enhancement query (CSI u), then the terminal does
+/// not support the Kitty keyboard protocol.
+///
+/// See https://sw.kovidgoyal.net/kitty/keyboard-protocol/#detection-of-support-for-this-protocol
+static void tui_query_kitty_keyboard(TUIData *tui)
+  FUNC_ATTR_NONNULL_ALL
+{
+  tui->input.waiting_for_kkp_response = true;
+  out(tui, S_LEN("\x1b[?u\x1b[c"));
 }
 
 static void terminfo_start(TUIData *tui)
@@ -250,11 +294,8 @@ static void terminfo_start(TUIData *tui)
   tui->unibi_ext.reset_scroll_region = -1;
   tui->unibi_ext.set_cursor_style = -1;
   tui->unibi_ext.reset_cursor_style = -1;
-  tui->unibi_ext.get_bg = -1;
   tui->unibi_ext.set_underline_color = -1;
-  tui->unibi_ext.enable_extended_keys = -1;
-  tui->unibi_ext.disable_extended_keys = -1;
-  tui->unibi_ext.get_extkeys = -1;
+  tui->unibi_ext.sync = -1;
   tui->out_fd = STDOUT_FILENO;
   tui->out_isatty = os_isatty(tui->out_fd);
   tui->input.tui_data = tui;
@@ -316,10 +357,6 @@ static void terminfo_start(TUIData *tui)
     || terminfo_is_term_family(term, "win32con")
     || terminfo_is_term_family(term, "interix");
   tui->bce = unibi_get_bool(tui->ut, unibi_back_color_erase);
-  tui->normlen = unibi_pre_fmt_str(tui, unibi_cursor_normal,
-                                   tui->norm, sizeof tui->norm);
-  tui->invislen = unibi_pre_fmt_str(tui, unibi_cursor_invisible,
-                                    tui->invis, sizeof tui->invis);
   // Set 't_Co' from the result of unibilium & fix_terminfo.
   t_colors = unibi_get_num(tui->ut, unibi_max_colors);
   // Enter alternate screen, save title, and clear.
@@ -327,15 +364,17 @@ static void terminfo_start(TUIData *tui)
   unibi_out(tui, unibi_enter_ca_mode);
   unibi_out(tui, unibi_keypad_xmit);
   unibi_out(tui, unibi_clear_screen);
-  // Ask the terminal to send us the background color.
-  tui->input.waiting_for_bg_response = 5;
-  unibi_out_ext(tui, tui->unibi_ext.get_bg);
+
   // Enable bracketed paste
   unibi_out_ext(tui, tui->unibi_ext.enable_bracketed_paste);
 
-  // Query the terminal to see if it supports CSI u
-  tui->input.waiting_for_csiu_response = 5;
-  unibi_out_ext(tui, tui->unibi_ext.get_extkeys);
+  // Query support for mode 2026 (Synchronized Output). Some terminals also
+  // support an older DCS sequence for synchronized output, but we will only use
+  // mode 2026
+  tui_request_term_mode(tui, kTermModeSynchronizedOutput);
+
+  // Query the terminal to see if it supports Kitty's keyboard protocol
+  tui_query_kitty_keyboard(tui);
 
   int ret;
   uv_loop_init(&tui->write_loop);
@@ -378,8 +417,10 @@ static void terminfo_stop(TUIData *tui)
   // Reset cursor to normal before exiting alternate screen.
   unibi_out(tui, unibi_cursor_normal);
   unibi_out(tui, unibi_keypad_local);
-  // Disable extended keys before exiting alternate screen.
-  unibi_out_ext(tui, tui->unibi_ext.disable_extended_keys);
+
+  // Reset the key encoding
+  tui_reset_key_encoding(tui);
+
   // May restore old title before exiting alternate screen.
   tui_set_title(tui, (String)STRING_INIT);
   if (ui_client_exit_status == 0) {
@@ -399,6 +440,11 @@ static void terminfo_stop(TUIData *tui)
   unibi_out_ext(tui, tui->unibi_ext.disable_bracketed_paste);
   // Disable focus reporting
   unibi_out_ext(tui, tui->unibi_ext.disable_focus_reporting);
+
+  // Disable synchronized output
+  UNIBI_SET_NUM_VAR(tui->params[0], 0);
+  unibi_out_ext(tui, tui->unibi_ext.sync);
+
   flush_buf(tui);
   uv_tty_reset_mode();
   uv_close((uv_handle_t *)&tui->output_handle, NULL);
@@ -1107,9 +1153,7 @@ void tui_set_mode(TUIData *tui, ModeShape mode)
     HlAttrs aep = kv_A(tui->attrs, c.id);
 
     tui->want_invisible = aep.hl_blend == 100;
-    if (tui->want_invisible) {
-      unibi_out(tui, unibi_cursor_invisible);
-    } else if (aep.rgb_ae_attr & HL_INVERSE) {
+    if (!tui->want_invisible && aep.rgb_ae_attr & HL_INVERSE) {
       // We interpret "inverse" as "default" (no termcode for "inverse"...).
       // Hopefully the user's default cursor color is inverse.
       unibi_out_ext(tui, tui->unibi_ext.reset_cursor_color);
@@ -1261,6 +1305,39 @@ void tui_default_colors_set(TUIData *tui, Integer rgb_fg, Integer rgb_bg, Intege
   invalidate(tui, 0, tui->grid.height, 0, tui->grid.width);
 }
 
+/// Begin flushing the TUI. If 'termsync' is set and the terminal supports synchronized updates,
+/// begin a synchronized update. Otherwise, hide the cursor to avoid cursor jumping.
+static void tui_flush_start(TUIData *tui)
+  FUNC_ATTR_NONNULL_ALL
+{
+  if (tui->sync_output && tui->unibi_ext.sync != -1) {
+    UNIBI_SET_NUM_VAR(tui->params[0], 1);
+    unibi_out_ext(tui, tui->unibi_ext.sync);
+  } else if (!tui->is_invisible) {
+    unibi_out(tui, unibi_cursor_invisible);
+    tui->is_invisible = true;
+  }
+}
+
+/// Finish flushing the TUI. If 'termsync' is set and the terminal supports synchronized updates,
+/// end a synchronized update. Otherwise, make the cursor visible again.
+static void tui_flush_end(TUIData *tui)
+  FUNC_ATTR_NONNULL_ALL
+{
+  if (tui->sync_output && tui->unibi_ext.sync != -1) {
+    UNIBI_SET_NUM_VAR(tui->params[0], 0);
+    unibi_out_ext(tui, tui->unibi_ext.sync);
+  }
+  bool should_invisible = tui->busy || tui->want_invisible;
+  if (tui->is_invisible && !should_invisible) {
+    unibi_out(tui, unibi_cursor_normal);
+    tui->is_invisible = false;
+  } else if (!tui->is_invisible && should_invisible) {
+    unibi_out(tui, unibi_cursor_invisible);
+    tui->is_invisible = true;
+  }
+}
+
 void tui_flush(TUIData *tui)
 {
   UGrid *grid = &tui->grid;
@@ -1276,6 +1353,8 @@ void tui_flush(TUIData *tui)
     loop_purge(tui->loop);
     tui_busy_stop(tui);  // avoid hidden cursor
   }
+
+  tui_flush_start(tui);
 
   while (kv_size(tui->invalid_regions)) {
     Rect r = kv_pop(tui->invalid_regions);
@@ -1303,6 +1382,8 @@ void tui_flush(TUIData *tui)
   }
 
   cursor_goto(tui, tui->row, tui->col);
+
+  tui_flush_end(tui);
 
   flush_buf(tui);
 }
@@ -1453,6 +1534,8 @@ void tui_option_set(TUIData *tui, String name, Object value)
     tui->input.ttimeoutlen = (OptInt)value.data.integer;
   } else if (strequal(name.data, "verbose")) {
     tui->verbose = value.data.integer;
+  } else if (strequal(name.data, "termsync")) {
+    tui->sync_output = value.data.boolean;
   }
 }
 
@@ -1882,15 +1965,6 @@ static void patch_terminfo_bugs(TUIData *tui, const char *term, const char *colo
 #define XTERM_SETAB_16 \
   "\x1b[%?%p1%{8}%<%t4%p1%d%e%p1%{16}%<%t10%p1%{8}%-%d%e39%;m"
 
-  tui->unibi_ext.get_bg = (int)unibi_add_ext_str(ut, "ext.get_bg",
-                                                 "\x1b]11;?\x07");
-
-  // Query the terminal to see if it supports CSI u key encoding by writing CSI
-  // ? u followed by a request for the primary device attributes (CSI c)
-  // See https://sw.kovidgoyal.net/kitty/keyboard-protocol/#detection-of-support-for-this-protocol
-  tui->unibi_ext.get_extkeys = (int)unibi_add_ext_str(ut, "ext.get_extkeys",
-                                                      "\x1b[?u\x1b[c");
-
   // Terminals with 256-colour SGR support despite what terminfo says.
   if (unibi_get_num(ut, unibi_max_colors) < 256) {
     // See http://fedoraproject.org/wiki/Features/256_Color_Terminals
@@ -2152,9 +2226,12 @@ static void augment_terminfo(TUIData *tui, const char *term, int vte_version, in
                                                                   "\x1b[?2004l");
   // For urxvt send BOTH xterm and old urxvt sequences. #8695
   tui->unibi_ext.enable_focus_reporting = (int)unibi_add_ext_str(ut, "ext.enable_focus",
-                                                                 rxvt ? "\x1b[?1004h\x1b]777;focus;on\x7" : "\x1b[?1004h");
-  tui->unibi_ext.disable_focus_reporting = (int)unibi_add_ext_str(ut, "ext.disable_focus",
-                                                                  rxvt ? "\x1b[?1004l\x1b]777;focus;off\x7" : "\x1b[?1004l");
+                                                                 rxvt ?
+                                                                 "\x1b[?1004h\x1b]777;focus;on\x7" :
+                                                                 "\x1b[?1004h");
+  tui->unibi_ext.disable_focus_reporting =
+    (int)unibi_add_ext_str(ut, "ext.disable_focus",
+                           rxvt ? "\x1b[?1004l\x1b]777;focus;off\x7" : "\x1b[?1004l");
   tui->unibi_ext.enable_mouse = (int)unibi_add_ext_str(ut, "ext.enable_mouse",
                                                        "\x1b[?1002h\x1b[?1006h");
   tui->unibi_ext.disable_mouse = (int)unibi_add_ext_str(ut, "ext.disable_mouse",
@@ -2184,71 +2261,29 @@ static void augment_terminfo(TUIData *tui, const char *term, int vte_version, in
   }
 
   if (!kitty && (vte_version == 0 || vte_version >= 5400)) {
-    // Fallback to Xterm's modifyOtherKeys if terminal does not support CSI u
-    tui->input.extkeys_type = kExtkeysXterm;
+    // Fallback to Xterm's modifyOtherKeys if terminal does not support the
+    // Kitty keyboard protocol
+    tui->input.key_encoding = kKeyEncodingXterm;
   }
 }
 
 static void flush_buf(TUIData *tui)
 {
   uv_write_t req;
-  uv_buf_t bufs[3];
-  uv_buf_t *bufp = &bufs[0];
+  uv_buf_t buf;
 
-  // The content of the output for each condition is shown in the following
-  // table. Therefore, if tui->bufpos == 0 and N/A or invis + norm, there is
-  // no need to output it.
-  //
-  //                         | is_invisible | !is_invisible
-  // ------+-----------------+--------------+---------------
-  // busy  | want_invisible  |     N/A      |    invis
-  //       | !want_invisible |     N/A      |    invis
-  // ------+-----------------+--------------+---------------
-  // !busy | want_invisible  |     N/A      |    invis
-  //       | !want_invisible |     norm     | invis + norm
-  // ------+-----------------+--------------+---------------
-  //
-  if (tui->bufpos <= 0
-      && ((tui->is_invisible && tui->busy)
-          || (tui->is_invisible && !tui->busy && tui->want_invisible)
-          || (!tui->is_invisible && !tui->busy && !tui->want_invisible))) {
+  if (tui->bufpos <= 0) {
     return;
   }
 
-  if (!tui->is_invisible) {
-    // cursor is visible. Write a "cursor invisible" command before writing the
-    // buffer.
-    bufp->base = tui->invis;
-    bufp->len = UV_BUF_LEN(tui->invislen);
-    bufp++;
-    tui->is_invisible = true;
-  }
-
-  if (tui->bufpos > 0) {
-    bufp->base = tui->buf;
-    bufp->len = UV_BUF_LEN(tui->bufpos);
-    bufp++;
-  }
-
-  if (!tui->busy) {
-    assert(tui->is_invisible);
-    // not busy and the cursor is invisible. Write a "cursor normal" command
-    // after writing the buffer.
-    if (!tui->want_invisible) {
-      bufp->base = tui->norm;
-      bufp->len = UV_BUF_LEN(tui->normlen);
-      bufp++;
-      tui->is_invisible = false;
-    }
-  }
+  buf.base = tui->buf;
+  buf.len = UV_BUF_LEN(tui->bufpos);
 
   if (tui->screenshot) {
-    for (size_t i = 0; i < (size_t)(bufp - bufs); i++) {
-      fwrite(bufs[i].base, bufs[i].len, 1, tui->screenshot);
-    }
+    fwrite(buf.base, buf.len, 1, tui->screenshot);
   } else {
     int ret
-      = uv_write(&req, (uv_stream_t *)&tui->output_handle, bufs, (unsigned)(bufp - bufs), NULL);
+      = uv_write(&req, (uv_stream_t *)&tui->output_handle, &buf, 1, NULL);
     if (ret) {
       ELOG("uv_write failed: %s", uv_strerror(ret));
     }

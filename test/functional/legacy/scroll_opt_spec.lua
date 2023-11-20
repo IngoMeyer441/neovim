@@ -3,6 +3,7 @@ local Screen = require('test.functional.ui.screen')
 local clear = helpers.clear
 local exec = helpers.exec
 local feed = helpers.feed
+local assert_alive = helpers.assert_alive
 
 before_each(clear)
 
@@ -980,6 +981,46 @@ describe('smoothscroll', function()
       {3:< }{4:[No Name] [+]                         }|
                                               |
     ]])
+  end)
+
+  -- oldtest: Test_smoothscroll_cursor_top()
+  it('resets skipcol when scrolling cursor to top', function()
+    screen:try_resize(40, 12)
+    exec([[
+      set smoothscroll scrolloff=2
+      new | 11resize | wincmd j
+      call setline(1, ['line1', 'line2', 'line3'->repeat(20), 'line4'])
+      exe "norm G3\<C-E>k"
+    ]])
+    screen:expect([[
+                                              |
+      [No Name]                               |
+      line1                                   |
+      line2                                   |
+      ^line3line3line3line3line3line3line3line3|
+      line3line3line3line3line3line3line3line3|
+      line3line3line3line3                    |
+      line4                                   |
+      ~                                       |
+      ~                                       |
+      [No Name] [+]                           |
+                                              |
+    ]])
+  end)
+
+  -- oldtest: Test_smoothscroll_crash()
+  it('does not crash with small window and cpo+=n', function()
+    screen:try_resize(40, 12)
+    exec([[
+      20 new
+      vsp
+      put =repeat('aaaa', 20)
+      set nu fdc=1  smoothscroll cpo+=n
+      vert resize 0
+      exe "norm! 0\<c-e>"
+    ]])
+    feed('2<C-E>')
+    assert_alive()
   end)
 
   it("works with virt_lines above and below", function()

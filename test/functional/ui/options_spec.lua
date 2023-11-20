@@ -23,6 +23,7 @@ describe('UI receives option updates', function()
       mousemoveevent=false,
       showtabline=1,
       termguicolors=false,
+      termsync=true,
       ttimeout=true,
       ttimeoutlen=50,
       verbose=0,
@@ -208,22 +209,6 @@ describe('UI can set terminal option', function()
     -- by default we implicitly "--cmd 'set bg=light'" which ruins everything
     clear{args_rm={'--cmd'}}
     screen = Screen.new(20,5)
-  end)
-
-  it('term_background', function()
-    eq('dark', eval '&background')
-
-    screen:attach {term_background='light'}
-    eq('light', eval '&background')
-  end)
-
-  it("term_background but not if 'background' already set by user", function()
-    eq('dark', eval '&background')
-    command 'set background=dark'
-
-    screen:attach {term_background='light'}
-
-    eq('dark', eval '&background')
   end)
 
   it('term_name', function()

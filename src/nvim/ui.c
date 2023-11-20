@@ -35,6 +35,7 @@
 #include "nvim/ui_compositor.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
+#include "nvim/winfloat.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "ui.c.generated.h"
@@ -623,7 +624,10 @@ Array ui_array(void)
 
     // TUI fields. (`stdin_fd` is intentionally omitted.)
     PUT(info, "term_name", CSTR_TO_OBJ(ui->term_name));
-    PUT(info, "term_background", CSTR_TO_OBJ(ui->term_background));
+
+    // term_background is deprecated. Populate with an empty string
+    PUT(info, "term_background", CSTR_TO_OBJ(""));
+
     PUT(info, "term_colors", INTEGER_OBJ(ui->term_colors));
     PUT(info, "stdin_tty", BOOLEAN_OBJ(ui->stdin_tty));
     PUT(info, "stdout_tty", BOOLEAN_OBJ(ui->stdout_tty));

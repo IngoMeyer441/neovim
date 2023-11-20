@@ -139,7 +139,7 @@ static int msg_grid_pos_at_flush = 0;
 
 static void ui_ext_msg_set_pos(int row, bool scrolled)
 {
-  char buf[MAX_MCO + 1];
+  char buf[MB_MAXCHAR + 1];
   size_t size = (size_t)utf_char2bytes(curwin->w_p_fcs_chars.msgsep, buf);
   buf[size] = '\0';
   ui_call_msg_set_pos(msg_grid.handle, row, scrolled,
@@ -285,7 +285,6 @@ bool msg_attr_keep(const char *s, int attr, bool keep, bool multiline)
   FUNC_ATTR_NONNULL_ALL
 {
   static int entered = 0;
-  int retval;
   char *buf = NULL;
 
   if (keep && multiline) {
@@ -339,7 +338,7 @@ bool msg_attr_keep(const char *s, int attr, bool keep, bool multiline)
   if (need_clear) {
     msg_clr_eos();
   }
-  retval = msg_end();
+  int retval = msg_end();
 
   if (keep && retval && vim_strsize(s) < (Rows - cmdline_row - 1) * Columns + sc_col) {
     set_keep_msg(s, 0);
@@ -390,7 +389,6 @@ char *msg_strtrunc(const char *s, int force)
 void trunc_string(const char *s, char *buf, int room_in, int buflen)
 {
   int room = room_in - 3;  // "..." takes 3 chars
-  int half;
   int len = 0;
   int e;
   int i;
@@ -406,7 +404,7 @@ void trunc_string(const char *s, char *buf, int room_in, int buflen)
   if (room_in < 3) {
     room = 0;
   }
-  half = room / 2;
+  int half = room / 2;
 
   // First part: Start of the string.
   for (e = 0; len < half && e < buflen; e++) {
@@ -468,7 +466,7 @@ void trunc_string(const char *s, char *buf, int room_in, int buflen)
     buf[e + 3 + len - 1] = NUL;
   } else {
     // can't fit in the "...", just truncate it
-    buf[e - 1] = NUL;
+    buf[buflen - 1] = NUL;
   }
 }
 
@@ -628,7 +626,6 @@ int emsg_not_now(void)
 
 bool emsg_multiline(const char *s, bool multiline)
 {
-  int attr;
   bool ignore = false;
 
   // Skip this if not giving error messages at the moment.
@@ -725,7 +722,7 @@ bool emsg_multiline(const char *s, bool multiline)
   }
 
   emsg_on_display = true;     // remember there is an error message
-  attr = HL_ATTR(HLF_E);      // set highlight mode for error messages
+  int attr = HL_ATTR(HLF_E);      // set highlight mode for error messages
   if (msg_scrolled != 0) {
     need_wait_return = true;  // needed in case emsg() is called after
   }                           // wait_return() has reset need_wait_return
@@ -898,15 +895,13 @@ void msg_schedule_semsg_multiline(const char *const fmt, ...)
 /// @return  a pointer to the printed message, if wait_return() not called.
 char *msg_trunc(char *s, bool force, int attr)
 {
-  int n;
-
   // Add message to history before truncating.
   add_msg_hist(s, -1, attr, false);
 
   char *ts = msg_may_trunc(force, s);
 
   msg_hist_off = true;
-  n = msg(ts, attr);
+  int n = msg(ts, attr);
   msg_hist_off = false;
 
   if (n) {
@@ -1012,12 +1007,10 @@ static void add_msg_hist_multiattr(const char *s, int len, int attr, bool multil
 /// @return  FAIL if there are no messages.
 int delete_first_msg(void)
 {
-  struct msg_hist *p;
-
   if (msg_hist_len <= 0) {
     return FAIL;
   }
-  p = first_msg_hist;
+  struct msg_hist *p = first_msg_hist;
   first_msg_hist = p->next;
   if (first_msg_hist == NULL) {  // history is becoming empty
     assert(msg_hist_len == 1);
@@ -1034,8 +1027,6 @@ int delete_first_msg(void)
 void ex_messages(exarg_T *eap)
   FUNC_ATTR_NONNULL_ALL
 {
-  struct msg_hist *p;
-
   if (strcmp(eap->arg, "clear") == 0) {
     int keep = eap->addr_count == 0 ? 0 : eap->line2;
 
@@ -1050,7 +1041,7 @@ void ex_messages(exarg_T *eap)
     return;
   }
 
-  p = first_msg_hist;
+  struct msg_hist *p = first_msg_hist;
 
   if (eap->addr_count != 0) {
     int c = 0;
@@ -1132,8 +1123,6 @@ void msg_end_prompt(void)
 void wait_return(int redraw)
 {
   int c;
-  int oldState;
-  int tmpState;
   int had_got_int;
   FILE *save_scriptout;
 
@@ -1167,7 +1156,7 @@ void wait_return(int redraw)
   }
 
   redir_off = true;             // don't redirect this message
-  oldState = State;
+  int oldState = State;
   if (quit_more) {
     c = CAR;                    // just pretend CR was hit
     quit_more = false;
@@ -1282,7 +1271,7 @@ void wait_return(int redraw)
   // If the screen size changed screen_resize() will redraw the screen.
   // Otherwise the screen is only redrawn if 'redraw' is set and no ':'
   // typed.
-  tmpState = State;
+  int tmpState = State;
   State = oldState;  // restore State before screen_resize()
   setmouse();
   msg_check();
@@ -1471,7 +1460,7 @@ void msg_putchar(int c)
 
 void msg_putchar_attr(int c, int attr)
 {
-  char buf[MB_MAXBYTES + 1];
+  char buf[MB_MAXCHAR + 1];
 
   if (IS_SPECIAL(c)) {
     buf[0] = (char)K_SPECIAL;
@@ -1558,12 +1547,6 @@ int msg_outtrans_len(const char *msgstr, int len, int attr)
   if (msg_row >= cmdline_row && msg_col == 0) {
     clear_cmdline = false;
     mode_displayed = false;
-  }
-
-  // If the string starts with a composing character first draw a space on
-  // which the composing char can be drawn.
-  if (utf_iscomposing(utf_ptr2char(msgstr))) {
-    msg_puts_attr(" ", attr);
   }
 
   // Go over the string.  Special characters are translated and printed.
@@ -2680,7 +2663,6 @@ static int do_more_prompt(int typed_char)
   bool to_redraw = false;
   msgchunk_T *mp_last = NULL;
   msgchunk_T *mp;
-  int i;
 
   // If headless mode is enabled and no input is required, this variable
   // will be true. However If server mode is enabled, the message "--more--"
@@ -2698,7 +2680,7 @@ static int do_more_prompt(int typed_char)
   if (typed_char == 'G') {
     // "g<": Find first line on the last page.
     mp_last = msg_sb_start(last_msgchunk);
-    for (i = 0; i < Rows - 2 && mp_last != NULL
+    for (int i = 0; i < Rows - 2 && mp_last != NULL
          && mp_last->sb_prev != NULL; i++) {
       mp_last = msg_sb_start(mp_last->sb_prev);
     }
@@ -2816,13 +2798,13 @@ static int do_more_prompt(int typed_char)
         }
 
         // go to start of line at top of the screen
-        for (i = 0; i < Rows - 2 && mp != NULL && mp->sb_prev != NULL; i++) {
+        for (int i = 0; i < Rows - 2 && mp != NULL && mp->sb_prev != NULL; i++) {
           mp = msg_sb_start(mp->sb_prev);
         }
 
         if (mp != NULL && (mp->sb_prev != NULL || to_redraw)) {
           // Find line to be displayed at top
-          for (i = 0; i > toscroll; i--) {
+          for (int i = 0; i > toscroll; i--) {
             if (mp == NULL || mp->sb_prev == NULL) {
               break;
             }
@@ -2846,7 +2828,7 @@ static int do_more_prompt(int typed_char)
             // event fragmentization, not unnecessary scroll events).
             grid_fill(&msg_grid_adj, 0, Rows, 0, Columns, ' ', ' ',
                       HL_ATTR(HLF_MSG));
-            for (i = 0; mp != NULL && i < Rows - 1; i++) {
+            for (int i = 0; mp != NULL && i < Rows - 1; i++) {
               mp = disp_sb_line(i, mp);
               msg_scrolled++;
             }
