@@ -12,6 +12,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef ENABLE_ASAN_UBSAN
+# include <sanitizer/asan_interface.h>
+# include <sanitizer/ubsan_interface.h>
+#endif
 
 #include "nvim/arglist.h"
 #include "nvim/ascii.h"
@@ -343,7 +347,7 @@ int main(int argc, char **argv)
   // Don't redraw until much later.
   RedrawingDisabled++;
 
-  setbuf(stdout, NULL);
+  setbuf(stdout, NULL);  // NOLINT(bugprone-unsafe-functions)
 
   full_screen = !silent_mode;
 
@@ -2227,13 +2231,11 @@ static void check_swap_exists_action(void)
 }
 
 #ifdef ENABLE_ASAN_UBSAN
-const char *__ubsan_default_options(void);
 const char *__ubsan_default_options(void)
 {
   return "print_stacktrace=1";
 }
 
-const char *__asan_default_options(void);
 const char *__asan_default_options(void)
 {
   return "handle_abort=1,handle_sigill=1";

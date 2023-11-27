@@ -75,7 +75,6 @@
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/ex_getln.h"
-#include "nvim/extmark_defs.h"
 #include "nvim/fold.h"
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
@@ -99,6 +98,7 @@
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
+#include "nvim/sign_defs.h"
 #include "nvim/spell.h"
 #include "nvim/state.h"
 #include "nvim/statusline.h"
@@ -606,7 +606,7 @@ int update_screen(void)
     }
 
     // Reset 'statuscolumn' if there is no dedicated signcolumn but it is invalid.
-    if (*wp->w_p_stc != NUL && !wp->w_buffer->b_signcols.valid && win_no_signcol(wp)) {
+    if (*wp->w_p_stc != NUL && !wp->w_buffer->b_signcols.valid && wp->w_minscwidth <= SCL_NO) {
       wp->w_nrwidth_line_count = 0;
       wp->w_valid &= ~VALID_WCOL;
       wp->w_redr_type = UPD_NOT_VALID;
@@ -619,7 +619,7 @@ int update_screen(void)
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     // Validate b_signcols if there is no dedicated signcolumn but 'statuscolumn' is set.
-    if (*wp->w_p_stc != NUL && win_no_signcol(wp)) {
+    if (*wp->w_p_stc != NUL && wp->w_minscwidth <= SCL_NO) {
       buf_signcols(wp->w_buffer, 0);
     }
 
@@ -2250,8 +2250,8 @@ static void win_update(win_T *wp, DecorProviders *providers)
       // When lines are folded, display one line for all of them.
       // Otherwise, display normally (can be several display lines when
       // 'wrap' is on).
-      foldinfo_T foldinfo = wp->w_p_cul && lnum == wp->w_cursor.lnum ?
-                            cursorline_fi : fold_info(wp, lnum);
+      foldinfo_T foldinfo = wp->w_p_cul && lnum == wp->w_cursor.lnum
+                            ? cursorline_fi : fold_info(wp, lnum);
 
       if (foldinfo.fi_lines == 0
           && idx < wp->w_lines_valid
@@ -2312,8 +2312,8 @@ static void win_update(win_T *wp, DecorProviders *providers)
       if (wp->w_p_rnu && wp->w_last_cursor_lnum_rnu != wp->w_cursor.lnum) {
         // 'relativenumber' set and cursor moved vertically: The
         // text doesn't need to be drawn, but the number column does.
-        foldinfo_T info = wp->w_p_cul && lnum == wp->w_cursor.lnum ?
-                          cursorline_fi : fold_info(wp, lnum);
+        foldinfo_T info = wp->w_p_cul && lnum == wp->w_cursor.lnum
+                          ? cursorline_fi : fold_info(wp, lnum);
         (void)win_line(wp, lnum, srow, wp->w_grid.rows, true, &spv, info, &line_providers);
       }
 
@@ -2335,6 +2335,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
       lnum = wp->w_topline;
       wp->w_lines_valid = 0;
       wp->w_valid &= ~VALID_WCOL;
+      decor_redraw_reset(wp, &decor_state);
       decor_providers_invoke_win(wp, providers, &line_providers);
       continue;
     }
@@ -2632,8 +2633,7 @@ int number_width(win_T *wp)
 
   // If 'signcolumn' is set to 'number' and there is a sign to display, then
   // the minimal width for the number column is 2.
-  if (n < 2 && wp->w_buffer->b_signs_with_text
-      && (*wp->w_p_scl == 'n' && *(wp->w_p_scl + 1) == 'u')) {
+  if (n < 2 && wp->w_buffer->b_signs_with_text && wp->w_minscwidth == SCL_NUM) {
     n = 2;
   }
 

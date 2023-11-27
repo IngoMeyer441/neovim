@@ -15,9 +15,7 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
 #include "nvim/cursor_shape.h"
-#include "nvim/event/defs.h"
 #include "nvim/event/loop.h"
-#include "nvim/event/multiqueue.h"
 #include "nvim/event/signal.h"
 #include "nvim/event/stream.h"
 #include "nvim/globals.h"
@@ -334,7 +332,7 @@ static void terminfo_start(TUIData *tui)
                  || os_getenv("KONSOLE_DBUS_SESSION");
   const char *konsolev_env = os_getenv("KONSOLE_VERSION");
   int konsolev = konsolev_env ? (int)strtol(konsolev_env, NULL, 10)
-                               : (konsole ? 1 : 0);
+                              : (konsole ? 1 : 0);
 
   patch_terminfo_bugs(tui, term, colorterm, vtev, konsolev, iterm_env, nsterm);
   augment_terminfo(tui, term, vtev, konsolev, iterm_env, nsterm);
@@ -792,11 +790,15 @@ static void cursor_goto(TUIData *tui, int row, int col)
   if (grid->row == -1) {
     goto safe_move;
   }
-  if (0 == col ? col != grid->col :
-      row != grid->row ? false :
-      1 == col ? 2 < grid->col && cheap_to_print(tui, grid->row, 0, col) :
-      2 == col ? 5 < grid->col && cheap_to_print(tui, grid->row, 0, col) :
-      false) {
+  if (0 == col
+      ? col != grid->col
+      : (row != grid->row
+         ? false
+         : (1 == col
+            ? (2 < grid->col && cheap_to_print(tui, grid->row, 0, col))
+            : (2 == col
+               ? (5 < grid->col && cheap_to_print(tui, grid->row, 0, col))
+               : false)))) {
     // Motion to left margin from anywhere else, or CR + printing chars is
     // even less expensive than using BSes or CUB.
     unibi_out(tui, unibi_carriage_return);
@@ -1420,10 +1422,10 @@ static void show_verbose_terminfo(TUIData *tui)
   api_free_array(args);
 }
 
-#ifdef UNIX
-static void suspend_event(void **argv)
+void tui_suspend(TUIData *tui)
 {
-  TUIData *tui = argv[0];
+// on a non-UNIX system, this is a no-op
+#ifdef UNIX
   ui_client_detach();
   bool enable_mouse = tui->mouse_enabled;
   tui_terminal_stop(tui);
@@ -1438,18 +1440,6 @@ static void suspend_event(void **argv)
   }
   stream_set_blocking(tui->input.in_fd, false);  // libuv expects this
   ui_client_attach(tui->width, tui->height, tui->term);
-}
-#endif
-
-void tui_suspend(TUIData *tui)
-{
-// on a non-UNIX system, this is a no-op
-#ifdef UNIX
-  // kill(0, SIGTSTP) won't stop the UI thread, so we must poll for SIGCONT
-  // before continuing. This is done in another callback to avoid
-  // loop_poll_events recursion
-  multiqueue_put_event(resize_events,
-                       event_create(suspend_event, 1, tui));
 #endif
 }
 
@@ -1770,9 +1760,6 @@ static void patch_terminfo_bugs(TUIData *tui, const char *term, const char *colo
 {
   unibi_term *ut = tui->ut;
   const char *xterm_version = os_getenv("XTERM_VERSION");
-#if 0   // We don't need to identify this specifically, for now.
-  bool roxterm = !!os_getenv("ROXTERM_ID");
-#endif
   bool xterm = terminfo_is_term_family(term, "xterm")
                // Treat Terminal.app as generic xterm-like, for now.
                || nsterm;
@@ -2226,9 +2213,9 @@ static void augment_terminfo(TUIData *tui, const char *term, int vte_version, in
                                                                   "\x1b[?2004l");
   // For urxvt send BOTH xterm and old urxvt sequences. #8695
   tui->unibi_ext.enable_focus_reporting = (int)unibi_add_ext_str(ut, "ext.enable_focus",
-                                                                 rxvt ?
-                                                                 "\x1b[?1004h\x1b]777;focus;on\x7" :
-                                                                 "\x1b[?1004h");
+                                                                 rxvt
+                                                                 ? "\x1b[?1004h\x1b]777;focus;on\x7"
+                                                                 : "\x1b[?1004h");
   tui->unibi_ext.disable_focus_reporting =
     (int)unibi_add_ext_str(ut, "ext.disable_focus",
                            rxvt ? "\x1b[?1004l\x1b]777;focus;off\x7" : "\x1b[?1004l");

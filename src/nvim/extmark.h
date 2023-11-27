@@ -7,7 +7,7 @@
 #include "klib/kvec.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/decoration.h"
-#include "nvim/extmark_defs.h"
+#include "nvim/extmark_defs.h"  // IWYU pragma: export
 #include "nvim/macros.h"
 #include "nvim/marktree.h"
 #include "nvim/pos.h"
@@ -64,6 +64,8 @@ typedef enum {
   kExtmarkClear,
 } UndoObjectType;
 
+// TODO(bfredl): if possible unify these with marktree flags,
+// so it is possible to filter extmarks directly on top-level flags
 typedef enum {
   kExtmarkNone = 0x1,
   kExtmarkSign = 0x2,

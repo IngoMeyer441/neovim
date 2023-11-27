@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <uv.h>
 
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
@@ -337,8 +336,8 @@ static void parse_msgpack(Channel *channel)
       arena_mem_free(arena_finish(&p->arena));
     } else if (p->type == kMessageTypeResponse) {
       ChannelCallFrame *frame = channel->rpc.client_type == kClientTypeMsgpackRpc
-        ? find_call_frame(&channel->rpc, p->request_id)
-        : kv_last(channel->rpc.call_stack);
+                                ? find_call_frame(&channel->rpc, p->request_id)
+                                : kv_last(channel->rpc.call_stack);
       if (frame == NULL || p->request_id != frame->request_id) {
         char buf[256];
         snprintf(buf, sizeof(buf),

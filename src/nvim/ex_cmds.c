@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <float.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -46,7 +47,6 @@
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/grid_defs.h"
 #include "nvim/help.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
@@ -155,7 +155,7 @@ void do_ascii(exarg_T *eap)
                       ? NL  // NL is stored as CR.
                       : c);
     char buf1[20];
-    if (vim_isprintc_strict(c) && (c < ' ' || c > '~')) {
+    if (vim_isprintc(c) && (c < ' ' || c > '~')) {
       char buf3[7];
       transchar_nonprint(curbuf, buf3, c);
       vim_snprintf(buf1, sizeof(buf1), "  <%s>", buf3);
@@ -397,10 +397,10 @@ static int sort_compare(const void *s1, const void *s2)
       result = l1.st_u.num.is_number - l2.st_u.num.is_number;
     } else {
       result = l1.st_u.num.value == l2.st_u.num.value
-        ? 0
-        : l1.st_u.num.value > l2.st_u.num.value
-          ? 1
-          : -1;
+               ? 0
+               : l1.st_u.num.value > l2.st_u.num.value
+               ? 1
+               : -1;
     }
   } else if (sort_flt) {
     result = l1.st_u.value_flt == l2.st_u.value_flt
@@ -1365,7 +1365,7 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
 
   if (itmp != NULL) {
     len += is_pwsh ? strlen(itmp) + sizeof("& { Get-Content " " | & " " }") - 1 + 6  // +6: #20530
-                    : strlen(itmp) + sizeof(" { " " < " " } ") - 1;
+                   : strlen(itmp) + sizeof(" { " " < " " } ") - 1;
   }
   if (otmp != NULL) {
     len += strlen(otmp) + strlen(p_srr) + 2;  // two extra spaces ("  "),
@@ -1389,7 +1389,7 @@ char *make_filter_cmd(char *cmd, char *itmp, char *otmp)
     // redirecting input and/or output.
     if (itmp != NULL || otmp != NULL) {
       char *fmt = is_fish_shell ? "begin; %s; end"
-        : "(%s)";
+                                : "(%s)";
       vim_snprintf(buf, len, fmt, cmd);
     } else {
       xstrlcpy(buf, cmd, len);
@@ -3222,6 +3222,25 @@ static char *sub_parse_flags(char *cmd, subflags_T *subflags, int *which_pat)
   return cmd;
 }
 
+/// Skip over the "sub" part in :s/pat/sub/ where "delimiter" is the separating
+/// character.
+static char *skip_substitute(char *start, int delimiter)
+{
+  char *p = start;
+
+  while (p[0]) {
+    if (p[0] == delimiter) {  // end delimiter found
+      *p++ = NUL;  // replace it with a NUL
+      break;
+    }
+    if (p[0] == '\\' && p[1] != 0) {  // skip escaped characters
+      p++;
+    }
+    MB_PTR_ADV(p);
+  }
+  return p;
+}
+
 static int check_regexp_delim(int c)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
@@ -3348,18 +3367,9 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
 
     // Small incompatibility: vi sees '\n' as end of the command, but in
     // Vim we want to use '\n' to find/substitute a NUL.
-    sub = cmd;              // remember the start of the substitution
-
-    while (cmd[0]) {
-      if (cmd[0] == delimiter) {                // end delimiter found
-        *cmd++ = NUL;                           // replace it with a NUL
-        break;
-      }
-      if (cmd[0] == '\\' && cmd[1] != 0) {      // skip escaped characters
-        cmd++;
-      }
-      MB_PTR_ADV(cmd);
-    }
+    char *p = cmd;  // remember the start of the substitution
+    cmd = skip_substitute(cmd, delimiter);
+    sub = xstrdup(p);
 
     if (!eap->skip && cmdpreview_ns <= 0) {
       sub_set_replacement((SubReplacementString) {
@@ -3374,7 +3384,7 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
       return 0;
     }
     pat = NULL;                 // search_regcomp() will use previous pattern
-    sub = old_sub.sub;
+    sub = xstrdup(old_sub.sub);
 
     // Vi compatibility quirk: repeating with ":s" keeps the cursor in the
     // last column after using "$".
@@ -3382,6 +3392,7 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
   }
 
   if (sub != NULL && sub_joining_lines(eap, pat, sub, cmd, cmdpreview_ns <= 0)) {
+    xfree(sub);
     return 0;
   }
 
@@ -3396,11 +3407,13 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
     i = getdigits_int(&cmd, true, INT_MAX);
     if (i <= 0 && !eap->skip && subflags.do_error) {
       emsg(_(e_zerocount));
+      xfree(sub);
       return 0;
     } else if (i >= INT_MAX) {
       char buf[20];
       vim_snprintf(buf, sizeof(buf), "%d", i);
       semsg(_(e_val_too_large), buf);
+      xfree(sub);
       return 0;
     }
     eap->line1 = eap->line2;
@@ -3416,17 +3429,20 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
     eap->nextcmd = check_nextcmd(cmd);
     if (eap->nextcmd == NULL) {
       semsg(_(e_trailing_arg), cmd);
+      xfree(sub);
       return 0;
     }
   }
 
   if (eap->skip) {          // not executing commands, only parsing
+    xfree(sub);
     return 0;
   }
 
   if (!subflags.do_count && !MODIFIABLE(curbuf)) {
     // Substitution is not allowed in non-'modifiable' buffer
     emsg(_(e_modifiable));
+    xfree(sub);
     return 0;
   }
 
@@ -3435,6 +3451,7 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
     if (subflags.do_error) {
       emsg(_(e_invcmd));
     }
+    xfree(sub);
     return 0;
   }
 
@@ -3449,22 +3466,20 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
 
   assert(sub != NULL);
 
-  char *sub_copy = NULL;
-
   // If the substitute pattern starts with "\=" then it's an expression.
   // Make a copy, a recursive function may free it.
   // Otherwise, '~' in the substitute pattern is replaced with the old
   // pattern.  We do it here once to avoid it to be replaced over and over
   // again.
   if (sub[0] == '\\' && sub[1] == '=') {
-    sub = xstrdup(sub);
-    sub_copy = sub;
+    char *p = xstrdup(sub);
+    xfree(sub);
+    sub = p;
   } else {
-    char *newsub = regtilde(sub, magic_isset(), cmdpreview_ns > 0);
-    if (newsub != sub) {
-      // newsub was allocated, free it later.
-      sub_copy = newsub;
-      sub = newsub;
+    char *p = regtilde(sub, magic_isset(), cmdpreview_ns > 0);
+    if (p != sub) {
+      xfree(sub);
+      sub = p;
     }
   }
 
@@ -4235,7 +4250,7 @@ skip:
   }
 
   vim_regfree(regmatch.regprog);
-  xfree(sub_copy);
+  xfree(sub);
 
   // Restore the flag values, they can be used for ":&&".
   subflags.do_all = save_do_all;
@@ -4283,15 +4298,15 @@ bool do_sub_msg(bool count_only)
     }
 
     char *msg_single = count_only
-                     ? NGETTEXT("%" PRId64 " match on %" PRId64 " line",
-                                "%" PRId64 " matches on %" PRId64 " line", sub_nsubs)
-                     : NGETTEXT("%" PRId64 " substitution on %" PRId64 " line",
-                                "%" PRId64 " substitutions on %" PRId64 " line", sub_nsubs);
+                       ? NGETTEXT("%" PRId64 " match on %" PRId64 " line",
+                                  "%" PRId64 " matches on %" PRId64 " line", sub_nsubs)
+                       : NGETTEXT("%" PRId64 " substitution on %" PRId64 " line",
+                                  "%" PRId64 " substitutions on %" PRId64 " line", sub_nsubs);
     char *msg_plural = count_only
-                     ? NGETTEXT("%" PRId64 " match on %" PRId64 " lines",
-                                "%" PRId64 " matches on %" PRId64 " lines", sub_nsubs)
-                     : NGETTEXT("%" PRId64 " substitution on %" PRId64 " lines",
-                                "%" PRId64 " substitutions on %" PRId64 " lines", sub_nsubs);
+                       ? NGETTEXT("%" PRId64 " match on %" PRId64 " lines",
+                                  "%" PRId64 " matches on %" PRId64 " lines", sub_nsubs)
+                       : NGETTEXT("%" PRId64 " substitution on %" PRId64 " lines",
+                                  "%" PRId64 " substitutions on %" PRId64 " lines", sub_nsubs);
     vim_snprintf_add(msg_buf, sizeof(msg_buf),
                      NGETTEXT(msg_single, msg_plural, sub_nlines),
                      (int64_t)sub_nsubs, (int64_t)sub_nlines);

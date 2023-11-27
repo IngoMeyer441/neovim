@@ -834,6 +834,19 @@ stack traceback:
     end}
   end)
 
+  it('supports multiline messages for :map', function()
+    command('mapclear')
+    command('nmap Y y$')
+    command('nmap Q @@')
+    command('nnoremap j k')
+    feed(':map<cr>')
+
+    screen:expect{messages={{
+      content = {{ "\nn  Q             @@\nn  Y             y$\nn  j           " }, { "*", 5 }, { " k" }},
+      kind = ''
+    }}}
+  end)
+
   it('wildmode=list', function()
     screen:try_resize(25, 7)
     screen:set_option('ext_popupmenu', false)
@@ -1388,6 +1401,19 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
                                                                   |
     ]])
     eq(1, meths.get_option_value('cmdheight', {}))
+  end)
+
+  it('using nvim_echo in VimResized does not cause hit-enter prompt #26139', function()
+    command([[au VimResized * lua vim.api.nvim_echo({ { '123456' } }, true, {})]])
+    screen:try_resize(60, 5)
+    screen:expect([[
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+                                                                  |
+    ]])
+    eq({ mode = 'n', blocking = false }, meths.get_mode())
   end)
 end)
 

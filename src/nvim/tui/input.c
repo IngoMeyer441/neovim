@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <uv.h>
 
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
@@ -725,8 +724,8 @@ static void tinput_read_cb(Stream *stream, RBuffer *buf, size_t count_, void *da
   if (rbuffer_size(input->read_stream.buffer)) {
     // If 'ttimeout' is not set, start the timer with a timeout of 0 to process
     // the next input.
-    int64_t ms = input->ttimeout ?
-                 (input->ttimeoutlen >= 0 ? input->ttimeoutlen : 0) : 0;
+    int64_t ms = input->ttimeout
+                 ? (input->ttimeoutlen >= 0 ? input->ttimeoutlen : 0) : 0;
     // Stop the current timer if already running
     time_watcher_stop(&input->timer_handle);
     time_watcher_start(&input->timer_handle, tinput_timer_cb, (uint32_t)ms, 0);

@@ -19,7 +19,7 @@ typedef struct {
 #include "nvim/arglist_defs.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/extmark_defs.h"
-#include "nvim/garray.h"
+#include "nvim/garray_defs.h"
 #include "nvim/grid_defs.h"
 #include "nvim/hashtab.h"
 #include "nvim/highlight_defs.h"
@@ -1206,6 +1206,8 @@ struct window_S {
   int w_nrwidth;                    // width of 'number' and 'relativenumber'
                                     // column being used
   int w_scwidth;                    // width of 'signcolumn'
+  int w_minscwidth;                 // minimum width or SCL_NO/SCL_NUM
+  int w_maxscwidth;                 // maximum width or SCL_NO/SCL_NUM
 
   // === end of cached values ===
 

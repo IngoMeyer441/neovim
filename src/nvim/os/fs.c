@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <uv.h>
 
 #ifdef MSWIN
@@ -795,6 +796,7 @@ void os_copy_xattr(const char *from_file, const char *to_file)
         case E2BIG:
           errmsg = e_xattr_e2big;
           goto error_exit;
+        case ENOTSUP:
         case EACCES:
         case EPERM:
           break;

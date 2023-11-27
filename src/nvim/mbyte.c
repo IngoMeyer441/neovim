@@ -32,7 +32,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wchar.h>
 #include <wctype.h>
 
 #include "auto/config.h"
@@ -62,7 +61,6 @@
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
-#include "nvim/os/os_defs.h"
 #include "nvim/pos.h"
 #include "nvim/strings.h"
 #include "nvim/types.h"

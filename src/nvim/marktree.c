@@ -56,6 +56,7 @@
 // only for debug functions
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
+#include "nvim/garray_defs.h"
 #include "nvim/macros.h"
 
 #define T MT_BRANCH_FACTOR
@@ -287,7 +288,7 @@ static inline void marktree_putp_aux(MarkTree *b, MTNode *x, MTKey k)
 
 void marktree_put(MarkTree *b, MTKey key, int end_row, int end_col, bool end_right)
 {
-  assert(!(key.flags & ~MT_FLAG_EXTERNAL_MASK));
+  assert(!(key.flags & ~(MT_FLAG_EXTERNAL_MASK | MT_FLAG_RIGHT_GRAVITY)));
   if (end_row >= 0) {
     key.flags |= MT_FLAG_PAIRED;
   }
@@ -773,13 +774,14 @@ static void intersect_mov(Intersection *restrict x, Intersection *restrict y,
   kv_size(*y) = yn;
 }
 
-bool intersect_mov_test(uint64_t *x, size_t nx, uint64_t *y, size_t ny, uint64_t *win, size_t nwin,
-                        uint64_t *wout, size_t *nwout, uint64_t *dout, size_t *ndout)
+bool intersect_mov_test(const uint64_t *x, size_t nx, const uint64_t *y, size_t ny,
+                        const uint64_t *win, size_t nwin, uint64_t *wout, size_t *nwout,
+                        uint64_t *dout, size_t *ndout)
 {
   // x is immutable in the context of intersect_mov. y might shrink, but we
   // don't care about it (we get it the deleted ones in d)
-  Intersection xi = { .items = x, .size = nx };
-  Intersection yi = { .items = y, .size = ny };
+  Intersection xi = { .items = (uint64_t *)x, .size = nx };
+  Intersection yi = { .items = (uint64_t *)y, .size = ny };
 
   Intersection w;
   kvi_init(w);
@@ -1134,25 +1136,6 @@ static void marktree_free_node(MarkTree *b, MTNode *x)
   kvi_destroy(x->intersect);
   xfree(x);
   b->n_nodes--;
-}
-
-/// NB: caller must check not pair!
-void marktree_revise(MarkTree *b, MarkTreeIter *itr, uint8_t decor_level, MTKey key)
-{
-  // TODO(bfredl): clean up this mess and re-instantiate &= and |= forms
-  // once we upgrade to a non-broken version of gcc in functionaltest-lua CI
-  rawkey(itr).flags = (uint16_t)(rawkey(itr).flags & (uint16_t) ~MT_FLAG_DECOR_MASK);
-  rawkey(itr).flags = (uint16_t)(rawkey(itr).flags & (uint16_t) ~MT_FLAG_INVALID);
-  rawkey(itr).flags = (uint16_t)(rawkey(itr).flags
-                                 | (uint16_t)(decor_level << MT_FLAG_DECOR_OFFSET)
-                                 | (uint16_t)(key.flags & MT_FLAG_DECOR_MASK)
-                                 | (uint16_t)(key.flags & MT_FLAG_HL_EOL)
-                                 | (uint16_t)(key.flags & MT_FLAG_NO_UNDO)
-                                 | (uint16_t)(key.flags & MT_FLAG_INVALID)
-                                 | (uint16_t)(key.flags & MT_FLAG_INVALIDATE));
-  rawkey(itr).decor_full = key.decor_full;
-  rawkey(itr).hl_id = key.hl_id;
-  rawkey(itr).priority = key.priority;
 }
 
 /// @param itr iterator is invalid after call
@@ -2002,8 +1985,8 @@ static void marktree_itr_fix_pos(MarkTree *b, MarkTreeIter *itr)
 void marktree_put_test(MarkTree *b, uint32_t ns, uint32_t id, int row, int col, bool right_gravity,
                        int end_row, int end_col, bool end_right)
 {
-  uint16_t flags = mt_flags(right_gravity, false, false, false, 0);
-  MTKey key = { { row, col }, ns, id, 0, flags, 0, NULL };
+  uint16_t flags = mt_flags(right_gravity, false, false, false);
+  MTKey key = { { row, col }, ns, id, flags, { .hl = DECOR_HIGHLIGHT_INLINE_INIT } };
   marktree_put(b, key, end_row, end_col, end_right);
 }
 

@@ -48,7 +48,6 @@
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/msgpack_rpc/channel.h"
-#include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/unpacker.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
@@ -1301,9 +1300,9 @@ void nvim_subscribe(uint64_t channel_id, String event)
 void nvim_unsubscribe(uint64_t channel_id, String event)
   FUNC_API_SINCE(1) FUNC_API_REMOTE_ONLY
 {
-  size_t length = (event.size < METHOD_MAXLEN ?
-                   event.size :
-                   METHOD_MAXLEN);
+  size_t length = (event.size < METHOD_MAXLEN
+                   ? event.size
+                   : METHOD_MAXLEN);
   char e[METHOD_MAXLEN + 1];
   memcpy(e, event.data, length);
   e[length] = NUL;
@@ -2235,8 +2234,9 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
     maxwidth = (int)opts->maxwidth;
   } else {
     maxwidth = statuscol_lnum ? win_col_off(wp)
-               : (opts->use_tabline
-                  || (!opts->use_winbar && global_stl_height() > 0)) ? Columns : wp->w_width;
+                              : (opts->use_tabline
+                                 || (!opts->use_winbar
+                                     && global_stl_height() > 0)) ? Columns : wp->w_width;
   }
 
   char buf[MAXPATHL];

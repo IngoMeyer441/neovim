@@ -24,6 +24,7 @@
 #include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
 #include "nvim/garray.h"
+#include "nvim/garray_defs.h"
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
@@ -671,9 +672,7 @@ static void cat_func_name(char *buf, size_t buflen, ufunc_T *fp)
 /// Add a number variable "name" to dict "dp" with value "nr".
 static void add_nr_var(dict_T *dp, dictitem_T *v, char *name, varnumber_T nr)
 {
-#ifndef __clang_analyzer__
   STRCPY(v->di_key, name);
-#endif
   v->di_flags = DI_FLAGS_RO | DI_FLAGS_FIX;
   hash_add(&dp->dv_hashtab, v->di_key);
   v->di_tv.v_type = VAR_NUMBER;
@@ -976,10 +975,8 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rett
     // Set l:self to "selfdict".  Use "name" to avoid a warning from
     // some compiler that checks the destination size.
     v = (dictitem_T *)&fc->fc_fixvar[fixvar_idx++];
-#ifndef __clang_analyzer__
     name = (char *)v->di_key;
     STRCPY(name, "self");
-#endif
     v->di_flags = DI_FLAGS_RO | DI_FLAGS_FIX;
     hash_add(&fc->fc_l_vars.dv_hashtab, v->di_key);
     v->di_tv.v_type = VAR_DICT;
@@ -1002,10 +999,8 @@ void call_user_func(ufunc_T *fp, int argcount, typval_T *argvars, typval_T *rett
     // Use "name" to avoid a warning from some compiler that checks the
     // destination size.
     v = (dictitem_T *)&fc->fc_fixvar[fixvar_idx++];
-#ifndef __clang_analyzer__
     name = (char *)v->di_key;
     STRCPY(name, "000");
-#endif
     v->di_flags = DI_FLAGS_RO | DI_FLAGS_FIX;
     hash_add(&fc->fc_l_avars.dv_hashtab, v->di_key);
     v->di_tv.v_type = VAR_LIST;
@@ -2446,7 +2441,7 @@ void ex_function(exarg_T *eap)
           p = theline;
         } else if (is_heredoc) {
           p = skipwhite(theline) == theline
-            ? theline : theline + strlen(heredoc_trimmed);
+              ? theline : theline + strlen(heredoc_trimmed);
         } else {
           p = theline + strlen(heredoc_trimmed);
         }
@@ -3573,8 +3568,8 @@ void make_partial(dict_T *const selfdict, typval_T *const rettv)
     fp = rettv->vval.v_partial->pt_func;
   } else {
     char *fname = rettv->v_type == VAR_FUNC || rettv->v_type == VAR_STRING
-                                      ? rettv->vval.v_string
-                                      : rettv->vval.v_partial->pt_name;
+                  ? rettv->vval.v_string
+                  : rettv->vval.v_partial->pt_name;
     // Translate "s:func" to the stored function name.
     fname = fname_trans_sid(fname, fname_buf, &tofree, &error);
     fp = find_func(fname);

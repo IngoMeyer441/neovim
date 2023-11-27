@@ -1,6 +1,15 @@
 add_library(main_lib INTERFACE)
 add_executable(nvim main.c)
 
+set_target_properties(nvim
+  PROPERTIES
+  EXPORT_COMPILE_COMMANDS ON
+  ENABLE_EXPORTS TRUE)
+
+#-------------------------------------------------------------------------------
+# Dependencies
+#-------------------------------------------------------------------------------
+
 add_library(libuv INTERFACE)
 find_package(libuv CONFIG QUIET)
 if(TARGET libuv::uv_a)
@@ -70,6 +79,177 @@ else()
   endif()
 endif()
 
+#-------------------------------------------------------------------------------
+# Compiler and linker options
+#-------------------------------------------------------------------------------
+
+if(NOT MSVC)
+  target_compile_options(main_lib INTERFACE -Wall -Wextra -pedantic -Wno-unused-parameter
+    -Wstrict-prototypes -std=gnu99 -Wshadow -Wconversion -Wvla
+    -Wdouble-promotion
+    -Wmissing-noreturn
+    -Wmissing-format-attribute
+    -Wmissing-prototypes
+    -fsigned-char)
+
+  # For O_CLOEXEC, O_DIRECTORY, and O_NOFOLLOW flags on older systems
+  # (pre POSIX.1-2008: glibc 2.11 and earlier). #4042
+  # For ptsname(). #6743
+  target_compile_definitions(main_lib INTERFACE _GNU_SOURCE)
+endif()
+
+# -fstack-protector breaks Mingw-w64 builds
+if(NOT MINGW)
+  check_c_compiler_flag(-fstack-protector-strong HAS_FSTACK_PROTECTOR_STRONG_FLAG)
+  if(HAS_FSTACK_PROTECTOR_STRONG_FLAG)
+    target_compile_options(main_lib INTERFACE -fstack-protector-strong)
+    target_link_libraries(main_lib INTERFACE -fstack-protector-strong)
+  else()
+    check_c_compiler_flag(-fstack-protector HAS_FSTACK_PROTECTOR_FLAG)
+    if(HAS_FSTACK_PROTECTOR_FLAG)
+      target_compile_options(main_lib INTERFACE -fstack-protector --param ssp-buffer-size=4)
+      target_link_libraries(main_lib INTERFACE -fstack-protector --param ssp-buffer-size=4)
+    endif()
+  endif()
+endif()
+
+# Compiler specific options
+if(MSVC)
+  target_compile_options(main_lib INTERFACE -W3)
+
+  # Disable warnings that give too many false positives.
+  target_compile_options(main_lib INTERFACE -wd4311 -wd4146 -wd4003 -wd4715)
+  target_compile_definitions(main_lib INTERFACE _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+
+  target_sources(main_lib INTERFACE ${CMAKE_CURRENT_LIST_DIR}/os/nvim.manifest)
+elseif(MINGW)
+  # Use POSIX compatible stdio in Mingw
+  target_compile_definitions(main_lib INTERFACE __USE_MINGW_ANSI_STDIO)
+
+  # Enable wmain
+  target_link_libraries(nvim PRIVATE -municode)
+elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(main_lib INTERFACE -fno-common
+    $<$<CONFIG:Release>:-Wno-unused-result>
+    $<$<CONFIG:RelWithDebInfo>:-Wno-unused-result>
+    $<$<CONFIG:MinSizeRel>:-Wno-unused-result>)
+elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  # On FreeBSD 64 math.h uses unguarded C11 extension, which taints clang
+  # 3.4.1 used there.
+  if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    target_compile_options(main_lib INTERFACE -Wno-c11-extensions)
+  endif()
+
+  # workaround for clang-11 on macOS, supported on later versions
+  if(NOT APPLE)
+    target_link_libraries(nvim PRIVATE -Wl,--no-undefined)
+  endif()
+endif()
+
+# Platform specific options
+if(UNIX)
+  target_link_libraries(main_lib INTERFACE m)
+  if (NOT CMAKE_SYSTEM_NAME STREQUAL "SunOS")
+    target_link_libraries(main_lib INTERFACE util)
+  endif()
+endif()
+
+if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+  target_compile_definitions(main_lib INTERFACE _WIN32_WINNT=0x0602 MSWIN)
+  target_link_libraries(main_lib INTERFACE netapi32)
+elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+  target_link_libraries(nvim PRIVATE "-framework CoreServices")
+
+  # Actually export symbols - symbols may not be visible even though
+  # ENABLE_EXPORTS is set to true. See
+  # https://github.com/neovim/neovim/issues/25295
+  set_target_properties(nvim PROPERTIES LINK_FLAGS "-Wl,-export_dynamic")
+elseif(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
+  target_link_libraries(main_lib INTERFACE pthread c++abi)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
+  target_link_libraries(nvim PRIVATE -lsocket)
+endif()
+
+check_c_compiler_flag(-Wimplicit-fallthrough HAVE_WIMPLICIT_FALLTHROUGH_FLAG)
+if(HAVE_WIMPLICIT_FALLTHROUGH_FLAG)
+  target_compile_options(main_lib INTERFACE -Wimplicit-fallthrough)
+endif()
+
+check_c_compiler_flag(-fdiagnostics-color=auto HAS_DIAG_COLOR_FLAG)
+if(HAS_DIAG_COLOR_FLAG)
+  if(CMAKE_GENERATOR MATCHES "Ninja")
+    target_compile_options(main_lib INTERFACE -fdiagnostics-color=always)
+  else()
+    target_compile_options(main_lib INTERFACE -fdiagnostics-color=auto)
+  endif()
+endif()
+
+target_compile_definitions(main_lib INTERFACE INCLUDE_GENERATED_DECLARATIONS)
+
+# Remove --sort-common from linker flags, as this seems to cause bugs (see #2641, #3374).
+# TODO: Figure out the root cause.
+if(CMAKE_EXE_LINKER_FLAGS MATCHES "--sort-common" OR
+   CMAKE_SHARED_LINKER_FLAGS MATCHES "--sort-common" OR
+   CMAKE_MODULE_LINKER_FLAGS MATCHES "--sort-common")
+  message(STATUS "Removing --sort-common from linker flags")
+  string(REGEX REPLACE ",--sort-common(=[^,]+)?" "" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+  string(REGEX REPLACE ",--sort-common(=[^,]+)?" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+  string(REGEX REPLACE ",--sort-common(=[^,]+)?" "" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
+
+  # If no linker flags remain for a -Wl argument, remove it.
+  # '-Wl$' will match LDFLAGS="-Wl,--sort-common",
+  # '-Wl ' will match LDFLAGS="-Wl,--sort-common -Wl,..."
+  string(REGEX REPLACE "-Wl($| )" "" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+  string(REGEX REPLACE "-Wl($| )" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+  string(REGEX REPLACE "-Wl($| )" "" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
+endif()
+
+#-------------------------------------------------------------------------------
+# Cmake options
+#-------------------------------------------------------------------------------
+
+if(ENABLE_ASAN_UBSAN)
+  message(STATUS "Enabling address sanitizer and undefined behavior sanitizer for nvim.")
+  if(NOT MSVC)
+    if(CI_BUILD)
+      # Try to recover from all sanitize issues so we get reports about all failures
+      target_compile_options(nvim PRIVATE -fsanitize-recover=all)
+    else()
+      target_compile_options(nvim PRIVATE -fno-sanitize-recover=all)
+    endif()
+    target_compile_options(nvim PRIVATE
+      -fno-omit-frame-pointer
+      -fno-optimize-sibling-calls
+      -fsanitize=undefined)
+  endif()
+
+  target_compile_options(nvim PRIVATE -fsanitize=address)
+  target_link_libraries(nvim PRIVATE -fsanitize=address -fsanitize=undefined)
+  target_compile_definitions(nvim PRIVATE ENABLE_ASAN_UBSAN)
+elseif(ENABLE_MSAN)
+  message(STATUS "Enabling memory sanitizer for nvim.")
+  target_compile_options(nvim PRIVATE
+    -fsanitize=memory
+    -fsanitize-memory-track-origins
+    -fno-omit-frame-pointer
+    -fno-optimize-sibling-calls)
+  target_link_libraries(nvim PRIVATE -fsanitize=memory -fsanitize-memory-track-origins)
+elseif(ENABLE_TSAN)
+  message(STATUS "Enabling thread sanitizer for nvim.")
+  target_compile_options(nvim PRIVATE -fsanitize=thread -fPIE)
+  target_link_libraries(nvim PRIVATE -fsanitize=thread)
+endif()
+
+option(CI_BUILD "CI, extra flags will be set" OFF)
+if(CI_BUILD)
+  message(STATUS "CI build enabled")
+  if(MSVC)
+    target_compile_options(main_lib INTERFACE -WX)
+  else()
+    target_compile_options(main_lib INTERFACE -Werror)
+  endif()
+endif()
+
 option(ENABLE_IWYU "Run include-what-you-use with the compiler." OFF)
 if(ENABLE_IWYU)
   find_program(IWYU_PRG NAMES include-what-you-use iwyu)
@@ -79,48 +259,10 @@ if(ENABLE_IWYU)
 
   set(iwyu_flags "${IWYU_PRG};")
   string(APPEND iwyu_flags "-Xiwyu;--no_default_mappings;")
-  string(APPEND iwyu_flags "-Xiwyu;--mapping_file=${PROJECT_SOURCE_DIR}/cmake.config/iwyu/mapping.imp;")
-  string(APPEND iwyu_flags "-Xiwyu;--mapping_file=${PROJECT_SOURCE_DIR}/cmake.config/iwyu/gcc.libc.imp;")
-  string(APPEND iwyu_flags "-Xiwyu;--mapping_file=${PROJECT_SOURCE_DIR}/cmake.config/iwyu/gcc.symbols.imp")
+  string(APPEND iwyu_flags "-Xiwyu;--mapping_file=${PROJECT_SOURCE_DIR}/cmake.config/iwyu/mapping.imp")
 
   set_target_properties(nvim PROPERTIES C_INCLUDE_WHAT_YOU_USE "${iwyu_flags}")
   target_compile_definitions(main_lib INTERFACE EXITFREE)
-endif()
-
-if(MSVC)
-  target_compile_options(main_lib INTERFACE -W3)
-
-  # Disable warnings that give too many false positives.
-  target_compile_options(main_lib INTERFACE -wd4311 -wd4146 -wd4003 -wd4715)
-  target_compile_definitions(main_lib INTERFACE _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
-
-  target_sources(main_lib INTERFACE ${CMAKE_CURRENT_LIST_DIR}/os/nvim.manifest)
-else()
-  target_compile_options(main_lib INTERFACE -Wall -Wextra -pedantic -Wno-unused-parameter
-    -Wstrict-prototypes -std=gnu99 -Wshadow -Wconversion -Wvla
-    -Wdouble-promotion
-    -Wmissing-noreturn
-    -Wmissing-format-attribute
-    -Wmissing-prototypes
-    -fsigned-char)
-
-  if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(main_lib INTERFACE -fno-common
-      $<$<CONFIG:Release>:-Wno-unused-result>
-      $<$<CONFIG:RelWithDebInfo>:-Wno-unused-result>
-      $<$<CONFIG:MinSizeRel>:-Wno-unused-result>)
-  endif()
-endif()
-
-# On FreeBSD 64 math.h uses unguarded C11 extension, which taints clang
-# 3.4.1 used there.
-if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" AND CMAKE_C_COMPILER_ID MATCHES "Clang")
-  target_compile_options(main_lib INTERFACE -Wno-c11-extensions)
-endif()
-
-check_c_compiler_flag(-Wimplicit-fallthrough HAVE_WIMPLICIT_FALLTHROUGH_FLAG)
-if(HAVE_WIMPLICIT_FALLTHROUGH_FLAG)
-  target_compile_options(main_lib INTERFACE -Wimplicit-fallthrough)
 endif()
 
 option(ENABLE_COMPILER_SUGGESTIONS "Enable -Wsuggest compiler warnings" OFF)
@@ -147,67 +289,6 @@ if(ENABLE_COMPILER_SUGGESTIONS)
   endif()
 endif()
 
-if(MINGW)
-  # Use POSIX compatible stdio in Mingw
-  target_compile_definitions(main_lib INTERFACE __USE_MINGW_ANSI_STDIO)
-endif()
-if(WIN32)
-  target_compile_definitions(main_lib INTERFACE _WIN32_WINNT=0x0602 MSWIN)
-endif()
-
-check_c_compiler_flag(-fdiagnostics-color=auto HAS_DIAG_COLOR_FLAG)
-if(HAS_DIAG_COLOR_FLAG)
-  if(CMAKE_GENERATOR MATCHES "Ninja")
-    target_compile_options(main_lib INTERFACE -fdiagnostics-color=always)
-  else()
-    target_compile_options(main_lib INTERFACE -fdiagnostics-color=auto)
-  endif()
-endif()
-
-option(CI_BUILD "CI, extra flags will be set" OFF)
-if(CI_BUILD)
-  message(STATUS "CI build enabled")
-  if(MSVC)
-    target_compile_options(main_lib INTERFACE -WX)
-  else()
-    target_compile_options(main_lib INTERFACE -Werror)
-  endif()
-endif()
-
-target_compile_definitions(main_lib INTERFACE INCLUDE_GENERATED_DECLARATIONS)
-
-# Remove --sort-common from linker flags, as this seems to cause bugs (see #2641, #3374).
-# TODO: Figure out the root cause.
-if(CMAKE_EXE_LINKER_FLAGS MATCHES "--sort-common" OR
-   CMAKE_SHARED_LINKER_FLAGS MATCHES "--sort-common" OR
-   CMAKE_MODULE_LINKER_FLAGS MATCHES "--sort-common")
-  message(STATUS "Removing --sort-common from linker flags")
-  string(REGEX REPLACE ",--sort-common(=[^,]+)?" "" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
-  string(REGEX REPLACE ",--sort-common(=[^,]+)?" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
-  string(REGEX REPLACE ",--sort-common(=[^,]+)?" "" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
-
-  # If no linker flags remain for a -Wl argument, remove it.
-  # '-Wl$' will match LDFLAGS="-Wl,--sort-common",
-  # '-Wl ' will match LDFLAGS="-Wl,--sort-common -Wl,..."
-  string(REGEX REPLACE "-Wl($| )" "" CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
-  string(REGEX REPLACE "-Wl($| )" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
-  string(REGEX REPLACE "-Wl($| )" "" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
-endif()
-
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
-  if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
-    target_link_libraries(nvim PRIVATE -Wl,--no-undefined -lsocket)
-  # workaround for clang-11 on macOS, supported on later versions:
-  elseif(NOT APPLE)
-    target_link_libraries(nvim PRIVATE -Wl,--no-undefined)
-  endif()
-
-  # For O_CLOEXEC, O_DIRECTORY, and O_NOFOLLOW flags on older systems
-  # (pre POSIX.1-2008: glibc 2.11 and earlier). #4042
-  # For ptsname(). #6743
-  target_compile_definitions(main_lib INTERFACE _GNU_SOURCE)
-endif()
-
 option(ENABLE_GCOV "Enable gcov support" OFF)
 if(ENABLE_GCOV)
   if(ENABLE_TSAN)
@@ -220,34 +301,9 @@ if(ENABLE_GCOV)
   target_compile_definitions(main_lib INTERFACE USE_GCOV)
 endif()
 
-if(WIN32)
-  if(MINGW)
-    # Enable wmain
-    target_link_libraries(nvim PRIVATE -municode)
-  endif()
-elseif(APPLE)
-  target_link_libraries(nvim PRIVATE "-framework CoreServices")
-
-  # Actually export symbols - symbols may not be visible even though
-  # ENABLE_EXPORTS is set to true. See
-  # https://github.com/neovim/neovim/issues/25295
-  set_target_properties(nvim PROPERTIES LINK_FLAGS "-Wl,-export_dynamic")
-endif()
-
-if(UNIX)
-  # -fstack-protector breaks non Unix builds even in Mingw-w64
-  check_c_compiler_flag(-fstack-protector-strong HAS_FSTACK_PROTECTOR_STRONG_FLAG)
-  if(HAS_FSTACK_PROTECTOR_STRONG_FLAG)
-    target_compile_options(main_lib INTERFACE -fstack-protector-strong)
-    target_link_libraries(main_lib INTERFACE -fstack-protector-strong)
-  else()
-    check_c_compiler_flag(-fstack-protector HAS_FSTACK_PROTECTOR_FLAG)
-    if(HAS_FSTACK_PROTECTOR_FLAG)
-      target_compile_options(main_lib INTERFACE -fstack-protector --param ssp-buffer-size=4)
-      target_link_libraries(main_lib INTERFACE -fstack-protector --param ssp-buffer-size=4)
-    endif()
-  endif()
-endif()
+#-------------------------------------------------------------------------------
+# Variables
+#-------------------------------------------------------------------------------
 
 set(GENERATOR_DIR ${CMAKE_CURRENT_LIST_DIR}/generators)
 set(GENERATED_DIR ${PROJECT_BINARY_DIR}/src/nvim/auto)
@@ -401,6 +457,10 @@ if(ENABLE_ASAN_UBSAN OR ENABLE_MSAN OR ENABLE_TSAN)
   target_compile_definitions(main_lib INTERFACE EXITFREE)
 endif()
 
+#-------------------------------------------------------------------------------
+# Header generation
+#-------------------------------------------------------------------------------
+
 get_target_property(prop main_lib INTERFACE_COMPILE_DEFINITIONS)
 foreach(gen_cdef DO_NOT_DEFINE_EMPTY_ATTRIBUTES ${prop})
   if(NOT ${gen_cdef} MATCHES "INCLUDE_GENERATED_DECLARATIONS")
@@ -417,8 +477,7 @@ foreach(target ${targets})
 endforeach()
 
 if(APPLE AND CMAKE_OSX_SYSROOT)
-  list(APPEND gen_cflags "-isysroot")
-  list(APPEND gen_cflags "${CMAKE_OSX_SYSROOT}")
+  list(APPEND gen_cflags "-isysroot" "${CMAKE_OSX_SYSROOT}")
 endif()
 if(MSVC)
   list(APPEND gen_cflags -wd4003)
@@ -629,21 +688,6 @@ foreach(hfile ${NVIM_GENERATED_FOR_HEADERS})
   endif()
 endforeach()
 
-if (CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
-  target_link_libraries(main_lib INTERFACE pthread c++abi)
-endif()
-
-if(WIN32)
-  target_link_libraries(main_lib INTERFACE netapi32)
-endif()
-
-if(UNIX)
-  target_link_libraries(main_lib INTERFACE m)
-  if (NOT CMAKE_SYSTEM_NAME STREQUAL "SunOS")
-    target_link_libraries(main_lib INTERFACE util)
-  endif()
-endif()
-
 if(PREFER_LUA)
   message(STATUS "luajit not used, skipping unit tests")
 else()
@@ -662,15 +706,6 @@ target_sources(main_lib INTERFACE
   ${EXTERNAL_HEADERS})
 
 target_sources(nlua0 PUBLIC ${NLUA0_SOURCES})
-
-set_target_properties(nvim
-  PROPERTIES
-  EXPORT_COMPILE_COMMANDS ON
-  ENABLE_EXPORTS TRUE)
-
-if(${CMAKE_VERSION} VERSION_LESS 3.20)
-  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-endif()
 
 target_link_libraries(nvim PRIVATE main_lib PUBLIC libuv)
 install_helper(TARGETS nvim)
@@ -768,37 +803,9 @@ set_target_properties(
 target_compile_definitions(libnvim PRIVATE MAKE_LIB)
 target_link_libraries(libnvim PRIVATE main_lib PUBLIC libuv)
 
-if(ENABLE_ASAN_UBSAN)
-  message(STATUS "Enabling address sanitizer and undefined behavior sanitizer for nvim.")
-  if(NOT MSVC)
-    if(CI_BUILD)
-      # Try to recover from all sanitize issues so we get reports about all failures
-      target_compile_options(nvim PRIVATE -fsanitize-recover=all)
-    else()
-      target_compile_options(nvim PRIVATE -fno-sanitize-recover=all)
-    endif()
-    target_compile_options(nvim PRIVATE
-      -fno-omit-frame-pointer
-      -fno-optimize-sibling-calls
-      -fsanitize=undefined)
-  endif()
-
-  target_compile_options(nvim PRIVATE -fsanitize=address)
-  target_link_libraries(nvim PRIVATE -fsanitize=address -fsanitize=undefined)
-  target_compile_definitions(nvim PRIVATE ENABLE_ASAN_UBSAN)
-elseif(ENABLE_MSAN)
-  message(STATUS "Enabling memory sanitizer for nvim.")
-  target_compile_options(nvim PRIVATE
-    -fsanitize=memory
-    -fsanitize-memory-track-origins
-    -fno-omit-frame-pointer
-    -fno-optimize-sibling-calls)
-  target_link_libraries(nvim PRIVATE -fsanitize=memory -fsanitize-memory-track-origins)
-elseif(ENABLE_TSAN)
-  message(STATUS "Enabling thread sanitizer for nvim.")
-  target_compile_options(nvim PRIVATE -fsanitize=thread -fPIE)
-  target_link_libraries(nvim PRIVATE -fsanitize=thread)
-endif()
+#-------------------------------------------------------------------------------
+# Lint
+#-------------------------------------------------------------------------------
 
 find_program(CLANG_TIDY_PRG clang-tidy)
 set(EXCLUDE_CLANG_TIDY typval_encode.c.h ui_events.in.h)
