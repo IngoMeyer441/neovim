@@ -20,17 +20,16 @@
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/msgpack_rpc/helpers.h"
 #include "nvim/option.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
 
 #define BUF_POS(data) ((size_t)((data)->buf_wptr - (data)->buf))
 
@@ -107,21 +106,36 @@ static void mpack_str(char **buf, const char *str)
   *buf += len;
 }
 
+static void remote_ui_destroy(UI *ui)
+  FUNC_ATTR_NONNULL_ALL
+{
+  UIData *data = ui->data;
+  kv_destroy(data->call_buf);
+  XFREE_CLEAR(ui->term_name);
+  xfree(ui);
+}
+
 void remote_ui_disconnect(uint64_t channel_id)
 {
   UI *ui = pmap_get(uint64_t)(&connected_uis, channel_id);
   if (!ui) {
     return;
   }
-  UIData *data = ui->data;
-  kv_destroy(data->call_buf);
   pmap_del(uint64_t)(&connected_uis, channel_id, NULL);
   ui_detach_impl(ui, channel_id);
-
-  // Destroy `ui`.
-  XFREE_CLEAR(ui->term_name);
-  xfree(ui);
+  remote_ui_destroy(ui);
 }
+
+#ifdef EXITFREE
+void remote_ui_free_all_mem(void)
+{
+  UI *ui;
+  map_foreach_value(&connected_uis, ui, {
+    remote_ui_destroy(ui);
+  });
+  map_destroy(uint64_t, &connected_uis);
+}
+#endif
 
 /// Wait until ui has connected on stdio channel if only_stdio
 /// is true, otherwise any channel.

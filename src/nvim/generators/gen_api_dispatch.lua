@@ -227,7 +227,7 @@ output:write([[
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_getln.h"
 #include "nvim/log.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/msgpack_rpc/helpers.h"
 
 #include "nvim/api/autocmd.h"
@@ -752,9 +752,9 @@ for _, fn in ipairs(functions) do
 end
 
 output:write(string.format([[
-void nlua_add_api_functions(lua_State *lstate);  // silence -Wmissing-prototypes
 void nlua_add_api_functions(lua_State *lstate)
-  FUNC_ATTR_NONNULL_ALL
+  REAL_FATTR_NONNULL_ALL;
+void nlua_add_api_functions(lua_State *lstate)
 {
   lua_createtable(lstate, 0, %u);
 ]], #lua_c_functions))

@@ -13,7 +13,7 @@
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/cursor_shape.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/signal.h"
@@ -22,7 +22,7 @@
 #include "nvim/grid.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/log.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
@@ -32,10 +32,10 @@
 #include "nvim/tui/input.h"
 #include "nvim/tui/terminfo.h"
 #include "nvim/tui/tui.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ugrid.h"
-#include "nvim/ui.h"
 #include "nvim/ui_client.h"
+#include "nvim/ui_defs.h"
 
 #ifdef MSWIN
 # include "nvim/os/os_win_console.h"
@@ -1051,7 +1051,7 @@ void tui_grid_cursor_goto(TUIData *tui, Integer grid, Integer row, Integer col)
   tui->col = (int)col;
 }
 
-CursorShape tui_cursor_decode_shape(const char *shape_str)
+static CursorShape tui_cursor_decode_shape(const char *shape_str)
 {
   CursorShape shape;
   if (strequal(shape_str, "block")) {
@@ -1144,7 +1144,7 @@ void tui_mouse_off(TUIData *tui)
   }
 }
 
-void tui_set_mode(TUIData *tui, ModeShape mode)
+static void tui_set_mode(TUIData *tui, ModeShape mode)
 {
   if (!cursor_style_enabled) {
     return;

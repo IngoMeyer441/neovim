@@ -49,25 +49,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/file_search.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
 #include "nvim/strings.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 static char *ff_expand_buffer = NULL;  // used for expanding filenames

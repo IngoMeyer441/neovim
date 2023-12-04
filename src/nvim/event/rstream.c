@@ -2,14 +2,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
+#include <sys/types.h>
 #include <uv.h>
 
 #include "nvim/event/loop.h"
 #include "nvim/event/rstream.h"
 #include "nvim/event/stream.h"
 #include "nvim/log.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/os/os_defs.h"
 #include "nvim/rbuffer.h"
@@ -200,10 +200,6 @@ static void invoke_read_cb(Stream *stream, size_t count, bool eof)
   // Don't let the stream be closed before the event is processed.
   stream->pending_reqs++;
 
-  CREATE_EVENT(stream->events,
-               read_event,
-               3,
-               stream,
-               (void *)(uintptr_t *)count,
-               (void *)(uintptr_t)eof);
+  CREATE_EVENT(stream->events, read_event,
+               stream, (void *)(uintptr_t *)count, (void *)(uintptr_t)eof);
 }

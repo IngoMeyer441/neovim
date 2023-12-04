@@ -9,11 +9,10 @@
 #include "klib/kvec.h"
 #include "msgpack/pack.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/assert.h"
-#include "nvim/event/wstream.h"
+#include "nvim/assert_defs.h"
 #include "nvim/memory.h"
 #include "nvim/msgpack_rpc/helpers.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "msgpack_rpc/helpers.c.generated.h"
@@ -27,6 +26,14 @@ void msgpack_rpc_helpers_init(void)
   msgpack_zone_init(&zone, 0xfff);
   msgpack_sbuffer_init(&sbuffer);
 }
+
+#ifdef EXITFREE
+void msgpack_rpc_helpers_free_all_mem(void)
+{
+  msgpack_zone_destroy(&zone);
+  msgpack_sbuffer_destroy(&sbuffer);
+}
+#endif
 
 typedef struct {
   const msgpack_object *mobj;

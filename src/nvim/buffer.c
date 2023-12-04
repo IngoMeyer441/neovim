@@ -29,8 +29,8 @@
 #include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
-#include "nvim/assert.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_updates.h"
@@ -65,7 +65,7 @@
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -78,29 +78,29 @@
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/time.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
 #include "nvim/search.h"
-#include "nvim/sign.h"
 #include "nvim/spell.h"
+#include "nvim/state_defs.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/usercmd.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
@@ -1844,7 +1844,7 @@ buf_T *buflist_new(char *ffname_arg, char *sfname_arg, linenr_T lnum, int flags)
     buf = xcalloc(1, sizeof(buf_T));
     // init b: variables
     buf->b_vars = tv_dict_alloc();
-    buf->b_signcols.valid = false;
+    buf->b_signcols.sentinel = 0;
     init_var_dict(buf->b_vars, &buf->b_bufvar, VAR_SCOPE);
     buf_init_changedtick(buf);
   }
@@ -4026,87 +4026,64 @@ char *buf_spname(buf_T *buf)
   return NULL;
 }
 
-/// Invalidate the signcolumn if needed after deleting
-/// signs between line1 and line2 (inclusive).
-///
-/// @param buf   buffer to check
-/// @param line1 start of region being deleted
-/// @param line2 end of region being deleted
+/// Invalidate the signcolumn if needed after deleting a sign ranging from line1 to line2.
 void buf_signcols_del_check(buf_T *buf, linenr_T line1, linenr_T line2)
 {
-  if (!buf->b_signcols.valid) {
-    return;
+  linenr_T sent = buf->b_signcols.sentinel;
+  if (sent >= line1 && sent <= line2) {
+    // When removed sign overlaps the sentinel line, entire buffer needs to be checked.
+    buf->b_signcols.sentinel = buf->b_signcols.size = 0;
   }
+}
 
+/// Invalidate the signcolumn if needed after adding a sign ranging from line1 to line2.
+void buf_signcols_add_check(buf_T *buf, linenr_T line1, linenr_T line2)
+{
   if (!buf->b_signcols.sentinel) {
-    buf->b_signcols.valid = false;
     return;
   }
 
   linenr_T sent = buf->b_signcols.sentinel;
-
   if (sent >= line1 && sent <= line2) {
-    // Only invalidate when removing signs at the sentinel line.
-    buf->b_signcols.valid = false;
-  }
-}
-
-/// Re-calculate the signcolumn after adding a sign.
-///
-/// @param buf   buffer to check
-/// @param added sign being added
-void buf_signcols_add_check(buf_T *buf, linenr_T lnum)
-{
-  if (!buf->b_signcols.valid) {
-    return;
-  }
-
-  if (!buf->b_signcols.sentinel) {
-    buf->b_signcols.valid = false;
-    return;
-  }
-
-  if (lnum == buf->b_signcols.sentinel) {
+    // If added sign overlaps sentinel line, increment without invalidating.
     if (buf->b_signcols.size == buf->b_signcols.max) {
       buf->b_signcols.max++;
     }
     buf->b_signcols.size++;
-    redraw_buf_later(buf, UPD_NOT_VALID);
     return;
   }
 
-  int signcols = decor_signcols(buf, lnum - 1, lnum - 1, SIGN_SHOW_MAX);
-
-  if (signcols > buf->b_signcols.size) {
-    buf->b_signcols.size = signcols;
-    buf->b_signcols.max = signcols;
-    buf->b_signcols.sentinel = lnum;
-    redraw_buf_later(buf, UPD_NOT_VALID);
+  if (line1 < buf->b_signcols.invalid_top) {
+    buf->b_signcols.invalid_top = line1;
+  }
+  if (line2 > buf->b_signcols.invalid_bot) {
+    buf->b_signcols.invalid_bot = line2;
   }
 }
 
 int buf_signcols(buf_T *buf, int max)
 {
-  // The maximum can be determined from 'signcolumn' which is window scoped so
-  // need to invalidate signcols if the maximum is greater than the previous
-  // (valid) maximum.
-  if (buf->b_signcols.max && max > buf->b_signcols.max) {
-    buf->b_signcols.valid = false;
-  }
-
-  if (!buf->b_signcols.valid) {
-    buf->b_signcols.sentinel = 0;
-    int signcols = decor_signcols(buf, 0, (int)buf->b_ml.ml_line_count - 1, max);
-    // Check if we need to redraw
-    if (signcols != buf->b_signcols.size) {
-      buf->b_signcols.size = signcols;
-      redraw_buf_later(buf, UPD_NOT_VALID);
+  if (!buf->b_signs_with_text) {
+    buf->b_signcols.size = 0;
+  } else if (max <= 1 && buf->b_signs_with_text >= (size_t)max) {
+    buf->b_signcols.size = max;
+  } else {
+    linenr_T sent = buf->b_signcols.sentinel;
+    if (!sent || max > buf->b_signcols.max) {
+      // Recheck if the window scoped maximum 'signcolumn' is greater than the
+      // previous maximum or if there is no sentinel line yet.
+      buf->b_signcols.invalid_top = sent ? sent : 1;
+      buf->b_signcols.invalid_bot = sent ? sent : buf->b_ml.ml_line_count;
     }
 
-    buf->b_signcols.max = max;
-    buf->b_signcols.valid = true;
+    if (buf->b_signcols.invalid_bot) {
+      decor_validate_signcols(buf, max);
+    }
   }
 
+  buf->b_signcols.max = max;
+  buf->b_signcols.invalid_top = MAXLNUM;
+  buf->b_signcols.invalid_bot = 0;
   return buf->b_signcols.size;
 }
 

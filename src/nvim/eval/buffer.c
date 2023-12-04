@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
@@ -15,16 +15,16 @@
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/globals.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/move.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/sign.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 typedef struct {
   win_T *cob_curwin_save;

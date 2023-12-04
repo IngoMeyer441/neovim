@@ -6,10 +6,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "auto/config.h"
+
 // Note: Some systems need both string.h and strings.h (Savage).
 #include <string.h>
 #ifdef HAVE_STRINGS_H
-# include <strings.h>
+# include <strings.h>  // IWYU pragma: export
 #endif
 
 #ifdef MSWIN
@@ -40,6 +42,8 @@
 
 // Command-processing buffer. Use large buffers for all platforms.
 #define CMDBUFFSIZE 1024
+
+#define ROOT_UID 0
 
 /// Converts libuv error (negative int) to error description string.
 #define os_strerror uv_strerror
@@ -101,5 +105,39 @@
 #  define S_ISLNK(m)    (((m)& S_IFMT) == S_IFLNK)
 # else
 #  define S_ISLNK(m)    0
+# endif
+#endif
+
+// BSD is supposed to cover FreeBSD and similar systems.
+#if (defined(BSD) || defined(__FreeBSD_kernel__)) \
+  && (defined(S_ISCHR) || defined(S_IFCHR))
+# define OPEN_CHR_FILES
+#endif
+
+// We use 64-bit file functions here, if available.  E.g. ftello() returns
+// off_t instead of long, which helps if long is 32 bit and off_t is 64 bit.
+// We assume that when fseeko() is available then ftello() is too.
+// Note that Windows has different function names.
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__MINGW32__)
+typedef __int64 off_T;
+# ifdef __MINGW32__
+#  define vim_lseek lseek64
+#  define vim_fseek fseeko64
+#  define vim_ftell ftello64
+# else
+#  define vim_lseek _lseeki64
+#  define vim_fseek _fseeki64
+#  define vim_ftell _ftelli64
+# endif
+#else
+typedef off_t off_T;
+# ifdef HAVE_FSEEKO
+#  define vim_lseek lseek
+#  define vim_ftell ftello
+#  define vim_fseek fseeko
+# else
+#  define vim_lseek lseek
+#  define vim_ftell ftell
+#  define vim_fseek(a, b, c) fseek(a, (long)b, c)
 # endif
 #endif

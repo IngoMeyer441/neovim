@@ -1,10 +1,9 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <time.h>
+#include <stddef.h>  // IWYU pragma: keep
+#include <time.h>  // IWYU pragma: keep
 
-typedef uint64_t Timestamp;
+#include "nvim/os/time_defs.h"  // IWYU pragma: export
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "os/time.h.generated.h"

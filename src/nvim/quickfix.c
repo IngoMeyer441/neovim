@@ -11,7 +11,7 @@
 #include <time.h>
 
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
@@ -33,9 +33,9 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/help.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -47,18 +47,18 @@
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 struct dir_stack_T {
@@ -250,6 +250,8 @@ static const char *e_current_quickfix_list_was_changed =
   N_("E925: Current quickfix list was changed");
 static const char *e_current_location_list_was_changed =
   N_("E926: Current location list was changed");
+
+enum { QF_WINHEIGHT = 10, };  ///< default height for quickfix window
 
 // Quickfix window check helper macro
 #define IS_QF_WINDOW(wp) (bt_quickfix((wp)->w_buffer) && (wp)->w_llist_ref == NULL)

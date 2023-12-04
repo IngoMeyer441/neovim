@@ -7,12 +7,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include "auto/config.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
@@ -40,14 +42,15 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/grid_defs.h"
+#include "nvim/hashtab.h"
 #include "nvim/highlight_group.h"
 #include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/lib/queue.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -60,13 +63,13 @@
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fileio.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/lang.h"
 #include "nvim/os/os.h"
 #include "nvim/os/shell.h"
 #include "nvim/os/stdpaths_defs.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
@@ -74,12 +77,12 @@
 #include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/tag.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/usercmd.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 // TODO(ZyX-I): Remove DICT_MAXNEST, make users be non-recursive instead
@@ -497,6 +500,10 @@ static void evalvars_clear(void)
       p->vv_list = NULL;
     }
   }
+
+  partial_unref(vvlua_partial);
+  vimvars[VV_LUA].vv_partial = vvlua_partial = NULL;
+
   hash_clear(&vimvarht);
   hash_init(&vimvarht);    // garbage_collect() will access it
   hash_clear(&compat_hashtab);
@@ -4545,7 +4552,7 @@ bool garbage_collect(bool testing)
 
   // history items (ShaDa additional elements)
   if (p_hi) {
-    for (HistoryType i = 0; i < HIST_COUNT; i++) {
+    for (int i = 0; i < HIST_COUNT; i++) {
       const void *iter = NULL;
       do {
         histentry_T hist;

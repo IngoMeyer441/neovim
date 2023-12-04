@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/debugger.h"
@@ -22,12 +22,13 @@
 #include "nvim/keycodes.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/os.h"
 #include "nvim/os/time.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/runtime.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "profile.c.generated.h"

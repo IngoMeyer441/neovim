@@ -2,6 +2,7 @@
 // file, manipulations with redo buffer and stuff buffer.
 
 #include <assert.h>
+#include <lauxlib.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -10,10 +11,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lauxlib.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
@@ -34,7 +34,7 @@
 #include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mapping.h"
 #include "nvim/mbyte.h"
@@ -50,13 +50,13 @@
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/plines.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 /// Index in scriptin
 static int curscript = 0;

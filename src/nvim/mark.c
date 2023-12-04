@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
@@ -20,7 +20,7 @@
 #include "nvim/fold.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -29,13 +29,14 @@
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option_vars.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
 #include "nvim/quickfix.h"
 #include "nvim/strings.h"
 #include "nvim/textobject.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 // This file contains routines to maintain and manipulate marks.
 

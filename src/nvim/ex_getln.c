@@ -15,7 +15,7 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
 #include "nvim/arabic.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
@@ -38,11 +38,11 @@
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/keycodes.h"
-#include "nvim/macros.h"
-#include "nvim/map.h"
+#include "nvim/macros_defs.h"
+#include "nvim/map_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -61,17 +61,17 @@
 #include "nvim/os/os.h"
 #include "nvim/path.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/usercmd.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/viml/parser/expressions.h"
 #include "nvim/viml/parser/parser.h"
 #include "nvim/window.h"
@@ -1834,8 +1834,10 @@ static int command_line_handle_key(CommandLineState *s)
   case K_INS:
   case K_KINS:
     ccline.overstrike = !ccline.overstrike;
-
     ui_cursor_shape();                // may show different cursor shape
+    may_trigger_modechanged();
+    status_redraw_curbuf();
+    redraw_statuslines();
     return command_line_not_changed(s);
 
   case Ctrl_HAT:

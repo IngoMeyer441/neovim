@@ -7,8 +7,9 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
@@ -27,13 +28,13 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -49,7 +50,7 @@
 #include "nvim/os/input.h"
 #include "nvim/plines.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
@@ -57,10 +58,10 @@
 #include "nvim/terminal.h"
 #include "nvim/textformat.h"
 #include "nvim/textobject.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 typedef struct insert_state {
@@ -1470,7 +1471,7 @@ void edit_putchar(int c, bool highlight)
 
 /// @return    the effective prompt for the specified buffer.
 char *buf_prompt_text(const buf_T *const buf)
-    FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
 {
   if (buf->b_prompt_text == NULL) {
     return "% ";

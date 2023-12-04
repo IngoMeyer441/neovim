@@ -3,7 +3,7 @@
 #include <stdbool.h>
 
 #include "nvim/func_attr.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/os/os_defs.h"
 
 // Definitions of various common control characters.
@@ -104,6 +104,10 @@ static inline bool ascii_isident(int c)
   REAL_FATTR_ALWAYS_INLINE;
 
 static inline bool ascii_isbdigit(int c)
+  REAL_FATTR_CONST
+  REAL_FATTR_ALWAYS_INLINE;
+
+static inline bool ascii_isodigit(int c)
   REAL_FATTR_CONST
   REAL_FATTR_ALWAYS_INLINE;
 

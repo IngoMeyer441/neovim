@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
@@ -25,7 +25,7 @@
 #include "nvim/hashtab.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/input.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -35,17 +35,16 @@
 #include "nvim/option_vars.h"
 #include "nvim/os/fs.h"
 #include "nvim/os/input.h"
-#include "nvim/os/os_defs.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 // Use this to adjust the score after finding suggestions, based on the
 // suggested word sounding like the bad word.  This is much faster than doing
@@ -1942,6 +1941,12 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char *fword, bool soun
       // - Skip the byte if it's equal to the byte in the word,
       //   accepting that byte is always better.
       n += sp->ts_curi++;
+
+      // break out, if we would be accessing byts buffer out of bounds
+      if (byts == slang->sl_fbyts && n >= slang->sl_fbyts_len) {
+        got_int = true;
+        break;
+      }
       c = byts[n];
       if (soundfold && sp->ts_twordlen == 0 && c == '*') {
         // Inserting a vowel at the start of a word counts less,
@@ -3140,8 +3145,7 @@ static void check_suggestions(suginfo_T *su, garray_T *gap)
     // Need to append what follows to check for "the the".
     xstrlcpy(longword, stp[i].st_word, MAXWLEN + 1);
     int len = stp[i].st_wordlen;
-    xstrlcpy(longword + len, su->su_badptr + stp[i].st_orglen,
-             (size_t)(MAXWLEN - len + 1));
+    xstrlcpy(longword + len, su->su_badptr + stp[i].st_orglen, MAXWLEN + 1 - (size_t)len);
     hlf_T attr = HLF_COUNT;
     (void)spell_check(curwin, longword, &attr, NULL, false);
     if (attr != HLF_COUNT) {

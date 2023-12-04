@@ -47,17 +47,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include "klib/kvec.h"
 #include "nvim/garray.h"
 #include "nvim/marktree.h"
 #include "nvim/memory.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 // only for debug functions
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/garray_defs.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 
 #define T MT_BRANCH_FACTOR
 #define ILEN (sizeof(MTNode) + (2 * T) * sizeof(void *))
@@ -1116,7 +1117,6 @@ void marktree_clear(MarkTree *b)
     b->root = NULL;
   }
   map_destroy(uint64_t, b->id2node);
-  *b->id2node = (PMap(uint64_t)) MAP_INIT;
   b->n_keys = 0;
   assert(b->n_nodes == 0);
 }

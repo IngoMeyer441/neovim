@@ -11,7 +11,7 @@
 #include "nvim/api/extmark.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
@@ -28,22 +28,26 @@
 #include "nvim/fold.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
-#include "nvim/macros.h"
-#include "nvim/map.h"
+#include "nvim/macros_defs.h"
+#include "nvim/map_defs.h"
 #include "nvim/marktree.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/move.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/sign.h"
 #include "nvim/sign_defs.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/types_defs.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
+
+#ifdef INCLUDE_GENERATED_DECLARATIONS
+# include "sign.c.generated.h"
+#endif
 
 static PMap(cstr_t) sign_map INIT( = MAP_INIT);
 static kvec_t(Integer) sign_ns INIT( = MAP_INIT);
@@ -909,7 +913,7 @@ static dict_T *sign_get_placed_info_dict(MTKey mark)
 
 /// Returns information about signs placed in a buffer as list of dicts.
 list_T *get_buffer_signs(buf_T *buf)
-    FUNC_ATTR_NONNULL_RET FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
+  FUNC_ATTR_NONNULL_RET FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
   list_T *const l = tv_list_alloc(kListLenMayKnow);
   MarkTreeIter itr[1];

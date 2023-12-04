@@ -3,12 +3,12 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/memory.h"
 #include "nvim/rbuffer.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "rbuffer.c.generated.h"  // IWYU pragma: export
+# include "rbuffer.c.generated.h"
 #endif
 
 /// Creates a new `RBuffer` instance.
@@ -29,25 +29,10 @@ RBuffer *rbuffer_new(size_t capacity)
   return rv;
 }
 
-void rbuffer_free(RBuffer *buf)
+void rbuffer_free(RBuffer *buf) FUNC_ATTR_NONNULL_ALL
 {
   xfree(buf->temp);
   xfree(buf);
-}
-
-size_t rbuffer_size(RBuffer *buf) FUNC_ATTR_NONNULL_ALL
-{
-  return buf->size;
-}
-
-size_t rbuffer_capacity(RBuffer *buf) FUNC_ATTR_NONNULL_ALL
-{
-  return (size_t)(buf->end_ptr - buf->start_ptr);
-}
-
-size_t rbuffer_space(RBuffer *buf) FUNC_ATTR_NONNULL_ALL
-{
-  return rbuffer_capacity(buf) - buf->size;
 }
 
 /// Return a pointer to a raw buffer containing the first empty slot available
@@ -213,7 +198,7 @@ size_t rbuffer_read(RBuffer *buf, char *dst, size_t dst_size)
 }
 
 char *rbuffer_get(RBuffer *buf, size_t index)
-    FUNC_ATTR_NONNULL_ALL FUNC_ATTR_NONNULL_RET
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_NONNULL_RET
 {
   assert(index < buf->size);
   char *rptr = buf->read_ptr + index;

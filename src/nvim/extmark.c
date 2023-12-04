@@ -26,6 +26,7 @@
 // code for redrawing the line with the deleted decoration.
 
 #include <assert.h>
+#include <stddef.h>
 
 #include "nvim/api/private/defs.h"
 #include "nvim/buffer_defs.h"
@@ -34,10 +35,10 @@
 #include "nvim/extmark.h"
 #include "nvim/extmark_defs.h"
 #include "nvim/globals.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/marktree.h"
 #include "nvim/memline.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/undo.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -90,7 +91,7 @@ void extmark_set(buf_T *buf, uint32_t ns_id, uint32_t *idp, int row, colnr_T col
 
 revised:
   if (decor_flags || decor.ext) {
-    buf_put_decor(buf, decor, row);
+    buf_put_decor(buf, decor, row, end_row > -1 ? end_row : row);
     decor_redraw(buf, row, end_row > -1 ? end_row : row, decor);
   }
 
@@ -310,9 +311,8 @@ void extmark_free_all(buf_T *buf)
 /// copying is useful when we cannot simply reverse the operation. This will do
 /// nothing on redo, enforces correct position when undo.
 void extmark_splice_delete(buf_T *buf, int l_row, colnr_T l_col, int u_row, colnr_T u_col,
-                           ExtmarkOp op)
+                           extmark_undo_vec_t *uvp, bool only_copy, ExtmarkOp op)
 {
-  u_header_T *uhp = u_force_get_undo_header(buf);
   MarkTreeIter itr[1] = { 0 };
   ExtmarkUndoObject undo;
 
@@ -327,7 +327,7 @@ void extmark_splice_delete(buf_T *buf, int l_row, colnr_T l_col, int u_row, coln
 
     bool invalidated = false;
     // Invalidate/delete mark
-    if (!mt_invalid(mark) && mt_invalidate(mark) && !mt_end(mark)) {
+    if (!only_copy && !mt_invalid(mark) && mt_invalidate(mark) && !mt_end(mark)) {
       MTPos endpos = marktree_get_altpos(buf->b_marktree, mark, NULL);
       if (endpos.row < 0) {
         endpos = mark.pos;
@@ -347,7 +347,7 @@ void extmark_splice_delete(buf_T *buf, int l_row, colnr_T l_col, int u_row, coln
     }
 
     // Push mark to undo header
-    if (uhp && op == kExtmarkUndo && !mt_no_undo(mark)) {
+    if (only_copy || (uvp != NULL && op == kExtmarkUndo && !mt_no_undo(mark))) {
       ExtmarkSavePos pos;
       pos.mark = mt_lookup_key(mark);
       pos.invalidated = invalidated;
@@ -358,7 +358,7 @@ void extmark_splice_delete(buf_T *buf, int l_row, colnr_T l_col, int u_row, coln
 
       undo.data.savepos = pos;
       undo.type = kExtmarkSavePos;
-      kv_push(uhp->uh_extmark, undo);
+      kv_push(*uvp, undo);
     }
 
     marktree_itr_next(buf->b_marktree, itr);
@@ -393,7 +393,8 @@ void extmark_apply_undo(ExtmarkUndoObject undo_info, bool undo)
         MarkTreeIter itr[1] = { 0 };
         MTKey mark = marktree_lookup(curbuf->b_marktree, pos.mark, itr);
         mt_itr_rawkey(itr).flags &= (uint16_t) ~MT_FLAG_INVALID;
-        buf_put_decor(curbuf, mt_decor(mark), mark.pos.row);
+        MTPos end = marktree_get_altpos(curbuf->b_marktree, mark, itr);
+        buf_put_decor(curbuf, mt_decor(mark), mark.pos.row, end.row < 0 ? mark.pos.row : end.row);
       }
       if (pos.old_row >= 0) {
         extmark_setraw(curbuf, pos.mark, pos.old_row, pos.old_col);
@@ -509,7 +510,9 @@ void extmark_splice_impl(buf_T *buf, int start_row, colnr_T start_col, bcount_t 
     // merge!)
     int end_row = start_row + old_row;
     int end_col = (old_row ? 0 : start_col) + old_col;
-    extmark_splice_delete(buf, start_row, start_col, end_row, end_col, undo);
+    u_header_T *uhp = u_force_get_undo_header(buf);
+    extmark_undo_vec_t *uvp = uhp ? &uhp->uh_extmark : NULL;
+    extmark_splice_delete(buf, start_row, start_col, end_row, end_col, uvp, false, undo);
   }
 
   // Move the signcolumn sentinel line

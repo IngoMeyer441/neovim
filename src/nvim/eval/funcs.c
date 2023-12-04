@@ -24,8 +24,8 @@
 #include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
-#include "nvim/ascii.h"
-#include "nvim/assert.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
@@ -71,7 +71,7 @@
 #include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
 #include "nvim/math.h"
@@ -90,7 +90,7 @@
 #include "nvim/optionstr.h"
 #include "nvim/os/dl.h"
 #include "nvim/os/fileio.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/os.h"
 #include "nvim/os/pty_process.h"
 #include "nvim/os/shell.h"
@@ -99,7 +99,7 @@
 #include "nvim/path.h"
 #include "nvim/plines.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
@@ -113,7 +113,7 @@
 #include "nvim/tag.h"
 #include "nvim/ui.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 /// Describe data to return from find_some_match()
@@ -7440,7 +7440,7 @@ static void f_setenv(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   char valbuf[NUMBUFLEN];
   const char *name = tv_get_string_buf(&argvars[0], namebuf);
 
-  // seting an environment variable may be dangerous, e.g. you could
+  // setting an environment variable may be dangerous, e.g. you could
   // setenv GCONV_PATH=/tmp and then have iconv() unexpectedly call
   // a shell command using some shared library:
   if (check_secure()) {

@@ -9,9 +9,12 @@
 #include <time.h>
 
 #include "nvim/api/extmark.h"
+#include "nvim/api/private/helpers.h"
+#include "nvim/api/ui.h"
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer_updates.h"
+#include "nvim/channel.h"
 #include "nvim/context.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/drawline.h"
@@ -23,15 +26,21 @@
 #include "nvim/insexpand.h"
 #include "nvim/lua/executor.h"
 #include "nvim/main.h"
+#include "nvim/map_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/memfile.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option_vars.h"
+#include "nvim/os/input.h"
 #include "nvim/sign.h"
+#include "nvim/state_defs.h"
+#include "nvim/statusline.h"
 #include "nvim/ui.h"
+#include "nvim/ui_client.h"
+#include "nvim/ui_compositor.h"
 #include "nvim/usercmd.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 #ifdef UNIT_TESTING
 # define malloc(size) mem_malloc(size)
@@ -210,6 +219,18 @@ void *xmemdupz(const void *data, size_t len)
 {
   return memcpy(xmallocz(len), data, len);
 }
+
+#ifndef HAVE_STRNLEN
+size_t xstrnlen(const char *s, size_t n)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE
+{
+  const char *end = memchr(s, '\0', n);
+  if (end == NULL) {
+    return n;
+  }
+  return (size_t)(end - s);
+}
+#endif
 
 /// A version of strchr() that returns a pointer to the terminating NUL if it
 /// doesn't find `c`.
@@ -494,13 +515,6 @@ bool strequal(const char *a, const char *b)
   return (a == NULL && b == NULL) || (a && b && strcmp(a, b) == 0);
 }
 
-/// Case-insensitive `strequal`.
-bool striequal(const char *a, const char *b)
-  FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
-{
-  return (a == NULL && b == NULL) || (a && b && STRICMP(a, b) == 0);
-}
-
 // Avoid repeating the error message many times (they take 1 second each).
 // Did_outofmem_msg is reset when a character is read.
 void do_outofmem_msg(size_t size)
@@ -577,7 +591,9 @@ void alloc_block(Arena *arena)
 
 static size_t arena_align_offset(uint64_t off)
 {
+#define ARENA_ALIGN MAX(sizeof(void *), sizeof(double))
   return ((off + (ARENA_ALIGN - 1)) & ~(ARENA_ALIGN - 1));
+#undef ARENA_ALIGN
 }
 
 /// @param arena if NULL, do a global allocation. caller must then free the value!
@@ -662,6 +678,7 @@ char *arena_memdupz(Arena *arena, const char *buf, size_t size)
 # include "nvim/grid.h"
 # include "nvim/mark.h"
 # include "nvim/msgpack_rpc/channel.h"
+# include "nvim/msgpack_rpc/helpers.h"
 # include "nvim/ops.h"
 # include "nvim/option.h"
 # include "nvim/os/os.h"
@@ -730,6 +747,7 @@ void free_all_mem(void)
   free_all_marks();
   alist_clear(&global_alist);
   free_homedir();
+  free_envmap();
   free_users();
   free_search_patterns();
   free_old_sub();
@@ -764,6 +782,25 @@ void free_all_mem(void)
   // Free all option values.  Must come after closing windows.
   free_all_options();
 
+  // Free all buffers.  Reset 'autochdir' to avoid accessing things that
+  // were freed already.
+  // Must be after eval_clear to avoid it trying to access b:changedtick after
+  // freeing it.
+  p_acd = false;
+  for (buf = firstbuf; buf != NULL;) {
+    bufref_T bufref;
+    set_bufref(&bufref, buf);
+    nextbuf = buf->b_next;
+
+    // Since options (in addition to other stuff) have been freed above we need to ensure no
+    // callbacks are called, so free them before closing the buffer.
+    buf_free_callbacks(buf);
+
+    close_buffer(NULL, buf, DOBUF_WIPE, false, false);
+    // Didn't work, try next one.
+    buf = bufref_valid(&bufref) ? nextbuf : firstbuf;
+  }
+
   // Clear registers.
   clear_registers();
   ResetRedobuff();
@@ -784,31 +821,19 @@ void free_all_mem(void)
     }
   }
 
+  channel_free_all_mem();
   eval_clear();
   api_extmark_free_all_mem();
   ctx_free_all();
 
-  // Free all buffers.  Reset 'autochdir' to avoid accessing things that
-  // were freed already.
-  // Must be after eval_clear to avoid it trying to access b:changedtick after
-  // freeing it.
-  p_acd = false;
-  for (buf = firstbuf; buf != NULL;) {
-    bufref_T bufref;
-    set_bufref(&bufref, buf);
-    nextbuf = buf->b_next;
-
-    // Since options (in addition to other stuff) have been freed above we need to ensure no
-    // callbacks are called, so free them before closing the buffer.
-    buf_free_callbacks(buf);
-
-    close_buffer(NULL, buf, DOBUF_WIPE, false, false);
-    // Didn't work, try next one.
-    buf = bufref_valid(&bufref) ? nextbuf : firstbuf;
-  }
+  map_destroy(int, &buffer_handles);
+  map_destroy(int, &window_handles);
+  map_destroy(int, &tabpage_handles);
 
   // free screenlines (can't display anything now!)
   grid_free_all_mem();
+  stl_clear_click_defs(tab_page_click_defs, tab_page_click_defs_size);
+  xfree(tab_page_click_defs);
 
   clear_hl_tables(false);
 
@@ -816,10 +841,18 @@ void free_all_mem(void)
 
   decor_free_all_mem();
   drawline_free_all_mem();
+  input_free_all_mem();
 
+  if (ui_client_channel_id) {
+    ui_client_free_all_mem();
+  }
+
+  remote_ui_free_all_mem();
   ui_free_all_mem();
+  ui_comp_free_all_mem();
   nlua_free_all_mem();
   rpc_free_all_mem();
+  msgpack_rpc_helpers_free_all_mem();
 
   // should be last, in case earlier free functions deallocates arenas
   arena_free_reuse_blks();

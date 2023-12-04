@@ -17,10 +17,8 @@
 #include "nvim/os/os.h"
 #include "nvim/os/time.h"
 
-struct tm;
-
 #ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "os/time.c.generated.h"  // IWYU pragma: export
+# include "os/time.c.generated.h"
 #endif
 
 /// Gets a high-resolution (nanosecond), monotonically-increasing time relative

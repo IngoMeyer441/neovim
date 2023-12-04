@@ -17,12 +17,13 @@
 #include <uv.h>
 
 #include "auto/config.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/eval.h"
 #include "nvim/globals.h"
 #include "nvim/log.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/os.h"
 #include "nvim/os/stdpaths_defs.h"
 #include "nvim/os/time.h"

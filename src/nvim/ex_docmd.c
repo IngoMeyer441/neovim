@@ -9,10 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include "auto/config.h"
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
@@ -42,12 +43,12 @@
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/input.h"
 #include "nvim/keycodes.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -61,12 +62,13 @@
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/shell.h"
 #include "nvim/path.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
@@ -77,11 +79,11 @@
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/tag.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/usercmd.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
@@ -1708,6 +1710,9 @@ int execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo, bool preview)
   if (parse_count(eap, &errormsg, true) == FAIL) {
     goto end;
   }
+
+  cstack_T cstack = { .cs_idx = -1 };
+  eap->cstack = &cstack;
 
   // Execute the command
   execute_cmd0(&retv, eap, &errormsg, preview);
@@ -7421,7 +7426,9 @@ static void ex_terminal(exarg_T *eap)
     char shell_argv[512] = { 0 };
 
     while (*p != NULL) {
-      snprintf(tempstring, sizeof(tempstring), ",\"%s\"", *p);
+      char *escaped = vim_strsave_escaped(*p, "\"\\");
+      snprintf(tempstring, sizeof(tempstring), ",\"%s\"", escaped);
+      xfree(escaped);
       xstrlcat(shell_argv, tempstring, sizeof(shell_argv));
       p++;
     }

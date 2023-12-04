@@ -8,17 +8,14 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/decoration.h"
 #include "nvim/extmark_defs.h"  // IWYU pragma: export
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/marktree.h"
-#include "nvim/pos.h"
-#include "nvim/types.h"
+#include "nvim/pos_defs.h"
+#include "nvim/types_defs.h"
 
-EXTERN int extmark_splice_pending INIT( = 0);
+EXTERN int curbuf_splice_pending INIT( = 0);
 
 typedef kvec_t(MTPair) ExtmarkInfoArray;
-
-// TODO(bfredl): good enough name for now.
-typedef ptrdiff_t bcount_t;
 
 // delete the columns between mincol and endcol
 typedef struct {

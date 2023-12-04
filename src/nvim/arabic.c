@@ -21,8 +21,8 @@
 #include <stddef.h>
 
 #include "nvim/arabic.h"
-#include "nvim/ascii.h"
-#include "nvim/macros.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/macros_defs.h"
 #include "nvim/option_vars.h"
 
 // Unicode values for Arabic characters.

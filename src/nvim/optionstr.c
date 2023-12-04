@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
@@ -25,7 +25,7 @@
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/insexpand.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -36,14 +36,14 @@
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/types_defs.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -442,7 +442,7 @@ int check_signcolumn(win_T *wp)
 const char *check_stl_option(char *s)
 {
   int groupdepth = 0;
-  static char errbuf[80];
+  static char errbuf[ERR_BUFLEN];
 
   while (*s) {
     // Check for valid keys after % sequences

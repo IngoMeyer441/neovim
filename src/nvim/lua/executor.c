@@ -15,7 +15,7 @@
 #include "nvim/api/extmark.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/change.h"
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor.h"
@@ -41,7 +41,7 @@
 #include "nvim/lua/executor.h"
 #include "nvim/lua/stdlib.h"
 #include "nvim/lua/treesitter.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -51,14 +51,14 @@
 #include "nvim/os/fileio.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/runtime.h"
 #include "nvim/strings.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/usercmd.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 static int in_fast_callback = 0;
@@ -115,7 +115,7 @@ lua_State *get_global_lstate(void)
 /// Convert lua error into a Vim error message
 ///
 /// @param  lstate  Lua interpreter state.
-/// @param[in]  msg  Message base, must contain one `%s`.
+/// @param[in]  msg  Message base, must contain one `%*s`.
 void nlua_error(lua_State *const lstate, const char *const msg)
   FUNC_ATTR_NONNULL_ALL
 {
@@ -208,7 +208,7 @@ static int nlua_luv_cfpcall(lua_State *lstate, int nargs, int nresult, int flags
     const char *error = lua_tostring(lstate, -1);
 
     multiqueue_put(main_loop.events, nlua_luv_error_event,
-                   2, xstrdup(error), (intptr_t)kCallback);
+                   xstrdup(error), (void *)(intptr_t)kCallback);
     lua_pop(lstate, 1);  // error message
     retval = -status;
   } else {  // LUA_OK
@@ -266,11 +266,11 @@ static int nlua_luv_thread_common_cfpcall(lua_State *lstate, int nargs, int nres
     const char *error = lua_tostring(lstate, -1);
 
     loop_schedule_deferred(&main_loop,
-                           event_create(nlua_luv_error_event, 2,
+                           event_create(nlua_luv_error_event,
                                         xstrdup(error),
-                                        is_callback
-                                        ? (intptr_t)kThreadCallback
-                                        : (intptr_t)kThread));
+                                        (void *)(intptr_t)(is_callback
+                                                           ? kThreadCallback
+                                                           : kThread)));
     lua_pop(lstate, 1);  // error message
     retval = -status;
   } else {  // LUA_OK
@@ -379,8 +379,7 @@ static int nlua_schedule(lua_State *const lstate)
 
   LuaRef cb = nlua_ref_global(lstate, 1);
 
-  multiqueue_put(main_loop.events, nlua_schedule_event,
-                 1, (void *)(ptrdiff_t)cb);
+  multiqueue_put(main_loop.events, nlua_schedule_event, (void *)(ptrdiff_t)cb);
   return 0;
 }
 
@@ -411,6 +410,10 @@ static bool nlua_wait_condition(lua_State *lstate, int *status, bool *callback_r
 static int nlua_wait(lua_State *lstate)
   FUNC_ATTR_NONNULL_ALL
 {
+  if (in_fast_callback) {
+    return luaL_error(lstate, e_luv_api_disabled, "vim.wait");
+  }
+
   intptr_t timeout = luaL_checkinteger(lstate, 1);
   if (timeout < 0) {
     return luaL_error(lstate, "timeout must be >= 0");
@@ -449,8 +452,7 @@ static int nlua_wait(lua_State *lstate)
     fast_only = lua_toboolean(lstate, 4);
   }
 
-  MultiQueue *loop_events = fast_only || in_fast_callback > 0
-                            ? main_loop.fast_events : main_loop.events;
+  MultiQueue *loop_events = fast_only ? main_loop.fast_events : main_loop.events;
 
   TimeWatcher *tw = xmalloc(sizeof(TimeWatcher));
 
@@ -1019,15 +1021,14 @@ static int nlua_print(lua_State *const lstate)
 
   if (is_thread) {
     loop_schedule_deferred(&main_loop,
-                           event_create(nlua_print_event, 2,
+                           event_create(nlua_print_event,
                                         msg_ga.ga_data,
-                                        (intptr_t)msg_ga.ga_len));
+                                        (void *)(intptr_t)msg_ga.ga_len));
   } else if (in_fast_callback) {
     multiqueue_put(main_loop.events, nlua_print_event,
-                   2, msg_ga.ga_data, (intptr_t)msg_ga.ga_len);
+                   msg_ga.ga_data, (void *)(intptr_t)msg_ga.ga_len);
   } else {
-    nlua_print_event((void *[]){ msg_ga.ga_data,
-                                 (void *)(intptr_t)msg_ga.ga_len });
+    nlua_print_event((void *[]){ msg_ga.ga_data, (void *)(intptr_t)msg_ga.ga_len });
   }
   return 0;
 

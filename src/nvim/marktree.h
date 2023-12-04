@@ -1,21 +1,16 @@
 #pragma once
 
-#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include "klib/kvec.h"
-#include "nvim/assert.h"
 #include "nvim/decoration_defs.h"
-#include "nvim/garray_defs.h"
-#include "nvim/map.h"
-#include "nvim/pos.h"
-#include "nvim/types.h"
+#include "nvim/garray_defs.h"  // IWYU pragma: keep
+#include "nvim/map_defs.h"
+#include "nvim/pos_defs.h"  // IWYU pragma: keep
 // only for debug functions:
-#include "nvim/api/private/defs.h"
-
-struct mtnode_s;
+#include "nvim/api/private/defs.h"  // IWYU pragma: keep
 
 #define MT_MAX_DEPTH 20
 #define MT_BRANCH_FACTOR 10
@@ -48,7 +43,7 @@ typedef struct {
 } MarkTreeIter;
 
 #define marktree_itr_valid(itr) ((itr)->x != NULL)
-// accces raw key: flags in MT_FLAG_EXTERNAL_MASK and decor_data are safe to modify.
+// access raw key: flags in MT_FLAG_EXTERNAL_MASK and decor_data are safe to modify.
 #define mt_itr_rawkey(itr) ((itr)->x->key[(itr)->i])
 
 // Internal storage

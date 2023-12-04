@@ -16,7 +16,7 @@
 #include "auto/config.h"
 #include "klib/kvec.h"
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
@@ -48,11 +48,11 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/help.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/input.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -66,25 +66,26 @@
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/shell.h"
 #include "nvim/os/time.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
 #include "nvim/spell.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 /// Case matching style to use for :substitute
@@ -3143,7 +3144,7 @@ static char *sub_grow_buf(char **new_start, int *new_start_len, int needed_len)
     // substitution into (and some extra space to avoid
     // too many calls to xmalloc()/free()).
     *new_start_len = needed_len + 50;
-    *new_start = xmalloc((size_t)(*new_start_len));
+    *new_start = xcalloc(1, (size_t)(*new_start_len));
     **new_start = NUL;
     new_end = *new_start;
   } else {
@@ -3153,8 +3154,11 @@ static char *sub_grow_buf(char **new_start, int *new_start_len, int needed_len)
     size_t len = strlen(*new_start);
     needed_len += (int)len;
     if (needed_len > *new_start_len) {
+      size_t prev_new_start_len = (size_t)(*new_start_len);
       *new_start_len = needed_len + 50;
+      size_t added_len = (size_t)(*new_start_len) - prev_new_start_len;
       *new_start = xrealloc(*new_start, (size_t)(*new_start_len));
+      memset(*new_start + prev_new_start_len, 0, added_len);
     }
     new_end = *new_start + len;
   }

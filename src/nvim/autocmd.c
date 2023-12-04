@@ -9,7 +9,7 @@
 
 #include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
@@ -28,11 +28,11 @@
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/hashtab.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/insexpand.h"
 #include "nvim/lua/executor.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
@@ -48,10 +48,10 @@
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
@@ -2564,7 +2564,7 @@ void may_trigger_vim_suspend_resume(bool suspend)
     pending_vimresume = kTrue;
   } else if (!suspend && pending_vimresume == kTrue) {
     pending_vimresume = kNone;
-    multiqueue_put(main_loop.events, vimresume_event, 0);
+    multiqueue_put(main_loop.events, vimresume_event, NULL);
   }
 }
 
@@ -2573,6 +2573,11 @@ void do_autocmd_uienter(uint64_t chanid, bool attached)
 {
   static bool recursive = false;
 
+#ifdef EXITFREE
+  if (entered_free_all_mem) {
+    return;
+  }
+#endif
   if (starting == NO_SCREEN) {
     return;  // user config hasn't been sourced yet
   }

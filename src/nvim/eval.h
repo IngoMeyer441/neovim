@@ -4,16 +4,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "nvim/buffer_defs.h"
+#include "nvim/buffer_defs.h"  // IWYU pragma: keep
 #include "nvim/channel.h"
-#include "nvim/cmdexpand_defs.h"
+#include "nvim/cmdexpand_defs.h"  // IWYU pragma: keep
 #include "nvim/eval/typval_defs.h"
 #include "nvim/event/time.h"
 #include "nvim/ex_cmds_defs.h"
-#include "nvim/hashtab.h"
-#include "nvim/macros.h"
-#include "nvim/os/fileio.h"
-#include "nvim/os/stdpaths_defs.h"
+#include "nvim/hashtab_defs.h"
+#include "nvim/macros_defs.h"
+#include "nvim/mbyte_defs.h"  // IWYU pragma: keep
+#include "nvim/os/fileio_defs.h"  // IWYU pragma: keep
+#include "nvim/os/stdpaths_defs.h"  // IWYU pragma: keep
+#include "nvim/vim_defs.h"  // IWYU pragma: keep
 
 #define COPYID_INC 2
 #define COPYID_MASK (~0x1)
@@ -275,6 +277,9 @@ typedef struct {
 enum {
   EVAL_EVALUATE = 1,  ///< when missing don't actually evaluate
 };
+
+// Character used as separated in autoload function/variable names.
+#define AUTOLOAD_CHAR '#'
 
 /// Passed to an eval() function to enable evaluation.
 EXTERN evalarg_T EVALARG_EVALUATE INIT( = { EVAL_EVALUATE, NULL, NULL, NULL });

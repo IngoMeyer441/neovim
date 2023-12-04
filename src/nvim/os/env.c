@@ -9,7 +9,7 @@
 #include <uv.h>
 
 #include "auto/config.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
@@ -17,16 +17,17 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/log.h"
-#include "nvim/macros.h"
-#include "nvim/map.h"
+#include "nvim/macros_defs.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option_vars.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
 #include "nvim/strings.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 #ifdef MSWIN
 # include "nvim/mbyte.h"
@@ -42,6 +43,10 @@
 
 #ifdef HAVE_SYS_UTSNAME_H
 # include <sys/utsname.h>
+#endif
+
+#ifdef INCLUDE_GENERATED_DECLARATIONS
+# include "os/env.c.generated.h"
 #endif
 
 // Because `uv_os_getenv` requires allocating, we must manage a map to maintain
@@ -503,6 +508,17 @@ static char *os_homedir(void)
 void free_homedir(void)
 {
   xfree(homedir);
+}
+
+void free_envmap(void)
+{
+  cstr_t name;
+  ptr_t e;
+  map_foreach(&envmap, name, e, {
+    xfree((char *)name);
+    xfree(e);
+  });
+  map_destroy(cstr_t, &envmap);
 }
 
 #endif

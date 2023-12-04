@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #include "auto/config.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 
 // USDT probes. Example invocation:
 //     NVIM_PROBE(nvim_foo_bar, 1, string.data);
@@ -45,9 +45,11 @@
 # define LOG_CALLSTACK_TO_FILE(fp) log_callstack_to_file(fp, __func__, __LINE__)
 #endif
 
-#if NVIM_HAS_INCLUDE("sanitizer/asan_interface.h")
-# include "sanitizer/asan_interface.h"
+// uncrustify:off
+#if NVIM_HAS_INCLUDE(<sanitizer/asan_interface.h>)
+# include <sanitizer/asan_interface.h>  // IWYU pragma: keep
 #endif
+// uncrustify:on
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "log.h.generated.h"

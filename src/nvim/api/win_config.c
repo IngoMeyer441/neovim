@@ -3,11 +3,12 @@
 
 #include "klib/kvec.h"
 #include "nvim/api/extmark.h"
-#include "nvim/api/keysets.h"
+#include "nvim/api/keysets_defs.h"
 #include "nvim/api/private/defs.h"
+#include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/win_config.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/decoration.h"
@@ -15,11 +16,12 @@
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight_group.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/option.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
+#include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/ui.h"
 #include "nvim/window.h"
@@ -255,8 +257,8 @@ void nvim_win_set_config(Window window, Dict(float_config) *config, Error *err)
   }
 }
 
-Dictionary config_put_bordertext(Dictionary config, FloatConfig *fconfig,
-                                 BorderTextType bordertext_type)
+static Dictionary config_put_bordertext(Dictionary config, FloatConfig *fconfig,
+                                        BorderTextType bordertext_type)
 {
   VirtText vt;
   AlignTextPos align;
@@ -309,6 +311,9 @@ Dictionary config_put_bordertext(Dictionary config, FloatConfig *fconfig,
 Dictionary nvim_win_get_config(Window window, Error *err)
   FUNC_API_SINCE(6)
 {
+  /// Keep in sync with FloatRelative in buffer_defs.h
+  static const char *const float_relative_str[] = { "editor", "win", "cursor", "mouse" };
+
   Dictionary rv = ARRAY_DICT_INIT;
 
   win_T *wp = find_window_by_handle(window, err);

@@ -6,7 +6,7 @@
 #include <uv.h>
 
 #include "nvim/api/private/defs.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
@@ -17,7 +17,7 @@
 #include "nvim/globals.h"
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/option_vars.h"
@@ -27,7 +27,6 @@
 #include "nvim/profile.h"
 #include "nvim/rbuffer.h"
 #include "nvim/state.h"
-#include "nvim/vim.h"
 
 #define READ_BUFFER_SIZE 0xfff
 #define INPUT_BUFFER_SIZE (READ_BUFFER_SIZE * 4)
@@ -75,6 +74,13 @@ void input_stop(void)
   stream_close(&read_stream, NULL, NULL);
 }
 
+#ifdef EXITFREE
+void input_free_all_mem(void)
+{
+  rbuffer_free(input_buffer);
+}
+#endif
+
 static void cursorhold_event(void **argv)
 {
   event_T event = State & MODE_INSERT ? EVENT_CURSORHOLDI : EVENT_CURSORHOLD;
@@ -89,7 +95,7 @@ static void create_cursorhold_event(bool events_enabled)
   // TODO(tarruda): Cursorhold should be implemented as a timer set during the
   // `state_check` callback for the states where it can be triggered.
   assert(!events_enabled || multiqueue_empty(main_loop.events));
-  multiqueue_put(main_loop.events, cursorhold_event, 0);
+  multiqueue_put(main_loop.events, cursorhold_event, NULL);
 }
 
 static void restart_cursorhold_wait(int tb_change_cnt)

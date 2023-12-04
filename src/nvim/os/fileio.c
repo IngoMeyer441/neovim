@@ -15,17 +15,21 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/log.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/os/fileio.h"
-#include "nvim/os/os.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/os_defs.h"
 #include "nvim/rbuffer.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 
 #ifdef MSWIN
 # include "nvim/os/os_win_console.h"
+#endif
+
+#ifdef HAVE_SYS_UIO_H
+# include <sys/uio.h>
 #endif
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS

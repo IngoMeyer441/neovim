@@ -8,9 +8,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
@@ -41,16 +42,19 @@
 #include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/time.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 // To be able to scroll back at the "more" and "hit-enter" prompts we need to
 // store the displayed text and remember where screen lines start.
@@ -867,7 +871,7 @@ void msg_schedule_semsg(const char *const fmt, ...)
   va_end(ap);
 
   char *s = xstrdup(IObuff);
-  loop_schedule_deferred(&main_loop, event_create(msg_semsg_event, 1, s));
+  loop_schedule_deferred(&main_loop, event_create(msg_semsg_event, s));
 }
 
 static void msg_semsg_multiline_event(void **argv)
@@ -885,7 +889,7 @@ void msg_schedule_semsg_multiline(const char *const fmt, ...)
   va_end(ap);
 
   char *s = xstrdup(IObuff);
-  loop_schedule_deferred(&main_loop, event_create(msg_semsg_multiline_event, 1, s));
+  loop_schedule_deferred(&main_loop, event_create(msg_semsg_multiline_event, s));
 }
 
 /// Like msg(), but truncate to a single line if p_shm contains 't', or when

@@ -17,6 +17,7 @@
 #endif
 
 #include "auto/config.h"
+#include "nvim/os/fs.h"
 
 #if defined(HAVE_ACL)
 # ifdef HAVE_SYS_ACL_H
@@ -31,19 +32,18 @@
 # include <sys/xattr.h>
 #endif
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/log.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option_vars.h"
-#include "nvim/os/fs_defs.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/types_defs.h"
+#include "nvim/vim_defs.h"
 
 #ifdef HAVE_SYS_UIO_H
 # include <sys/uio.h>
@@ -52,6 +52,7 @@
 #ifdef MSWIN
 # include "nvim/mbyte.h"
 # include "nvim/option.h"
+# include "nvim/strings.h"
 #endif
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -66,8 +67,6 @@ static const char e_xattr_e2big[]
 static const char e_xattr_other[]
   = N_("E1509: Error occurred when reading or writing extended attribute");
 #endif
-
-struct iovec;
 
 #define RUN_UV_FS_FUNC(ret, func, ...) \
   do { \

@@ -12,7 +12,7 @@
 #include "nvim/strings.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "garray.c.generated.h"  // IWYU pragma: export
+# include "garray.c.generated.h"
 #endif
 
 /// Clear an allocated growing array.

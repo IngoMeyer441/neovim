@@ -3,18 +3,19 @@
 /// psutil is a good reference for cross-platform syscall voodoo:
 /// https://github.com/giampaolo/psutil/tree/master/psutil/arch
 
+// IWYU pragma: no_include <sys/param.h>
+
 #include <assert.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <uv.h>
 
 #ifdef MSWIN
 # include <tlhelp32.h>
 #endif
 
-#if defined(__FreeBSD__)  // XXX: OpenBSD ?
+#if defined(__FreeBSD__)
 # include <string.h>
 # include <sys/types.h>
 # include <sys/user.h>
@@ -25,8 +26,13 @@
 #endif
 
 #if defined(__APPLE__) || defined(BSD)
-# include <pwd.h>
 # include <sys/sysctl.h>
+
+# include "nvim/macros_defs.h"
+#endif
+
+#if defined(__linux__)
+# include <stdio.h>
 #endif
 
 #include "nvim/log.h"
@@ -38,7 +44,7 @@
 #endif
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "os/process.c.generated.h"  // IWYU pragma: export
+# include "os/process.c.generated.h"
 #endif
 
 #ifdef MSWIN
@@ -108,6 +114,7 @@ bool os_proc_tree_kill(int pid, int sig)
 /// @param[out] proc_count Number of child processes.
 /// @return 0 on success, 1 if process not found, 2 on other error.
 int os_proc_children(int ppid, int **proc_list, size_t *proc_count)
+  FUNC_ATTR_NONNULL_ALL
 {
   if (ppid < 0) {
     return 2;

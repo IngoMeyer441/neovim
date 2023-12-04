@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tree_sitter/api.h>
 #include <uv.h>
 
 #include "klib/kvec.h"
@@ -19,14 +20,13 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/globals.h"
 #include "nvim/lua/treesitter.h"
-#include "nvim/macros.h"
-#include "nvim/map.h"
+#include "nvim/macros_defs.h"
+#include "nvim/map_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
-#include "tree_sitter/api.h"
+#include "nvim/types_defs.h"
 
 #define TS_META_PARSER "treesitter_parser"
 #define TS_META_TREE "treesitter_tree"

@@ -8,11 +8,12 @@
 #include <string.h>
 
 #include "klib/kvec.h"
-#include "nvim/api/keysets.h"
+#include "nvim/api/keysets_defs.h"
 #include "nvim/api/private/defs.h"
+#include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand_defs.h"
@@ -29,8 +30,8 @@
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
-#include "nvim/map.h"
+#include "nvim/macros_defs.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
@@ -38,9 +39,9 @@
 #include "nvim/os/time.h"
 #include "nvim/runtime.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 /// \addtogroup SG_SET
 /// @{

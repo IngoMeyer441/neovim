@@ -10,6 +10,10 @@
 #include "nvim/memory.h"
 #include "nvim/window.h"
 
+#ifdef INCLUDE_GENERATED_DECLARATIONS
+# include "api/tabpage.c.generated.h"
+#endif
+
 /// Gets the windows in a tabpage
 ///
 /// @param tabpage  Tabpage handle, or 0 for current tabpage

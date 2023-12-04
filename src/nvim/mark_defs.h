@@ -1,8 +1,8 @@
 #pragma once
 
 #include "nvim/eval/typval_defs.h"
-#include "nvim/os/time.h"
-#include "nvim/pos.h"
+#include "nvim/os/time_defs.h"
+#include "nvim/pos_defs.h"
 
 // marks: positions in a file
 // (a normal mark is a lnum/col pair, the same as a file position)
@@ -84,6 +84,3 @@ typedef struct xfilemark {
 } xfmark_T;
 
 #define INIT_XFMARK { INIT_FMARK, NULL }
-
-/// Global marks (marks with file number or name)
-EXTERN xfmark_T namedfm[NGLOBALMARKS] INIT( = { 0 });

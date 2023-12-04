@@ -11,13 +11,13 @@
 #include "nvim/event/socket.h"
 #include "nvim/event/stream.h"
 #include "nvim/garray_defs.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/os/pty_process.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 
 #define CHAN_STDIO 1
 #define CHAN_STDERR 2
@@ -122,7 +122,9 @@ static inline Channel *find_channel(uint64_t id)
 }
 
 static inline Stream *channel_instream(Channel *chan)
-  FUNC_ATTR_NONNULL_ALL
+  REAL_FATTR_NONNULL_ALL;
+
+static inline Stream *channel_instream(Channel *chan)
 {
   switch (chan->streamtype) {
   case kChannelStreamProc:
@@ -142,7 +144,9 @@ static inline Stream *channel_instream(Channel *chan)
 }
 
 static inline Stream *channel_outstream(Channel *chan)
-  FUNC_ATTR_NONNULL_ALL
+  REAL_FATTR_NONNULL_ALL;
+
+static inline Stream *channel_outstream(Channel *chan)
 {
   switch (chan->streamtype) {
   case kChannelStreamProc:

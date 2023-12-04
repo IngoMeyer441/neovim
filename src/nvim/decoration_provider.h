@@ -4,9 +4,9 @@
 #include <stdint.h>
 
 #include "klib/kvec.h"
-#include "nvim/buffer_defs.h"
-#include "nvim/macros.h"
-#include "nvim/types.h"
+#include "nvim/buffer_defs.h"  // IWYU pragma: keep
+#include "nvim/macros_defs.h"
+#include "nvim/types_defs.h"
 
 #define DP_MAX_ERROR 3
 

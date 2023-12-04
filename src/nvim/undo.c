@@ -77,12 +77,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <time.h>
 #include <uv.h>
 
 #include "auto/config.h"
 #include "klib/kvec.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_updates.h"
@@ -102,29 +103,28 @@
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
-#include "nvim/macros.h"
+#include "nvim/highlight.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mark.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
-#include "nvim/os/os.h"
 #include "nvim/os/os_defs.h"
 #include "nvim/os/time.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/sha256.h"
 #include "nvim/spell.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/undo.h"
 #include "nvim/undo_defs.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 /// Structure passed around between undofile functions.
 typedef struct {

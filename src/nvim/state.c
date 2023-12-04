@@ -1,35 +1,36 @@
 #include <stdbool.h>
-#include <stddef.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/event/defs.h"
 #include "nvim/event/multiqueue.h"
+#include "nvim/ex_getln.h"
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
 #include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
+#include "nvim/memory.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/input.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "state.c.generated.h"  // IWYU pragma: export
+# include "state.c.generated.h"
 #endif
 
 void state_enter(VimState *s)
+  FUNC_ATTR_NONNULL_ALL
 {
   while (true) {
     int check_result = s->check ? s->check(s) : 1;
@@ -168,6 +169,7 @@ int get_real_state(void)
 /// The first character represents the major mode, the following ones the minor
 /// ones.
 void get_mode(char *buf)
+  FUNC_ATTR_NONNULL_ALL
 {
   int i = 0;
 
@@ -210,6 +212,9 @@ void get_mode(char *buf)
     buf[i++] = 'c';
     if (exmode_active) {
       buf[i++] = 'v';
+    }
+    if ((State & MODE_CMDLINE) && cmdline_overstrike()) {
+      buf[i++] = 'r';
     }
   } else if (State & MODE_TERMINAL) {
     buf[i++] = 't';

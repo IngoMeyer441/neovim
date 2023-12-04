@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/digraph.h"
@@ -21,7 +21,7 @@
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/keycodes.h"
 #include "nvim/mapping.h"
 #include "nvim/mbyte.h"
@@ -31,9 +31,10 @@
 #include "nvim/option_vars.h"
 #include "nvim/os/input.h"
 #include "nvim/runtime.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/types_defs.h"
+#include "nvim/vim_defs.h"
 
 typedef int result_T;
 

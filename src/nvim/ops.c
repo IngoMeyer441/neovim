@@ -9,10 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include "nvim/api/private/defs.h"
-#include "nvim/ascii.h"
-#include "nvim/assert.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
@@ -31,11 +32,11 @@
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/keycodes.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -56,10 +57,10 @@
 #include "nvim/strings.h"
 #include "nvim/terminal.h"
 #include "nvim/textformat.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 static yankreg_T y_regs[NUM_REGISTERS] = { 0 };
@@ -102,9 +103,9 @@ static const char e_search_pattern_and_expression_register_may_not_contain_two_o
 #define OPF_LINES  1  // operator always works on lines
 #define OPF_CHANGE 2  // operator changes text
 
-// The names of operators.
-// IMPORTANT: Index must correspond with defines in vim.h!!!
-// The third field indicates whether the operator always works on lines.
+/// The names of operators.
+/// IMPORTANT: Index must correspond with defines in ops.h!!!
+/// The third field indicates whether the operator always works on lines.
 static char opchars[][3] = {
   { NUL, NUL, 0 },                       // OP_NOP
   { 'd', NUL, OPF_CHANGE },              // OP_DELETE

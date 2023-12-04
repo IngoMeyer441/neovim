@@ -23,7 +23,7 @@
 #include "nvim/globals.h"
 #include "nvim/log.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/msgpack_rpc/channel.h"
@@ -32,7 +32,7 @@
 #include "nvim/msgpack_rpc/unpacker.h"
 #include "nvim/os/input.h"
 #include "nvim/rbuffer.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
 
@@ -404,7 +404,7 @@ static void handle_request(Channel *channel, Unpacker *p, Array args)
 
     if (is_get_mode && !input_blocking()) {
       // Defer the event to a special queue used by os/input.c. #6247
-      multiqueue_put(ch_before_blocking_events, request_event, 1, evdata);
+      multiqueue_put(ch_before_blocking_events, request_event, evdata);
     } else {
       // Invoke immediately.
       request_event((void **)&evdata);
@@ -412,12 +412,11 @@ static void handle_request(Channel *channel, Unpacker *p, Array args)
   } else {
     bool is_resize = p->handler.fn == handle_nvim_ui_try_resize;
     if (is_resize) {
-      Event ev = event_create_oneshot(event_create(request_event, 1, evdata),
-                                      2);
+      Event ev = event_create_oneshot(event_create(request_event, evdata), 2);
       multiqueue_put_event(channel->events, ev);
       multiqueue_put_event(resize_events, ev);
     } else {
-      multiqueue_put(channel->events, request_event, 1, evdata);
+      multiqueue_put(channel->events, request_event, evdata);
       DLOG("RPC: scheduled %.*s", (int)p->method_name_len, p->handler.name);
     }
   }
@@ -484,7 +483,7 @@ static bool channel_write(Channel *channel, WBuffer *buffer)
 
   if (channel->streamtype == kChannelStreamInternal) {
     channel_incref(channel);
-    CREATE_EVENT(channel->events, internal_read_event, 2, channel, buffer);
+    CREATE_EVENT(channel->events, internal_read_event, channel, buffer);
     success = true;
   } else {
     Stream *in = channel_instream(channel);
@@ -752,6 +751,7 @@ const char *get_client_info(Channel *chan, const char *key)
   return NULL;
 }
 
+#ifdef EXITFREE
 void rpc_free_all_mem(void)
 {
   cstr_t key;
@@ -759,4 +759,8 @@ void rpc_free_all_mem(void)
     xfree((void *)key);
   });
   set_destroy(cstr_t, &event_strings);
+
+  msgpack_sbuffer_destroy(&out_buffer);
+  multiqueue_free(ch_before_blocking_events);
 }
+#endif

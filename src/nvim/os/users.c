@@ -6,17 +6,24 @@
 #include <uv.h>
 
 #include "auto/config.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/garray.h"
 #include "nvim/memory.h"
 #include "nvim/os/os.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #ifdef HAVE_PWD_FUNCS
 # include <pwd.h>
 #endif
 #ifdef MSWIN
 # include <lm.h>
+
+# include "nvim/mbyte.h"
+# include "nvim/message.h"
+#endif
+
+#ifdef INCLUDE_GENERATED_DECLARATIONS
+# include "os/users.c.generated.h"
 #endif
 
 // All user names (for ~user completion as done by shell).

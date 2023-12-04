@@ -5,10 +5,10 @@
 
 #include "klib/kvec.h"
 #include "nvim/decoration_provider.h"
-#include "nvim/fold.h"
-#include "nvim/macros.h"
-#include "nvim/pos.h"
-#include "nvim/types.h"
+#include "nvim/fold_defs.h"
+#include "nvim/macros_defs.h"
+#include "nvim/pos_defs.h"
+#include "nvim/types_defs.h"
 
 // Maximum columns for terminal highlight attributes
 #define TERM_ATTRS_MAX 1024

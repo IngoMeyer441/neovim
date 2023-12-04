@@ -61,7 +61,7 @@
 
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
@@ -91,10 +91,9 @@
 #include "nvim/normal.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
-#include "nvim/os/os_defs.h"
 #include "nvim/plines.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
@@ -105,11 +104,11 @@
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 /// corner value flags for hsep_connected and vsep_connected
@@ -606,10 +605,12 @@ int update_screen(void)
     }
 
     // Reset 'statuscolumn' if there is no dedicated signcolumn but it is invalid.
-    if (*wp->w_p_stc != NUL && !wp->w_buffer->b_signcols.valid && wp->w_minscwidth <= SCL_NO) {
+    if (*wp->w_p_stc != NUL && wp->w_minscwidth <= SCL_NO
+        && (wp->w_buffer->b_signcols.invalid_bot || !wp->w_buffer->b_signcols.sentinel)) {
       wp->w_nrwidth_line_count = 0;
       wp->w_valid &= ~VALID_WCOL;
       wp->w_redr_type = UPD_NOT_VALID;
+      wp->w_buffer->b_signcols.invalid_bot = 0;
     }
   }
 
@@ -618,11 +619,6 @@ int update_screen(void)
   screen_search_hl.rm.regprog = NULL;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    // Validate b_signcols if there is no dedicated signcolumn but 'statuscolumn' is set.
-    if (*wp->w_p_stc != NUL && wp->w_minscwidth <= SCL_NO) {
-      buf_signcols(wp->w_buffer, 0);
-    }
-
     if (wp->w_redr_type == UPD_CLEAR && wp->w_floating && wp->w_grid_alloc.chars) {
       grid_invalidate(&wp->w_grid_alloc);
       wp->w_redr_type = UPD_NOT_VALID;
@@ -1213,6 +1209,7 @@ static void redraw_win_signcol(win_T *wp)
   wp->w_scwidth = win_signcol_count(wp);
   if (wp->w_scwidth != scwidth) {
     changed_line_abv_curs_win(wp);
+    redraw_later(wp, UPD_NOT_VALID);
   }
 }
 
@@ -2646,7 +2643,6 @@ int number_width(win_T *wp)
 /// Set must_redraw only if not already set to a higher value.
 /// e.g. if must_redraw is UPD_CLEAR, type UPD_NOT_VALID will do nothing.
 void redraw_later(win_T *wp, int type)
-  FUNC_ATTR_NONNULL_ALL
 {
   if (!exiting && wp->w_redr_type < type) {
     wp->w_redr_type = type;
