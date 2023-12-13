@@ -62,35 +62,31 @@ describe('command-line option', function()
       screen:attach()
       local args = {
         nvim_prog_abs(), '-u', 'NONE', '-i', 'NONE',
-        '--cmd', '"set noswapfile shortmess+=IFW fileformats=unix"',
+        '--cmd', '"set noswapfile shortmess+=IFW fileformats=unix notermguicolors"',
         '-s', '-'
       }
 
       -- Need to explicitly pipe to stdin so that the embedded Nvim instance doesn't try to read
       -- data from the terminal #18181
-      funcs.termopen(string.format([[echo "" | %s]], table.concat(args, " ")))
+      funcs.termopen(string.format([[echo "" | %s]], table.concat(args, " ")), {
+        env = { VIMRUNTIME = os.getenv('VIMRUNTIME') }
+      })
       screen:expect([[
-        ^                                        |
-        {1:~                                       }|
-        {1:~                                       }|
-        {1:~                                       }|
-        {1:~                                       }|
-        {2:[No Name]             0,0-1          All}|
-                                                |
+        {1:^                                        }|
+        {2:~                                       }|*4
+        {3:[No Name]             0,0-1          All}|
+        {1:                                        }|
                                                 |
       ]], {
-        [1] = {foreground = tonumber('0x4040ff'), fg_indexed=true},
-        [2] = {bold = true, reverse = true}
+        [1] = {bg_indexed = true, foreground = Screen.colors.Grey91, background = tonumber('0x161616'), fg_indexed = true},
+        [2] = {bg_indexed = true, foreground = Screen.colors.Gray30, background = tonumber('0x161616'), fg_indexed = true},
+        [3] = {bg_indexed = true, foreground = tonumber('0xd2d2d2'), background = Screen.colors.Black , fg_indexed = true},
       })
       feed('i:cq<CR>')
       screen:expect([[
                                                 |
         [Process exited 1]                      |
-                                                |
-                                                |
-                                                |
-                                                |
-                                                |
+                                                |*5
         -- TERMINAL --                          |
       ]])
       --[=[ Example of incorrect output:
@@ -101,8 +97,7 @@ describe('command-line option', function()
         LENO' failed.                           |
                                                 |
         [Process exited 6]                      |
-                                                |
-                                                |
+                                                |*2
       ]])
       ]=]
     end)

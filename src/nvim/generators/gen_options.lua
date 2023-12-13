@@ -1,4 +1,5 @@
 local options_file = arg[1]
+local options_enum_file = arg[2]
 
 local opt_fd = assert(io.open(options_file, 'w'))
 
@@ -15,37 +16,43 @@ local options = require('options')
 
 local cstr = options.cstr
 
-local type_flags={
-  bool='P_BOOL',
-  number='P_NUM',
-  string='P_STRING',
+local type_flags = {
+  bool = 'P_BOOL',
+  number = 'P_NUM',
+  string = 'P_STRING',
 }
 
-local redraw_flags={
-  ui_option='P_UI_OPTION',
-  tabline='P_RTABL',
-  statuslines='P_RSTAT',
-  current_window='P_RWIN',
-  current_window_only='P_RWINONLY',
-  current_buffer='P_RBUF',
-  all_windows='P_RALL',
-  curswant='P_CURSWANT',
+local redraw_flags = {
+  ui_option = 'P_UI_OPTION',
+  tabline = 'P_RTABL',
+  statuslines = 'P_RSTAT',
+  current_window = 'P_RWIN',
+  current_window_only = 'P_RWINONLY',
+  current_buffer = 'P_RBUF',
+  all_windows = 'P_RALL',
+  curswant = 'P_CURSWANT',
 }
 
-local list_flags={
-  comma='P_COMMA',
-  onecomma='P_ONECOMMA',
-  commacolon='P_COMMA|P_COLON',
-  onecommacolon='P_ONECOMMA|P_COLON',
-  flags='P_FLAGLIST',
-  flagscomma='P_COMMA|P_FLAGLIST',
+local list_flags = {
+  comma = 'P_COMMA',
+  onecomma = 'P_ONECOMMA',
+  commacolon = 'P_COMMA|P_COLON',
+  onecommacolon = 'P_ONECOMMA|P_COLON',
+  flags = 'P_FLAGLIST',
+  flagscomma = 'P_COMMA|P_FLAGLIST',
 }
+
+--- @param s string
+--- @return string
+local lowercase_to_titlecase = function(s)
+  return s:sub(1, 1):upper() .. s:sub(2)
+end
 
 --- @param o vim.option_meta
 --- @return string
 local function get_flags(o)
   --- @type string[]
-  local ret = {type_flags[o.type]}
+  local ret = { type_flags[o.type] }
   local add_flag = function(f)
     ret[1] = ret[1] .. '|' .. f
   end
@@ -64,19 +71,19 @@ local function get_flags(o)
     end
   end
   for _, flag_desc in ipairs({
-    {'alloced'},
-    {'nodefault'},
-    {'no_mkrc'},
-    {'secure'},
-    {'gettext'},
-    {'noglob'},
-    {'normal_fname_chars', 'P_NFNAME'},
-    {'normal_dname_chars', 'P_NDNAME'},
-    {'pri_mkrc'},
-    {'deny_in_modelines', 'P_NO_ML'},
-    {'deny_duplicates', 'P_NODUP'},
-    {'modelineexpr', 'P_MLE'},
-    {'func'}
+    { 'alloced' },
+    { 'nodefault' },
+    { 'no_mkrc' },
+    { 'secure' },
+    { 'gettext' },
+    { 'noglob' },
+    { 'normal_fname_chars', 'P_NFNAME' },
+    { 'normal_dname_chars', 'P_NDNAME' },
+    { 'pri_mkrc' },
+    { 'deny_in_modelines', 'P_NO_ML' },
+    { 'deny_duplicates', 'P_NODUP' },
+    { 'modelineexpr', 'P_MLE' },
+    { 'func' },
   }) do
     local key_name = flag_desc[1]
     local def_name = flag_desc[2] or ('P_' .. key_name:upper())
@@ -108,20 +115,28 @@ local function get_cond(c, base_string)
 end
 
 local value_dumpers = {
-  ['function']=function(v) return v() end,
-  string=cstr,
-  boolean=function(v) return v and 'true' or 'false' end,
-  number=function(v) return ('%iL'):format(v) end,
-  ['nil']=function(_) return '0' end,
+  ['function'] = function(v)
+    return v()
+  end,
+  string = cstr,
+  boolean = function(v)
+    return v and 'true' or 'false'
+  end,
+  number = function(v)
+    return ('%iL'):format(v)
+  end,
+  ['nil'] = function(_)
+    return '0'
+  end,
 }
 
 local get_value = function(v)
   return '(void *) ' .. value_dumpers[type(v)](v)
 end
 
-local get_defaults = function(d,n)
+local get_defaults = function(d, n)
   if d == nil then
-    error("option '"..n.."' should have a default value")
+    error("option '" .. n .. "' should have a default value")
   end
   return get_value(d)
 end
@@ -153,20 +168,21 @@ local function dump_option(i, o)
   if #o.scope == 1 and o.scope[1] == 'global' then
     w('    .indir=PV_NONE')
   else
-    assert (#o.scope == 1 or #o.scope == 2)
-    assert (#o.scope == 1 or o.scope[1] == 'global')
+    assert(#o.scope == 1 or #o.scope == 2)
+    assert(#o.scope == 1 or o.scope[1] == 'global')
     local min_scope = o.scope[#o.scope]
-    local varname = o.pv_name or o.varname or (
-      'p_' .. (o.abbreviation or o.full_name))
+    local varname = o.pv_name or o.varname or ('p_' .. (o.abbreviation or o.full_name))
     local pv_name = (
-      'OPT_' .. min_scope:sub(1, 3):upper() .. '(' .. (
-        min_scope:sub(1, 1):upper() .. 'V_' .. varname:sub(3):upper()
-      ) .. ')'
+      'OPT_'
+      .. min_scope:sub(1, 3):upper()
+      .. '('
+      .. (min_scope:sub(1, 1):upper() .. 'V_' .. varname:sub(3):upper())
+      .. ')'
     )
     if #o.scope == 2 then
       pv_name = 'OPT_BOTH(' .. pv_name .. ')'
     end
-    table.insert(defines,  { 'PV_' .. varname:sub(3):upper() , pv_name})
+    table.insert(defines, { 'PV_' .. varname:sub(3):upper(), pv_name })
     w('    .indir=' .. pv_name)
   end
   if o.cb then
@@ -213,11 +229,25 @@ static vimoption_T options[] = {]])
 for i, o in ipairs(options.options) do
   dump_option(i, o)
 end
-w('  [' .. ('%u'):format(#options.options) .. ']={.fullname=NULL}')
 w('};')
 w('')
 
 for _, v in ipairs(defines) do
   w('#define ' .. v[1] .. ' ' .. v[2])
 end
+
+-- Generate options enum file
+opt_fd = assert(io.open(options_enum_file, 'w'))
+
+w('typedef enum {')
+w('  kOptInvalid = -1,')
+
+for i, o in ipairs(options.options) do
+  w(('  kOpt%s = %u,'):format(lowercase_to_titlecase(o.full_name), i - 1))
+end
+
+w('  // Option count, used when iterating through options')
+w('#define kOptIndexCount ' .. tostring(#options.options))
+w('} OptIndex;')
+
 opt_fd:close()

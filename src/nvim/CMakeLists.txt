@@ -11,17 +11,9 @@ set_target_properties(nvim
 #-------------------------------------------------------------------------------
 
 add_library(libuv INTERFACE)
-find_package(libuv CONFIG QUIET)
-if(TARGET libuv::uv_a)
-  target_link_libraries(libuv INTERFACE libuv::uv_a)
-  mark_as_advanced(libuv_DIR)
-else()
-  # Fall back to find module for libuv versions older than v1.45.0 which don't
-  # provide a config file
-  find_package(Libuv 1.28.0 REQUIRED MODULE)
-  target_include_directories(libuv SYSTEM BEFORE INTERFACE ${LIBUV_INCLUDE_DIR})
-  target_link_libraries(libuv INTERFACE ${LIBUV_LIBRARIES})
-endif()
+find_package(Libuv 1.28.0 REQUIRED)
+target_include_directories(libuv SYSTEM BEFORE INTERFACE ${LIBUV_INCLUDE_DIR})
+target_link_libraries(libuv INTERFACE ${LIBUV_LIBRARIES})
 
 add_library(nlua0 MODULE)
 if(WIN32)
@@ -332,6 +324,7 @@ set(GENERATED_KEYSETS_DEFS ${GENERATED_DIR}/keysets_defs.generated.h)
 set(GENERATED_EVENTS_ENUM ${GENERATED_INCLUDES_DIR}/auevents_enum.generated.h)
 set(GENERATED_EVENTS_NAMES_MAP ${GENERATED_DIR}/auevents_name_map.generated.h)
 set(GENERATED_OPTIONS ${GENERATED_DIR}/options.generated.h)
+set(GENERATED_OPTIONS_ENUM ${GENERATED_DIR}/options_enum.generated.h)
 set(EX_CMDS_GENERATOR ${GENERATOR_DIR}/gen_ex_cmds.lua)
 set(FUNCS_GENERATOR ${GENERATOR_DIR}/gen_eval.lua)
 set(EVENTS_GENERATOR ${GENERATOR_DIR}/gen_events.lua)
@@ -676,8 +669,8 @@ add_custom_command(OUTPUT ${GENERATED_EVENTS_ENUM} ${GENERATED_EVENTS_NAMES_MAP}
   DEPENDS ${LUA_GEN_DEPS} ${EVENTS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/auevents.lua
 )
 
-add_custom_command(OUTPUT ${GENERATED_OPTIONS}
-  COMMAND ${LUA_GEN} ${OPTIONS_GENERATOR} ${GENERATED_OPTIONS}
+add_custom_command(OUTPUT ${GENERATED_OPTIONS} ${GENERATED_OPTIONS_ENUM}
+  COMMAND ${LUA_GEN} ${OPTIONS_GENERATOR} ${GENERATED_OPTIONS} ${GENERATED_OPTIONS_ENUM}
   DEPENDS ${LUA_GEN_DEPS} ${OPTIONS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/options.lua
 )
 
@@ -879,12 +872,11 @@ add_glob_target(
   FLAGS -c ${UNCRUSTIFY_CONFIG} -q --check
   FILES ${LINT_NVIM_SOURCES})
 
-add_custom_target(formatc
-  COMMAND ${CMAKE_COMMAND}
-    -D FORMAT_PRG=${UNCRUSTIFY_PRG}
-    -D LANG=c
-    -P ${PROJECT_SOURCE_DIR}/cmake/Format.cmake
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+add_glob_target(
+  TARGET formatc
+  COMMAND ${UNCRUSTIFY_PRG}
+  FLAGS -c ${UNCRUSTIFY_CONFIG} --replace --no-backup
+  FILES ${LINT_NVIM_SOURCES})
 
 add_dependencies(lintc-uncrustify uncrustify_update_config)
 add_dependencies(formatc uncrustify_update_config)

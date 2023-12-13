@@ -362,11 +362,7 @@ describe(':terminal prints more lines than the screen height and exits', functio
     -- closes the buffer correctly after pressing a key
     screen:expect([[
       ^                              |
-      ~                             |
-      ~                             |
-      ~                             |
-      ~                             |
-      ~                             |
+      ~                             |*5
                                     |
     ]])
   end)
@@ -392,9 +388,9 @@ describe("'scrollback' option", function()
   it('set to 0 behaves as 1', function()
     local screen
     if is_os('win') then
-      screen = thelpers.screen_setup(nil, "['cmd.exe']", 30)
+      screen = thelpers.screen_setup(nil, { 'cmd.exe' }, 30)
     else
-      screen = thelpers.screen_setup(nil, "['sh']", 30)
+      screen = thelpers.screen_setup(nil, { 'sh' }, 30)
     end
 
     meths.set_option_value('scrollback', 0, {})
@@ -407,10 +403,10 @@ describe("'scrollback' option", function()
     local screen
     if is_os('win') then
       command([[let $PROMPT='$$']])
-      screen = thelpers.screen_setup(nil, "['cmd.exe']", 30)
+      screen = thelpers.screen_setup(nil, { 'cmd.exe' }, 30)
     else
       command('let $PS1 = "$"')
-      screen = thelpers.screen_setup(nil, "['sh']", 30)
+      screen = thelpers.screen_setup(nil, { 'sh' }, 30)
     end
 
     meths.set_option_value('scrollback', 200, {})
@@ -614,10 +610,7 @@ describe("pending scrollback line handling", function()
           or {'printf', ('hi\n'):rep(12)}
     )
     screen:expect [[
-      hi                            |
-      hi                            |
-      hi                            |
-      hi                            |
+      hi                            |*4
                                     |
       [Process exited 0]{2: }           |
       {3:-- TERMINAL --}                |

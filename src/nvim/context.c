@@ -138,8 +138,8 @@ bool ctx_restore(Context *ctx, const int flags)
     free_ctx = true;
   }
 
-  OptVal op_shada = get_option_value("shada", NULL, OPT_GLOBAL, NULL);
-  set_option_value("shada", STATIC_CSTR_AS_OPTVAL("!,'100,%"), OPT_GLOBAL);
+  OptVal op_shada = get_option_value(kOptShada, OPT_GLOBAL);
+  set_option_value(kOptShada, STATIC_CSTR_AS_OPTVAL("!,'100,%"), OPT_GLOBAL);
 
   if (flags & kCtxRegs) {
     ctx_restore_regs(ctx);
@@ -165,7 +165,7 @@ bool ctx_restore(Context *ctx, const int flags)
     ctx_free(ctx);
   }
 
-  set_option_value("shada", op_shada, OPT_GLOBAL);
+  set_option_value(kOptShada, op_shada, OPT_GLOBAL);
   optval_free(op_shada);
 
   return true;
@@ -326,9 +326,7 @@ static inline msgpack_sbuffer array_to_sbuf(Array array, Error *err)
   msgpack_sbuffer_init(&sbuf);
 
   typval_T list_tv;
-  if (!object_to_vim(ARRAY_OBJ(array), &list_tv, err)) {
-    return sbuf;
-  }
+  object_to_vim(ARRAY_OBJ(array), &list_tv, err);
 
   assert(list_tv.v_type == VAR_LIST);
   if (!encode_vim_list_to_buf(list_tv.vval.v_list, &sbuf.size, &sbuf.data)) {

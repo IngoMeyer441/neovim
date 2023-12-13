@@ -2114,7 +2114,7 @@ M.funcs = {
     name = 'execute',
     params = {
       { 'command', 'string|string[]' },
-      { 'silent', "''|'silent'|'silent!'" }
+      { 'silent', "''|'silent'|'silent!'" },
     },
     returns = 'string',
     signature = 'execute({command} [, {silent}])',
@@ -4519,7 +4519,7 @@ M.funcs = {
     name = 'getwininfo',
     params = { { 'winid', 'integer' } },
     signature = 'getwininfo([{winid}])',
-    returns = 'vim.fn.getwininfo.ret.item[]'
+    returns = 'vim.fn.getwininfo.ret.item[]',
   },
   getwinpos = {
     args = { 0, 1 },
@@ -5735,8 +5735,7 @@ M.funcs = {
       Vim value. In the following cases it will output
       |msgpack-special-dict|:
       1. Dictionary contains duplicate key.
-      2. Dictionary contains empty key.
-      3. String contains NUL byte.  Two special dictionaries: for
+      2. String contains NUL byte.  Two special dictionaries: for
          dictionary and for string will be emitted in case string
          with NUL byte was a dictionary key.
 
@@ -6297,7 +6296,7 @@ M.funcs = {
     ]],
     name = 'maplist',
     params = {},
-    signature = 'maplist([{abbr}])'
+    signature = 'maplist([{abbr}])',
   },
   mapnew = {
     args = 2,
@@ -7155,7 +7154,6 @@ M.funcs = {
       	   are binary strings).
       	2. String with NUL byte inside.
       	3. Duplicate key.
-      	4. Empty key.
       ext	|List| with two values: first is a signed integer
       	representing extension type. Second is
       	|readfile()|-style list of strings.
@@ -9905,7 +9903,7 @@ M.funcs = {
     name = 'sign_jump',
     params = { { 'id', 'integer' }, { 'group', 'string' }, { 'buf', 'integer|string' } },
     signature = 'sign_jump({id}, {group}, {buf})',
-    returns = 'integer'
+    returns = 'integer',
   },
   sign_place = {
     args = { 4, 5 },
@@ -9968,7 +9966,7 @@ M.funcs = {
       { 'dict', 'vim.fn.sign_place.dict' },
     },
     signature = 'sign_place({id}, {group}, {name}, {buf} [, {dict}])',
-    returns = 'integer'
+    returns = 'integer',
   },
   sign_placelist = {
     args = 1,
@@ -10035,7 +10033,7 @@ M.funcs = {
     name = 'sign_placelist',
     params = { { 'list', 'vim.fn.sign_placelist.list.item[]' } },
     signature = 'sign_placelist({list})',
-    returns = 'integer[]'
+    returns = 'integer[]',
   },
   sign_undefine = {
     args = { 0, 1 },
@@ -10570,7 +10568,7 @@ M.funcs = {
     signature = 'stdpath({what})',
   },
   state = {
-    args = {0, 1},
+    args = { 0, 1 },
     base = 1,
     desc = [=[
       Return a string which contains characters indicating the
@@ -12698,7 +12696,7 @@ M.funcs = {
     name = 'winsaveview',
     params = {},
     signature = 'winsaveview()',
-    returns = 'vim.fn.winsaveview.ret'
+    returns = 'vim.fn.winsaveview.ret',
   },
   winwidth = {
     args = 1,

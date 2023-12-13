@@ -21,14 +21,15 @@ describe("shell command :!", function()
   local screen
   before_each(function()
     clear()
-    screen = child_session.screen_setup(0, '["'..helpers.nvim_prog..
-      '", "-u", "NONE", "-i", "NONE", "--cmd", "'..helpers.nvim_set..'"]')
+    screen = child_session.setup_child_nvim({
+      '-u', 'NONE',
+      '-i', 'NONE',
+      '--cmd', 'colorscheme vim',
+      '--cmd', helpers.nvim_set .. ' notermguicolors',
+    })
     screen:expect([[
       {1: }                                                 |
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {4:~                                                 }|
+      {4:~                                                 }|*4
                                                         |
       {3:-- TERMINAL --}                                    |
     ]])
@@ -45,8 +46,7 @@ describe("shell command :!", function()
     child_session.feed_data(":!printf foo; sleep 200\n")
     screen:expect([[
                                                         |
-      {4:~                                                 }|
-      {4:~                                                 }|
+      {4:~                                                 }|*2
       {5:                                                  }|
       :!printf foo; sleep 200                           |
       foo                                               |
@@ -143,8 +143,7 @@ describe("shell command :!", function()
     feed([[:!printf '\n'<CR>]])
     screen:expect([[
       :!printf '\n'                                     |
-                                                        |
-                                                        |
+                                                        |*2
       {2:Press ENTER or type command to continue}^           |
     ]])
     feed([[<CR>]])
@@ -182,8 +181,7 @@ describe("shell command :!", function()
       feed([[\l]])
       screen:expect([[
                                                              |
-        {1:~                                                    }|
-        {1:~                                                    }|
+        {1:~                                                    }|*2
         {4:                                                     }|
         ]]..result..[[                            |
         f1                                                   |

@@ -152,6 +152,8 @@ typedef struct cmdpreview_buf_info {
   buf_T *buf;
   OptInt save_b_p_ul;
   int save_b_changed;
+  pos_T save_b_op_start;
+  pos_T save_b_op_end;
   varnumber_T save_changedtick;
   CpUndoInfo undo_info;
 } CpBufInfo;
@@ -903,7 +905,7 @@ static uint8_t *command_line_enter(int firstc, int count, int indent, bool clear
     need_wait_return = false;
   }
 
-  set_string_option_direct("icm", -1, s->save_p_icm, OPT_FREE, SID_NONE);
+  set_string_option_direct(kOptInccommand, s->save_p_icm, OPT_FREE, SID_NONE);
   State = s->save_State;
   if (cmdpreview != save_cmdpreview) {
     cmdpreview = save_cmdpreview;  // restore preview state
@@ -2360,6 +2362,8 @@ static void cmdpreview_prepare(CpInfo *cpinfo)
       cp_bufinfo.buf = buf;
       cp_bufinfo.save_b_p_ul = buf->b_p_ul;
       cp_bufinfo.save_b_changed = buf->b_changed;
+      cp_bufinfo.save_b_op_start = buf->b_op_start;
+      cp_bufinfo.save_b_op_end = buf->b_op_end;
       cp_bufinfo.save_changedtick = buf_get_changedtick(buf);
       cmdpreview_save_undo(&cp_bufinfo.undo_info, buf);
       kv_push(cpinfo->buf_info, cp_bufinfo);
@@ -2437,6 +2441,9 @@ static void cmdpreview_restore_state(CpInfo *cpinfo)
 
     u_blockfree(buf);
     cmdpreview_restore_undo(&cp_bufinfo.undo_info, buf);
+
+    buf->b_op_start = cp_bufinfo.save_b_op_start;
+    buf->b_op_end = cp_bufinfo.save_b_op_end;
 
     if (cp_bufinfo.save_changedtick != buf_get_changedtick(buf)) {
       buf_set_changedtick(buf, cp_bufinfo.save_changedtick);
@@ -4319,7 +4326,7 @@ static int open_cmdwin(void)
     return Ctrl_C;
   }
   // Command-line buffer has bufhidden=wipe, unlike a true "scratch" buffer.
-  set_option_value_give_err("bh", STATIC_CSTR_AS_OPTVAL("wipe"), OPT_LOCAL);
+  set_option_value_give_err(kOptBufhidden, STATIC_CSTR_AS_OPTVAL("wipe"), OPT_LOCAL);
   curbuf->b_p_ma = true;
   curwin->w_p_fen = false;
   curwin->w_p_rl = cmdmsg_rl;
@@ -4337,7 +4344,7 @@ static int open_cmdwin(void)
       add_map("<Tab>", "<C-X><C-V>", MODE_INSERT, true);
       add_map("<Tab>", "a<C-X><C-V>", MODE_NORMAL, true);
     }
-    set_option_value_give_err("ft", STATIC_CSTR_AS_OPTVAL("vim"), OPT_LOCAL);
+    set_option_value_give_err(kOptFiletype, STATIC_CSTR_AS_OPTVAL("vim"), OPT_LOCAL);
   }
   curbuf->b_ro_locked--;
 

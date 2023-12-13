@@ -285,12 +285,7 @@ describe('API', function()
       meths.exec2("echo 'hello'", { output = false })
       screen:expect{grid=[[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*6
         hello                                   |
       ]]}
     end)
@@ -304,10 +299,7 @@ describe('API', function()
       meths.exec2("echo 'hello'", { output = true })
       screen:expect{grid=[[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*4
                                                 |
       ]]}
       exec([[
@@ -318,10 +310,7 @@ describe('API', function()
       feed([[:echon 1 | call Print() | echon 5<CR>]])
       screen:expect{grid=[[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*4
         15                                      |
       ]]}
     end)
@@ -1140,8 +1129,7 @@ describe('API', function()
       nvim('paste', '', true, 3)
       screen:expect([[
                             |
-        ~                   |
-        ~                   |
+        ~                   |*2
         :Foo^                |
       ]])
     end)
@@ -1152,8 +1140,7 @@ describe('API', function()
       nvim('paste', 'normal! \023\022\006\027', true, -1)
       screen:expect([[
                             |
-        ~                   |
-        ~                   |
+        ~                   |*2
         :normal! ^W^V^F^[^   |
       ]])
     end)
@@ -1318,6 +1305,10 @@ describe('API', function()
       eq(0, funcs.exists('g:lua'))
       eq("Key not found: lua", pcall_err(meths.del_var, 'lua'))
       meths.set_var('lua', 1)
+
+      -- Empty keys are allowed in Vim dicts (and msgpack).
+      nvim('set_var', 'dict_empty_key', {[''] = 'empty key'})
+      eq({[''] = 'empty key'}, nvim('get_var', 'dict_empty_key'))
 
       -- Set locked g: var.
       command('lockvar lua')
@@ -1983,7 +1974,7 @@ describe('API', function()
     it('errors when context dictionary is invalid', function()
       eq('E474: Failed to convert list to msgpack string buffer',
          pcall_err(nvim, 'load_context', { regs = { {} }, jumps = { {} } }))
-      eq("Empty dictionary keys aren't allowed",
+      eq('E474: Failed to convert list to msgpack string buffer',
          pcall_err(nvim, 'load_context', { regs = { { [''] = '' } } }))
     end)
   end)
@@ -2102,9 +2093,7 @@ describe('API', function()
       feed([[:call nvim_out_write("\na\n")<CR>]])
       screen:expect{grid=[[
                                                 |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*3
         {2:                                        }|
                                                 |
         a                                       |
@@ -2114,8 +2103,7 @@ describe('API', function()
       feed([[:call nvim_out_write("b\n\nc\n")<CR>]])
       screen:expect{grid=[[
                                                 |
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*2
         {2:                                        }|
         b                                       |
                                                 |
@@ -2128,9 +2116,7 @@ describe('API', function()
       feed([[:lua vim.api.nvim_out_write('aaa\0bbb\0\0ccc\nddd\0\0\0eee\n')<CR>]])
       screen:expect{grid=[[
                                                 |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*3
         {2:                                        }|
         aaa{3:^@}bbb{3:^@^@}ccc                         |
         ddd{3:^@^@^@}eee                            |
@@ -2157,12 +2143,7 @@ describe('API', function()
       nvim_async('err_write', 'has bork\n')
       screen:expect([[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*6
         {1:has bork}                                |
       ]])
     end)
@@ -2171,9 +2152,7 @@ describe('API', function()
       nvim_async('err_write', 'something happened\nvery bad\n')
       screen:expect([[
                                                 |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*3
         {3:                                        }|
         {1:something happened}                      |
         {1:very bad}                                |
@@ -2201,12 +2180,7 @@ describe('API', function()
       nvim_async('err_write', 'fail\n')
       screen:expect([[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*6
         {1:very fail}                               |
       ]])
       helpers.poke_eventloop()
@@ -2215,9 +2189,7 @@ describe('API', function()
       nvim_async('err_write', 'more fail\ntoo fail\n')
       screen:expect([[
                                                 |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*3
         {3:                                        }|
         {1:more fail}                               |
         {1:too fail}                                |
@@ -2230,9 +2202,7 @@ describe('API', function()
       nvim_async('err_write', 'aaa\0bbb\0\0ccc\nddd\0\0\0eee\n')
       screen:expect{grid=[[
                                                 |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*3
         {3:                                        }|
         {1:aaa^@bbb^@^@ccc}                         |
         {1:ddd^@^@^@eee}                            |
@@ -2270,12 +2240,7 @@ describe('API', function()
       feed('<CR>')
       screen:expect([[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*6
                                                 |
       ]])
     end)
@@ -2392,7 +2357,11 @@ describe('API', function()
       eq(info, meths.get_chan_info(3))
 
       -- :terminal with args + running process.
-      command(':exe "terminal" shellescape(v:progpath) "-u NONE -i NONE"')
+      command('enew')
+      local progpath_esc = eval('shellescape(v:progpath)')
+      funcs.termopen(('%s -u NONE -i NONE'):format(progpath_esc), {
+        env = { VIMRUNTIME = os.getenv('VIMRUNTIME') }
+      })
       eq(-1, eval('jobwait([&channel], 0)[0]'))  -- Running?
       local expected2 = {
         stream = 'job',
@@ -2402,11 +2371,11 @@ describe('API', function()
             eval('&shell'),
             '/s',
             '/c',
-            fmt('"%s -u NONE -i NONE"', eval('shellescape(v:progpath)')),
+            fmt('"%s -u NONE -i NONE"', progpath_esc),
           } or {
             eval('&shell'),
             eval('&shellcmdflag'),
-            fmt('%s -u NONE -i NONE', eval('shellescape(v:progpath)')),
+            fmt('%s -u NONE -i NONE', progpath_esc),
           }
         ),
         mode = 'terminal',
@@ -2851,8 +2820,7 @@ describe('API', function()
       meths.set_current_buf(2)
       screen:expect([[
         ^some text           |
-        {1:~                   }|
-        {1:~                   }|
+        {1:~                   }|*2
                             |
       ]], {
         [1] = {bold = true, foreground = Screen.colors.Blue1},
@@ -2929,8 +2897,7 @@ describe('API', function()
       meths.set_current_buf(edited_buf)
       screen:expect([[
         ^some text           |
-        {1:~                   }|
-        {1:~                   }|
+        {1:~                   }|*2
                             |
       ]])
       eq('nofile', meths.get_option_value('buftype', {buf=edited_buf}))
@@ -2942,8 +2909,7 @@ describe('API', function()
       command('bwipe')
       screen:expect([[
         ^                    |
-        {1:~                   }|
-        {1:~                   }|
+        {1:~                   }|*2
                             |
       ]])
     end)
@@ -3221,12 +3187,7 @@ describe('API', function()
       feed(':call nvim_echo([["msg"]], v:false, {})<CR>')
       screen:expect{grid=[[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*6
         msg                                     |
       ]]}
     end)
@@ -3235,12 +3196,7 @@ describe('API', function()
       nvim_async("echo", {{"msg_a"}, {"msg_b", "Statement"}, {"msg_c", "Special"}}, true, {})
       screen:expect{grid=[[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*6
         msg_a{3:msg_b}{4:msg_c}                         |
       ]]}
     end)
@@ -3249,9 +3205,7 @@ describe('API', function()
       nvim_async("echo", {{"msg_a\nmsg_a", "Statement"}, {"msg_b", "Special"}}, true, {})
       screen:expect{grid=[[
                                                 |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*3
         {2:                                        }|
         {3:msg_a}                                   |
         {3:msg_a}{4:msg_b}                              |
@@ -3330,8 +3284,7 @@ describe('API', function()
         {0:~}{3:Press ENTER or type command to continue}{1:                                        }{0:                    }|
         {0:~}{4:term://~/config2/docs/pres//32693:vim --clean +smile         29,39          All}{0:                    }|
         {0:~}{1::call nvim__screenshot("smile2.cat")                                           }{0:                    }|
-        {0:~                                                                                                   }|
-        {0:~                                                                                                   }|
+        {0:~                                                                                                   }|*2
                                                                                                             |
       ]]}
     end)
@@ -3359,13 +3312,8 @@ describe('API', function()
       screen:expect{grid=[[
                                                           |
         {0:~}{1:^                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~                                                 }|
-        {0:~                                                 }|
-        {0:~                                                 }|
+        {0:~}{1:                                        }{0:         }|*4
+        {0:~                                                 }|*3
                                                           |
       ]]}
 
@@ -3373,13 +3321,8 @@ describe('API', function()
       screen:expect{grid=[[
                                                           |
         {0:~}{7: }{1:                                       }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~                                                 }|
-        {0:~                                                 }|
-        {0:~                                                 }|
+        {0:~}{1:                                        }{0:         }|*4
+        {0:~                                                 }|*3
         {6:-- TERMINAL --}                                    |
       ]]}
 
@@ -3392,13 +3335,8 @@ describe('API', function()
       screen:expect{grid=[[
                                                           |
         {0:~}{1:herrejösses!}{7: }{1:                           }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~}{1:                                        }{0:         }|
-        {0:~                                                 }|
-        {0:~                                                 }|
-        {0:~                                                 }|
+        {0:~}{1:                                        }{0:         }|*4
+        {0:~                                                 }|*3
         {6:-- TERMINAL --}                                    |
       ]]}
       eq('ba\024blaherrejösses!', exec_lua [[ return stream ]])
@@ -4151,8 +4089,7 @@ describe('API', function()
       screen:expect([[
         foo                                                         |
         bar                                                         |
-        {0:~                                                           }|
-        {0:~                                                           }|
+        {0:~                                                           }|*2
         {1:                                                            }|
         Entering Ex mode.  Type "visual" to go to Normal mode.      |
         :1^                                                          |
@@ -4510,10 +4447,7 @@ describe('API', function()
       meths.cmd({cmd = 'echo', args = {[['hello']]}}, {output = true})
       screen:expect{grid=[[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*4
                                                 |
       ]]}
       exec([[
@@ -4524,10 +4458,7 @@ describe('API', function()
       feed([[:echon 1 | call Print() | echon 5<CR>]])
       screen:expect{grid=[[
         ^                                        |
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
-        {0:~                                       }|
+        {0:~                                       }|*4
         15                                      |
       ]]}
     end)

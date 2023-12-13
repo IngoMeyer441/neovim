@@ -678,7 +678,7 @@ void auto_format(bool trailblank, bool prev_line)
   // Do the formatting and restore the cursor position.  "saved_cursor" will
   // be adjusted for the text formatting.
   saved_cursor = pos;
-  format_lines((linenr_T) - 1, false);
+  format_lines(-1, false);
   curwin->w_cursor = saved_cursor;
   saved_cursor.lnum = 0;
 
@@ -761,7 +761,7 @@ int comp_textwidth(bool ff)
       textwidth -= 1;
     }
     textwidth -= win_fdccol_count(curwin);
-    textwidth -= win_signcol_count(curwin);
+    textwidth -= curwin->w_scwidth;
 
     if (curwin->w_p_nu || curwin->w_p_rnu) {
       textwidth -= 8;
@@ -870,7 +870,7 @@ void op_formatexpr(oparg_T *oap)
 /// @param c  character to be inserted
 int fex_format(linenr_T lnum, long count, int c)
 {
-  int use_sandbox = was_set_insecurely(curwin, "formatexpr", OPT_LOCAL);
+  int use_sandbox = was_set_insecurely(curwin, kOptFormatexpr, OPT_LOCAL);
   const sctx_T save_sctx = current_sctx;
 
   // Set v:lnum to the first line number and v:count to the number of lines.

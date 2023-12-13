@@ -186,9 +186,7 @@ describe('ui/cursor', function()
     command("echo 'test'")
     screen:expect{grid=[[
       ^                         |
-      ~                        |
-      ~                        |
-      ~                        |
+      ~                        |*3
       test                     |
     ]], condition=function()
       eq(nil, screen._mode_info)
@@ -215,7 +213,7 @@ describe('ui/cursor', function()
           m.hl_id = 64
           m.attr = {background = Screen.colors.DarkGray}
       end
-      if m.id_lm then m.id_lm = 67 end
+      if m.id_lm then m.id_lm = 69 end
     end
 
     -- Assert the new expectation.
@@ -255,9 +253,7 @@ describe('ui/cursor', function()
     end
     screen:expect{grid=[[
       ^                         |
-      ~                        |
-      ~                        |
-      ~                        |
+      ~                        |*3
       test                     |
     ]], condition=function()
       eq(expected_mode_info, screen._mode_info)

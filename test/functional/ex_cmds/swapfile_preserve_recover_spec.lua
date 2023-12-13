@@ -115,7 +115,9 @@ describe("preserve and (R)ecover with custom 'directory'", function()
     local screen0 = Screen.new()
     screen0:attach()
     local child_server = new_pipename()
-    funcs.termopen({nvim_prog, '-u', 'NONE', '-i', 'NONE', '--listen', child_server})
+    funcs.termopen({ nvim_prog, '-u', 'NONE', '-i', 'NONE', '--listen', child_server }, {
+      env = { VIMRUNTIME = os.getenv('VIMRUNTIME') }
+    })
     screen0:expect({any = pesc('[No Name]')})  -- Wait for the child process to start.
     local child_session = helpers.connect(child_server)
     set_session(child_session)
@@ -264,22 +266,7 @@ describe('swapfile detection', function()
     feed(':<CR>')
     screen:expect([[
       ^                                                                           |
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
+      {0:~                                                                          }|*16
       :                                                                          |
     ]])
     nvim1:close()
@@ -301,22 +288,7 @@ describe('swapfile detection', function()
     command([[echo 'hello']])
     screen:expect([[
       ^                                                                           |
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
-      {0:~                                                                          }|
+      {0:~                                                                          }|*16
       hello                                                                      |
     ]])
     nvim2:close()
@@ -452,7 +424,9 @@ describe('quitting swapfile dialog on startup stops TUI properly', function()
   it('(Q)uit at first file argument', function()
     local chan = funcs.termopen({nvim_prog, '-u', 'NONE', '-i', 'NONE',
                                  '--cmd', init_dir, '--cmd', init_set,
-                                 testfile})
+                                 testfile}, {
+                                   env = { VIMRUNTIME = os.getenv('VIMRUNTIME') }
+                                 })
     retry(nil, nil, function()
       eq('[O]pen Read-Only, (E)dit anyway, (R)ecover, (D)elete it, (Q)uit, (A)bort:',
          eval("getline('$')->trim(' ', 2)"))
@@ -467,7 +441,9 @@ describe('quitting swapfile dialog on startup stops TUI properly', function()
   it('(A)bort at second file argument with -p', function()
     local chan = funcs.termopen({nvim_prog, '-u', 'NONE', '-i', 'NONE',
                                  '--cmd', init_dir, '--cmd', init_set,
-                                 '-p', otherfile, testfile})
+                                 '-p', otherfile, testfile}, {
+                                   env = { VIMRUNTIME = os.getenv('VIMRUNTIME') }
+                                 })
     retry(nil, nil, function()
       eq('[O]pen Read-Only, (E)dit anyway, (R)ecover, (D)elete it, (Q)uit, (A)bort:',
          eval("getline('$')->trim(' ', 2)"))
@@ -487,7 +463,9 @@ describe('quitting swapfile dialog on startup stops TUI properly', function()
       third	%s	/^  \zsthird$/]]):format(testfile, testfile, testfile))
     local chan = funcs.termopen({nvim_prog, '-u', 'NONE', '-i', 'NONE',
                                  '--cmd', init_dir, '--cmd', init_set,
-                                 '--cmd', 'set tags='..otherfile, '-tsecond'})
+                                 '--cmd', 'set tags='..otherfile, '-tsecond'}, {
+                                   env = { VIMRUNTIME = os.getenv('VIMRUNTIME') }
+                                 })
     retry(nil, nil, function()
       eq('[O]pen Read-Only, (E)dit anyway, (R)ecover, (D)elete it, (Q)uit, (A)bort:',
          eval("getline('$')->trim(' ', 2)"))

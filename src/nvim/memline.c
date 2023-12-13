@@ -974,7 +974,7 @@ void ml_recover(bool checkext)
     set_fileformat(b0_ff - 1, OPT_LOCAL);
   }
   if (b0_fenc != NULL) {
-    set_option_value_give_err("fenc", CSTR_AS_OPTVAL(b0_fenc), OPT_LOCAL);
+    set_option_value_give_err(kOptFileencoding, CSTR_AS_OPTVAL(b0_fenc), OPT_LOCAL);
     xfree(b0_fenc);
   }
   unchanged(curbuf, true, true);
@@ -3907,7 +3907,7 @@ int ml_find_line_or_offset(buf_T *buf, linenr_T lnum, int *offp, bool no_ff)
       || lnum < 0) {
     // memline is currently empty. Although if it is loaded,
     // it behaves like there is one empty line.
-    if (!ffdos && buf->b_ml.ml_mfp && (lnum == 1 || lnum == 2)) {
+    if (no_ff && buf->b_ml.ml_mfp && (lnum == 1 || lnum == 2)) {
       return lnum - 1;
     }
     return -1;

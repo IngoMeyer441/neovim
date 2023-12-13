@@ -42,9 +42,6 @@
 # include "nvim/os/tty.h"
 #endif
 
-// Space reserved in two output buffers to make the cursor normal or invisible
-// when flushing. No existing terminal will require 32 bytes to do that.
-#define CNORM_COMMAND_MAX_SIZE 32
 #define OUTBUF_SIZE 0xffff
 
 #define TOO_MANY_EVENTS 1000000
@@ -77,7 +74,7 @@ struct TUIData {
   TermInput input;
   uv_loop_t write_loop;
   unibi_term *ut;
-  char *term;  // value of $TERM
+  char *term;  ///< value of $TERM
   union {
     uv_tty_t tty;
     uv_pipe_t pipe;
@@ -148,7 +145,8 @@ static bool cursor_style_enabled = false;
 # include "tui/tui.c.generated.h"
 #endif
 
-void tui_start(TUIData **tui_p, int *width, int *height, char **term)
+void tui_start(TUIData **tui_p, int *width, int *height, char **term, bool *rgb)
+  FUNC_ATTR_NONNULL_ALL
 {
   TUIData *tui = xcalloc(1, sizeof(TUIData));
   tui->is_starting = true;
@@ -169,14 +167,14 @@ void tui_start(TUIData **tui_p, int *width, int *height, char **term)
 
   uv_timer_init(&tui->loop->uv, &tui->startup_delay_timer);
   tui->startup_delay_timer.data = tui;
-  uv_timer_start(&tui->startup_delay_timer, after_startup_cb,
-                 100, 0);
+  uv_timer_start(&tui->startup_delay_timer, after_startup_cb, 100, 0);
 
   *tui_p = tui;
   loop_poll_events(&main_loop, 1);
   *width = tui->width;
   *height = tui->height;
   *term = tui->term;
+  *rgb = tui->rgb;
 }
 
 void tui_set_key_encoding(TUIData *tui)
@@ -333,6 +331,9 @@ static void terminfo_start(TUIData *tui)
   const char *konsolev_env = os_getenv("KONSOLE_VERSION");
   int konsolev = konsolev_env ? (int)strtol(konsolev_env, NULL, 10)
                               : (konsole ? 1 : 0);
+
+  // truecolor support must be checked before patching/augmenting terminfo
+  tui->rgb = term_has_truecolor(tui, colorterm);
 
   patch_terminfo_bugs(tui, term, colorterm, vtev, konsolev, iterm_env, nsterm);
   augment_terminfo(tui, term, vtev, konsolev, iterm_env, nsterm);
@@ -1307,39 +1308,6 @@ void tui_default_colors_set(TUIData *tui, Integer rgb_fg, Integer rgb_bg, Intege
   invalidate(tui, 0, tui->grid.height, 0, tui->grid.width);
 }
 
-/// Begin flushing the TUI. If 'termsync' is set and the terminal supports synchronized updates,
-/// begin a synchronized update. Otherwise, hide the cursor to avoid cursor jumping.
-static void tui_flush_start(TUIData *tui)
-  FUNC_ATTR_NONNULL_ALL
-{
-  if (tui->sync_output && tui->unibi_ext.sync != -1) {
-    UNIBI_SET_NUM_VAR(tui->params[0], 1);
-    unibi_out_ext(tui, tui->unibi_ext.sync);
-  } else if (!tui->is_invisible) {
-    unibi_out(tui, unibi_cursor_invisible);
-    tui->is_invisible = true;
-  }
-}
-
-/// Finish flushing the TUI. If 'termsync' is set and the terminal supports synchronized updates,
-/// end a synchronized update. Otherwise, make the cursor visible again.
-static void tui_flush_end(TUIData *tui)
-  FUNC_ATTR_NONNULL_ALL
-{
-  if (tui->sync_output && tui->unibi_ext.sync != -1) {
-    UNIBI_SET_NUM_VAR(tui->params[0], 0);
-    unibi_out_ext(tui, tui->unibi_ext.sync);
-  }
-  bool should_invisible = tui->busy || tui->want_invisible;
-  if (tui->is_invisible && !should_invisible) {
-    unibi_out(tui, unibi_cursor_normal);
-    tui->is_invisible = false;
-  } else if (!tui->is_invisible && should_invisible) {
-    unibi_out(tui, unibi_cursor_invisible);
-    tui->is_invisible = true;
-  }
-}
-
 void tui_flush(TUIData *tui)
 {
   UGrid *grid = &tui->grid;
@@ -1355,8 +1323,6 @@ void tui_flush(TUIData *tui)
     loop_purge(tui->loop);
     tui_busy_stop(tui);  // avoid hidden cursor
   }
-
-  tui_flush_start(tui);
 
   while (kv_size(tui->invalid_regions)) {
     Rect r = kv_pop(tui->invalid_regions);
@@ -1384,8 +1350,6 @@ void tui_flush(TUIData *tui)
   }
 
   cursor_goto(tui, tui->row, tui->col);
-
-  tui_flush_end(tui);
 
   flush_buf(tui);
 }
@@ -1439,7 +1403,7 @@ void tui_suspend(TUIData *tui)
     tui_mouse_on(tui);
   }
   stream_set_blocking(tui->input.in_fd, false);  // libuv expects this
-  ui_client_attach(tui->width, tui->height, tui->term);
+  ui_client_attach(tui->width, tui->height, tui->term, tui->rgb);
 #endif
 }
 
@@ -1750,6 +1714,44 @@ static int unibi_find_ext_bool(unibi_term *ut, const char *name)
     }
   }
   return -1;
+}
+
+/// Determine if the terminal supports truecolor or not:
+///
+/// 1. If $COLORTERM is "24bit" or "truecolor", return true
+/// 2. Else, check terminfo for Tc, RGB, setrgbf, or setrgbb capabilities. If
+///    found, return true
+/// 3. Else, return false
+static bool term_has_truecolor(TUIData *tui, const char *colorterm)
+{
+  // Check $COLORTERM
+  if (strequal(colorterm, "truecolor") || strequal(colorterm, "24bit")) {
+    return true;
+  }
+
+  // Check for Tc and RGB
+  for (size_t i = 0; i < unibi_count_ext_bool(tui->ut); i++) {
+    const char *n = unibi_get_ext_bool_name(tui->ut, i);
+    if (n && (!strcmp(n, "Tc") || !strcmp(n, "RGB"))) {
+      return true;
+    }
+  }
+
+  // Check for setrgbf and setrgbb
+  bool setrgbf = false;
+  bool setrgbb = false;
+  for (size_t i = 0; i < unibi_count_ext_str(tui->ut) && (!setrgbf || !setrgbb); i++) {
+    const char *n = unibi_get_ext_str_name(tui->ut, i);
+    if (n) {
+      if (!setrgbf && !strcmp(n, "setrgbf")) {
+        setrgbf = true;
+      } else if (!setrgbb && !strcmp(n, "setrgbb")) {
+        setrgbb = true;
+      }
+    }
+  }
+
+  return setrgbf && setrgbb;
 }
 
 /// Patches the terminfo records after loading from system or built-in db.
@@ -2254,23 +2256,97 @@ static void augment_terminfo(TUIData *tui, const char *term, int vte_version, in
   }
 }
 
+static bool should_invisible(TUIData *tui)
+{
+  return tui->busy || tui->want_invisible;
+}
+
+/// Write the sequence to begin flushing output to `buf`.
+/// If 'termsync' is set and the terminal supports synchronized output, begin synchronized update.
+/// Otherwise, hide the cursor to avoid cursor jumping.
+///
+/// @param buf  the buffer to write the sequence to
+/// @param len  the length of `buf`
+static size_t flush_buf_start(TUIData *tui, char *buf, size_t len)
+  FUNC_ATTR_NONNULL_ALL
+{
+  const char *str = NULL;
+
+  if (tui->sync_output && tui->unibi_ext.sync != -1) {
+    UNIBI_SET_NUM_VAR(tui->params[0], 1);
+    str = unibi_get_ext_str(tui->ut, (size_t)tui->unibi_ext.sync);
+  } else if (!tui->is_invisible) {
+    str = unibi_get_str(tui->ut, unibi_cursor_invisible);
+    tui->is_invisible = true;
+  }
+
+  if (str == NULL) {
+    return 0;
+  }
+
+  return unibi_run(str, tui->params, buf, len);
+}
+
+/// Write the sequence to end flushing output to `buf`.
+/// If 'termsync' is set and the terminal supports synchronized output, end synchronized update.
+/// Otherwise, make the cursor visible again.
+///
+/// @param buf  the buffer to write the sequence to
+/// @param len  the length of `buf`
+static size_t flush_buf_end(TUIData *tui, char *buf, size_t len)
+  FUNC_ATTR_NONNULL_ALL
+{
+  size_t offset = 0;
+  if (tui->sync_output && tui->unibi_ext.sync != -1) {
+    UNIBI_SET_NUM_VAR(tui->params[0], 0);
+    const char *str = unibi_get_ext_str(tui->ut, (size_t)tui->unibi_ext.sync);
+    offset = unibi_run(str, tui->params, buf, len);
+  }
+
+  const char *str = NULL;
+  if (tui->is_invisible && !should_invisible(tui)) {
+    str = unibi_get_str(tui->ut, unibi_cursor_normal);
+    tui->is_invisible = false;
+  } else if (!tui->is_invisible && should_invisible(tui)) {
+    str = unibi_get_str(tui->ut, unibi_cursor_invisible);
+    tui->is_invisible = true;
+  }
+
+  if (str != NULL) {
+    assert(len >= offset);
+    offset += unibi_run(str, tui->params, buf + offset, len - offset);
+  }
+
+  return offset;
+}
+
 static void flush_buf(TUIData *tui)
 {
   uv_write_t req;
-  uv_buf_t buf;
+  uv_buf_t bufs[3];
+  char pre[32];
+  char post[32];
 
-  if (tui->bufpos <= 0) {
+  if (tui->bufpos <= 0 && tui->is_invisible == should_invisible(tui)) {
     return;
   }
 
-  buf.base = tui->buf;
-  buf.len = UV_BUF_LEN(tui->bufpos);
+  bufs[0].base = pre;
+  bufs[0].len = UV_BUF_LEN(flush_buf_start(tui, pre, sizeof(pre)));
+
+  bufs[1].base = tui->buf;
+  bufs[1].len = UV_BUF_LEN(tui->bufpos);
+
+  bufs[2].base = post;
+  bufs[2].len = UV_BUF_LEN(flush_buf_end(tui, post, sizeof(post)));
 
   if (tui->screenshot) {
-    fwrite(buf.base, buf.len, 1, tui->screenshot);
+    for (size_t i = 0; i < ARRAY_SIZE(bufs); i++) {
+      fwrite(bufs[i].base, bufs[i].len, 1, tui->screenshot);
+    }
   } else {
     int ret
-      = uv_write(&req, (uv_stream_t *)&tui->output_handle, &buf, 1, NULL);
+      = uv_write(&req, (uv_stream_t *)&tui->output_handle, bufs, ARRAY_SIZE(bufs), NULL);
     if (ret) {
       ELOG("uv_write failed: %s", uv_strerror(ret));
     }

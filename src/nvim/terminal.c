@@ -188,7 +188,7 @@ void terminal_teardown(void)
 
 static void term_output_callback(const char *s, size_t len, void *user_data)
 {
-  terminal_send((Terminal *)user_data, (char *)s, len);
+  terminal_send((Terminal *)user_data, s, len);
 }
 
 // public API {{{
@@ -233,7 +233,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   aucmd_prepbuf(&aco, buf);
 
   refresh_screen(rv, buf);
-  set_option_value("buftype", STATIC_CSTR_AS_OPTVAL("terminal"), OPT_LOCAL);
+  set_option_value(kOptBuftype, STATIC_CSTR_AS_OPTVAL("terminal"), OPT_LOCAL);
 
   // Default settings for terminal buffers
   buf->b_p_ma = false;     // 'nomodifiable'
@@ -241,8 +241,8 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   buf->b_p_scbk =          // 'scrollback' (initialize local from global)
                   (p_scbk < 0) ? 10000 : MAX(1, p_scbk);
   buf->b_p_tw = 0;         // 'textwidth'
-  set_option_value("wrap", BOOLEAN_OPTVAL(false), OPT_LOCAL);
-  set_option_value("list", BOOLEAN_OPTVAL(false), OPT_LOCAL);
+  set_option_value(kOptWrap, BOOLEAN_OPTVAL(false), OPT_LOCAL);
+  set_option_value(kOptList, BOOLEAN_OPTVAL(false), OPT_LOCAL);
   if (buf->b_ffname != NULL) {
     buf_set_term_title(buf, buf->b_ffname, strlen(buf->b_ffname));
   }
@@ -680,7 +680,7 @@ void terminal_destroy(Terminal **termpp)
   }
 }
 
-void terminal_send(Terminal *term, char *data, size_t size)
+static void terminal_send(Terminal *term, const char *data, size_t size)
 {
   if (term->closed) {
     return;
@@ -762,7 +762,7 @@ void terminal_paste(int count, char **y_array, size_t y_size)
   vterm_keyboard_end_paste(curbuf->terminal->vt);
 }
 
-void terminal_send_key(Terminal *term, int c)
+static void terminal_send_key(Terminal *term, int c)
 {
   VTermModifier mod = VTERM_MOD_NONE;
 
@@ -780,7 +780,7 @@ void terminal_send_key(Terminal *term, int c)
   }
 }
 
-void terminal_receive(Terminal *term, char *data, size_t len)
+void terminal_receive(Terminal *term, const char *data, size_t len)
 {
   if (!data) {
     return;

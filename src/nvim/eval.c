@@ -681,7 +681,7 @@ int eval_charconvert(const char *const enc_from, const char *const enc_to,
   set_vim_var_string(VV_CC_TO, enc_to, -1);
   set_vim_var_string(VV_FNAME_IN, fname_from, -1);
   set_vim_var_string(VV_FNAME_OUT, fname_to, -1);
-  sctx_T *ctx = get_option_sctx("charconvert");
+  sctx_T *ctx = get_option_sctx(kOptCharconvert);
   if (ctx != NULL) {
     current_sctx = *ctx;
   }
@@ -710,7 +710,7 @@ void eval_diff(const char *const origfile, const char *const newfile, const char
   set_vim_var_string(VV_FNAME_NEW, newfile, -1);
   set_vim_var_string(VV_FNAME_OUT, outfile, -1);
 
-  sctx_T *ctx = get_option_sctx("diffexpr");
+  sctx_T *ctx = get_option_sctx(kOptDiffexpr);
   if (ctx != NULL) {
     current_sctx = *ctx;
   }
@@ -732,7 +732,7 @@ void eval_patch(const char *const origfile, const char *const difffile, const ch
   set_vim_var_string(VV_FNAME_DIFF, difffile, -1);
   set_vim_var_string(VV_FNAME_OUT, outfile, -1);
 
-  sctx_T *ctx = get_option_sctx("patchexpr");
+  sctx_T *ctx = get_option_sctx(kOptPatchexpr);
   if (ctx != NULL) {
     current_sctx = *ctx;
   }
@@ -1134,7 +1134,7 @@ list_T *eval_spell_expr(char *badword, char *expr)
   if (p_verbose == 0) {
     emsg_off++;
   }
-  sctx_T *ctx = get_option_sctx("spellsuggest");
+  sctx_T *ctx = get_option_sctx(kOptSpellsuggest);
   if (ctx != NULL) {
     current_sctx = *ctx;
   }
@@ -1278,7 +1278,7 @@ void *call_func_retlist(const char *func, int argc, typval_T *argv)
 int eval_foldexpr(win_T *wp, int *cp)
 {
   const sctx_T saved_sctx = current_sctx;
-  const bool use_sandbox = was_set_insecurely(wp, "foldexpr", OPT_LOCAL);
+  const bool use_sandbox = was_set_insecurely(wp, kOptFoldexpr, OPT_LOCAL);
 
   char *arg = wp->w_p_fde;
   current_sctx = wp->w_p_script_ctx[WV_FDE].script_ctx;
@@ -1326,7 +1326,7 @@ int eval_foldexpr(win_T *wp, int *cp)
 /// Evaluate 'foldtext', returning an Array or a String (NULL_STRING on failure).
 Object eval_foldtext(win_T *wp)
 {
-  const bool use_sandbox = was_set_insecurely(wp, "foldtext", OPT_LOCAL);
+  const bool use_sandbox = was_set_insecurely(wp, kOptFoldtext, OPT_LOCAL);
   char *arg = wp->w_p_fdt;
   funccal_entry_T funccal_entry;
 
@@ -3735,7 +3735,11 @@ static int eval_index_inner(typval_T *rettv, bool is_range, typval_T *var1, typv
     dictitem_T *const item = tv_dict_find(rettv->vval.v_dict, key, keylen);
 
     if (item == NULL && verbose) {
-      semsg(_(e_dictkey), key);
+      if (keylen > 0) {
+        semsg(_(e_dictkey_len), keylen, key);
+      } else {
+        semsg(_(e_dictkey), key);
+      }
     }
     if (item == NULL || tv_is_luafunc(&item->di_tv)) {
       return FAIL;
@@ -3780,37 +3784,32 @@ int eval_option(const char **const arg, typval_T *const rettv, const bool evalua
   }
 
   int ret = OK;
-  bool hidden;
   char c = *option_end;
   *option_end = NUL;
-  OptVal value = get_option_value(*arg, NULL, scope, &hidden);
 
-  if (rettv != NULL) {
-    switch (value.type) {
-    case kOptValTypeNil:
+  bool is_tty_opt = is_tty_option(*arg);
+  OptIndex opt_idx = is_tty_opt ? kOptInvalid : findoption(*arg);
+
+  if (opt_idx == kOptInvalid && !is_tty_opt) {
+    // Only give error if result is going to be used.
+    if (rettv != NULL) {
       semsg(_("E113: Unknown option: %s"), *arg);
-      ret = FAIL;
-      break;
-    case kOptValTypeBoolean:
-      rettv->v_type = VAR_NUMBER;
-      rettv->vval.v_number = value.data.boolean;
-      break;
-    case kOptValTypeNumber:
-      rettv->v_type = VAR_NUMBER;
-      rettv->vval.v_number = value.data.number;
-      break;
-    case kOptValTypeString:
-      rettv->v_type = VAR_STRING;
-      rettv->vval.v_string = value.data.string.data;
-      break;
     }
-  } else {
-    // Value isn't being used, free it.
-    optval_free(value);
 
-    if (value.type == kOptValTypeNil || (working && hidden)) {
-      ret = FAIL;
+    ret = FAIL;
+  } else if (rettv != NULL) {
+    OptVal value = is_tty_opt ? get_tty_option(*arg) : get_option_value(opt_idx, scope);
+    assert(value.type != kOptValTypeNil);
+
+    *rettv = optval_as_tv(value);
+
+    // Convert boolean option value to number for backwards compatibility.
+    if (rettv->v_type == VAR_BOOL) {
+      rettv->v_type = VAR_NUMBER;
+      rettv->vval.v_number = rettv->vval.v_bool == kBoolVarTrue ? 1 : 0;
     }
+  } else if (working && !is_tty_opt && is_option_hidden(opt_idx)) {
+    ret = FAIL;
   }
 
   *option_end = c;                  // put back for error messages
@@ -4711,7 +4710,7 @@ bool set_ref_in_ht(hashtab_T *ht, int copyID, list_stack_T **list_stack)
 /// @param ht_stack      Used to add hashtabs to be marked. Can be NULL.
 ///
 /// @returns             true if setting references failed somehow.
-bool set_ref_in_list(list_T *l, int copyID, ht_stack_T **ht_stack)
+bool set_ref_in_list_items(list_T *l, int copyID, ht_stack_T **ht_stack)
   FUNC_ATTR_WARN_UNUSED_RESULT
 {
   bool abort = false;
@@ -4788,7 +4787,7 @@ bool set_ref_in_item(typval_T *tv, int copyID, ht_stack_T **ht_stack, list_stack
       // Didn't see this list yet.
       ll->lv_copyID = copyID;
       if (list_stack == NULL) {
-        abort = set_ref_in_list(ll, copyID, ht_stack);
+        abort = set_ref_in_list_items(ll, copyID, ht_stack);
       } else {
         list_stack_T *const newitem = xmalloc(sizeof(list_stack_T));
         newitem->list = ll;
@@ -5030,7 +5029,7 @@ size_t string2float(const char *const text, float_T *const ret_value)
     return 3;
   }
   if (STRNICMP(text, "-inf", 3) == 0) {
-    *ret_value = (float_T) - INFINITY;
+    *ret_value = (float_T)(-INFINITY);
     return 4;
   }
   if (STRNICMP(text, "nan", 3) == 0) {
@@ -8716,7 +8715,7 @@ char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, const char 
     // If it's still empty it was changed and restored, need to restore in
     // the complicated way.
     if (*p_cpo == NUL) {
-      set_option_value_give_err("cpo", CSTR_AS_OPTVAL(save_cpo), 0);
+      set_option_value_give_err(kOptCpoptions, CSTR_AS_OPTVAL(save_cpo), 0);
     }
     free_string_option(save_cpo);
   }

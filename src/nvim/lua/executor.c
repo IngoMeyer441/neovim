@@ -115,7 +115,7 @@ lua_State *get_global_lstate(void)
 /// Convert lua error into a Vim error message
 ///
 /// @param  lstate  Lua interpreter state.
-/// @param[in]  msg  Message base, must contain one `%*s`.
+/// @param[in]  msg  Message base, must contain one `%.*s`.
 void nlua_error(lua_State *const lstate, const char *const msg)
   FUNC_ATTR_NONNULL_ALL
 {
@@ -2312,4 +2312,24 @@ void nlua_init_defaults(void)
     os_errmsg(lua_tostring(L, -1));
     os_errmsg("\n");
   }
+}
+
+/// check lua function exist
+bool nlua_func_exists(const char *lua_funcname)
+{
+  MAXSIZE_TEMP_ARRAY(args, 1);
+  size_t length = strlen(lua_funcname) + 8;
+  char *str = xmalloc(length);
+  vim_snprintf(str, length, "return %s", lua_funcname);
+  ADD_C(args, CSTR_AS_OBJ(str));
+  Error err = ERROR_INIT;
+  Object result = NLUA_EXEC_STATIC("return type(loadstring(...)()) == 'function'", args, &err);
+  xfree(str);
+
+  api_clear_error(&err);
+  if (result.type != kObjectTypeBoolean) {
+    api_free_object(result);
+    return false;
+  }
+  return result.data.boolean;
 }

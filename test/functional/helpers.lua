@@ -28,7 +28,7 @@ module.nvim_prog = (
 )
 -- Default settings for the test session.
 module.nvim_set = (
-  'set shortmess+=IS background=light noswapfile noautoindent startofline'
+  'set shortmess+=IS background=light termguicolors noswapfile noautoindent startofline'
   ..' laststatus=1 undodir=. directory=. viewdir=. backupdir=.'
   ..' belloff= wildoptions-=pum joinspaces noshowcmd noruler nomore redrawdebug=invalid')
 module.nvim_argv = {
@@ -36,8 +36,13 @@ module.nvim_argv = {
   -- XXX: find treesitter parsers.
   '--cmd', runtime_set,
   '--cmd', module.nvim_set,
-  '--cmd', 'mapclear',
-  '--cmd', 'mapclear!',
+  -- Remove default mappings.
+  '--cmd', 'mapclear | mapclear!',
+  -- Make screentest work after changing to the new default color scheme
+  -- Source 'vim' color scheme without side effects
+  -- TODO: rewrite tests
+  '--cmd', 'lua f=io.open("runtime/colors/vim.vim", "r"); l=f:read("*a"); f:close(); vim.api.nvim_exec2(l, {})',
+  '--cmd', 'unlet g:colors_name',
   '--embed'}
 
 -- Directory containing nvim.
@@ -433,7 +438,7 @@ function module.connect(file_or_address)
   return Session.new(stream)
 end
 
--- Starts a new global Nvim session.
+-- Starts (and returns) a new global Nvim session.
 --
 -- Parameters are interpreted as startup args, OR a map with these keys:
 --    args:       List: Args appended to the default `nvim_argv` set.
@@ -447,6 +452,7 @@ end
 --    clear{args={'-e'}, args_rm={'-i'}, env={TERM=term}}
 function module.clear(...)
   module.set_session(module.spawn_argv(false, ...))
+  return module.get_session()
 end
 
 -- same params as clear, but does returns the session instead
@@ -938,7 +944,7 @@ function module.add_builddir_to_rtp()
   module.command(string.format([[set rtp+=%s/runtime]], module.test_build_dir))
 end
 
--- Kill process with given pid
+-- Kill (reap) a process by PID.
 function module.os_kill(pid)
   return os.execute((is_os('win')
     and 'taskkill /f /t /pid '..pid..' > nul'

@@ -11,6 +11,8 @@ local exec = helpers.exec
 local eq = helpers.eq
 local meths = helpers.meths
 
+before_each(clear)
+
 describe('Diff mode screen', function()
   local fname = 'Xtest-functional-diff-screen-1'
   local fname_2 = fname .. '.2'
@@ -21,7 +23,6 @@ describe('Diff mode screen', function()
   end
 
   setup(function()
-    clear()
     os.remove(fname)
     os.remove(fname_2)
   end)
@@ -32,7 +33,6 @@ describe('Diff mode screen', function()
   end)
 
   before_each(function()
-    clear()
     feed(':e ' .. fname_2 .. '<cr>')
     feed(':vnew ' .. fname .. '<cr>')
     feed(':diffthis<cr>')
@@ -68,12 +68,7 @@ describe('Diff mode screen', function()
       {1:  }5                 │{1:  }5                |
       {1:  }6                 │{1:  }6                |
       {1:+ }{5:+--  4 lines: 7···}│{1:+ }{5:+--  4 lines: 7··}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*6
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler                     |
     ]])
@@ -88,12 +83,7 @@ describe('Diff mode screen', function()
       {1:  }5                 │{1:  }5                |
       {1:  }6                 │{1:  }6                |
       {1:+ }{5:+--  4 lines: 7···}│{1:+ }{5:+--  4 lines: 7··}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*6
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -114,12 +104,7 @@ describe('Diff mode screen', function()
       {1:  }5                 │{1:  }5                |
       {1:  }6                 │{1:  }6                |
       {1:+ }{5:+--  4 lines: 7···}│{1:+ }{5:+--  4 lines: 7··}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*6
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler                     |
     ]])
@@ -134,12 +119,7 @@ describe('Diff mode screen', function()
       {1:  }5                 │{1:  }5                |
       {1:  }6                 │{1:  }6                |
       {1:+ }{5:+--  4 lines: 7···}│{1:+ }{5:+--  4 lines: 7··}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*6
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -160,12 +140,7 @@ describe('Diff mode screen', function()
       {1:  }9                 │{1:  }9                |
       {1:  }10                │{1:  }10               |
       {1:  }{2:------------------}│{1:  }{4:11               }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*6
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler                     |
     ]])
@@ -180,12 +155,7 @@ describe('Diff mode screen', function()
       {1:  }9                 │{1:  }9                |
       {1:  }10                │{1:  }10               |
       {1:  }{2:------------------}│{1:  }{4:11               }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*6
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -219,12 +189,7 @@ describe('Diff mode screen', function()
       {1:  }9                 │{1:  }9                |
       {1:  }10                │{1:  }10               |
       {1:  }{4:11                }│{1:  }{2:-----------------}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*6
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler                     |
     ]])
@@ -239,12 +204,7 @@ describe('Diff mode screen', function()
       {1:  }9                 │{1:  }9                |
       {1:  }10                │{1:  }10               |
       {1:  }{4:11                }│{1:  }{2:-----------------}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*6
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -282,8 +242,7 @@ describe('Diff mode screen', function()
       {1:  }9                 │{1:  }9                |
       {1:  }10                │{1:  }10               |
       {1:  }{4:11                }│{1:  }{2:-----------------}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*2
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler                     |
     ]])
@@ -302,8 +261,7 @@ describe('Diff mode screen', function()
       {1:  }9                 │{1:  }9                |
       {1:  }10                │{1:  }10               |
       {1:  }{4:11                }│{1:  }{2:-----------------}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*2
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -328,8 +286,7 @@ describe('Diff mode screen', function()
       {1:  }9                 │{1:  }9                |
       {1:  }10                │{1:  }10               |
       {1:  }{2:------------------}│{1:  }{4:11               }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*2
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler                     |
     ]])
@@ -348,8 +305,7 @@ describe('Diff mode screen', function()
       {1:  }9                 │{1:  }9                |
       {1:  }10                │{1:  }10               |
       {1:  }{2:------------------}│{1:  }{4:11               }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*2
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -578,11 +534,7 @@ int main(int argc, char **argv)
         {1:  }{2:------------------}│{1:  }{4:  values.each do }|
         {1:  }    v.finalize    │{1:  }    v.finalize   |
         {1:  }  end             │{1:  }  end            |
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*5
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :set diffopt=internal,filler            |
       ]])
@@ -601,11 +553,7 @@ int main(int argc, char **argv)
         {1:  }  values.each do |│{1:  }  values.each do |
         {1:  }    v.finalize    │{1:  }    v.finalize   |
         {1:  }  end             │{1:  }  end            |
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*5
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
                                                 |
       ]])
@@ -625,11 +573,7 @@ int main(int argc, char **argv)
         {1:  }  values.each do |│{1:  }  values.each do |
         {1:  }    v.finalize    │{1:  }    v.finalize   |
         {1:  }  end             │{1:  }  end            |
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*5
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :                                       |
       ]])
@@ -644,19 +588,7 @@ int main(int argc, char **argv)
     feed(':set diffopt=filler<cr>')
     screen:expect([[
       {1:+ }{5:^+-- 10 lines: 1···}│{1:+ }{5:+-- 10 lines: 1··}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*13
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler                     |
     ]])
@@ -664,19 +596,7 @@ int main(int argc, char **argv)
     feed(':set diffopt+=internal<cr>')
     screen:expect([[
       {1:+ }{5:^+-- 10 lines: 1···}│{1:+ }{5:+-- 10 lines: 1··}|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*13
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -690,19 +610,7 @@ int main(int argc, char **argv)
     feed(':set diffopt=filler<cr>')
     screen:expect([[
       {1:- }^                  │{1:- }                 |
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*13
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler                     |
     ]])
@@ -710,19 +618,7 @@ int main(int argc, char **argv)
     feed(':set diffopt+=internal<cr>')
     screen:expect([[
       {1:- }^                  │{1:- }                 |
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*13
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -738,17 +634,7 @@ int main(int argc, char **argv)
       {1:  }^a                 │{1:  }A                |
       {1:  }b                 │{1:  }b                |
       {1:  }{9:cd                }│{1:  }{9:cD}{8:e}{9:              }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*11
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt=filler,icase               |
     ]])
@@ -758,17 +644,7 @@ int main(int argc, char **argv)
       {1:  }^a                 │{1:  }A                |
       {1:  }b                 │{1:  }b                |
       {1:  }{9:cd                }│{1:  }{9:cD}{8:e}{9:              }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
-      {6:~                   }│{6:~                  }|
+      {6:~                   }│{6:~                  }|*11
       {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
       :set diffopt+=internal                  |
     ]])
@@ -795,12 +671,7 @@ int main(int argc, char **argv)
         {1:  }   return 0;      │{1:  }      return 0;  |
         {1:  }{2:------------------}│{1:  }{4:   }             }|
         {1:  }}                 │{1:  }}                |
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*6
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :set diffopt=filler,iwhite              |
       ]])
@@ -818,12 +689,7 @@ int main(int argc, char **argv)
         {1:  }   return 0;      │{1:  }      return 0;  |
         {1:  }{2:------------------}│{1:  }{4:   }             }|
         {1:  }}                 │{1:  }}                |
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*6
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :set diffopt=filler,iwhite,internal     |
       ]])
@@ -842,19 +708,12 @@ int main(int argc, char **argv)
       feed(':set diffopt=internal,filler,iblank<cr>')
       screen:expect([[
         {1:  }^a                 │{1:  }a                |
-        {1:  }{4:                  }│{1:  }{2:-----------------}|
-        {1:  }{4:                  }│{1:  }{2:-----------------}|
+        {1:  }{4:                  }│{1:  }{2:-----------------}|*2
         {1:  }cd                │{1:  }cd               |
         {1:  }ef                │{1:  }                 |
         {1:  }{8:xxx}{9:               }│{1:  }ef               |
         {6:~                   }│{1:  }{8:yyy}{9:              }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*7
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :set diffopt=internal,filler,iblank     |
       ]])
@@ -871,14 +730,7 @@ int main(int argc, char **argv)
         {1:  }cd                │{1:  }ef               |
         {1:  }ef                │{1:  }{8:yyy}{9:              }|
         {1:  }{8:xxx}{9:               }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*8
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :                                       |
       ]])
@@ -895,14 +747,7 @@ int main(int argc, char **argv)
         {1:  }cd                │{1:  }ef               |
         {1:  }ef                │{1:  }{8:yyy}{9:              }|
         {1:  }{8:xxx}{9:               }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*8
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :                                       |
       ]])
@@ -919,14 +764,7 @@ int main(int argc, char **argv)
         {1:  }cd                │{1:  }ef               |
         {1:  }ef                │{1:  }{8:yyy}{9:              }|
         {1:  }{8:xxx}{9:               }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*8
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :                                       |
       ]])
@@ -953,12 +791,7 @@ int main(int argc, char **argv)
         {1:  }foo               │{1:  }foo              |
         {1:  }{2:------------------}│{1:  }{4:                 }|
         {1:  }bar               │{1:  }bar              |
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*6
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :                                       |
       ]])
@@ -977,12 +810,7 @@ int main(int argc, char **argv)
         {1:  }foo               │{1:  }foo              |
         {1:  }{2:------------------}│{1:  }{4:                 }|
         {1:  }bar               │{1:  }bar              |
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*6
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :                                       |
       ]])
@@ -1116,9 +944,7 @@ int main(int argc, char **argv)
   {1:  }    ui.setupUI(Mai│{1:  }    ui.setupUI(Ma|
   {1:  }    MainWindow.sho│{1:  }    MainWindow.sh|
   {1:  }    sys.exit(app.e│{1:  }    sys.exit(app.|
-  {6:~                   }│{6:~                  }|
-  {6:~                   }│{6:~                  }|
-  {6:~                   }│{6:~                  }|
+  {6:~                   }│{6:~                  }|*3
   {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
   :set diffopt=internal,filler            |
       ]])
@@ -1137,9 +963,7 @@ int main(int argc, char **argv)
         {1:  }    ui.setupUI(Mai│{1:  }    ui.setupUI(Ma|
         {1:  }    MainWindow.sho│{1:  }    MainWindow.sh|
         {1:  }    ^sys.exit(app.e│{1:  }    sys.exit(app.|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*3
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :set diffopt+=linematch:20              |
       ]])
@@ -1163,17 +987,7 @@ ccca]]
         {1:  }^DDD               │{1:  }DDD              |
         {1:  }{2:------------------}│{1:  }{4:AAA              }|
         {1:  }{8:_a}{9:a               }│{1:  }{8:ccc}{9:a             }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*11
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
                                                 |
       ]])
@@ -1182,17 +996,7 @@ ccca]]
         {1:  }^DDD               │{1:  }DDD              |
         {1:  }{8:_}{9:aa               }│{1:  }{8:A}{9:AA              }|
         {1:  }{2:------------------}│{1:  }{4:ccca             }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*11
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :set diffopt+=icase                     |
       ]])
@@ -1216,17 +1020,7 @@ AAAB]]
         {1:  }^BB                │{1:  }BB               |
         {1:  }{9:   AA}{8:A}{9:            }│{1:  }{9:   AA}{8:B}{9:           }|
         {1:  }{2:------------------}│{1:  }{4:AAAB             }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*11
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
                                                 |
       ]]}
@@ -1235,17 +1029,7 @@ AAAB]]
         {1:  }^BB                │{1:  }BB               |
         {1:  }{2:------------------}│{1:  }{4:   AAB           }|
         {1:  }{9:   AAA            }│{1:  }{9:AAA}{8:B}{9:             }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
-        {6:~                   }│{6:~                  }|
+        {6:~                   }│{6:~                  }|*11
         {7:<onal-diff-screen-1  }{3:<l-diff-screen-1.2 }|
         :set diffopt+=iwhiteall                 |
       ]]}
@@ -1267,12 +1051,7 @@ AAAB]]
       {6:~                   }│{6:~                  }|
       {3:<onal-diff-screen-1  <l-diff-screen-1.2 }|
       ^                                        |
-      {6:~                                       }|
-      {6:~                                       }|
-      {6:~                                       }|
-      {6:~                                       }|
-      {6:~                                       }|
-      {6:~                                       }|
+      {6:~                                       }|*6
       {7:[No Name]                               }|
       :e                                      |
     ]]}
@@ -1287,12 +1066,7 @@ AAAB]]
       {6:~                   }│{6:~                  }|
       {3:<-diff-screen-1 [+]  <l-diff-screen-1.2 }|
       ^                                        |
-      {6:~                                       }|
-      {6:~                                       }|
-      {6:~                                       }|
-      {6:~                                       }|
-      {6:~                                       }|
-      {6:~                                       }|
+      {6:~                                       }|*6
       {7:[No Name]                               }|
       :e                                      |
     ]]}
@@ -1317,8 +1091,7 @@ AAAB]]
       ccc                                     |
                                               |
       xx                                      |
-      {6:~                                       }|
-      {6:~                                       }|
+      {6:~                                       }|*2
       {7:Xtest-functional-diff-screen-1          }|
       :e                                      |
     ]]}
@@ -1337,8 +1110,7 @@ AAAB]]
       ccc                                     |
                                               |
       xx                                      |
-      {6:~                                       }|
-      {6:~                                       }|
+      {6:~                                       }|*2
       {7:Xtest-functional-diff-screen-1 [+]      }|
       :e                                      |
     ]]}
@@ -1347,7 +1119,6 @@ end)
 
 it('win_update redraws lines properly', function()
   local screen
-  clear()
   screen = Screen.new(50, 10)
   screen:attach()
   screen:set_default_attr_ids({
@@ -1388,8 +1159,7 @@ it('win_update redraws lines properly', function()
   command("windo 1")
   screen:expect{grid=[[
     {13:  }{16:-----------------------}│{13:  }{15:^1                     }|
-    {13:  }{16:-----------------------}│{13:  }{15:                      }|
-    {13:  }{16:-----------------------}│{13:  }{15:                      }|
+    {13:  }{16:-----------------------}│{13:  }{15:                      }|*2
     {13:  }2                      │{13:  }2                     |
     {13:  }{17:2}{18:a                     }│{13:  }{17:1}{18:a                    }|
     {13:  }{15:2b                     }│{13:  }{16:----------------------}|
@@ -1419,7 +1189,6 @@ end)
 
 -- oldtest: Test_diff_rnu()
 it('diff updates line numbers below filler lines', function()
-  clear()
   local screen = Screen.new(40, 14)
   screen:attach()
   screen:set_default_attr_ids({
@@ -1447,8 +1216,7 @@ it('diff updates line numbers below filler lines', function()
     {1:  }a                │{11:  1 }a               |
     {1:  }a                │{11:  2 }a               |
     {1:  }{8:x}{9:                }│{11:  3 }{8:y}{9:               }|
-    {1:  }{4:x                }│{11:    }{2:----------------}|
-    {1:  }{4:x                }│{11:    }{2:----------------}|
+    {1:  }{4:x                }│{11:    }{2:----------------}|*2
     {1:  }b                │{11:  4 }b               |
     {1:  }b                │{11:  5 }b               |
     {1:  }b                │{11:  6 }b               |
@@ -1464,8 +1232,7 @@ it('diff updates line numbers below filler lines', function()
     {1:  }a                │{10:2   }^a               |
     {1:  }a                │{11:  1 }a               |
     {1:  }{8:x}{9:                }│{11:  2 }{8:y}{9:               }|
-    {1:  }{4:x                }│{11:    }{2:----------------}|
-    {1:  }{4:x                }│{11:    }{2:----------------}|
+    {1:  }{4:x                }│{11:    }{2:----------------}|*2
     {1:  }b                │{11:  3 }b               |
     {1:  }b                │{11:  4 }b               |
     {1:  }b                │{11:  5 }b               |
@@ -1481,8 +1248,7 @@ it('diff updates line numbers below filler lines', function()
     {1:  }a                │{11:  1 }a               |
     {1:  }a                │{10:3   }^a               |
     {1:  }{8:x}{9:                }│{11:  1 }{8:y}{9:               }|
-    {1:  }{4:x                }│{11:    }{2:----------------}|
-    {1:  }{4:x                }│{11:    }{2:----------------}|
+    {1:  }{4:x                }│{11:    }{2:----------------}|*2
     {1:  }b                │{11:  2 }b               |
     {1:  }b                │{11:  3 }b               |
     {1:  }b                │{11:  4 }b               |
@@ -1496,7 +1262,6 @@ end)
 
 -- oldtest: Test_diff_with_scroll_and_change()
 it('Align the filler lines when changing text in diff mode', function()
-  clear()
   local screen = Screen.new(40, 20)
   screen:attach()
   screen:set_default_attr_ids({
@@ -1528,14 +1293,7 @@ it('Align the filler lines when changing text in diff mode', function()
     {1:  }13                │{1:  }13               |
     {1:  }14                │{1:  }14               |
     {1:- }1^5                │{1:- }15               |
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
+    {7:~                   }│{7:~                  }|*8
     {8:[No Name] [+]        }{3:[No Name] [+]      }|
                                             |
   ]]}
@@ -1551,14 +1309,7 @@ it('Align the filler lines when changing text in diff mode', function()
     {1:  }13                │{1:  }13               |
     {1:  }14                │{1:  }14               |
     {1:  }{5:15}{6:^x}{5:               }│{1:  }{5:15               }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
-    {7:~                   }│{7:~                  }|
+    {7:~                   }│{7:~                  }|*8
     {8:[No Name] [+]        }{3:[No Name] [+]      }|
                                             |
   ]]}
@@ -1574,21 +1325,13 @@ it('Align the filler lines when changing text in diff mode', function()
     {1:  }13               │{1:  }13                |
     {1:  }14               │{1:  }14                |
     {1:  }{5:15}{6:x}{5:              }│{1:  }{5:15}{6:^y}{5:               }|
-    {7:~                  }│{7:~                   }|
-    {7:~                  }│{7:~                   }|
-    {7:~                  }│{7:~                   }|
-    {7:~                  }│{7:~                   }|
-    {7:~                  }│{7:~                   }|
-    {7:~                  }│{7:~                   }|
-    {7:~                  }│{7:~                   }|
-    {7:~                  }│{7:~                   }|
+    {7:~                  }│{7:~                   }|*8
     {3:[No Name] [+]       }{8:[No Name] [+]       }|
                                             |
   ]]}
 end)
 
 it("diff mode doesn't restore invalid 'foldcolumn' value #21647", function()
-  clear()
   local screen = Screen.new(60, 6)
   screen:set_default_attr_ids({
     [0] = {foreground = Screen.colors.Blue, bold = true};
@@ -1598,10 +1341,7 @@ it("diff mode doesn't restore invalid 'foldcolumn' value #21647", function()
   command('diffsplit | bd')
   screen:expect([[
     ^                                                            |
-    {0:~                                                           }|
-    {0:~                                                           }|
-    {0:~                                                           }|
-    {0:~                                                           }|
+    {0:~                                                           }|*4
                                                                 |
   ]])
   eq('0', meths.get_option_value('foldcolumn', {}))
@@ -1609,7 +1349,6 @@ end)
 
 -- oldtest: Test_diff_binary()
 it('diff mode works properly if file contains NUL bytes vim-patch:8.2.3925', function()
-  clear()
   local screen = Screen.new(40, 20)
   screen:set_default_attr_ids({
     [1] = {foreground = Screen.colors.DarkBlue, background = Screen.colors.Gray};
@@ -1641,17 +1380,7 @@ it('diff mode works properly if file contains NUL bytes vim-patch:8.2.3925', fun
     {1:  }{5:E}{4:                 }│{1:  }{5:e}{4:                }|
     {1:  }f                 │{1:  }f                |
     {1:  }g                 │{1:  }g                |
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
+    {6:~                   }│{6:~                  }|*11
     {8:[No Name] [+]        }{2:[No Name] [+]      }|
                                             |
   ]])
@@ -1667,17 +1396,7 @@ it('diff mode works properly if file contains NUL bytes vim-patch:8.2.3925', fun
     {1:  }E                 │{1:  }e                |
     {1:  }f                 │{1:  }f                |
     {1:  }g                 │{1:  }g                |
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
+    {6:~                   }│{6:~                  }|*11
     {8:[No Name] [+]        }{2:[No Name] [+]      }|
                                             |
   ]])
@@ -1693,17 +1412,7 @@ it('diff mode works properly if file contains NUL bytes vim-patch:8.2.3925', fun
     {1:  }{5:E}{4:                 }│{1:  }{5:e}{4:                }|
     {1:  }f                 │{1:  }f                |
     {1:  }g                 │{1:  }g                |
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
+    {6:~                   }│{6:~                  }|*11
     {8:[No Name] [+]        }{2:[No Name] [+]      }|
                                             |
   ]])
@@ -1719,18 +1428,36 @@ it('diff mode works properly if file contains NUL bytes vim-patch:8.2.3925', fun
     {1:  }E                 │{1:  }e                |
     {1:  }f                 │{1:  }f                |
     {1:  }g                 │{1:  }g                |
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
-    {6:~                   }│{6:~                  }|
+    {6:~                   }│{6:~                  }|*11
     {8:[No Name] [+]        }{2:[No Name] [+]      }|
                                             |
+  ]])
+end)
+
+-- oldtest: Test_diff_breakindent_after_filler()
+it("diff mode draws 'breakindent' correctly after filler lines", function()
+  local screen = Screen.new(45, 8)
+  screen:attach()
+  screen:set_default_attr_ids({
+    [1] = {background = Screen.colors.Grey, foreground = Screen.colors.DarkBlue};
+    [2] = {background = Screen.colors.LightBlue};
+    [3] = {background = Screen.colors.LightCyan, bold = true, foreground = Screen.colors.Blue};
+    [4] = {foreground = Screen.colors.Blue, bold = true};
+  })
+  exec([[
+    set laststatus=0 diffopt+=followwrap breakindent
+    call setline(1, ['a', '  ' .. repeat('c', 50)])
+    vnew
+    call setline(1, ['a', 'b', '  ' .. repeat('c', 50)])
+    windo diffthis
+    norm! G$
+  ]])
+  screen:expect([[
+    {1:  }a                   │{1:  }a                   |
+    {1:  }{2:b                   }│{1:  }{3:--------------------}|
+    {1:  }  cccccccccccccccccc│{1:  }  cccccccccccccccccc|*2
+    {1:  }  cccccccccccccc    │{1:  }  ccccccccccccc^c    |
+    {4:~                     }│{4:~                     }|*2
+                                                 |
   ]])
 end)

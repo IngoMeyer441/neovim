@@ -4265,7 +4265,7 @@ skip:
   // Show 'inccommand' preview if there are matched lines.
   if (cmdpreview_ns > 0 && !aborting()) {
     if (got_quit || profile_passed_limit(timeout)) {  // Too slow, disable.
-      set_string_option_direct("icm", -1, "", OPT_FREE, SID_NONE);
+      set_string_option_direct(kOptInccommand, "", OPT_FREE, SID_NONE);
     } else if (*p_icm != NUL && pat != NULL) {
       if (pre_hl_id == 0) {
         pre_hl_id = syn_check_group(S_LEN("Substitute"));
@@ -4544,8 +4544,8 @@ bool prepare_tagpreview(bool undo_sync)
   curwin->w_p_wfh = true;
   RESET_BINDING(curwin);                // don't take over 'scrollbind' and 'cursorbind'
   curwin->w_p_diff = false;             // no 'diff'
-  set_string_option_direct("fdc", -1,     // no 'foldcolumn'
-                           "0", OPT_FREE, SID_NONE);
+
+  set_string_option_direct(kOptFoldcolumn, "0", OPT_FREE, SID_NONE);  // no 'foldcolumn'
   return true;
 }
 
@@ -4564,7 +4564,7 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
   buf_T *cmdpreview_buf = NULL;
 
   // disable file info message
-  set_string_option_direct("shm", -1, "F", OPT_FREE, SID_NONE);
+  set_string_option_direct(kOptShortmess, "F", OPT_FREE, SID_NONE);
 
   // Update the topline to ensure that main window is on the correct line
   update_topline(curwin);
@@ -4580,7 +4580,6 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
   }
 
   // Width of the "| lnum|..." column which displays the line numbers.
-  linenr_T highest_num_line = 0;
   int col_width = 0;
   // Use preview window only when inccommand=split and range is not just the current line
   bool preview = (*p_icm == 's') && (eap->line1 != old_cusr.lnum || eap->line2 != old_cusr.lnum);
@@ -4590,8 +4589,11 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
     assert(cmdpreview_buf != NULL);
 
     if (lines.subresults.size > 0) {
-      highest_num_line = kv_last(lines.subresults).end.lnum;
-      col_width = (int)log10(highest_num_line) + 1 + 3;
+      SubResult last_match = kv_last(lines.subresults);
+      // `last_match.end.lnum` may be 0 when using 'n' flag.
+      linenr_T highest_lnum = MAX(last_match.start.lnum, last_match.end.lnum);
+      assert(highest_lnum > 0);
+      col_width = (int)log10(highest_lnum) + 1 + 3;
     }
   }
 
@@ -4663,7 +4665,7 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
 
   xfree(str);
 
-  set_string_option_direct("shm", -1, save_shm_p, OPT_FREE, SID_NONE);
+  set_string_option_direct(kOptShortmess, save_shm_p, OPT_FREE, SID_NONE);
   xfree(save_shm_p);
 
   return preview ? 2 : 1;

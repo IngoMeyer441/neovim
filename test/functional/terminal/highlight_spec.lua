@@ -37,10 +37,7 @@ describe(':terminal highlight', function()
     screen:expect([[
       tty ready                                         |
       {10: }                                                 |
-                                                        |
-                                                        |
-                                                        |
-                                                        |
+                                                        |*4
       {5:-- TERMINAL --}                                    |
     ]])
   end)
@@ -64,10 +61,7 @@ describe(':terminal highlight', function()
         screen:expect(sub([[
           tty ready                                         |
           {NUM:text}text{10: }                                         |
-                                                            |
-                                                            |
-                                                            |
-                                                            |
+                                                            |*4
           {5:-- TERMINAL --}                                    |
         ]]))
       end
@@ -143,10 +137,14 @@ it(':terminal highlight has lower precedence than editor #9964', function()
   screen:attach({rgb=true})
   -- Child nvim process in :terminal (with cterm colors).
   funcs.termopen({
-    nvim_prog_abs(), '-n', '-u', 'NORC', '-i', 'NONE', '--cmd', nvim_set,
+    nvim_prog_abs(), '-n', '-u', 'NORC', '-i', 'NONE', '--cmd', nvim_set .. ' notermguicolors',
     '+hi Normal ctermfg=Blue ctermbg=Yellow',
     '+norm! ichild nvim',
     '+norm! oline 2',
+  }, {
+    env = {
+      VIMRUNTIME = os.getenv('VIMRUNTIME'),
+    },
   })
   screen:expect([[
     {N_child:^child nvim                    }|
@@ -190,10 +188,7 @@ describe(':terminal highlight forwarding', function()
     screen:expect([[
       tty ready                                         |
       {1: }                                                 |
-                                                        |
-                                                        |
-                                                        |
-                                                        |
+                                                        |*4
       {2:-- TERMINAL --}                                    |
     ]])
   end)
@@ -209,10 +204,7 @@ describe(':terminal highlight forwarding', function()
     screen:expect{grid=[[
       tty ready                                         |
       {3:text}{4:color}text{1: }                                    |
-                                                        |
-                                                        |
-                                                        |
-                                                        |
+                                                        |*4
       {2:-- TERMINAL --}                                    |
     ]]}
   end)
@@ -242,10 +234,7 @@ describe(':terminal highlight with custom palette', function()
     screen:expect([[
       tty ready                                         |
       {7: }                                                 |
-                                                        |
-                                                        |
-                                                        |
-                                                        |
+                                                        |*4
       {9:-- TERMINAL --}                                    |
     ]])
   end)
@@ -259,10 +248,7 @@ describe(':terminal highlight with custom palette', function()
     screen:expect([[
       tty ready                                         |
       {1:text}text{7: }                                         |
-                                                        |
-                                                        |
-                                                        |
-                                                        |
+                                                        |*4
       {9:-- TERMINAL --}                                    |
     ]])
   end)

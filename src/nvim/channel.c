@@ -233,7 +233,7 @@ void channel_create_event(Channel *chan, const char *ext_source)
   typval_T tv = TV_INITIAL_VALUE;
   // TODO(bfredl): do the conversion in one step. Also would be nice
   // to pretty print top level dict in defined order
-  (void)object_to_vim(DICTIONARY_OBJ(info), &tv, NULL);
+  object_to_vim(DICTIONARY_OBJ(info), &tv, NULL);
   assert(tv.v_type == VAR_DICT);
   char *str = encode_tv2json(&tv, NULL);
   ILOG("new channel %" PRIu64 " (%s) : %s", chan->id, source, str);
@@ -794,19 +794,20 @@ static void channel_callback_call(Channel *chan, CallbackReader *reader)
 /// and `buf` is assumed to be a new, unmodified buffer.
 void channel_terminal_open(buf_T *buf, Channel *chan)
 {
-  TerminalOptions topts;
-  topts.data = chan;
-  topts.width = chan->stream.pty.width;
-  topts.height = chan->stream.pty.height;
-  topts.write_cb = term_write;
-  topts.resize_cb = term_resize;
-  topts.close_cb = term_close;
+  TerminalOptions topts = {
+    .data = chan,
+    .width = chan->stream.pty.width,
+    .height = chan->stream.pty.height,
+    .write_cb = term_write,
+    .resize_cb = term_resize,
+    .close_cb = term_close,
+  };
   buf->b_p_channel = (OptInt)chan->id;  // 'channel' option
   channel_incref(chan);
   terminal_open(&chan->term, buf, topts);
 }
 
-static void term_write(char *buf, size_t size, void *data)
+static void term_write(const char *buf, size_t size, void *data)
 {
   Channel *chan = data;
   if (chan->stream.proc.in.closed) {
@@ -864,7 +865,7 @@ static void set_info_event(void **argv)
   dict_T *dict = get_v_event(&save_v_event);
   Dictionary info = channel_info(chan->id);
   typval_T retval;
-  (void)object_to_vim(DICTIONARY_OBJ(info), &retval, NULL);
+  object_to_vim(DICTIONARY_OBJ(info), &retval, NULL);
   assert(retval.v_type == VAR_DICT);
   tv_dict_add_dict(dict, S_LEN("info"), retval.vval.v_dict);
   tv_dict_set_keys_readonly(dict);

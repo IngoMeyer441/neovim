@@ -2,7 +2,6 @@ local helpers = require('test.functional.helpers')(after_each)
 local thelpers = require('test.functional.terminal.helpers')
 local luv = require('luv')
 local clear = helpers.clear
-local nvim_prog = helpers.nvim_prog
 local feed_command = helpers.feed_command
 local feed_data = thelpers.feed_data
 
@@ -14,8 +13,12 @@ describe('autoread TUI FocusGained/FocusLost', function()
 
   before_each(function()
     clear()
-    screen = thelpers.screen_setup(0, '["'..nvim_prog
-      ..'", "-u", "NONE", "-i", "NONE", "--cmd", "set noswapfile noshowcmd noruler"]')
+    screen = thelpers.setup_child_nvim({
+      '-u', 'NONE',
+      '-i', 'NONE',
+      '--cmd', 'colorscheme vim',
+      '--cmd', 'set noswapfile noshowcmd noruler notermguicolors',
+    })
   end)
 
   teardown(function()
@@ -37,9 +40,7 @@ describe('autoread TUI FocusGained/FocusLost', function()
 
     screen:expect{grid=[[
       {1: }                                                 |
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {4:~                                                 }|
+      {4:~                                                 }|*3
       {5:[No Name]                                         }|
                                                         |
       {3:-- TERMINAL --}                                    |
@@ -47,9 +48,7 @@ describe('autoread TUI FocusGained/FocusLost', function()
     feed_command('edit '..path)
     screen:expect{grid=[[
       {1: }                                                 |
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {4:~                                                 }|
+      {4:~                                                 }|*3
       {5:xtest-foo                                         }|
       :edit xtest-foo                                   |
       {3:-- TERMINAL --}                                    |
@@ -58,9 +57,7 @@ describe('autoread TUI FocusGained/FocusLost', function()
     feed_data('\027[O')
     screen:expect{grid=[[
       {1: }                                                 |
-      {4:~                                                 }|
-      {4:~                                                 }|
-      {4:~                                                 }|
+      {4:~                                                 }|*3
       {5:xtest-foo                                         }|
       :edit xtest-foo                                   |
       {3:-- TERMINAL --}                                    |

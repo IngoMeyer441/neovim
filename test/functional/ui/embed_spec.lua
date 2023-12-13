@@ -26,31 +26,29 @@ local function test_embed(ext_linegrid)
       [3] = {bold = true, foreground = Screen.colors.Blue1},
       [4] = {bold = true, foreground = Screen.colors.Green},
       [5] = {bold = true, reverse = true},
+      [6] = {foreground = Screen.colors.NvimDarkGrey3, background = Screen.colors.NvimLightGrey1};
+      [7] = {foreground = Screen.colors.NvimDarkRed};
+      [8] = {foreground = Screen.colors.NvimDarkCyan};
+      [9] = {foreground = Screen.colors.NvimLightGrey3, background = Screen.colors.NvimDarkGrey1};
+      [10] = {foreground = Screen.colors.NvimLightRed};
+      [11] = {foreground = Screen.colors.NvimLightCyan};
     })
   end
 
   it('can display errors', function()
     startup('--cmd', 'echoerr invalid+')
     screen:expect([[
-                                                                  |
-                                                                  |
-                                                                  |
-                                                                  |
-                                                                  |
-      Error detected while processing pre-vimrc command line:     |
-      E121: Undefined variable: invalid                           |
-      Press ENTER or type command to continue^                     |
+                                                                  |*4
+      {6:                                                            }|
+      {7:Error detected while processing pre-vimrc command line:}     |
+      {7:E121: Undefined variable: invalid}                           |
+      {8:Press ENTER or type command to continue}^                     |
     ]])
 
     feed('<cr>')
     screen:expect([[
       ^                                                            |
-      {3:~                                                           }|
-      {3:~                                                           }|
-      {3:~                                                           }|
-      {3:~                                                           }|
-      {3:~                                                           }|
-      {3:~                                                           }|
+      {3:~                                                           }|*6
                                                                   |
     ]])
   end)
@@ -61,28 +59,24 @@ local function test_embed(ext_linegrid)
     end
     startup('--cmd', 'echoerr "foo"', '--cmd', 'color default', '--cmd', 'echoerr "bar"')
     screen:expect([[
-                                                                  |
-                                                                  |
-                                                                  |
-      {5:                                                            }|
-      Error detected while processing pre-vimrc command line:     |
-      foo                                                         |
-      {1:bar}                                                         |
-      {4:Press ENTER or type command to continue}^                     |
+                                                                  |*3
+      {9:                                                            }|
+      {7:Error detected while processing pre-vimrc command line:}     |
+      {7:foo}                                                         |
+      {10:bar}                                                         |
+      {11:Press ENTER or type command to continue}^                     |
     ]])
   end)
 
   it("doesn't erase output when setting Normal colors", function()
     startup('--cmd', 'echoerr "foo"', '--cmd', 'hi Normal guibg=Green', '--cmd', 'echoerr "bar"')
     screen:expect{grid=[[
-                                                                  |
-                                                                  |
-                                                                  |
-                                                                  |
-      Error detected while processing pre-vimrc command line:     |
-      foo                                                         |
-      bar                                                         |
-      Press ENTER or type command to continue^                     |
+                                                                  |*3
+      {6:                                                            }|
+      {7:Error detected while processing pre-vimrc command line:}     |
+      {7:foo}                                                         |
+      {7:bar}                                                         |
+      {8:Press ENTER or type command to continue}^                     |
     ]], condition=function()
       eq(Screen.colors.Green, screen.default_colors.rgb_bg)
     end}
@@ -116,11 +110,7 @@ describe('--embed UI', function()
     screen:expect{grid=[[
       ^hello nvim                              |
       from external input                     |
-      {1:~                                       }|
-      {1:~                                       }|
-      {1:~                                       }|
-      {1:~                                       }|
-      {1:~                                       }|
+      {1:~                                       }|*5
                                               |
     ]]}
 
@@ -130,12 +120,42 @@ describe('--embed UI', function()
       hello nvim                              |
       ^                                        |
       from external input                     |
-      {1:~                                       }|
-      {1:~                                       }|
-      {1:~                                       }|
-      {1:~                                       }|
+      {1:~                                       }|*4
       {2:-- INSERT --}                            |
     ]]}
+  end)
+
+  it("only sets background colors once even if overridden", function()
+    local screen, current, seen
+    local function handle_default_colors_set(_, _, rgb_bg, _, _, _)
+      seen[rgb_bg] = true
+      current = rgb_bg
+    end
+    local function startup(...)
+      seen = {}
+      current = nil
+      clear {args_rm={'--headless'}, args={...}}
+
+      -- attach immediately after startup, for early UI
+      screen = Screen.new(40, 8)
+      screen._handle_default_colors_set = handle_default_colors_set
+      screen:attach()
+    end
+
+    startup()
+    screen:expect{condition=function()
+      eq(16777215, current)
+    end}
+    eq({[16777215]=true}, seen)
+
+    -- NB: by accident how functional/helpers.lua currently handles the default color scheme, the
+    -- above is sufficient to test the behavior. But in case that workaround is removed, we need
+    -- a test with an explicit override like below, so do it to remain safe.
+    startup('--cmd', 'hi NORMAL guibg=#FF00FF')
+    screen:expect{condition=function()
+      eq(16711935, current)
+    end}
+    eq({[16711935]=true}, seen) -- we only saw the last one, despite 16777215 was set internally earlier
   end)
 end)
 
@@ -144,7 +164,7 @@ describe('--embed --listen UI', function()
     helpers.skip(helpers.is_os('win'))
     clear()
     local child_server = assert(helpers.new_pipename())
-    funcs.jobstart({nvim_prog, '--embed', '--listen', child_server, '--clean'})
+    funcs.jobstart({nvim_prog, '--embed', '--listen', child_server, '--clean', '--cmd', 'colorscheme vim'})
     retry(nil, nil, function() neq(nil, uv.fs_stat(child_server)) end)
 
     local child_session = helpers.connect(child_server)
@@ -169,9 +189,7 @@ describe('--embed --listen UI', function()
     child_screen:attach(nil, child_session)
     child_screen:expect{grid=[[
       ^                                        |
-      {1:~                                       }|
-      {1:~                                       }|
-      {1:~                                       }|
+      {1:~                                       }|*3
       {2:[No Name]             0,0-1          All}|
                                               |
     ]], attr_ids={
