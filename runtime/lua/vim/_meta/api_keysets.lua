@@ -68,6 +68,9 @@ error('Cannot require a meta file')
 --- @class vim.api.keyset.cmd_opts
 --- @field output? boolean
 
+--- @class vim.api.keyset.complete_set
+--- @field info? string
+
 --- @class vim.api.keyset.context
 --- @field types? any[]
 
@@ -217,6 +220,7 @@ error('Cannot require a meta file')
 
 --- @class vim.api.keyset.open_term
 --- @field on_input? function
+--- @field force_crlf? boolean
 
 --- @class vim.api.keyset.option
 --- @field scope? string

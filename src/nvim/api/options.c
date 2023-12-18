@@ -15,7 +15,6 @@
 #include "nvim/macros_defs.h"
 #include "nvim/memory.h"
 #include "nvim/option.h"
-#include "nvim/option_vars.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
@@ -79,7 +78,7 @@ static int validate_option_value_args(Dict(option) *opts, char *name, OptIndex *
     return FAIL;
   });
 
-  *opt_idxp = findoption(name);
+  *opt_idxp = find_option(name);
   int flags = get_option_attrs(*opt_idxp);
   if (flags == 0) {
     // hidden or unknown option

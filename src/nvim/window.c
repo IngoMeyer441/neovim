@@ -56,6 +56,7 @@
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/fs.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
 #include "nvim/pos_defs.h"
@@ -4426,6 +4427,10 @@ void tabpage_move(int nr)
     return;
   }
 
+  if (tabpage_move_disallowed) {
+    return;
+  }
+
   int n = 1;
   tabpage_T *tp;
 
@@ -4978,7 +4983,7 @@ void free_wininfo(wininfo_T *wip, buf_T *bp)
 /// Remove window 'wp' from the window list and free the structure.
 ///
 /// @param tp  tab page "win" is in, NULL for current
-static void win_free(win_T *wp, tabpage_T *tp)
+void win_free(win_T *wp, tabpage_T *tp)
 {
   pmap_del(int)(&window_handles, wp->handle, NULL);
   clearFolding(wp);

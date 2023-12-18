@@ -15,6 +15,7 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/cursor_shape.h"
+#include "nvim/event/defs.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/signal.h"
 #include "nvim/event/stream.h"
@@ -2270,10 +2271,11 @@ static bool should_invisible(TUIData *tui)
 static size_t flush_buf_start(TUIData *tui, char *buf, size_t len)
   FUNC_ATTR_NONNULL_ALL
 {
-  const char *str = NULL;
+  unibi_var_t params[9];  // Don't use tui->params[] as they may already be in use.
 
+  const char *str = NULL;
   if (tui->sync_output && tui->unibi_ext.sync != -1) {
-    UNIBI_SET_NUM_VAR(tui->params[0], 1);
+    UNIBI_SET_NUM_VAR(params[0], 1);
     str = unibi_get_ext_str(tui->ut, (size_t)tui->unibi_ext.sync);
   } else if (!tui->is_invisible) {
     str = unibi_get_str(tui->ut, unibi_cursor_invisible);
@@ -2284,7 +2286,7 @@ static size_t flush_buf_start(TUIData *tui, char *buf, size_t len)
     return 0;
   }
 
-  return unibi_run(str, tui->params, buf, len);
+  return unibi_run(str, params, buf, len);
 }
 
 /// Write the sequence to end flushing output to `buf`.
@@ -2296,11 +2298,13 @@ static size_t flush_buf_start(TUIData *tui, char *buf, size_t len)
 static size_t flush_buf_end(TUIData *tui, char *buf, size_t len)
   FUNC_ATTR_NONNULL_ALL
 {
+  unibi_var_t params[9];  // Don't use tui->params[] as they may already be in use.
+
   size_t offset = 0;
   if (tui->sync_output && tui->unibi_ext.sync != -1) {
-    UNIBI_SET_NUM_VAR(tui->params[0], 0);
+    UNIBI_SET_NUM_VAR(params[0], 0);
     const char *str = unibi_get_ext_str(tui->ut, (size_t)tui->unibi_ext.sync);
-    offset = unibi_run(str, tui->params, buf, len);
+    offset = unibi_run(str, params, buf, len);
   }
 
   const char *str = NULL;
@@ -2314,7 +2318,7 @@ static size_t flush_buf_end(TUIData *tui, char *buf, size_t len)
 
   if (str != NULL) {
     assert(len >= offset);
-    offset += unibi_run(str, tui->params, buf + offset, len - offset);
+    offset += unibi_run(str, params, buf + offset, len - offset);
   }
 
   return offset;

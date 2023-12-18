@@ -441,10 +441,16 @@ config({opts}, {namespace})                          *vim.diagnostic.config()*
                          warnings, information, and hints, respectively.
                          Example: >lua
 
-                         vim.diagnostic.config({
-                           sign = { text = { [vim.diagnostic.severity.ERROR] = 'E', ... } }
-                         })
+                           vim.diagnostic.config({
+                             signs = { text = { [vim.diagnostic.severity.ERROR] = 'E', ... } }
+                           })
 <
+                       • numhl: (table) A table mapping |diagnostic-severity|
+                         to the highlight group used for the line number where
+                         the sign is placed.
+                       • linehl: (table) A table mapping |diagnostic-severity|
+                         to the highlight group used for the whole line the
+                         sign is placed in.
 
                      • float: Options for floating windows. See
                        |vim.diagnostic.open_float()|.
@@ -459,6 +465,9 @@ config({opts}, {namespace})                          *vim.diagnostic.config()*
                        • reverse: (boolean) Reverse sort order
       • {namespace}  (integer|nil) Update the options for the given namespace.
                      When omitted, update the global diagnostic options.
+
+    Return: ~
+        (table|nil) table of current diagnostic config if `opts` is omitted.
 
 disable({bufnr}, {namespace})                       *vim.diagnostic.disable()*
     Disable diagnostics in the given buffer.

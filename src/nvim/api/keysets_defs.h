@@ -344,4 +344,10 @@ typedef struct {
 typedef struct {
   OptionalKeys is_set__open_term_;
   LuaRef on_input;
+  Boolean force_crlf;
 } Dict(open_term);
+
+typedef struct {
+  OptionalKeys is_set__complete_set_;
+  String info;
+} Dict(complete_set);

@@ -1373,6 +1373,8 @@ M.funcs = {
       		no item is selected when using the <Up> or
       		<Down> keys)
          inserted	Inserted string. [NOT IMPLEMENTED YET]
+         preview_winid     Info floating preview window id.
+         preview_bufnr     Info floating preview buffer id.
 
       					*complete_info_mode*
       mode values are:
@@ -7443,9 +7445,9 @@ M.funcs = {
       <This limits the length of the text used from "line" to
       "width" bytes.
 
-      If the argument to be formatted is specified using a posional
-      argument specifier, and a '*' is used to indicate that a
-      number argument is to be used to specify the width or
+      If the argument to be formatted is specified using a
+      positional argument specifier, and a '*' is used to indicate
+      that a number argument is to be used to specify the width or
       precision, the argument(s) to be used must also be specified
       using a {n$} positional argument specifier. See |printf-$|.
 

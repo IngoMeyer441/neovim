@@ -598,10 +598,14 @@ end
 ---                to display in the sign column. The default is to use "E", "W", "I", and "H"
 ---                for errors, warnings, information, and hints, respectively. Example:
 ---                   <pre>lua
----                     vim.diagnostic.config({
----                       sign = { text = { [vim.diagnostic.severity.ERROR] = 'E', ... } }
----                     })
+---                       vim.diagnostic.config({
+---                         signs = { text = { [vim.diagnostic.severity.ERROR] = 'E', ... } }
+---                       })
 ---                   </pre>
+---                * numhl: (table) A table mapping |diagnostic-severity| to the highlight
+---                group used for the line number where the sign is placed.
+---                * linehl: (table) A table mapping |diagnostic-severity| to the highlight group
+---                used for the whole line the sign is placed in.
 ---       - float: Options for floating windows. See |vim.diagnostic.open_float()|.
 ---       - update_in_insert: (default false) Update diagnostics in Insert mode (if false,
 ---                           diagnostics are updated on InsertLeave)
@@ -613,6 +617,8 @@ end
 ---
 ---@param namespace integer|nil Update the options for the given namespace. When omitted, update the
 ---                            global diagnostic options.
+---
+---@return table|nil table of current diagnostic config if `opts` is omitted.
 function M.config(opts, namespace)
   vim.validate({
     opts = { opts, 't', true },
@@ -873,7 +879,8 @@ M.handlers.signs = {
 
     local ns = M.get_namespace(namespace)
     if not ns.user_data.sign_ns then
-      ns.user_data.sign_ns = api.nvim_create_namespace('')
+      ns.user_data.sign_ns =
+        api.nvim_create_namespace(string.format('%s/diagnostic/signs', ns.name))
     end
 
     local text = {}
@@ -885,11 +892,16 @@ M.handlers.signs = {
       end
     end
 
+    local numhl = opts.signs.numhl or {}
+    local linehl = opts.signs.linehl or {}
+
     for _, diagnostic in ipairs(diagnostics) do
       if api.nvim_buf_is_loaded(diagnostic.bufnr) then
         api.nvim_buf_set_extmark(bufnr, ns.user_data.sign_ns, diagnostic.lnum, 0, {
           sign_text = text[diagnostic.severity] or text[M.severity[diagnostic.severity]] or 'U',
           sign_hl_group = sign_highlight_map[diagnostic.severity],
+          number_hl_group = numhl[diagnostic.severity],
+          line_hl_group = linehl[diagnostic.severity],
           priority = get_priority(diagnostic.severity),
         })
       end
@@ -897,7 +909,7 @@ M.handlers.signs = {
   end,
   hide = function(namespace, bufnr)
     local ns = M.get_namespace(namespace)
-    if ns.user_data.sign_group and api.nvim_buf_is_valid(bufnr) then
+    if ns.user_data.sign_ns and api.nvim_buf_is_valid(bufnr) then
       api.nvim_buf_clear_namespace(bufnr, ns.user_data.sign_ns, 0, -1)
     end
   end,
@@ -929,7 +941,8 @@ M.handlers.underline = {
 
     local ns = M.get_namespace(namespace)
     if not ns.user_data.underline_ns then
-      ns.user_data.underline_ns = api.nvim_create_namespace('')
+      ns.user_data.underline_ns =
+        api.nvim_create_namespace(string.format('%s/diagnostic/underline', ns.name))
     end
 
     local underline_ns = ns.user_data.underline_ns
@@ -1011,7 +1024,8 @@ M.handlers.virtual_text = {
 
     local ns = M.get_namespace(namespace)
     if not ns.user_data.virt_text_ns then
-      ns.user_data.virt_text_ns = api.nvim_create_namespace('')
+      ns.user_data.virt_text_ns =
+        api.nvim_create_namespace(string.format('%s/diagnostic/virtual_text', ns.name))
     end
 
     local virt_text_ns = ns.user_data.virt_text_ns

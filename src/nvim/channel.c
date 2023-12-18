@@ -15,8 +15,10 @@
 #include "nvim/eval.h"
 #include "nvim/eval/encode.h"
 #include "nvim/eval/typval.h"
+#include "nvim/event/multiqueue.h"
 #include "nvim/event/rstream.h"
 #include "nvim/event/socket.h"
+#include "nvim/event/stream.h"
 #include "nvim/event/wstream.h"
 #include "nvim/garray.h"
 #include "nvim/gettext.h"
@@ -32,6 +34,7 @@
 #include "nvim/os/shell.h"
 #include "nvim/path.h"
 #include "nvim/rbuffer.h"
+#include "nvim/types_defs.h"
 
 #ifdef MSWIN
 # include "nvim/os/fs.h"
@@ -801,6 +804,7 @@ void channel_terminal_open(buf_T *buf, Channel *chan)
     .write_cb = term_write,
     .resize_cb = term_resize,
     .close_cb = term_close,
+    .force_crlf = false,
   };
   buf->b_p_channel = (OptInt)chan->id;  // 'channel' option
   channel_incref(chan);
