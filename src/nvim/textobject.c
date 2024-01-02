@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "nvim/ascii_defs.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
@@ -586,7 +587,7 @@ int current_word(oparg_T *oap, int count, bool include, bool bigword)
 {
   pos_T start_pos;
   bool inclusive = true;
-  int include_white = false;
+  bool include_white = false;
 
   cls_bigword = bigword;
   clearpos(&start_pos);
@@ -1079,7 +1080,7 @@ int current_tagblock(oparg_T *oap, int count_arg, bool include)
   bool do_include = include;
   bool save_p_ws = p_ws;
   int retval = FAIL;
-  int is_inclusive = true;
+  bool is_inclusive = true;
 
   p_ws = false;
 

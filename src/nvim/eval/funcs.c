@@ -28,7 +28,6 @@
 #include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
@@ -305,7 +304,7 @@ int call_internal_method(const char *const fname, const int argcount, typval_T *
 }
 
 /// @return  true for a non-zero Number and a non-empty String.
-static int non_zero_arg(typval_T *argvars)
+static bool non_zero_arg(typval_T *argvars)
 {
   return ((argvars[0].v_type == VAR_NUMBER
            && argvars[0].vval.v_number != 0)
@@ -2443,7 +2442,7 @@ static void getpos_both(typval_T *argvars, typval_T *rettv, bool getcurpos, bool
                             : (varnumber_T)0));
   tv_list_append_number(l, (fp != NULL) ? (varnumber_T)fp->coladd : (varnumber_T)0);
   if (getcurpos) {
-    const int save_set_curswant = curwin->w_set_curswant;
+    const bool save_set_curswant = curwin->w_set_curswant;
     const colnr_T save_curswant = curwin->w_curswant;
     const colnr_T save_virtcol = curwin->w_virtcol;
 
@@ -4054,8 +4053,8 @@ static void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   bool clear_env = false;
   bool overlapped = false;
   ChannelStdinMode stdin_mode = kChannelStdinPipe;
-  CallbackReader on_stdout = CALLBACK_READER_INIT,
-                 on_stderr = CALLBACK_READER_INIT;
+  CallbackReader on_stdout = CALLBACK_READER_INIT;
+  CallbackReader on_stderr = CALLBACK_READER_INIT;
   Callback on_exit = CALLBACK_NONE;
   char *cwd = NULL;
   dictitem_T *job_env = NULL;
@@ -4118,7 +4117,8 @@ static void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     }
   }
 
-  uint16_t width = 0, height = 0;
+  uint16_t width = 0;
+  uint16_t height = 0;
   char *term_name = NULL;
 
   if (pty) {
@@ -8553,8 +8553,8 @@ static void f_termopen(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     return;
   }
 
-  CallbackReader on_stdout = CALLBACK_READER_INIT,
-                 on_stderr = CALLBACK_READER_INIT;
+  CallbackReader on_stdout = CALLBACK_READER_INIT;
+  CallbackReader on_stderr = CALLBACK_READER_INIT;
   Callback on_exit = CALLBACK_NONE;
   dict_T *job_opts = NULL;
   const char *cwd = ".";

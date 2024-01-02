@@ -1037,7 +1037,9 @@ void curs_columns(win_T *wp, int may_scroll)
 void textpos2screenpos(win_T *wp, pos_T *pos, int *rowp, int *scolp, int *ccolp, int *ecolp,
                        bool local)
 {
-  colnr_T scol = 0, ccol = 0, ecol = 0;
+  colnr_T scol = 0;
+  colnr_T ccol = 0;
+  colnr_T ecol = 0;
   int row = 0;
   colnr_T coloff = 0;
   bool visible_row = false;
@@ -1129,7 +1131,9 @@ void f_screenpos(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     pos.col = 0;
   }
   int row = 0;
-  int scol = 0, ccol = 0, ecol = 0;
+  int scol = 0;
+  int ccol = 0;
+  int ecol = 0;
   textpos2screenpos(wp, &pos, &row, &scol, &ccol, &ecol, false);
 
   tv_dict_add_nr(dict, S_LEN("row"), row);
@@ -2699,7 +2703,7 @@ void do_check_cursorbind(void)
   colnr_T col = curwin->w_cursor.col;
   colnr_T coladd = curwin->w_cursor.coladd;
   colnr_T curswant = curwin->w_curswant;
-  int set_curswant = curwin->w_set_curswant;
+  bool set_curswant = curwin->w_set_curswant;
   win_T *old_curwin = curwin;
   buf_T *old_curbuf = curbuf;
   int old_VIsual_select = VIsual_select;

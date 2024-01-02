@@ -390,7 +390,8 @@ static void shift_block(oparg_T *oap, int amount)
     bd.start_vcol = cts.cts_vcol;
     clear_chartabsize_arg(&cts);
 
-    int tabs = 0, spaces = 0;
+    int tabs = 0;
+    int spaces = 0;
     // OK, now total=all the VWS reqd, and textstart points at the 1st
     // non-ws char in the block.
     if (!curbuf->b_p_et) {
@@ -1159,6 +1160,7 @@ int do_execreg(int regname, int colon, int addcr, int silent)
       }
     }
     reg_executing = regname == 0 ? '"' : regname;  // disable the 'q' command
+    pending_end_reg_executing = false;
   }
   return retval;
 }
@@ -1495,7 +1497,7 @@ int op_delete(oparg_T *oap)
   // register.  For the black hole register '_' don't yank anything.
   if (oap->regname != '_') {
     yankreg_T *reg = NULL;
-    int did_yank = false;
+    bool did_yank = false;
     if (oap->regname != 0) {
       // check for read-only register
       if (!valid_yank_reg(oap->regname, true)) {
@@ -1793,7 +1795,7 @@ static int op_replace(oparg_T *oap, int c)
   int n;
   struct block_def bd;
   char *after_p = NULL;
-  int had_ctrl_v_cr = false;
+  bool had_ctrl_v_cr = false;
 
   if ((curbuf->b_ml.ml_flags & ML_EMPTY) || oap->empty) {
     return OK;              // nothing to do
@@ -1891,7 +1893,8 @@ static int op_replace(oparg_T *oap, int c)
       size_t after_p_len = 0;
       int col = oldlen - bd.textcol - bd.textlen + 1;
       assert(col >= 0);
-      int newrows = 0, newcols = 0;
+      int newrows = 0;
+      int newcols = 0;
       if (had_ctrl_v_cr || (c != '\r' && c != '\n')) {
         // strlen(newp) at this point
         int newp_len = bd.textcol + bd.startspaces;
@@ -2040,11 +2043,9 @@ void op_tilde(oparg_T *oap)
   pos_T pos = oap->start;
   if (oap->motion_type == kMTBlockWise) {  // Visual block mode
     for (; pos.lnum <= oap->end.lnum; pos.lnum++) {
-      int one_change;
-
       block_prep(oap, &bd, pos.lnum, false);
       pos.col = bd.textcol;
-      one_change = swapchars(oap->op_type, &pos, bd.textlen);
+      int one_change = swapchars(oap->op_type, &pos, bd.textlen);
       did_change |= one_change;
     }
     if (did_change) {
@@ -2636,8 +2637,9 @@ static void op_yank_reg(oparg_T *oap, bool message, yankreg_T *reg, bool append)
       break;
 
     case kMTCharWise: {
-      colnr_T startcol = 0, endcol = MAXCOL;
-      int is_oneChar = false;
+      colnr_T startcol = 0;
+      colnr_T endcol = MAXCOL;
+      bool is_oneChar = false;
       colnr_T cs, ce;
       char *p = ml_get(lnum);
       bd.startspaces = 0;
@@ -2685,8 +2687,7 @@ static void op_yank_reg(oparg_T *oap, bool message, yankreg_T *reg, bool append)
       if (endcol == MAXCOL) {
         endcol = (colnr_T)strlen(p);
       }
-      if (startcol > endcol
-          || is_oneChar) {
+      if (startcol > endcol || is_oneChar) {
         bd.textlen = 0;
       } else {
         bd.textlen = endcol - startcol + oap->inclusive;
@@ -3696,7 +3697,7 @@ void adjust_cursor_eol(void)
 }
 
 /// @return  true if lines starting with '#' should be left aligned.
-int preprocs_left(void)
+bool preprocs_left(void)
 {
   return ((curbuf->b_p_si && !curbuf->b_p_cin)
           || (curbuf->b_p_cin && in_cinkeys('#', ' ', true)
@@ -3956,7 +3957,7 @@ char *skip_comment(char *line, bool process, bool include_space, bool *is_commen
 ///                           to set those marks.
 ///
 /// @return  FAIL for failure, OK otherwise
-int do_join(size_t count, int insert_space, int save_undo, int use_formatoptions, bool setmark)
+int do_join(size_t count, bool insert_space, bool save_undo, bool use_formatoptions, bool setmark)
 {
   char *curr = NULL;
   char *curr_start = NULL;
@@ -3967,8 +3968,7 @@ int do_join(size_t count, int insert_space, int save_undo, int use_formatoptions
   int sumsize = 0;              // size of the long new line
   int ret = OK;
   int *comments = NULL;
-  int remove_comments = (use_formatoptions == true)
-                        && has_format_option(FO_REMOVE_COMS);
+  bool remove_comments = use_formatoptions && has_format_option(FO_REMOVE_COMS);
   bool prev_was_comment = false;
   assert(count >= 1);
 

@@ -15,6 +15,7 @@
 #include "nvim/api/private/validate.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor_shape.h"
@@ -670,7 +671,7 @@ void syn_init_cmdline_highlight(bool reset, bool init)
 /// @param reset clear groups first
 void init_highlight(bool both, bool reset)
 {
-  static int had_both = false;
+  static bool had_both = false;
 
   // Try finding the color scheme file.  Used when a color file was loaded
   // and 'background' or 't_Co' is changed.

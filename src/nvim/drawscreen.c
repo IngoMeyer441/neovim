@@ -105,7 +105,6 @@
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
-#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/version.h"
@@ -928,7 +927,6 @@ int showmode(void)
 
   bool can_show_mode = (p_ch != 0 || ui_has(kUIMessages));
   if ((do_mode || reg_recording != 0) && can_show_mode) {
-    int sub_attr;
     if (skip_showmode()) {
       return 0;  // show mode later
     }
@@ -981,7 +979,8 @@ int showmode(void)
           }
           if (edit_submode_extra != NULL) {
             msg_puts_attr(" ", attr);  // Add a space in between.
-            if ((int)edit_submode_highl < HLF_COUNT) {
+            int sub_attr;
+            if (edit_submode_highl < HLF_COUNT) {
               sub_attr = win_hl_attr(curwin, (int)edit_submode_highl);
             } else {
               sub_attr = attr;

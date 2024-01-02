@@ -19,6 +19,7 @@
 #include "nvim/optionstr.h"
 #include "nvim/pos_defs.h"
 #include "nvim/strings.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
@@ -146,7 +147,9 @@ void win_config_float(win_T *wp, FloatConfig fconfig)
     fconfig.col += curwin->w_wcol;
     fconfig.window = curwin->handle;
   } else if (fconfig.relative == kFloatRelativeMouse) {
-    int row = mouse_row, col = mouse_col, grid = mouse_grid;
+    int row = mouse_row;
+    int col = mouse_col;
+    int grid = mouse_grid;
     win_T *mouse_win = mouse_find_win(&grid, &row, &col);
     if (mouse_win != NULL) {
       fconfig.relative = kFloatRelativeWindow;
@@ -197,7 +200,8 @@ void win_config_float(win_T *wp, FloatConfig fconfig)
       row += parent->w_winrow;
       col += parent->w_wincol;
       ScreenGrid *grid = &parent->w_grid;
-      int row_off = 0, col_off = 0;
+      int row_off = 0;
+      int col_off = 0;
       grid_adjust(&grid, &row_off, &col_off);
       row += row_off;
       col += col_off;

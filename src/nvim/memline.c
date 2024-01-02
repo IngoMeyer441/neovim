@@ -48,7 +48,6 @@
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/change.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
@@ -3347,7 +3346,7 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
       if (!recoverymode && buf_fname != NULL && !buf->b_help && !(buf->b_flags & BF_DUMMY)) {
         int fd;
         ZeroBlock b0;
-        int differ = false;
+        bool differ = false;
 
         // Try to read block 0 from the swapfile to get the original file name (and inode number).
         fd = os_open(fname, O_RDONLY, 0);
@@ -3386,7 +3385,7 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
         // Show the ATTENTION message when:
         //  - there is an old swapfile for the current file
         //  - the buffer was not recovered
-        if (differ == false && !(curbuf->b_flags & BF_RECOVERED)
+        if (!differ && !(curbuf->b_flags & BF_RECOVERED)
             && vim_strchr(p_shm, SHM_ATTENTION) == NULL) {
           sea_choice_T choice = SEA_CHOICE_NONE;
 

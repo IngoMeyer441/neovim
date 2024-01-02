@@ -36,6 +36,7 @@
 #include "nvim/sign.h"
 #include "nvim/state_defs.h"
 #include "nvim/statusline.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
 #include "nvim/ui_compositor.h"
@@ -286,7 +287,8 @@ void strchrsub(char *str, char c, char x)
 void memchrsub(void *data, char c, char x, size_t len)
   FUNC_ATTR_NONNULL_ALL
 {
-  char *p = data, *end = (char *)data + len;
+  char *p = data;
+  char *end = (char *)data + len;
   while ((p = memchr(p, c, (size_t)(end - p)))) {
     *p++ = x;
   }
@@ -321,7 +323,8 @@ size_t memcnt(const void *data, char c, size_t len)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE
 {
   size_t cnt = 0;
-  const char *ptr = data, *end = ptr + len;
+  const char *ptr = data;
+  const char *end = ptr + len;
   while ((ptr = memchr(ptr, c, (size_t)(end - ptr))) != NULL) {
     cnt++;
     ptr++;  // Skip the instance of c.

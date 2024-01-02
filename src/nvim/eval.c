@@ -16,7 +16,6 @@
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand_defs.h"
@@ -564,7 +563,7 @@ static char *redir_varname = NULL;
 /// @param append  append to an existing variable
 ///
 /// @return  OK if successfully completed the setup.  FAIL otherwise.
-int var_redir_start(char *name, int append)
+int var_redir_start(char *name, bool append)
 {
   // Catch a bad name early.
   if (!eval_isnamec1(*name)) {
@@ -765,7 +764,7 @@ void fill_evalarg_from_eap(evalarg_T *evalarg, exarg_T *eap, bool skip)
 /// @param skip  only parse, don't execute
 ///
 /// @return  true or false.
-int eval_to_bool(char *arg, bool *error, exarg_T *eap, int skip)
+bool eval_to_bool(char *arg, bool *error, exarg_T *eap, int skip)
 {
   typval_T tv;
   bool retval = false;
@@ -2863,7 +2862,8 @@ static int eval5(char **arg, typval_T *rettv, evalarg_T *const evalarg)
       } else {
         bool error = false;
         varnumber_T n1, n2;
-        float_T f1 = 0, f2 = 0;
+        float_T f1 = 0;
+        float_T f2 = 0;
 
         if (rettv->v_type == VAR_FLOAT) {
           f1 = rettv->vval.v_float;
@@ -2954,7 +2954,8 @@ static int eval6(char **arg, typval_T *rettv, evalarg_T *const evalarg, bool wan
     }
 
     varnumber_T n1, n2;
-    float_T f1 = 0, f2 = 0;
+    float_T f1 = 0;
+    float_T f2 = 0;
     bool error = false;
     const bool evaluate = evalarg == NULL ? 0 : (evalarg->eval_flags & EVAL_EVALUATE);
     if (evaluate) {

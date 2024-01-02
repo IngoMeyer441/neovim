@@ -1358,9 +1358,13 @@ int vim_vsnprintf_typval(char *str, size_t str_m, const char *fmt, va_list ap_st
       assert(n <= SIZE_MAX - str_l);
       str_l += n;
     } else {
-      size_t min_field_width = 0, precision = 0;
-      int zero_padding = 0, precision_specified = 0, justify_left = 0;
-      int alternate_form = 0, force_sign = 0;
+      size_t min_field_width = 0;
+      size_t precision = 0;
+      int zero_padding = 0;
+      int precision_specified = 0;
+      int justify_left = 0;
+      int alternate_form = 0;
+      int force_sign = 0;
 
       // if both ' ' and '+' flags appear, ' ' flag should be ignored
       int space_for_positive = 1;
@@ -1896,7 +1900,7 @@ int vim_vsnprintf_typval(char *str, size_t str_m, const char *fmt, va_list ap_st
       case 'G': {
         // floating point
         char format[40];
-        int remove_trailing_zeroes = false;
+        bool remove_trailing_zeroes = false;
 
         double f = (tvs
                     ? tv_float(tvs, &arg_idx)

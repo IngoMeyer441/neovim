@@ -17,6 +17,7 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/debugger.h"
@@ -2757,7 +2758,7 @@ void ex_finish(exarg_T *eap)
 /// Mark a sourced file as finished.  Possibly makes the ":finish" pending.
 /// Also called for a pending finish at the ":endtry" or after returning from
 /// an extra do_cmdline().  "reanimate" is used in the latter case.
-void do_finish(exarg_T *eap, int reanimate)
+void do_finish(exarg_T *eap, bool reanimate)
 {
   if (reanimate) {
     ((struct source_cookie *)getline_cookie(eap->getline,

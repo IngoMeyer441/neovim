@@ -18,7 +18,6 @@
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cmdhist.h"
@@ -70,6 +69,7 @@
 #include "nvim/tag.h"
 #include "nvim/textformat.h"
 #include "nvim/textobject.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/vim_defs.h"
@@ -4721,7 +4721,7 @@ static void nv_vreplace(cmdarg_T *cap)
 /// Swap case for "~" command, when it does not work like an operator.
 static void n_swapchar(cmdarg_T *cap)
 {
-  int did_change = 0;
+  bool did_change = false;
 
   if (checkclearopq(cap->oap)) {
     return;
