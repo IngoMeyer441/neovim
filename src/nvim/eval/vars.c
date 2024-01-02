@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
+#include <uv.h>
 
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
@@ -42,6 +42,8 @@
 #include "nvim/types_defs.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
+
+typedef int (*ex_unletlock_callback)(lval_T *, char *, exarg_T *, int);
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "eval/vars.c.generated.h"
@@ -376,7 +378,7 @@ void ex_let(exarg_T *eap)
       if (!eap->skip) {
         op[0] = '=';
         op[1] = NUL;
-        (void)ex_let_vars(eap->arg, &rettv, false, semicolon, var_count, is_const, op);
+        ex_let_vars(eap->arg, &rettv, false, semicolon, var_count, is_const, op);
       }
       tv_clear(&rettv);
     }
@@ -413,7 +415,7 @@ void ex_let(exarg_T *eap)
   clear_evalarg(&evalarg, eap);
 
   if (!eap->skip && eval_res != FAIL) {
-    (void)ex_let_vars(eap->arg, &rettv, false, semicolon, var_count, is_const, op);
+    ex_let_vars(eap->arg, &rettv, false, semicolon, var_count, is_const, op);
   }
   if (eval_res != FAIL) {
     tv_clear(&rettv);
@@ -1301,7 +1303,7 @@ void vars_clear(hashtab_T *ht)
 }
 
 /// Like vars_clear(), but only free the value if "free_val" is true.
-void vars_clear_ext(hashtab_T *ht, int free_val)
+void vars_clear_ext(hashtab_T *ht, bool free_val)
 {
   int todo;
   hashitem_T *hi;

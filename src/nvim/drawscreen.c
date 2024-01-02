@@ -1,5 +1,5 @@
 // drawscreen.c: Code for updating all the windows on the screen.
-// This is the top level, drawline.c is the middle and grid.c/screen.c the lower level.
+// This is the top level, drawline.c is the middle and grid.c the lower level.
 
 // update_screen() is the function that updates all windows and status lines.
 // It is called from the main loop when must_redraw is non-zero.  It may be
@@ -98,13 +98,13 @@
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
-#include "nvim/sign_defs.h"
 #include "nvim/spell.h"
 #include "nvim/state.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/version.h"
@@ -442,7 +442,7 @@ int update_screen(void)
   // will be redrawn later or in win_update().
   must_redraw = 0;
 
-  updating_screen = 1;
+  updating_screen = true;
 
   display_tick++;  // let syntax code know we're in a next round of
                    // display updating
@@ -551,8 +551,7 @@ int update_screen(void)
 
   ui_comp_set_screen_valid(true);
 
-  DecorProviders providers;
-  decor_providers_start(&providers);
+  decor_providers_start();
 
   // "start" callback could have changed highlights for global elements
   if (win_check_ns_hl(NULL)) {
@@ -599,7 +598,7 @@ int update_screen(void)
       }
 
       if (buf->b_mod_tick_decor < display_tick) {
-        decor_providers_invoke_buf(buf, &providers);
+        decor_providers_invoke_buf(buf);
         buf->b_mod_tick_decor = display_tick;
       }
     }
@@ -629,7 +628,7 @@ int update_screen(void)
         did_one = true;
         start_search_hl();
       }
-      win_update(wp, &providers);
+      win_update(wp);
     }
 
     // redraw status line and window bar after the window to minimize cursor movement
@@ -656,7 +655,7 @@ int update_screen(void)
     wp->w_buffer->b_signcols.resized = false;
   }
 
-  updating_screen = 0;
+  updating_screen = false;
 
   // Clear or redraw the command line.  Done last, because scrolling may
   // mess up the command line.
@@ -670,8 +669,7 @@ int update_screen(void)
   }
   did_intro = true;
 
-  decor_providers_invoke_end(&providers);
-  kvi_destroy(providers);
+  decor_providers_invoke_end();
 
   // either cmdline is cleared, not drawn or mode is last drawn
   cmdline_was_last_drawn = false;
@@ -919,11 +917,11 @@ int showmode(void)
 
   msg_grid_validate();
 
-  int do_mode = ((p_smd && msg_silent == 0)
-                 && ((State & MODE_TERMINAL)
-                     || (State & MODE_INSERT)
-                     || restart_edit != NUL
-                     || VIsual_active));
+  bool do_mode = ((p_smd && msg_silent == 0)
+                  && ((State & MODE_TERMINAL)
+                      || (State & MODE_INSERT)
+                      || restart_edit != NUL
+                      || VIsual_active));
 
   bool can_show_mode = (p_ch != 0 || ui_has(kUIMessages));
   if ((do_mode || reg_recording != 0) && can_show_mode) {
@@ -1211,7 +1209,7 @@ static bool win_redraw_signcols(win_T *wp)
   } else if (wp->w_maxscwidth <= 1 && buf->b_signs_with_text >= (size_t)wp->w_maxscwidth) {
     width = wp->w_maxscwidth;
   } else {
-    width = buf_signcols_validate(wp, buf, false);
+    width = MIN(wp->w_maxscwidth, buf_signcols_validate(wp, buf, false));
   }
 
   int scwidth = wp->w_scwidth;
@@ -1426,7 +1424,7 @@ static void draw_sep_connectors_win(win_T *wp)
 /// top: from first row to top_end (when scrolled down)
 /// mid: from mid_start to mid_end (update inversion or changed text)
 /// bot: from bot_start to last row (when scrolled up)
-static void win_update(win_T *wp, DecorProviders *providers)
+static void win_update(win_T *wp)
 {
   int top_end = 0;              // Below last row of the top area that needs
                                 // updating.  0 when no top area updating.
@@ -1493,8 +1491,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
 
   decor_redraw_reset(wp, &decor_state);
 
-  DecorProviders line_providers;
-  decor_providers_invoke_win(wp, providers, &line_providers);
+  decor_providers_invoke_win(wp);
 
   if (win_redraw_signcols(wp)) {
     wp->w_lines_valid = 0;
@@ -1611,14 +1608,14 @@ static void win_update(win_T *wp, DecorProviders *providers)
         }
       }
 
-      (void)hasFoldingWin(wp, mod_top, &mod_top, NULL, true, NULL);
+      hasFoldingWin(wp, mod_top, &mod_top, NULL, true, NULL);
       if (mod_top > lnumt) {
         mod_top = lnumt;
       }
 
       // Now do the same for the bottom line (one above mod_bot).
       mod_bot--;
-      (void)hasFoldingWin(wp, mod_bot, NULL, &mod_bot, true, NULL);
+      hasFoldingWin(wp, mod_bot, NULL, &mod_bot, true, NULL);
       mod_bot++;
       if (mod_bot < lnumb) {
         mod_bot = lnumb;
@@ -1689,17 +1686,15 @@ static void win_update(win_T *wp, DecorProviders *providers)
       // New topline is above old topline: May scroll down.
       int j;
       if (hasAnyFolding(wp)) {
-        linenr_T ln;
-
         // count the number of lines we are off, counting a sequence
         // of folded lines as one
         j = 0;
-        for (ln = wp->w_topline; ln < wp->w_lines[0].wl_lnum; ln++) {
+        for (linenr_T ln = wp->w_topline; ln < wp->w_lines[0].wl_lnum; ln++) {
           j++;
           if (j >= wp->w_grid.rows - 2) {
             break;
           }
-          (void)hasFoldingWin(wp, ln, NULL, &ln, true, NULL);
+          hasFoldingWin(wp, ln, NULL, &ln, true, NULL);
         }
       } else {
         j = wp->w_lines[0].wl_lnum - wp->w_topline;
@@ -2283,7 +2278,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
         spellvars_T zero_spv = { 0 };
         row = win_line(wp, lnum, srow, wp->w_grid.rows, false,
                        foldinfo.fi_lines > 0 ? &zero_spv : &spv,
-                       foldinfo, &line_providers);
+                       foldinfo);
 
         if (foldinfo.fi_lines == 0) {
           wp->w_lines[idx].wl_folded = false;
@@ -2321,7 +2316,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
         // text doesn't need to be drawn, but the number column does.
         foldinfo_T info = wp->w_p_cul && lnum == wp->w_cursor.lnum
                           ? cursorline_fi : fold_info(wp, lnum);
-        (void)win_line(wp, lnum, srow, wp->w_grid.rows, true, &spv, info, &line_providers);
+        win_line(wp, lnum, srow, wp->w_grid.rows, true, &spv, info);
       }
 
       // This line does not need to be drawn, advance to the next one.
@@ -2343,7 +2338,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
       wp->w_lines_valid = 0;
       wp->w_valid &= ~VALID_WCOL;
       decor_redraw_reset(wp, &decor_state);
-      decor_providers_invoke_win(wp, providers, &line_providers);
+      decor_providers_invoke_win(wp);
       continue;
     }
 
@@ -2418,7 +2413,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
         spellvars_T zero_spv = { 0 };
         foldinfo_T zero_foldinfo = { 0 };
         row = win_line(wp, wp->w_botline, row, wp->w_grid.rows, false, &zero_spv,
-                       zero_foldinfo, &line_providers);
+                       zero_foldinfo);
       }
     } else if (dollar_vcol == -1) {
       wp->w_botline = lnum;
@@ -2441,8 +2436,6 @@ static void win_update(win_T *wp, DecorProviders *providers)
                  HLF_EOB);
     set_empty_rows(wp, row);
   }
-
-  kvi_destroy(line_providers);
 
   if (wp->w_redr_type >= UPD_REDRAW_TOP) {
     draw_vsep_win(wp);
@@ -2484,7 +2477,7 @@ static void win_update(win_T *wp, DecorProviders *providers)
         // Don't update for changes in buffer again.
         int mod_set = curbuf->b_mod_set;
         curbuf->b_mod_set = false;
-        win_update(curwin, providers);
+        win_update(curwin);
         must_redraw = 0;
         curbuf->b_mod_set = mod_set;
       }

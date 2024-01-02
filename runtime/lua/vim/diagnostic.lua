@@ -108,6 +108,7 @@ local function filter_by_severity(severity, diagnostics)
     severities[to_severity(s)] = true
   end
 
+  --- @param t table
   return vim.tbl_filter(function(t)
     return severities[t.severity]
   end, diagnostics)
@@ -362,7 +363,6 @@ local function get_diagnostics(bufnr, opts, clamp)
 
   local function add(b, d)
     if not opts.lnum or d.lnum == opts.lnum then
-      d = vim.deepcopy(d)
       if clamp and api.nvim_buf_is_loaded(b) then
         local line_count = buf_line_count[b] - 1
         if
@@ -373,6 +373,7 @@ local function get_diagnostics(bufnr, opts, clamp)
           or d.col < 0
           or d.end_col < 0
         then
+          d = vim.deepcopy(d)
           d.lnum = math.max(math.min(d.lnum, line_count), 0)
           d.end_lnum = math.max(math.min(d.end_lnum, line_count), 0)
           d.col = math.max(d.col, 0)
@@ -755,7 +756,31 @@ function M.get(bufnr, opts)
     opts = { opts, 't', true },
   })
 
-  return get_diagnostics(bufnr, opts, false)
+  return vim.deepcopy(get_diagnostics(bufnr, opts, false))
+end
+
+--- Get current diagnostics count.
+---
+---@param bufnr integer|nil Buffer number to get diagnostics from. Use 0 for
+---                        current buffer or nil for all buffers.
+---@param opts table|nil A table with the following keys:
+---                        - namespace: (number) Limit diagnostics to the given namespace.
+---                        - lnum: (number) Limit diagnostics to the given line number.
+---                        - severity: See |diagnostic-severity|.
+---@return table A table with actually present severity values as keys (see |diagnostic-severity|) and integer counts as values.
+function M.count(bufnr, opts)
+  vim.validate({
+    bufnr = { bufnr, 'n', true },
+    opts = { opts, 't', true },
+  })
+
+  local diagnostics = get_diagnostics(bufnr, opts, false)
+  local count = {}
+  for i = 1, #diagnostics do
+    local severity = diagnostics[i].severity
+    count[severity] = (count[severity] or 0) + 1
+  end
+  return count
 end
 
 --- Get the previous diagnostic closest to the cursor position.
@@ -891,15 +916,13 @@ M.handlers.signs = {
         local sign = vim.fn.sign_getdefined(name)[1]
         if sign then
           local severity = M.severity[v:upper()]
-          if vim.fn.has('nvim-0.11') == 1 then
-            vim.deprecate(
-              'Defining diagnostic signs with :sign-define or sign_define()',
-              'vim.diagnostic.config()',
-              '0.12',
-              nil,
-              false
-            )
-          end
+          vim.deprecate(
+            'Defining diagnostic signs with :sign-define or sign_define()',
+            'vim.diagnostic.config()',
+            '0.12',
+            nil,
+            false
+          )
 
           if not opts.signs.text then
             opts.signs.text = {}

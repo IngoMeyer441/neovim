@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
@@ -726,8 +725,6 @@ void draw_tabline(void)
     win_T *cwp;
     int wincount;
     int c;
-    int len;
-    char *p;
     grid_line_start(&default_grid, 0);
     FOR_ALL_TABS(tp) {
       tabcount++;
@@ -783,7 +780,7 @@ void draw_tabline(void)
       if (modified || wincount > 1) {
         if (wincount > 1) {
           vim_snprintf(NameBuff, MAXPATHL, "%d", wincount);
-          len = (int)strlen(NameBuff);
+          int len = (int)strlen(NameBuff);
           if (col + len >= Columns - 3) {
             break;
           }
@@ -802,8 +799,8 @@ void draw_tabline(void)
         // Get buffer name in NameBuff[]
         get_trans_bufname(cwp->w_buffer);
         shorten_dir(NameBuff);
-        len = vim_strsize(NameBuff);
-        p = NameBuff;
+        int len = vim_strsize(NameBuff);
+        char *p = NameBuff;
         while (len > room) {
           len -= ptr2cells(p);
           MB_PTR_ADV(p);
@@ -868,7 +865,7 @@ void draw_tabline(void)
 /// the v:lnum and v:relnum variables don't have to be updated.
 ///
 /// @return  The width of the built status column string for line "lnum"
-int build_statuscol_str(win_T *wp, linenr_T lnum, linenr_T relnum, statuscol_T *stcp)
+int build_statuscol_str(win_T *wp, linenr_T lnum, linenr_T relnum, char *buf, statuscol_T *stcp)
 {
   // Only update click definitions once per window per redraw.
   // Don't update when current width is 0, since it will be redrawn again if not empty.
@@ -881,7 +878,7 @@ int build_statuscol_str(win_T *wp, linenr_T lnum, linenr_T relnum, statuscol_T *
 
   StlClickRecord *clickrec;
   char *stc = xstrdup(wp->w_p_stc);
-  int width = build_stl_str_hl(wp, stcp->text, MAXPATHL, stc, kOptStatuscolumn, OPT_LOCAL, ' ',
+  int width = build_stl_str_hl(wp, buf, MAXPATHL, stc, kOptStatuscolumn, OPT_LOCAL, ' ',
                                stcp->width, &stcp->hlrec, fillclick ? &clickrec : NULL, stcp);
   xfree(stc);
 
@@ -889,7 +886,7 @@ int build_statuscol_str(win_T *wp, linenr_T lnum, linenr_T relnum, statuscol_T *
     stl_clear_click_defs(wp->w_statuscol_click_defs, wp->w_statuscol_click_defs_size);
     wp->w_statuscol_click_defs = stl_alloc_click_defs(wp->w_statuscol_click_defs, stcp->width,
                                                       &wp->w_statuscol_click_defs_size);
-    stl_fill_click_defs(wp->w_statuscol_click_defs, clickrec, stcp->text, stcp->width, false);
+    stl_fill_click_defs(wp->w_statuscol_click_defs, clickrec, buf, stcp->width, false);
   }
 
   return width;
@@ -1178,7 +1175,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         out_p = out_p - n + 1;
         // Fill up space left over by half a double-wide char.
         while (++group_len < stl_items[stl_groupitems[groupdepth]].minwid) {
-          MB_CHAR2BYTES(fillchar, out_p);
+          out_p += utf_char2bytes(fillchar, out_p);
         }
         // }
 
@@ -1201,7 +1198,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         if (min_group_width < 0) {
           min_group_width = 0 - min_group_width;
           while (group_len++ < min_group_width && out_p < out_end_p) {
-            MB_CHAR2BYTES(fillchar, out_p);
+            out_p += utf_char2bytes(fillchar, out_p);
           }
           // If the group is right-aligned, shift everything to the right and
           // prepend with filler characters.
@@ -1222,7 +1219,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
 
           // Prepend the fill characters
           for (; group_len > 0; group_len--) {
-            MB_CHAR2BYTES(fillchar, t);
+            t += utf_char2bytes(fillchar, t);
           }
         }
       }
@@ -1400,7 +1397,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
     case STL_VIM_EXPR:     // '{'
     {
       char *block_start = fmt_p - 1;
-      int reevaluate = (*fmt_p == '%');
+      bool reevaluate = (*fmt_p == '%');
       itemisflag = true;
 
       if (reevaluate) {
@@ -1632,29 +1629,42 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         break;
       }
       bool fold = opt == STL_FOLDCOL;
-      int width = fold ? (compute_foldcolumn(wp, 0) > 0) : wp->w_scwidth;
+      int fdc = fold ? compute_foldcolumn(wp, 0) : 0;
+      int width = fold ? fdc > 0 : wp->w_scwidth;
 
-      if (width == 0) {
+      if (width <= 0) {
         break;
       }
       foldsignitem = curitem;
 
       char *p = NULL;
       if (fold) {
-        size_t n = fill_foldcolumn(out_p, wp, stcp->foldinfo,
-                                   (linenr_T)get_vim_var_nr(VV_LNUM), NULL);
+        schar_T fold_buf[10];
+        fill_foldcolumn(wp, stcp->foldinfo, (linenr_T)get_vim_var_nr(VV_LNUM),
+                        0, fdc, NULL, fold_buf);
         stl_items[curitem].minwid = -((stcp->use_cul ? HLF_CLF : HLF_FC) + 1);
+        size_t buflen = 0;
+        // TODO(bfredl): this is very backwards. we must support schar_T
+        // being used directly in 'statuscolumn'
+        for (int i = 0; i < fdc; i++) {
+          schar_get(out_p + buflen, fold_buf[i]);
+          buflen += strlen(out_p + buflen);
+        }
         p = out_p;
-        p[n] = NUL;
       }
 
+      char buf[SIGN_WIDTH * MAX_SCHAR_SIZE];
       size_t buflen = 0;
       varnumber_T virtnum = get_vim_var_nr(VV_VIRTNUM);
       for (int i = 0; i < width; i++) {
         if (!fold) {
           SignTextAttrs *sattr = virtnum ? NULL : &stcp->sattrs[i];
-          p = sattr && sattr->text ? sattr->text : "  ";
-          stl_items[curitem].minwid = -(sattr && sattr->text
+          p = "  ";
+          if (sattr && sattr->text[0]) {
+            describe_sign_text(buf, sattr->text);
+            p = buf;
+          }
+          stl_items[curitem].minwid = -(sattr && sattr->text[0]
                                         ? (stcp->sign_cul_id ? stcp->sign_cul_id : sattr->hl_id)
                                         : (stcp->use_cul ? HLF_CLS : HLF_SC) + 1);
         }
@@ -1803,7 +1813,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
           if (l + 1 == minwid && fillchar == '-' && ascii_isdigit(*t)) {
             *out_p++ = ' ';
           } else {
-            MB_CHAR2BYTES(fillchar, out_p);
+            out_p += utf_char2bytes(fillchar, out_p);
           }
         }
         minwid = 0;
@@ -1826,7 +1836,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         // digit follows.
         if (fillable && *t == ' '
             && (!ascii_isdigit(*(t + 1)) || fillchar != '-')) {
-          MB_CHAR2BYTES(fillchar, out_p);
+          out_p += utf_char2bytes(fillchar, out_p);
         } else {
           *out_p++ = *t;
         }
@@ -1843,7 +1853,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
 
       // For left-aligned items, fill any remaining space with the fillchar
       for (; l < minwid && out_p < out_end_p; l++) {
-        MB_CHAR2BYTES(fillchar, out_p);
+        out_p += utf_char2bytes(fillchar, out_p);
       }
 
       // Otherwise if the item is a number, copy that to the output buffer.
@@ -2064,7 +2074,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
 
       // Fill up for half a double-wide character.
       while (++width < maxwidth) {
-        MB_CHAR2BYTES(fillchar, trunc_p);
+        trunc_p += utf_char2bytes(fillchar, trunc_p);
         *trunc_p = NUL;
       }
     }
@@ -2099,7 +2109,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         char *seploc = start + dislocation;
         STRMOVE(seploc, start);
         for (char *s = start; s < seploc;) {
-          MB_CHAR2BYTES(fillchar, s);
+          s += utf_char2bytes(fillchar, s);
         }
 
         for (int item_idx = stl_separator_locations[l] + 1;

@@ -19,7 +19,6 @@
 
 #include "auto/config.h"  // IWYU pragma: keep
 #include "nvim/api/extmark.h"
-#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/ui.h"
 #include "nvim/arglist.h"
@@ -248,7 +247,7 @@ int main(int argc, char **argv)
   argv0 = argv[0];
 
   if (!appname_is_valid()) {
-    os_errmsg("$NVIM_APPNAME must be a name or relative path.\n");
+    fprintf(stderr, "$NVIM_APPNAME must be a name or relative path.\n");
     exit(1);
   }
 
@@ -337,7 +336,7 @@ int main(int argc, char **argv)
     ui_client_forward_stdin = !stdin_isatty;
     uint64_t rv = ui_client_start_server(params.argc, params.argv);
     if (!rv) {
-      os_errmsg("Failed to start Nvim server!\n");
+      fprintf(stderr, "Failed to start Nvim server!\n");
       os_exit(1);
     }
     ui_client_channel_id = rv;
@@ -616,7 +615,7 @@ int main(int argc, char **argv)
 
   // WORKAROUND(mhi): #3023
   if (cb_flags & CB_UNNAMEDMASK) {
-    (void)eval_has_provider("clipboard");
+    eval_has_provider("clipboard");
   }
 
   if (params.luaf != NULL) {
@@ -824,8 +823,7 @@ void preserve_exit(const char *errmsg)
     ui_client_stop();
   }
   if (errmsg != NULL) {
-    os_errmsg(errmsg);
-    os_errmsg("\n");
+    fprintf(stderr, "%s\n", errmsg);
   }
   if (ui_client_channel_id) {
     os_exit(1);
@@ -836,7 +834,7 @@ void preserve_exit(const char *errmsg)
   FOR_ALL_BUFFERS(buf) {
     if (buf->b_ml.ml_mfp != NULL && buf->b_ml.ml_mfp->mf_fname != NULL) {
       if (errmsg != NULL) {
-        os_errmsg("Vim: preserving files...\r\n");
+        fprintf(stderr, "Vim: preserving files...\r\n");
       }
       ml_sync_all(false, false, true);  // preserve all swap files
       break;
@@ -846,7 +844,7 @@ void preserve_exit(const char *errmsg)
   ml_close_all(false);              // close all memfiles, without deleting
 
   if (errmsg != NULL) {
-    os_errmsg("Vim: Finished.\r\n");
+    fprintf(stderr, "Vim: Finished.\r\n");
   }
 
   getout(1);
@@ -911,14 +909,11 @@ static void remote_request(mparm_T *params, int remote_args, char *server_addr, 
 
   if (is_ui) {
     if (!chan) {
-      os_errmsg("Remote ui failed to start: ");
-      os_errmsg(connect_error);
-      os_errmsg("\n");
+      fprintf(stderr, "Remote ui failed to start: %s\n", connect_error);
       os_exit(1);
     } else if (strequal(server_addr, os_getenv("NVIM"))) {
-      os_errmsg("Cannot attach UI of :terminal child to its parent. ");
-      os_errmsg("(Unset $NVIM to skip this check)");
-      os_errmsg("\n");
+      fprintf(stderr, "%s", "Cannot attach UI of :terminal child to its parent. ");
+      fprintf(stderr, "%s\n", "(Unset $NVIM to skip this check)");
       os_exit(1);
     }
 
@@ -942,15 +937,14 @@ static void remote_request(mparm_T *params, int remote_args, char *server_addr, 
   Object o = nlua_exec(s, a, &err);
   api_free_array(a);
   if (ERROR_SET(&err)) {
-    os_errmsg(err.msg);
-    os_errmsg("\n");
+    fprintf(stderr, "%s\n", err.msg);
     os_exit(2);
   }
 
   if (o.type == kObjectTypeDictionary) {
     rvobj.data.dictionary = o.data.dictionary;
   } else {
-    os_errmsg("vim._cs_remote returned unexpected value\n");
+    fprintf(stderr, "vim._cs_remote returned unexpected value\n");
     os_exit(2);
   }
 
@@ -960,34 +954,33 @@ static void remote_request(mparm_T *params, int remote_args, char *server_addr, 
   for (size_t i = 0; i < rvobj.data.dictionary.size; i++) {
     if (strequal(rvobj.data.dictionary.items[i].key.data, "errmsg")) {
       if (rvobj.data.dictionary.items[i].value.type != kObjectTypeString) {
-        os_errmsg("vim._cs_remote returned an unexpected type for 'errmsg'\n");
+        fprintf(stderr, "vim._cs_remote returned an unexpected type for 'errmsg'\n");
         os_exit(2);
       }
-      os_errmsg(rvobj.data.dictionary.items[i].value.data.string.data);
-      os_errmsg("\n");
+      fprintf(stderr, "%s\n", rvobj.data.dictionary.items[i].value.data.string.data);
       os_exit(2);
     } else if (strequal(rvobj.data.dictionary.items[i].key.data, "result")) {
       if (rvobj.data.dictionary.items[i].value.type != kObjectTypeString) {
-        os_errmsg("vim._cs_remote returned an unexpected type for 'result'\n");
+        fprintf(stderr, "vim._cs_remote returned an unexpected type for 'result'\n");
         os_exit(2);
       }
-      os_msg(rvobj.data.dictionary.items[i].value.data.string.data);
+      printf("%s", rvobj.data.dictionary.items[i].value.data.string.data);
     } else if (strequal(rvobj.data.dictionary.items[i].key.data, "tabbed")) {
       if (rvobj.data.dictionary.items[i].value.type != kObjectTypeBoolean) {
-        os_errmsg("vim._cs_remote returned an unexpected type for 'tabbed'\n");
+        fprintf(stderr, "vim._cs_remote returned an unexpected type for 'tabbed'\n");
         os_exit(2);
       }
       tabbed = rvobj.data.dictionary.items[i].value.data.boolean ? kTrue : kFalse;
     } else if (strequal(rvobj.data.dictionary.items[i].key.data, "should_exit")) {
       if (rvobj.data.dictionary.items[i].value.type != kObjectTypeBoolean) {
-        os_errmsg("vim._cs_remote returned an unexpected type for 'should_exit'\n");
+        fprintf(stderr, "vim._cs_remote returned an unexpected type for 'should_exit'\n");
         os_exit(2);
       }
       should_exit = rvobj.data.dictionary.items[i].value.data.boolean ? kTrue : kFalse;
     }
   }
   if (should_exit == kNone || tabbed == kNone) {
-    os_errmsg("vim._cs_remote didn't return a value for should_exit or tabbed, bailing\n");
+    fprintf(stderr, "vim._cs_remote didn't return a value for should_exit or tabbed, bailing\n");
     os_exit(2);
   }
   api_free_object(o);
@@ -1020,7 +1013,7 @@ static void command_line_scan(mparm_T *parmp)
   char **argv = parmp->argv;
   int argv_idx;                         // index in argv[n][]
   bool had_minmin = false;              // found "--" argument
-  int want_argument;                    // option argument with argument
+  bool want_argument;                   // option argument with argument
   int n;
 
   argc--;
@@ -1378,7 +1371,7 @@ scripterror:
             vim_snprintf(IObuff, IOSIZE,
                          _("Attempt to open script file again: \"%s %s\"\n"),
                          argv[-1], argv[0]);
-            os_errmsg(IObuff);
+            fprintf(stderr, "%s", IObuff);
             os_exit(2);
           }
           parmp->scriptin = argv[0];
@@ -1588,7 +1581,7 @@ static void read_stdin(void)
   bool save_msg_didany = msg_didany;
   set_buflisted(true);
   // Create memfile and read from stdin.
-  (void)open_buffer(true, NULL, 0);
+  open_buffer(true, NULL, 0);
   if (buf_is_empty(curbuf) && curbuf->b_next != NULL) {
     // stdin was empty, go to buffer 2 (e.g. "echo file1 | xargs nvim"). #8561
     do_cmdline_cmd("silent! bnext");
@@ -1615,7 +1608,7 @@ static void open_script_files(mparm_T *parmp)
         vim_snprintf(IObuff, IOSIZE,
                      _("Cannot open for reading: \"%s\": %s\n"),
                      parmp->scriptin, os_strerror(error));
-        os_errmsg(IObuff);
+        fprintf(stderr, "%s", IObuff);
         os_exit(2);
       }
     }
@@ -1625,9 +1618,8 @@ static void open_script_files(mparm_T *parmp)
   if (parmp->scriptout) {
     scriptout = os_fopen(parmp->scriptout, parmp->scriptout_append ? APPENDBIN : WRITEBIN);
     if (scriptout == NULL) {
-      os_errmsg(_("Cannot open for script output: \""));
-      os_errmsg(parmp->scriptout);
-      os_errmsg("\"\n");
+      fprintf(stderr, _("Cannot open for script output: \""));
+      fprintf(stderr, "%s\"\n", parmp->scriptout);
       os_exit(2);
     }
   }
@@ -1711,7 +1703,7 @@ static void create_windows(mparm_T *parmp)
         set_buflisted(true);
 
         // create memfile, read file
-        (void)open_buffer(false, NULL, 0);
+        open_buffer(false, NULL, 0);
 
         if (swap_exists_action == SEA_QUIT) {
           if (got_int || only_one_window()) {
@@ -1733,7 +1725,7 @@ static void create_windows(mparm_T *parmp)
       }
       os_breakcheck();
       if (got_int) {
-        (void)vgetc();          // only break the file loading, not the rest
+        vgetc();          // only break the file loading, not the rest
         break;
       }
     }
@@ -1812,9 +1804,9 @@ static void edit_buffers(mparm_T *parmp, char *cwd)
       // Edit file from arg list, if there is one.  When "Quit" selected
       // at the ATTENTION prompt close the window.
       swap_exists_did_quit = false;
-      (void)do_ecmd(0, arg_idx < GARGCOUNT
-                    ? alist_name(&GARGLIST[arg_idx])
-                    : NULL, NULL, NULL, ECMD_LASTL, ECMD_HIDE, curwin);
+      do_ecmd(0, arg_idx < GARGCOUNT
+              ? alist_name(&GARGLIST[arg_idx])
+              : NULL, NULL, NULL, ECMD_LASTL, ECMD_HIDE, curwin);
       if (swap_exists_did_quit) {
         // abort or quit selected
         if (got_int || only_one_window()) {
@@ -1833,7 +1825,7 @@ static void edit_buffers(mparm_T *parmp, char *cwd)
     }
     os_breakcheck();
     if (got_int) {
-      (void)vgetc();            // only break the file loading, not the rest
+      vgetc();            // only break the file loading, not the rest
       break;
     }
   }
@@ -1965,7 +1957,7 @@ static void do_system_initialization(void)
 
 #ifdef SYS_VIMRC_FILE
   // Get system wide defaults, if the file name is defined.
-  (void)do_source(SYS_VIMRC_FILE, false, DOSO_NONE, NULL);
+  do_source(SYS_VIMRC_FILE, false, DOSO_NONE, NULL);
 #endif
 }
 
@@ -2159,17 +2151,12 @@ static void print_mainerr(const char *errstr, const char *str)
 
   signal_stop();              // kill us with CTRL-C here, if you like
 
-  os_errmsg(prgname);
-  os_errmsg(": ");
-  os_errmsg(_(errstr));
+  fprintf(stderr, "%s: %s", prgname, _(errstr));
   if (str != NULL) {
-    os_errmsg(": \"");
-    os_errmsg(str);
-    os_errmsg("\"");
+    fprintf(stderr, ": \"%s\"", str);
   }
-  os_errmsg(_("\nMore info with \""));
-  os_errmsg(prgname);
-  os_errmsg(" -h\"\n");
+  fprintf(stderr, _("\nMore info with \""));
+  fprintf(stderr, "%s -h\"\n", prgname);
 }
 
 /// Prints version information for "nvim -v" or "nvim --version".
@@ -2177,7 +2164,7 @@ static void version(void)
 {
   // TODO(bfred): not like this?
   nlua_init(NULL, 0, -1);
-  info_message = true;  // use os_msg(), not os_errmsg()
+  info_message = true;  // use stdout, not stderr
   list_version();
   msg_putchar('\n');
   msg_didout = false;
@@ -2188,38 +2175,38 @@ static void usage(void)
 {
   signal_stop();              // kill us with CTRL-C here, if you like
 
-  os_msg(_("Usage:\n"));
-  os_msg(_("  nvim [options] [file ...]\n"));
-  os_msg(_("\nOptions:\n"));
-  os_msg(_("  --cmd <cmd>           Execute <cmd> before any config\n"));
-  os_msg(_("  +<cmd>, -c <cmd>      Execute <cmd> after config and first file\n"));
-  os_msg(_("  -l <script> [args...] Execute Lua <script> (with optional args)\n"));
-  os_msg(_("  -S <session>          Source <session> after loading the first file\n"));
-  os_msg(_("  -s <scriptin>         Read Normal mode commands from <scriptin>\n"));
-  os_msg(_("  -u <config>           Use this config file\n"));
-  os_msg("\n");
-  os_msg(_("  -d                    Diff mode\n"));
-  os_msg(_("  -es, -Es              Silent (batch) mode\n"));
-  os_msg(_("  -h, --help            Print this help message\n"));
-  os_msg(_("  -i <shada>            Use this shada file\n"));
-  os_msg(_("  -n                    No swap file, use memory only\n"));
-  os_msg(_("  -o[N]                 Open N windows (default: one per file)\n"));
-  os_msg(_("  -O[N]                 Open N vertical windows (default: one per file)\n"));
-  os_msg(_("  -p[N]                 Open N tab pages (default: one per file)\n"));
-  os_msg(_("  -R                    Read-only (view) mode\n"));
-  os_msg(_("  -v, --version         Print version information\n"));
-  os_msg(_("  -V[N][file]           Verbose [level][file]\n"));
-  os_msg("\n");
-  os_msg(_("  --                    Only file names after this\n"));
-  os_msg(_("  --api-info            Write msgpack-encoded API metadata to stdout\n"));
-  os_msg(_("  --clean               \"Factory defaults\" (skip user config and plugins, shada)\n"));
-  os_msg(_("  --embed               Use stdin/stdout as a msgpack-rpc channel\n"));
-  os_msg(_("  --headless            Don't start a user interface\n"));
-  os_msg(_("  --listen <address>    Serve RPC API from this address\n"));
-  os_msg(_("  --remote[-subcommand] Execute commands remotely on a server\n"));
-  os_msg(_("  --server <address>    Specify RPC server to send commands to\n"));
-  os_msg(_("  --startuptime <file>  Write startup timing messages to <file>\n"));
-  os_msg(_("\nSee \":help startup-options\" for all options.\n"));
+  printf(_("Usage:\n"));
+  printf(_("  nvim [options] [file ...]\n"));
+  printf(_("\nOptions:\n"));
+  printf(_("  --cmd <cmd>           Execute <cmd> before any config\n"));
+  printf(_("  +<cmd>, -c <cmd>      Execute <cmd> after config and first file\n"));
+  printf(_("  -l <script> [args...] Execute Lua <script> (with optional args)\n"));
+  printf(_("  -S <session>          Source <session> after loading the first file\n"));
+  printf(_("  -s <scriptin>         Read Normal mode commands from <scriptin>\n"));
+  printf(_("  -u <config>           Use this config file\n"));
+  printf("\n");
+  printf(_("  -d                    Diff mode\n"));
+  printf(_("  -es, -Es              Silent (batch) mode\n"));
+  printf(_("  -h, --help            Print this help message\n"));
+  printf(_("  -i <shada>            Use this shada file\n"));
+  printf(_("  -n                    No swap file, use memory only\n"));
+  printf(_("  -o[N]                 Open N windows (default: one per file)\n"));
+  printf(_("  -O[N]                 Open N vertical windows (default: one per file)\n"));
+  printf(_("  -p[N]                 Open N tab pages (default: one per file)\n"));
+  printf(_("  -R                    Read-only (view) mode\n"));
+  printf(_("  -v, --version         Print version information\n"));
+  printf(_("  -V[N][file]           Verbose [level][file]\n"));
+  printf("\n");
+  printf(_("  --                    Only file names after this\n"));
+  printf(_("  --api-info            Write msgpack-encoded API metadata to stdout\n"));
+  printf(_("  --clean               \"Factory defaults\" (skip user config and plugins, shada)\n"));
+  printf(_("  --embed               Use stdin/stdout as a msgpack-rpc channel\n"));
+  printf(_("  --headless            Don't start a user interface\n"));
+  printf(_("  --listen <address>    Serve RPC API from this address\n"));
+  printf(_("  --remote[-subcommand] Execute commands remotely on a server\n"));
+  printf(_("  --server <address>    Specify RPC server to send commands to\n"));
+  printf(_("  --startuptime <file>  Write startup timing messages to <file>\n"));
+  printf(_("\nSee \":help startup-options\" for all options.\n"));
 }
 
 // Check the result of the ATTENTION dialog:

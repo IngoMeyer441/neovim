@@ -8,7 +8,6 @@
 #include <string.h>
 
 #include "auto/config.h"
-#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
@@ -873,7 +872,7 @@ int uc_add_command(char *name, size_t name_len, const char *rep, uint32_t argt, 
   char *rep_buf = NULL;
   garray_T *gap;
 
-  replace_termcodes(rep, strlen(rep), &rep_buf, 0, 0, NULL, CPO_TO_CPO_FLAGS);
+  replace_termcodes(rep, strlen(rep), &rep_buf, 0, 0, NULL, p_cpo);
   if (rep_buf == NULL) {
     // Can't replace termcodes - try using the string as is
     rep_buf = xstrdup(rep);
@@ -1709,8 +1708,8 @@ int do_ucmd(exarg_T *eap, bool preview)
     save_current_sctx = current_sctx;
     current_sctx.sc_sid = cmd->uc_script_ctx.sc_sid;
   }
-  (void)do_cmdline(buf, eap->getline, eap->cookie,
-                   DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_KEYTYPED);
+  do_cmdline(buf, eap->getline, eap->cookie,
+             DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_KEYTYPED);
 
   // Careful: Do not use "cmd" here, it may have become invalid if a user
   // command was added.

@@ -3861,6 +3861,39 @@ describe('LSP', function()
       ]]
       eq(result.method, "initialize")
     end)
+    it('can connect to lsp server via rpc.domain_socket_connect', function()
+      local tmpfile
+      if is_os("win") then
+        tmpfile = "\\\\.\\\\pipe\\pipe.test"
+        else
+        tmpfile = helpers.tmpname()
+        os.remove(tmpfile)
+      end
+      local result = exec_lua([[
+        local SOCK = ...
+        local uv = vim.uv
+        local server = uv.new_pipe(false)
+        server:bind(SOCK)
+        local init = nil
+
+        server:listen(127, function(err)
+                assert(not err, err)
+                local client = uv.new_pipe()
+                server:accept(client)
+                client:read_start(require("vim.lsp.rpc").create_read_loop(function(body)
+                        init = body
+                        client:close()
+                end))
+        end)
+        vim.lsp.start({ name = "dummy", cmd = vim.lsp.rpc.domain_socket_connect(SOCK) })
+        vim.wait(1000, function() return init ~= nil end)
+        assert(init, "server must receive `initialize` request")
+        server:close()
+        server:shutdown()
+        return vim.json.decode(init)
+      ]], tmpfile)
+      eq(result.method, "initialize")
+    end)
   end)
 
   describe('handlers', function()
@@ -3936,12 +3969,15 @@ describe('LSP', function()
 
   describe('#dynamic vim.lsp._dynamic', function()
     it('supports dynamic registration', function()
+      ---@type string
       local root_dir = helpers.tmpname()
       os.remove(root_dir)
       mkdir(root_dir)
       local tmpfile = root_dir .. '/dynamic.foo'
       local file = io.open(tmpfile, 'w')
-      file:close()
+      if file then
+        file:close()
+      end
 
       exec_lua(create_server_definition)
       local result = exec_lua([[
@@ -3952,6 +3988,9 @@ describe('LSP', function()
           name = 'dynamic-test',
           cmd = server.cmd,
           root_dir = root_dir,
+          get_language_id = function()
+            return "dummy-lang"
+          end,
           capabilities = {
             textDocument = {
               formatting = {
@@ -3985,6 +4024,13 @@ describe('LSP', function()
             {
               id = 'range-formatting',
               method = 'textDocument/rangeFormatting',
+              registerOptions = {
+              documentSelector = {
+                  {
+                    language = "dummy-lang"
+                  },
+                }
+              }
             },
           },
         }, { client_id = client_id })
@@ -4002,7 +4048,11 @@ describe('LSP', function()
         local function check(method, fname)
           local bufnr = fname and vim.fn.bufadd(fname) or nil
           local client = vim.lsp.get_client_by_id(client_id)
-          result[#result + 1] = {method = method, fname = fname, supported = client.supports_method(method, {bufnr = bufnr})}
+          result[#result + 1] = {
+            method = method,
+            fname = fname,
+            supported = client.supports_method(method, {bufnr = bufnr})
+          }
         end
 
 

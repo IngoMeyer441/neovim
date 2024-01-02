@@ -4,9 +4,8 @@
 #include <string.h>
 
 #include "klib/kvec.h"
-#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/event/defs.h"
+#include "nvim/event/loop.h"
 #include "nvim/event/stream.h"
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
@@ -369,15 +368,6 @@ static void forward_mouse_event(TermInput *input, TermKeyKey *key)
     // For drag and release, we can reasonably infer the button to be the last
     // pressed one.
     button = last_pressed_button;
-  }
-
-  if (ev == TERMKEY_MOUSE_UNKNOWN && !(key->code.mouse[0] & 0x20)) {
-    int code = key->code.mouse[0] & ~0x3c;
-    // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Other-buttons
-    if (code == 66 || code == 67) {
-      ev = TERMKEY_MOUSE_PRESS;
-      button = code + 4 - 64;
-    }
   }
 
   if ((button == 0 && ev != TERMKEY_MOUSE_RELEASE)

@@ -18,7 +18,7 @@
 #include "nvim/mark_defs.h"
 #include "nvim/marktree_defs.h"
 #include "nvim/memline_defs.h"
-#include "nvim/option_vars.h"
+#include "nvim/option_defs.h"
 #include "nvim/os/fs_defs.h"
 #include "nvim/pos_defs.h"
 #include "nvim/regexp_defs.h"
@@ -1316,9 +1316,3 @@ struct window_S {
   // Size of the w_statuscol_click_defs array
   size_t w_statuscol_click_defs_size;
 };
-
-/// Macros defined in Vim, but not in Neovim
-// uncrustify:off
-#define CHANGEDTICK(buf) \
-  (=== Include buffer.h & use buf_(get|set|inc) _changedtick ===)
-// uncrustify:on

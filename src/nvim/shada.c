@@ -13,7 +13,6 @@
 #include <uv.h>
 
 #include "auto/config.h"
-#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
@@ -997,6 +996,48 @@ static inline void hms_dealloc(HistoryMergerState *const hms_p)
 #define HMS_ITER(hms_p, cur_entry, code) \
   HMLL_FORALL(&((hms_p)->hmll), cur_entry, code)
 
+/// Iterate over global variables
+///
+/// @warning No modifications to global variable dictionary must be performed
+///          while iteration is in progress.
+///
+/// @param[in]   iter   Iterator. Pass NULL to start iteration.
+/// @param[out]  name   Variable name.
+/// @param[out]  rettv  Variable value.
+///
+/// @return Pointer that needs to be passed to next `var_shada_iter` invocation
+///         or NULL to indicate that iteration is over.
+static const void *var_shada_iter(const void *const iter, const char **const name, typval_T *rettv,
+                                  var_flavour_T flavour)
+  FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ARG(2, 3)
+{
+  const hashitem_T *hi;
+  const hashitem_T *hifirst = globvarht.ht_array;
+  const size_t hinum = (size_t)globvarht.ht_mask + 1;
+  *name = NULL;
+  if (iter == NULL) {
+    hi = globvarht.ht_array;
+    while ((size_t)(hi - hifirst) < hinum
+           && (HASHITEM_EMPTY(hi)
+               || !(var_flavour(hi->hi_key) & flavour))) {
+      hi++;
+    }
+    if ((size_t)(hi - hifirst) == hinum) {
+      return NULL;
+    }
+  } else {
+    hi = (const hashitem_T *)iter;
+  }
+  *name = TV_DICT_HI2DI(hi)->di_key;
+  tv_copy(&TV_DICT_HI2DI(hi)->di_tv, rettv);
+  while ((size_t)(++hi - hifirst) < hinum) {
+    if (!HASHITEM_EMPTY(hi) && (var_flavour(hi->hi_key) & flavour)) {
+      return hi;
+    }
+  }
+  return NULL;
+}
+
 /// Find buffer for given buffer name (cached)
 ///
 /// @param[in,out]  fname_bufs  Cache containing fname to buffer mapping.
@@ -1211,7 +1252,7 @@ static void shada_read(ShaDaReadDef *const sd_reader, const int flags)
       // string is close to useless: you can only use it with :& or :~ and
       // that’s all because s//~ is not available until the first call to
       // regtilde. Vim was not calling this for some reason.
-      (void)regtilde(cur_entry.data.sub_string.sub, magic_isset(), false);
+      regtilde(cur_entry.data.sub_string.sub, magic_isset(), false);
       // Do not free shada entry: its allocated memory was saved above.
       break;
     case kSDItemHistoryEntry:
@@ -3358,7 +3399,7 @@ static ShaDaReadResult msgpack_read_uint64(ShaDaReadDef *const sd_reader, const 
     CLEAR_GA_AND_ERROR_OUT(ad_ga); \
   }
 #define CHECKED_KEY(un, entry_name, name, error_desc, tgt, condition, attr, proc) \
-  else if (CHECK_KEY((un).data.via.map.ptr[i].key, name))  /* NOLINT(readability/braces) */ \
+  else if (CHECK_KEY((un).data.via.map.ptr[i].key, name)) \
   { \
     CHECKED_ENTRY(condition, \
                   "has " name " key value " error_desc, \
@@ -3389,7 +3430,7 @@ static ShaDaReadResult msgpack_read_uint64(ShaDaReadDef *const sd_reader, const 
 #define INTEGER_KEY(un, entry_name, name, tgt) \
   INT_KEY(un, entry_name, name, tgt, TOINT)
 #define ADDITIONAL_KEY(un) \
-  else {  /* NOLINT(readability/braces) */ \
+  else { \
     ga_grow(&ad_ga, 1); \
     memcpy(((char *)ad_ga.ga_data) + ((size_t)ad_ga.ga_len \
                                       * sizeof(*(un).data.via.map.ptr)), \
@@ -3983,7 +4024,7 @@ static bool shada_removable(const char *name)
 
   char *new_name = home_replace_save(NULL, name);
   for (char *p = p_shada; *p;) {
-    (void)copy_option_part(&p, part, ARRAY_SIZE(part), ", ");
+    copy_option_part(&p, part, ARRAY_SIZE(part), ", ");
     if (part[0] == 'r') {
       home_replace(NULL, part + 1, NameBuff, MAXPATHL, true);
       size_t n = strlen(NameBuff);

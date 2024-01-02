@@ -41,7 +41,7 @@ module.nvim_argv = {
   -- Make screentest work after changing to the new default color scheme
   -- Source 'vim' color scheme without side effects
   -- TODO: rewrite tests
-  '--cmd', 'lua f=io.open("runtime/colors/vim.vim", "r"); l=f:read("*a"); f:close(); vim.api.nvim_exec2(l, {})',
+  '--cmd', 'lua dofile("runtime/colors/vim.lua")',
   '--cmd', 'unlet g:colors_name',
   '--embed'}
 
@@ -65,10 +65,7 @@ if os.getenv('VALGRIND') then
     table.insert(prepend_argv, '--vgdb-error=0')
   end
 elseif os.getenv('GDB') then
-  local gdbserver_port = '7777'
-  if os.getenv('GDBSERVER_PORT') then
-    gdbserver_port = os.getenv('GDBSERVER_PORT')
-  end
+  local gdbserver_port = os.getenv('GDBSERVER_PORT') or '7777'
   prepend_argv = {'gdbserver', 'localhost:'..gdbserver_port}
 end
 

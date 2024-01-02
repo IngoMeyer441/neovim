@@ -687,6 +687,17 @@ describe('decorations providers', function()
       {18:Press ENTER or type command to continue}^ |
     ]]}
   end)
+
+   it('can add new providers during redraw #26652', function()
+    setup_provider [[
+    local ns = api.nvim_create_namespace('test_no_add')
+    function on_do(...)
+      api.nvim_set_decoration_provider(ns, {})
+    end
+    ]]
+
+    helpers.assert_alive()
+  end)
 end)
 
 local example_text = [[
@@ -751,6 +762,8 @@ describe('extmark decorations', function()
       [39] = {foreground = Screen.colors.Blue1, background = Screen.colors.LightCyan1, bold = true};
       [40] = {reverse = true};
       [41] = {bold = true, reverse = true};
+      [42] = {undercurl = true, special = Screen.colors.Red};
+      [43] = {background = Screen.colors.Yellow, undercurl = true, special = Screen.colors.Red};
     }
 
     ns = meths.create_namespace 'test'
@@ -1893,6 +1906,23 @@ describe('extmark decorations', function()
     ]])
   end)
 
+  it('highlight works properly with multibyte text and spell #26771', function()
+    insert('口口\n')
+    screen:try_resize(50, 3)
+    meths.buf_set_extmark(0, ns, 0, 0, { end_col = 3, hl_group = 'Search' })
+    screen:expect([[
+      {34:口}口                                              |
+      ^                                                  |
+                                                        |
+    ]])
+    command('setlocal spell')
+    screen:expect([[
+      {43:口}{42:口}                                              |
+      ^                                                  |
+                                                        |
+    ]])
+  end)
+
   it('supports multiline highlights', function()
     insert(example_text)
     feed 'gg'
@@ -2081,6 +2111,32 @@ describe('extmark decorations', function()
       {1:S }{4:abcdefghijklm^n}                                  |
       {1:~                                                 }|
                                                         |
+    ]]}
+  end)
+
+  it('virt_text_repeat_linebreak repeats virtual text on wrapped lines', function()
+    screen:try_resize(40, 5)
+    meths.set_option_value('breakindent', true, {})
+    insert(example_text)
+    meths.buf_set_extmark(0, ns, 1, 0, { virt_text = {{'│', 'NonText'}}, virt_text_pos = 'overlay', virt_text_repeat_linebreak = true })
+    meths.buf_set_extmark(0, ns, 1, 3, { virt_text = {{'│', 'NonText'}}, virt_text_pos = 'overlay', virt_text_repeat_linebreak = true })
+    command('norm gg')
+    screen:expect{grid=[[
+      ^for _,item in ipairs(items) do          |
+      {1:│}  {1:│}local text, hl_id_cell, count = unpa|
+      {1:│}  {1:│}ck(item)                            |
+          if hl_id_cell ~= nil then           |
+                                              |
+    ]]}
+    meths.buf_clear_namespace(0, ns, 0, -1)
+    meths.buf_set_extmark(0, ns, 1, 0, { virt_text = {{'│', 'NonText'}}, virt_text_repeat_linebreak = true, virt_text_win_col = 0 })
+    meths.buf_set_extmark(0, ns, 1, 0, { virt_text = {{'│', 'NonText'}}, virt_text_repeat_linebreak = true, virt_text_win_col = 2 })
+    screen:expect{grid=[[
+      ^for _,item in ipairs(items) do          |
+      {1:│} {1:│} local text, hl_id_cell, count = unpa|
+      {1:│} {1:│} ck(item)                            |
+          if hl_id_cell ~= nil then           |
+                                              |
     ]]}
   end)
 end)

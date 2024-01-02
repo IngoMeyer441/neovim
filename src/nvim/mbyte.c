@@ -32,7 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
+#include <uv.h>
 #include <wctype.h>
 
 #include "auto/config.h"
@@ -2251,7 +2251,7 @@ void *my_iconv_open(char *to, char *from)
     // stops for no apparent reason after about 8160 characters.
     char *p = tobuf;
     size_t tolen = ICONV_TESTLEN;
-    (void)iconv(fd, NULL, NULL, &p, &tolen);
+    iconv(fd, NULL, NULL, &p, &tolen);
     if (p == NULL) {
       iconv_working = kBroken;
       iconv_close(fd);

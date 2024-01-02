@@ -64,6 +64,7 @@
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/terminal.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
@@ -460,7 +461,7 @@ String nvim_replace_termcodes(String str, Boolean from_part, Boolean do_lt, Bool
   }
 
   char *ptr = NULL;
-  replace_termcodes(str.data, str.size, &ptr, 0, flags, NULL, CPO_TO_CPO_FLAGS);
+  replace_termcodes(str.data, str.size, &ptr, 0, flags, NULL, p_cpo);
   return cstr_as_string(ptr);
 }
 
@@ -598,7 +599,7 @@ ArrayOf(String) nvim__get_runtime(Array pat, Boolean all, Dict(runtime) *opts, E
   if (opts->do_source) {
     for (size_t i = 0; i < res.size; i++) {
       String name = res.items[i].data.string;
-      (void)do_source(name.data, false, DOSO_NONE, NULL);
+      do_source(name.data, false, DOSO_NONE, NULL);
     }
   }
 

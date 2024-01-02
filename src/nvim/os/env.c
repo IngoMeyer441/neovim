@@ -587,7 +587,7 @@ void expand_env_esc(char *restrict srcp, char *restrict dst, int dstlen, bool es
     if (src[0] == '`' && src[1] == '=') {
       var = src;
       src += 2;
-      (void)skip_expr(&src, NULL);
+      skip_expr(&src, NULL);
       if (*src == '`') {
         src++;
       }
@@ -619,7 +619,7 @@ void expand_env_esc(char *restrict srcp, char *restrict dst, int dstlen, bool es
           while (c-- > 0 && *tail != NUL && *tail != '}') {
             *var++ = *tail++;
           }
-        } else  // NOLINT
+        } else
 #endif
         {
           while (c-- > 0 && *tail != NUL && vim_isIDc((uint8_t)(*tail))) {
@@ -919,10 +919,7 @@ char *vim_getenv(const char *name)
   // Don't do this when default_vimruntime_dir is non-empty.
   char *vim_path = NULL;
   if (vimruntime
-#ifdef HAVE_PATHDEF
-      && *default_vimruntime_dir == NUL
-#endif
-      ) {
+      && *default_vimruntime_dir == NUL) {
     kos_env_path = os_getenv("VIM");
     if (kos_env_path != NULL) {
       vim_path = vim_version_dir(kos_env_path);
@@ -981,7 +978,6 @@ char *vim_getenv(const char *name)
     assert(vim_path != exe_name);
   }
 
-#ifdef HAVE_PATHDEF
   // When there is a pathdef.c file we can use default_vim_dir and
   // default_vimruntime_dir
   if (vim_path == NULL) {
@@ -995,7 +991,6 @@ char *vim_getenv(const char *name)
       }
     }
   }
-#endif
 
   // Set the environment variable, so that the new value can be found fast
   // next time, and others can also use it (e.g. Perl).
@@ -1066,7 +1061,7 @@ size_t home_replace(const buf_T *const buf, const char *src, char *const dst, si
     size_t usedlen = 0;
     size_t flen = strlen(homedir_env_mod);
     char *fbuf = NULL;
-    (void)modify_fname(":p", false, &usedlen, &homedir_env_mod, &fbuf, &flen);
+    modify_fname(":p", false, &usedlen, &homedir_env_mod, &fbuf, &flen);
     flen = strlen(homedir_env_mod);
     assert(homedir_env_mod != homedir_env);
     if (vim_ispathsep(homedir_env_mod[flen - 1])) {
