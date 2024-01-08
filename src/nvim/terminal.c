@@ -86,7 +86,7 @@
 #include "nvim/ui.h"
 #include "nvim/vim_defs.h"
 
-typedef struct terminal_state {
+typedef struct {
   VimState state;
   Terminal *term;
   int save_rd;              // saved value of RedrawingDisabled
@@ -1437,8 +1437,10 @@ static bool send_mouse_event(Terminal *term, int c)
   }
 
   int offset;
-  if (term->forward_mouse && mouse_win->w_buffer->terminal == term
-      && col >= (offset = win_col_off(mouse_win))) {
+  if (term->forward_mouse && mouse_win->w_buffer->terminal == term && row >= 0
+      && (grid > 1 || row + mouse_win->w_winbar_height < mouse_win->w_height)
+      && col >= (offset = win_col_off(mouse_win))
+      && (grid > 1 || col < mouse_win->w_width)) {
     // event in the terminal window and mouse events was enabled by the
     // program. translate and forward the event
     int button;

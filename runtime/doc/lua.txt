@@ -121,16 +121,14 @@ languages like Python and C#. Example: >lua
 
     func_with_opts { foo = true, filename = "hello.world" }
 <
-There's nothing special going on here except that parentheses are treated as
-whitespace. But visually, this small bit of sugar gets reasonably close to
-a "keyword args" interface. Nvim code tends to prefer this style.
+There's nothing special going on here except that parentheses are implicitly
+added. But visually, this small bit of sugar gets reasonably close to a
+"keyword args" interface.
 
-------------------------------------------------------------------------------
-LUA PATTERNS                                                    *lua-patterns*
-
+                                                                   *lua-regex*
 Lua intentionally does not support regular expressions, instead it has limited
-"patterns" |lua-pattern| which avoid the performance pitfalls of extended
-regex. Lua scripts can also use Vim regex via |vim.regex()|.
+|lua-patterns| which avoid the performance pitfalls of extended regex. Lua
+scripts can also use Vim regex via |vim.regex()|.
 
 Examples: >lua
 
@@ -1907,15 +1905,24 @@ vim.deep_equal({a}, {b})                                    *vim.deep_equal()*
     Return: ~
         (boolean) `true` if values are equals, else `false`
 
-vim.deepcopy({orig})                                          *vim.deepcopy()*
+vim.deepcopy({orig}, {noref})                                 *vim.deepcopy()*
     Returns a deep copy of the given object. Non-table objects are copied as
     in a typical Lua assignment, whereas table objects are copied recursively.
     Functions are naively copied, so functions in the copied table point to
     the same functions as those in the input table. Userdata and threads are
     not copied and will throw an error.
 
+    Note: `noref=true` is much more performant on tables with unique table
+    fields, while `noref=false` is more performant on tables that reuse table
+    fields.
+
     Parameters: ~
-      • {orig}  (table) Table to copy
+      • {orig}   (table) Table to copy
+      • {noref}  (boolean|nil) When `false` (default) a contained table is
+                 only copied once and all references point to this single
+                 copy. When `true` every occurrence of a table results in a
+                 new copy. This also means that a cyclic reference can cause
+                 `deepcopy()` to fail.
 
     Return: ~
         (table) Table of copied keys and (nested) values.
