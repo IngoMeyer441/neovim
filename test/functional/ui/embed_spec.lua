@@ -1,4 +1,4 @@
-local uv = require 'luv'
+local uv = vim.uv
 
 local helpers = require('test.functional.helpers')(after_each)
 local Screen = require('test.functional.ui.screen')
@@ -8,7 +8,7 @@ local eq = helpers.eq
 local neq = helpers.neq
 local clear = helpers.clear
 local ok = helpers.ok
-local funcs = helpers.funcs
+local fn = helpers.fn
 local nvim_prog = helpers.nvim_prog
 local retry = helpers.retry
 
@@ -26,7 +26,7 @@ local function test_embed(ext_linegrid)
       [3] = { bold = true, foreground = Screen.colors.Blue1 },
       [4] = { bold = true, foreground = Screen.colors.Green },
       [5] = { bold = true, reverse = true },
-      [6] = { foreground = Screen.colors.NvimDarkGrey3, background = Screen.colors.NvimLightGrey1 },
+      [6] = { foreground = Screen.colors.NvimLightGrey3, background = Screen.colors.NvimDarkGrey3 },
       [7] = { foreground = Screen.colors.NvimDarkRed },
       [8] = { foreground = Screen.colors.NvimDarkCyan },
     })
@@ -178,7 +178,7 @@ describe('--embed --listen UI', function()
     helpers.skip(helpers.is_os('win'))
     clear()
     local child_server = assert(helpers.new_pipename())
-    funcs.jobstart({
+    fn.jobstart({
       nvim_prog,
       '--embed',
       '--listen',

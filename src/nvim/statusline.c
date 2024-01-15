@@ -6,9 +6,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/digraph.h"
 #include "nvim/drawline.h"
@@ -16,30 +18,37 @@
 #include "nvim/eval.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/eval/vars.h"
-#include "nvim/gettext.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
+#include "nvim/grid_defs.h"
 #include "nvim/highlight.h"
+#include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
+#include "nvim/memline_defs.h"
 #include "nvim/memory.h"
+#include "nvim/memory_defs.h"
 #include "nvim/message.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
 #include "nvim/pos_defs.h"
 #include "nvim/sign.h"
+#include "nvim/sign_defs.h"
 #include "nvim/state_defs.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
+#include "nvim/ui_defs.h"
 #include "nvim/undo.h"
 #include "nvim/window.h"
 
@@ -58,7 +67,6 @@ typedef enum {
 /// If inversion is possible we use it. Else '=' characters are used.
 void win_redr_status(win_T *wp)
 {
-  int fillchar;
   int attr;
   bool is_stl_global = global_stl_height() > 0;
   static bool busy = false;
@@ -84,7 +92,7 @@ void win_redr_status(win_T *wp)
     // redraw custom status line
     redraw_custom_statusline(wp);
   } else {
-    fillchar = fillchar_status(&attr, wp);
+    schar_T fillchar = fillchar_status(&attr, wp);
     const int stl_width = is_stl_global ? Columns : wp->w_width;
 
     get_trans_bufname(wp->w_buffer);
@@ -169,6 +177,7 @@ void win_redr_status(win_T *wp)
 
   // May need to draw the character below the vertical separator.
   if (wp->w_vsep_width != 0 && wp->w_status_height != 0 && redrawing()) {
+    schar_T fillchar;
     if (stl_connected(wp)) {
       fillchar = fillchar_status(&attr, wp);
     } else {
@@ -176,7 +185,7 @@ void win_redr_status(win_T *wp)
       fillchar = wp->w_p_fcs_chars.vert;
     }
     grid_line_start(&default_grid, W_ENDROW(wp));
-    grid_line_put_schar(W_ENDCOL(wp), schar_from_char(fillchar), attr);
+    grid_line_put_schar(W_ENDCOL(wp), fillchar, attr);
     grid_line_flush();
   }
   busy = false;
@@ -291,7 +300,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
   int row;
   int col = 0;
   int maxwidth;
-  int fillchar;
+  schar_T fillchar;
   char buf[MAXPATHL];
   char transbuf[MAXPATHL];
   char *stl;
@@ -316,7 +325,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
     // Use 'tabline'.  Always at the first line of the screen.
     stl = p_tal;
     row = 0;
-    fillchar = ' ';
+    fillchar = schar_from_ascii(' ');
     attr = HL_ATTR(HLF_TPF);
     maxwidth = Columns;
     opt_idx = kOptTabline;
@@ -374,7 +383,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
         grid = &msg_grid_adj;
         row = Rows - 1;
         maxwidth--;  // writing in last column may cause scrolling
-        fillchar = ' ';
+        fillchar = schar_from_ascii(' ');
         attr = HL_ATTR(HLF_MSG);
       }
     } else {
@@ -513,7 +522,7 @@ void win_redr_ruler(win_T *wp)
                    && *ml_get_buf(wp->w_buffer, wp->w_cursor.lnum) == NUL;
 
   int width;
-  int fillchar;
+  schar_T fillchar;
   int attr;
   int off;
   bool part_of_status = false;
@@ -529,7 +538,7 @@ void win_redr_ruler(win_T *wp)
     width = Columns;
     part_of_status = true;
   } else {
-    fillchar = ' ';
+    fillchar = schar_from_ascii(' ');
     attr = HL_ATTR(HLF_MSG);
     width = Columns;
     off = 0;
@@ -577,7 +586,7 @@ void win_redr_ruler(win_T *wp)
   if (this_ru_col + o < width) {
     // Need at least 3 chars left for get_rel_pos() + NUL.
     while (this_ru_col + o < width && RULER_BUF_LEN > i + 4) {
-      i += utf_char2bytes(fillchar, buffer + i);
+      i += (int)schar_get(buffer + i, fillchar);
       o++;
     }
     get_rel_pos(wp, buffer + i, RULER_BUF_LEN - i);
@@ -612,18 +621,15 @@ void win_redr_ruler(win_T *wp)
 }
 
 /// Get the character to use in a status line.  Get its attributes in "*attr".
-int fillchar_status(int *attr, win_T *wp)
+schar_T fillchar_status(int *attr, win_T *wp)
 {
-  int fill;
-  bool is_curwin = (wp == curwin);
-  if (is_curwin) {
+  if (wp == curwin) {
     *attr = win_hl_attr(wp, HLF_S);
-    fill = wp->w_p_fcs_chars.stl;
+    return wp->w_p_fcs_chars.stl;
   } else {
     *attr = win_hl_attr(wp, HLF_SNC);
-    fill = wp->w_p_fcs_chars.stlnc;
+    return wp->w_p_fcs_chars.stlnc;
   }
-  return fill;
 }
 
 /// Redraw the status line according to 'statusline' and take care of any
@@ -724,7 +730,6 @@ void draw_tabline(void)
     int col = 0;
     win_T *cwp;
     int wincount;
-    int c;
     grid_line_start(&default_grid, 0);
     FOR_ALL_TABS(tp) {
       tabcount++;
@@ -826,12 +831,8 @@ void draw_tabline(void)
       }
     }
 
-    if (use_sep_chars) {
-      c = '_';
-    } else {
-      c = ' ';
-    }
-    grid_line_fill(col, Columns, c, attr_fill);
+    char c = use_sep_chars ? '_' : ' ';
+    grid_line_fill(col, Columns, schar_from_ascii(c), attr_fill);
 
     // Draw the 'showcmd' information if 'showcmdloc' == "tabline".
     if (p_sc && *p_sloc == 't') {
@@ -878,7 +879,7 @@ int build_statuscol_str(win_T *wp, linenr_T lnum, linenr_T relnum, char *buf, st
 
   StlClickRecord *clickrec;
   char *stc = xstrdup(wp->w_p_stc);
-  int width = build_stl_str_hl(wp, buf, MAXPATHL, stc, kOptStatuscolumn, OPT_LOCAL, ' ',
+  int width = build_stl_str_hl(wp, buf, MAXPATHL, stc, kOptStatuscolumn, OPT_LOCAL, 0,
                                stcp->width, &stcp->hlrec, fillclick ? &clickrec : NULL, stcp);
   xfree(stc);
 
@@ -920,7 +921,7 @@ int build_statuscol_str(win_T *wp, linenr_T lnum, linenr_T relnum, char *buf, st
 ///
 /// @return  The final width of the statusline
 int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex opt_idx,
-                     int opt_scope, int fillchar, int maxwidth, stl_hlrec_t **hltab,
+                     int opt_scope, schar_T fillchar, int maxwidth, stl_hlrec_t **hltab,
                      StlClickRecord **tabtab, statuscol_T *stcp)
 {
   static size_t stl_items_len = 20;  // Initial value, grows as needed.
@@ -977,7 +978,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
   }
 
   if (fillchar == 0) {
-    fillchar = ' ';
+    fillchar = schar_from_ascii(' ');
   }
 
   // The cursor in windows other than the current one isn't always
@@ -1175,7 +1176,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         out_p = out_p - n + 1;
         // Fill up space left over by half a double-wide char.
         while (++group_len < stl_items[stl_groupitems[groupdepth]].minwid) {
-          out_p += utf_char2bytes(fillchar, out_p);
+          schar_get_adv(&out_p, fillchar);
         }
         // }
 
@@ -1198,13 +1199,13 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         if (min_group_width < 0) {
           min_group_width = 0 - min_group_width;
           while (group_len++ < min_group_width && out_p < out_end_p) {
-            out_p += utf_char2bytes(fillchar, out_p);
+            schar_get_adv(&out_p, fillchar);
           }
           // If the group is right-aligned, shift everything to the right and
           // prepend with filler characters.
         } else {
           // { Move the group to the right
-          group_len = (min_group_width - group_len) * utf_char2len(fillchar);
+          group_len = (min_group_width - group_len) * (int)schar_len(fillchar);
           memmove(t + group_len, t, (size_t)(out_p - t));
           if (out_p + group_len >= (out_end_p + 1)) {
             group_len = out_end_p - out_p;
@@ -1219,7 +1220,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
 
           // Prepend the fill characters
           for (; group_len > 0; group_len--) {
-            t += utf_char2bytes(fillchar, t);
+            schar_get_adv(&t, fillchar);
           }
         }
       }
@@ -1647,8 +1648,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         // TODO(bfredl): this is very backwards. we must support schar_T
         // being used directly in 'statuscolumn'
         for (int i = 0; i < fdc; i++) {
-          schar_get(out_p + buflen, fold_buf[i]);
-          buflen += strlen(out_p + buflen);
+          buflen += schar_get(out_p + buflen, fold_buf[i]);
         }
         p = out_p;
       }
@@ -1813,7 +1813,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
           if (l + 1 == minwid && fillchar == '-' && ascii_isdigit(*t)) {
             *out_p++ = ' ';
           } else {
-            out_p += utf_char2bytes(fillchar, out_p);
+            schar_get_adv(&out_p, fillchar);
           }
         }
         minwid = 0;
@@ -1836,7 +1836,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
         // digit follows.
         if (fillable && *t == ' '
             && (!ascii_isdigit(*(t + 1)) || fillchar != '-')) {
-          out_p += utf_char2bytes(fillchar, out_p);
+          schar_get_adv(&out_p, fillchar);
         } else {
           *out_p++ = *t;
         }
@@ -1853,7 +1853,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
 
       // For left-aligned items, fill any remaining space with the fillchar
       for (; l < minwid && out_p < out_end_p; l++) {
-        out_p += utf_char2bytes(fillchar, out_p);
+        schar_get_adv(&out_p, fillchar);
       }
 
       // Otherwise if the item is a number, copy that to the output buffer.
@@ -2070,8 +2070,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
 
       // Fill up for half a double-wide character.
       while (++width < maxwidth) {
-        trunc_p += utf_char2bytes(fillchar, trunc_p);
-        *trunc_p = NUL;
+        schar_get_adv(&trunc_p, fillchar);
       }
     }
     width = maxwidth;
@@ -2100,12 +2099,12 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
 
       for (int l = 0; l < num_separators; l++) {
         int dislocation = (l == (num_separators - 1)) ? final_spaces : standard_spaces;
-        dislocation *= utf_char2len(fillchar);
+        dislocation *= (int)schar_len(fillchar);
         char *start = stl_items[stl_separator_locations[l]].start;
         char *seploc = start + dislocation;
         STRMOVE(seploc, start);
         for (char *s = start; s < seploc;) {
-          s += utf_char2bytes(fillchar, s);
+          schar_get_adv(&s, fillchar);
         }
 
         for (int item_idx = stl_separator_locations[l] + 1;
@@ -2184,7 +2183,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
   // matter?
   // if (called_emsg > called_emsg_before)
   if (opt_idx != kOptInvalid && did_emsg > did_emsg_before) {
-    set_string_option_direct(opt_idx, "", OPT_FREE | opt_scope, SID_ERROR);
+    set_string_option_direct(opt_idx, "", opt_scope, SID_ERROR);
   }
 
   // A user function may reset KeyTyped, restore it.

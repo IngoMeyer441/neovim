@@ -7,7 +7,7 @@
 #include "nvim/channel_defs.h"  // IWYU pragma: keep
 #include "nvim/cmdexpand_defs.h"  // IWYU pragma: keep
 #include "nvim/eval/typval_defs.h"
-#include "nvim/eval_defs.h"  // IWYU pragma: export
+#include "nvim/eval_defs.h"  // IWYU pragma: keep
 #include "nvim/event/defs.h"
 #include "nvim/ex_cmds_defs.h"  // IWYU pragma: keep
 #include "nvim/grid_defs.h"  // IWYU pragma: keep
@@ -86,6 +86,7 @@ typedef enum {
   VV_THIS_SESSION,
   VV_VERSION,
   VV_LNUM,
+  VV_TERMREQUEST,
   VV_TERMRESPONSE,
   VV_FNAME,
   VV_LANG,

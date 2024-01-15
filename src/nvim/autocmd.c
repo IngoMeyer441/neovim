@@ -25,11 +25,13 @@
 #include "nvim/ex_eval.h"
 #include "nvim/fileio.h"
 #include "nvim/getchar.h"
-#include "nvim/gettext.h"
+#include "nvim/getchar_defs.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/hashtab.h"
 #include "nvim/highlight.h"
+#include "nvim/highlight_defs.h"
 #include "nvim/insexpand.h"
 #include "nvim/lua/executor.h"
 #include "nvim/main.h"
@@ -37,17 +39,22 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/os/time.h"
+#include "nvim/os/time_defs.h"
 #include "nvim/path.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
+#include "nvim/runtime_defs.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
@@ -705,7 +712,7 @@ char *au_event_disable(char *what)
   } else {
     STRCAT(new_ei, what);
   }
-  set_string_option_direct(kOptEventignore, new_ei, OPT_FREE, SID_NONE);
+  set_string_option_direct(kOptEventignore, new_ei, 0, SID_NONE);
   xfree(new_ei);
   return save_ei;
 }
@@ -713,7 +720,7 @@ char *au_event_disable(char *what)
 void au_event_restore(char *old_ei)
 {
   if (old_ei != NULL) {
-    set_string_option_direct(kOptEventignore, old_ei, OPT_FREE, SID_NONE);
+    set_string_option_direct(kOptEventignore, old_ei, 0, SID_NONE);
     xfree(old_ei);
   }
 }

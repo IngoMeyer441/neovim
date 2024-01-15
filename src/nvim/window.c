@@ -8,10 +8,12 @@
 #include <string.h>
 
 #include "klib/kvec.h"
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/arglist.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
@@ -22,10 +24,12 @@
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
+#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/vars.h"
 #include "nvim/eval/window.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
@@ -34,16 +38,18 @@
 #include "nvim/fold.h"
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
-#include "nvim/gettext.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
+#include "nvim/grid_defs.h"
 #include "nvim/hashtab.h"
 #include "nvim/keycodes.h"
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/map_defs.h"
-#include "nvim/mapping.h"  // IWYU pragma: keep (langmap_adjust_mb)
+#include "nvim/mapping.h"
 #include "nvim/mark.h"
+#include "nvim/mark_defs.h"
 #include "nvim/match.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
@@ -62,6 +68,7 @@
 #include "nvim/quickfix.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
+#include "nvim/state_defs.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
@@ -69,6 +76,7 @@
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
+#include "nvim/ui_defs.h"
 #include "nvim/undo.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
@@ -5662,7 +5670,7 @@ void win_setheight_win(int height, win_T *win)
     // If there is extra space created between the last window and the command
     // line, clear it.
     if (full_screen && msg_scrolled == 0 && row < cmdline_row) {
-      grid_fill(&default_grid, row, cmdline_row, 0, Columns, ' ', ' ', 0);
+      grid_clear(&default_grid, row, cmdline_row, 0, Columns, 0);
       if (msg_grid.chars) {
         clear_cmdline = true;
       }
@@ -6145,7 +6153,7 @@ void win_drag_status_line(win_T *dragwin, int offset)
     }
   }
   int row = win_comp_pos();
-  grid_fill(&default_grid, row, cmdline_row, 0, Columns, ' ', ' ', 0);
+  grid_clear(&default_grid, row, cmdline_row, 0, Columns, 0);
   if (msg_grid.chars) {
     clear_cmdline = true;
   }
@@ -6640,7 +6648,7 @@ void command_height(void)
 
       // clear the lines added to cmdline
       if (full_screen) {
-        grid_fill(&default_grid, cmdline_row, Rows, 0, Columns, ' ', ' ', 0);
+        grid_clear(&default_grid, cmdline_row, Rows, 0, Columns, 0);
       }
       msg_row = cmdline_row;
       redraw_cmdline = true;

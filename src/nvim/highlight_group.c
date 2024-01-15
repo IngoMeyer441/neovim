@@ -15,6 +15,7 @@
 #include "nvim/api/private/validate.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/autocmd_defs.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand_defs.h"
@@ -26,7 +27,8 @@
 #include "nvim/eval/vars.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/garray.h"
-#include "nvim/gettext.h"
+#include "nvim/garray_defs.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
@@ -34,14 +36,17 @@
 #include "nvim/macros_defs.h"
 #include "nvim/map_defs.h"
 #include "nvim/memory.h"
+#include "nvim/memory_defs.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/time.h"
 #include "nvim/runtime.h"
 #include "nvim/strings.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
+#include "nvim/ui_defs.h"
 #include "nvim/vim_defs.h"
 
 /// \addtogroup SG_SET
@@ -173,15 +178,13 @@ static const char *highlight_init_both[] = {
   "default link PmenuKindSel   PmenuSel",
   "default link PmenuSbar      Pmenu",
   "default link Substitute     Search",
-  "default link TabLine        StatusLine",
+  "default link TabLine        StatusLineNC",
   "default link TabLineFill    TabLine",
   "default link TermCursorNC   NONE",
   "default link VertSplit      WinSeparator",
   "default link VisualNOS      Visual",
   "default link Whitespace     NonText",
   "default link WildMenu       PmenuSel",
-  "default link WinBar         StatusLine",
-  "default link WinBarNC       StatusLineNC",
   "default link WinSeparator   Normal",
 
   // Syntax
@@ -308,6 +311,8 @@ static const char *highlight_init_light[] = {
   "Normal guifg=NvimDarkGrey2 guibg=NvimLightGrey2 ctermfg=NONE ctermbg=NONE",
 
   // UI
+  "Added                guifg=NvimDarGreen                                   ctermfg=2",
+  "Changed              guifg=NvimDarkCyan                                   ctermfg=6",
   "ColorColumn                               guibg=NvimLightGrey4            cterm=reverse",
   "Conceal              guifg=NvimLightGrey4",
   "CurSearch            guifg=NvimLightGrey1 guibg=NvimDarkYellow            ctermfg=15 ctermbg=3",
@@ -336,6 +341,7 @@ static const char *highlight_init_light[] = {
   "RedrawDebugClear                          guibg=NvimLightYellow           ctermfg=15 ctermbg=3",
   "RedrawDebugComposed                       guibg=NvimLightGreen            ctermfg=15 ctermbg=2",
   "RedrawDebugRecompose                      guibg=NvimLightRed              ctermfg=15 ctermbg=1",
+  "Removed              guifg=NvimDarkRed                                    ctermfg=1",
   "Search               guifg=NvimDarkGrey1  guibg=NvimLightYellow           ctermfg=15 ctermbg=3",
   "SignColumn           guifg=NvimLightGrey4",
   "SpecialKey           guifg=NvimLightGrey4",
@@ -343,10 +349,12 @@ static const char *highlight_init_light[] = {
   "SpellCap             guisp=NvimDarkYellow gui=undercurl                   cterm=undercurl",
   "SpellLocal           guisp=NvimDarkGreen  gui=undercurl                   cterm=undercurl",
   "SpellRare            guisp=NvimDarkCyan   gui=undercurl                   cterm=undercurl",
-  "StatusLine           guifg=NvimDarkGrey3  guibg=NvimLightGrey1            cterm=reverse",
-  "StatusLineNC         guifg=NvimDarkGrey4  guibg=NvimLightGrey1            cterm=bold",
+  "StatusLine           guifg=NvimLightGrey3 guibg=NvimDarkGrey3             cterm=reverse",
+  "StatusLineNC         guifg=NvimDarkGrey3  guibg=NvimLightGrey3            cterm=bold",
   "Visual                                    guibg=NvimLightGrey4            ctermfg=15 ctermbg=0",
   "WarningMsg           guifg=NvimDarkYellow                                 ctermfg=3",
+  "WinBar               guifg=NvimDarkGrey4  guibg=NvimLightGrey1  gui=bold  cterm=bold",
+  "WinBarNC             guifg=NvimDarkGrey4  guibg=NvimLightGrey1            cterm=bold",
 
   // Syntax
   "Comment    guifg=NvimDarkGrey4",
@@ -377,6 +385,8 @@ static const char *highlight_init_dark[] = {
   "Normal guifg=NvimLightGrey2 guibg=NvimDarkGrey2 ctermfg=NONE ctermbg=NONE",
 
   // UI
+  "Added                guifg=NvimLightGreen                                ctermfg=10",
+  "Changed              guifg=NvimLightCyan                                 ctermfg=14",
   "ColorColumn                                guibg=NvimDarkGrey4           cterm=reverse",
   "Conceal              guifg=NvimDarkGrey4",
   "CurSearch            guifg=NvimDarkGrey1   guibg=NvimLightYellow         ctermfg=0 ctermbg=11",
@@ -405,6 +415,7 @@ static const char *highlight_init_dark[] = {
   "RedrawDebugClear                           guibg=NvimDarkYellow          ctermfg=0 ctermbg=11",
   "RedrawDebugComposed                        guibg=NvimDarkGreen           ctermfg=0 ctermbg=10",
   "RedrawDebugRecompose                       guibg=NvimDarkRed             ctermfg=0 ctermbg=9",
+  "Removed              guifg=NvimLightRed                                  ctermfg=9",
   "Search               guifg=NvimLightGrey1  guibg=NvimDarkYellow          ctermfg=0 ctermbg=11",
   "SignColumn           guifg=NvimDarkGrey4",
   "SpecialKey           guifg=NvimDarkGrey4",
@@ -412,10 +423,12 @@ static const char *highlight_init_dark[] = {
   "SpellCap             guisp=NvimLightYellow gui=undercurl                 cterm=undercurl",
   "SpellLocal           guisp=NvimLightGreen  gui=undercurl                 cterm=undercurl",
   "SpellRare            guisp=NvimLightCyan   gui=undercurl                 cterm=undercurl",
-  "StatusLine           guifg=NvimLightGrey3  guibg=NvimDarkGrey1           cterm=reverse",
-  "StatusLineNC         guifg=NvimLightGrey4  guibg=NvimDarkGrey1           cterm=bold",
+  "StatusLine           guifg=NvimDarkGrey3   guibg=NvimLightGrey3          cterm=reverse",
+  "StatusLineNC         guifg=NvimLightGrey3  guibg=NvimDarkGrey3           cterm=bold",
   "Visual                                     guibg=NvimDarkGrey4           ctermfg=0 ctermbg=15",
   "WarningMsg           guifg=NvimLightYellow                               ctermfg=11",
+  "WinBar               guifg=NvimLightGrey4  guibg=NvimDarkGrey1  gui=bold cterm=bold",
+  "WinBarNC             guifg=NvimLightGrey4  guibg=NvimDarkGrey1           cterm=bold",
 
   // Syntax
   "Comment    guifg=NvimLightGrey4",

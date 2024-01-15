@@ -19,14 +19,18 @@
 
 #include "auto/config.h"
 #include "nvim/api/private/converter.h"
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
+#include "nvim/channel_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/cmdexpand_defs.h"
@@ -45,21 +49,26 @@
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
 #include "nvim/eval/window.h"
+#include "nvim/event/defs.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
 #include "nvim/event/process.h"
 #include "nvim/event/time.h"
 #include "nvim/ex_cmds.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
 #include "nvim/file_search.h"
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
+#include "nvim/garray_defs.h"
 #include "nvim/getchar.h"
-#include "nvim/gettext.h"
+#include "nvim/getchar_defs.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
+#include "nvim/grid_defs.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
@@ -71,24 +80,34 @@
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
+#include "nvim/mark_defs.h"
 #include "nvim/math.h"
 #include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
+#include "nvim/memory_defs.h"
 #include "nvim/menu.h"
+#include "nvim/menu_defs.h"
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/msgpack_rpc/channel.h"
+#include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/normal.h"
+#include "nvim/normal_defs.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/dl.h"
 #include "nvim/os/fileio.h"
+#include "nvim/os/fileio_defs.h"
 #include "nvim/os/fs.h"
+#include "nvim/os/fs_defs.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/os/pty_process.h"
 #include "nvim/os/shell.h"
 #include "nvim/os/stdpaths_defs.h"
@@ -99,12 +118,15 @@
 #include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
+#include "nvim/regexp_defs.h"
 #include "nvim/runtime.h"
+#include "nvim/runtime_defs.h"
 #include "nvim/search.h"
 #include "nvim/sha256.h"
 #include "nvim/spell.h"
 #include "nvim/spellsuggest.h"
 #include "nvim/state.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/tag.h"
@@ -6881,15 +6903,8 @@ static void f_screenchar(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   ScreenGrid *grid;
   screenchar_adjust(&grid, &row, &col);
 
-  int c;
-  if (row < 0 || row >= grid->rows || col < 0 || col >= grid->cols) {
-    c = -1;
-  } else {
-    char buf[MAX_SCHAR_SIZE + 1];
-    schar_get(buf, grid_getchar(grid, row, col, NULL));
-    c = utf_ptr2char(buf);
-  }
-  rettv->vval.v_number = c;
+  rettv->vval.v_number = (row < 0 || row >= grid->rows || col < 0 || col >= grid->cols)
+                         ? -1 : schar_get_first_codepoint(grid_getchar(grid, row, col, NULL));
 }
 
 /// "screenchars()" function
@@ -8383,7 +8398,6 @@ static void f_synIDtrans(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 static void f_synconcealed(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   int syntax_flags = 0;
-  int cchar;
   int matchid = 0;
   char str[NUMBUFLEN];
 
@@ -8402,14 +8416,13 @@ static void f_synconcealed(typval_T *argvars, typval_T *rettv, EvalFuncData fptr
 
     // get the conceal character
     if ((syntax_flags & HL_CONCEAL) && curwin->w_p_cole < 3) {
-      cchar = syn_get_sub_char();
+      schar_T cchar = schar_from_char(syn_get_sub_char());
       if (cchar == NUL && curwin->w_p_cole == 1) {
         cchar = (curwin->w_p_lcs_chars.conceal == NUL)
-                ? ' '
-                : curwin->w_p_lcs_chars.conceal;
+                ? schar_from_ascii(' ') : curwin->w_p_lcs_chars.conceal;
       }
       if (cchar != NUL) {
-        utf_char2bytes(cchar, str);
+        schar_get(str, cchar);
       }
     }
   }

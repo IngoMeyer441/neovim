@@ -59,6 +59,7 @@
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/garray.h"
+#include "nvim/garray_defs.h"
 
 #define T MT_BRANCH_FACTOR
 #define ILEN (sizeof(MTNode) + (2 * T) * sizeof(void *))
@@ -1971,13 +1972,10 @@ MTPos marktree_get_altpos(MarkTree *b, MTKey mark, MarkTreeIter *itr)
   return marktree_get_alt(b, mark, itr).pos;
 }
 
+/// @return alt mark for a paired mark or mark itself for unpaired mark
 MTKey marktree_get_alt(MarkTree *b, MTKey mark, MarkTreeIter *itr)
 {
-  MTKey end = MT_INVALID_KEY;
-  if (mt_paired(mark)) {
-    end = marktree_lookup_ns(b, mark.ns, mark.id, !mt_end(mark), itr);
-  }
-  return end;
+  return mt_paired(mark) ? marktree_lookup_ns(b, mark.ns, mark.id, !mt_end(mark), itr) : mark;
 }
 
 static void marktree_itr_fix_pos(MarkTree *b, MarkTreeIter *itr)

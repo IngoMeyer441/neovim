@@ -8,30 +8,36 @@
 
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/extmark_defs.h"
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
-#include "nvim/gettext.h"
+#include "nvim/garray_defs.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/help.h"
 #include "nvim/macros_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/path.h"
 #include "nvim/pos_defs.h"
 #include "nvim/runtime.h"
@@ -607,7 +613,7 @@ void cleanup_help_tags(int num_file, char **file)
 void prepare_help_buffer(void)
 {
   curbuf->b_help = true;
-  set_string_option_direct(kOptBuftype, "help", OPT_FREE|OPT_LOCAL, 0);
+  set_string_option_direct(kOptBuftype, "help", OPT_LOCAL, 0);
 
   // Always set these options after jumping to a help tag, because the
   // user may have an autocommand that gets in the way.
@@ -616,13 +622,13 @@ void prepare_help_buffer(void)
   // Only set it when needed, buf_init_chartab() is some work.
   char *p = "!-~,^*,^|,^\",192-255";
   if (strcmp(curbuf->b_p_isk, p) != 0) {
-    set_string_option_direct(kOptIskeyword, p, OPT_FREE|OPT_LOCAL, 0);
+    set_string_option_direct(kOptIskeyword, p, OPT_LOCAL, 0);
     check_buf_options(curbuf);
     buf_init_chartab(curbuf, false);
   }
 
   // Don't use the global foldmethod.
-  set_string_option_direct(kOptFoldmethod, "manual", OPT_FREE|OPT_LOCAL, 0);
+  set_string_option_direct(kOptFoldmethod, "manual", OPT_LOCAL, 0);
 
   curbuf->b_p_ts = 8;         // 'tabstop' is 8.
   curwin->w_p_list = false;   // No list mode.

@@ -34,7 +34,7 @@ The generated :help text for each function is formatted as follows:
   - Each function documentation is separated by a single line.
 """
 
-from __future__ import annotations
+from __future__ import annotations  # PEP-563, python 3.7+
 
 import argparse
 import collections
@@ -47,8 +47,11 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 from xml.dom import minidom
+
+if sys.version_info >= (3, 8):
+    from typing import Literal
 
 import msgpack
 
@@ -165,7 +168,7 @@ class Config:
 
 CONFIG: Dict[str, Config] = {
     'api': Config(
-        mode = 'c',
+        mode='c',
         filename = 'api.txt',
         # Section ordering.
         section_order=[x for x in [
@@ -199,7 +202,6 @@ CONFIG: Dict[str, Config] = {
         filename='lua.txt',
         section_order=[
             'highlight.lua',
-            'regex.lua',
             'diff.lua',
             'mpack.lua',
             'json.lua',
@@ -217,6 +219,9 @@ CONFIG: Dict[str, Config] = {
             'keymap.lua',
             'fs.lua',
             'glob.lua',
+            'lpeg.lua',
+            're.lua',
+            'regex.lua',
             'secure.lua',
             'version.lua',
             'iter.lua',
@@ -247,6 +252,8 @@ CONFIG: Dict[str, Config] = {
             'runtime/lua/vim/_meta/json.lua',
             'runtime/lua/vim/_meta/base64.lua',
             'runtime/lua/vim/_meta/regex.lua',
+            'runtime/lua/vim/_meta/lpeg.lua',
+            'runtime/lua/vim/_meta/re.lua',
             'runtime/lua/vim/_meta/spell.lua',
         ],
         file_patterns='*.lua',
@@ -265,7 +272,10 @@ CONFIG: Dict[str, Config] = {
         section_fmt=lambda name: (
             'Lua module: vim' if name.lower() == '_editor' else
             'LUA-VIMSCRIPT BRIDGE' if name.lower() == '_options' else
-            f'VIM.{name.upper()}' if name.lower() in [ 'highlight', 'mpack', 'json', 'base64', 'diff', 'spell', 'regex' ] else
+            f'VIM.{name.upper()}' if name.lower() in [
+                'highlight', 'mpack', 'json', 'base64', 'diff', 'spell',
+                'regex', 'lpeg', 're',
+            ] else
             'VIM' if name.lower() == 'builtin' else
             f'Lua module: vim.{name.lower()}'),
         helptag_fmt=lambda name: (
@@ -302,6 +312,8 @@ CONFIG: Dict[str, Config] = {
             'json': 'vim.json',
             'base64': 'vim.base64',
             'regex': 'vim.regex',
+            'lpeg': 'vim.lpeg',
+            're': 'vim.re',
             'spell': 'vim.spell',
             'snippet': 'vim.snippet',
             'text': 'vim.text',
@@ -576,7 +588,7 @@ def is_inline(n):
     return True
 
 
-def doc_wrap(text, prefix='', width=70, func=False, indent=None):
+def doc_wrap(text, prefix='', width=70, func=False, indent=None) -> str:
     """Wraps text to `width`.
 
     First line is prefixed with `prefix`, subsequent lines are aligned.
@@ -651,12 +663,18 @@ def update_params_map(parent, ret_map, width=text_width - indentation):
     return ret_map
 
 
-def render_node(n, text, prefix='', indent='', width=text_width - indentation,
-                fmt_vimhelp=False):
+def render_node(n: Element, text: str, prefix='', *,
+                indent: str = '',
+                width: int = (text_width - indentation),
+                fmt_vimhelp: bool = False):
     """Renders a node as Vim help text, recursively traversing all descendants."""
 
     def ind(s):
         return s if fmt_vimhelp else ''
+
+    # Get the current column offset from the last line of `text`
+    # (needed to appropriately wrap multiple and contiguous inline elements)
+    col_offset: int = len_lastline(text)
 
     text = ''
     # space_preceding = (len(text) > 0 and ' ' == text[-1][-1])
@@ -682,7 +700,14 @@ def render_node(n, text, prefix='', indent='', width=text_width - indentation,
 
         text += '\n{}\n<'.format(textwrap.indent(o, ' ' * 4))
     elif is_inline(n):
-        text = doc_wrap(get_text(n), prefix=prefix, indent=indent, width=width)
+        o = get_text(n).strip()
+        if o:
+            DEL = chr(127)  # a dummy character to pad for proper line wrap
+            assert len(DEL) == 1
+            dummy_padding = DEL * max(0, col_offset - len(prefix))
+            text += doc_wrap(dummy_padding + o,
+                             prefix=prefix, indent=indent, width=width
+                            ).replace(DEL, "")
     elif n.nodeName == 'verbatim':
         # TODO: currently we don't use this. The "[verbatim]" hint is there as
         # a reminder that we must decide how to format this if we do use it.
@@ -701,12 +726,14 @@ def render_node(n, text, prefix='', indent='', width=text_width - indentation,
     elif n.nodeName in ('para', 'heading'):
         did_prefix = False
         for c in n.childNodes:
+            c_text = render_node(c, text, prefix=(prefix if not did_prefix else ''), indent=indent, width=width)
             if (is_inline(c)
-                    and '' != get_text(c).strip()
+                    and '' != c_text.strip()
                     and text
-                    and ' ' != text[-1]):
+                    and text[-1] not in (' ', '(', '|')
+                    and not c_text.startswith(')')):
                 text += ' '
-            text += render_node(c, text, prefix=(prefix if not did_prefix else ''), indent=indent, width=width)
+            text += c_text
             did_prefix = True
     elif n.nodeName == 'itemizedlist':
         for c in n.childNodes:
@@ -824,15 +851,17 @@ def para_as_map(parent: Element,
                     raise RuntimeError('unhandled simplesect: {}\n{}'.format(
                         child.nodeName, child.toprettyxml(indent='  ', newl='\n')))
             else:
+                child_text = render_node(child, text, indent=indent, width=width)
                 if (prev is not None
                         and is_inline(self_or_child(prev))
                         and is_inline(self_or_child(child))
                         and '' != get_text(self_or_child(child)).strip()
                         and text
-                        and ' ' != text[-1]):
+                        and text[-1] not in (' ', '(', '|')
+                        and not child_text.startswith(')')):
                     text += ' '
 
-                text += render_node(child, text, indent=indent, width=width)
+                text += child_text
                 prev = child
 
     chunks['text'] += text
@@ -1330,31 +1359,20 @@ def fmt_doxygen_xml_as_vimhelp(filename, target) -> Tuple[Docstring, Docstring]:
         # Verbatim handling.
         func_doc = re.sub(r'^\s+([<>])$', r'\1', func_doc, flags=re.M)
 
-        split_lines: List[str] = func_doc.split('\n')
-        start = 0
-        while True:
-            try:
-                start = split_lines.index('>', start)
-            except ValueError:
-                break
+        def process_helptags(func_doc: str) -> str:
+            lines: List[str] = func_doc.split('\n')
+            # skip ">lang ... <" regions
+            is_verbatim: bool = False
+            for i in range(len(lines)):
+                if re.search(' >([a-z])*$', lines[i]):
+                    is_verbatim = True
+                elif is_verbatim and lines[i].strip() == '<':
+                    is_verbatim = False
+                if not is_verbatim:
+                    lines[i] = align_tags(lines[i])
+            return "\n".join(lines)
 
-            try:
-                end = split_lines.index('<', start)
-            except ValueError:
-                break
-
-            split_lines[start + 1:end] = [
-                ('    ' + x).rstrip()
-                for x in textwrap.dedent(
-                    "\n".join(
-                        split_lines[start+1:end]
-                    )
-                ).split("\n")
-            ]
-
-            start = end
-
-        func_doc = "\n".join(map(align_tags, split_lines))
+        func_doc = process_helptags(func_doc)
 
         if (fn_name.startswith(config.fn_name_prefix)
             and fn_name != "nvim_error_event"):

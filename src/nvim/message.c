@@ -11,6 +11,7 @@
 #include <uv.h>
 
 #include "klib/kvec.h"
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
@@ -19,23 +20,28 @@
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
+#include "nvim/eval/typval_defs.h"
+#include "nvim/event/defs.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_eval.h"
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
+#include "nvim/garray_defs.h"
 #include "nvim/getchar.h"
-#include "nvim/gettext.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
+#include "nvim/highlight_defs.h"
 #include "nvim/indent.h"
 #include "nvim/input.h"
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
 #include "nvim/main.h"
 #include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/mouse.h"
@@ -49,11 +55,13 @@
 #include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
+#include "nvim/runtime_defs.h"
 #include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
+#include "nvim/ui_defs.h"
 #include "nvim/vim_defs.h"
 
 // To be able to scroll back at the "more" and "hit-enter" prompts we need to
@@ -143,9 +151,8 @@ static int msg_grid_pos_at_flush = 0;
 
 static void ui_ext_msg_set_pos(int row, bool scrolled)
 {
-  char buf[MB_MAXCHAR + 1];
-  size_t size = (size_t)utf_char2bytes(curwin->w_p_fcs_chars.msgsep, buf);
-  buf[size] = '\0';
+  char buf[MAX_SCHAR_SIZE];
+  size_t size = schar_get(buf, curwin->w_p_fcs_chars.msgsep);
   ui_call_msg_set_pos(msg_grid.handle, row, scrolled,
                       (String){ .data = buf, .size = size });
 }
@@ -205,6 +212,7 @@ void msg_grid_validate(void)
   } else if (msg_grid.chars && !msg_scrolled && msg_grid_pos != max_rows) {
     msg_grid_set_pos(max_rows, false);
   }
+  msg_grid_adj.cols = Columns;
 
   if (msg_grid.chars && !msg_scrolled && cmdline_row < msg_grid_pos) {
     // TODO(bfredl): this should already be the case, but fails in some
@@ -1798,12 +1806,12 @@ void str2specialbuf(const char *sp, char *buf, size_t len)
 /// print line for :print or :list command
 void msg_prt_line(const char *s, bool list)
 {
-  int c;
+  schar_T sc;
   int col = 0;
   int n_extra = 0;
-  int c_extra = 0;
-  int c_final = 0;
-  const char *p_extra = NULL;  // init to make SASC shut up
+  schar_T sc_extra = 0;
+  schar_T sc_final = 0;
+  const char *p_extra = NULL;  // init to make SASC shut up. ASCII only!
   int n;
   int attr = 0;
   const char *lead = NULL;
@@ -1845,13 +1853,13 @@ void msg_prt_line(const char *s, bool list)
   while (!got_int) {
     if (n_extra > 0) {
       n_extra--;
-      if (n_extra == 0 && c_final) {
-        c = c_final;
-      } else if (c_extra) {
-        c = c_extra;
+      if (n_extra == 0 && sc_final) {
+        sc = sc_final;
+      } else if (sc_extra) {
+        sc = sc_extra;
       } else {
         assert(p_extra != NULL);
-        c = (unsigned char)(*p_extra++);
+        sc = schar_from_ascii((unsigned char)(*p_extra++));
       }
     } else if ((l = utfc_ptr2len(s)) > 1) {
       col += utf_ptr2cells(s);
@@ -1859,10 +1867,8 @@ void msg_prt_line(const char *s, bool list)
       if (l >= MB_MAXBYTES) {
         xstrlcpy(buf, "?", sizeof(buf));
       } else if (curwin->w_p_lcs_chars.nbsp != NUL && list
-                 && (utf_ptr2char(s) == 160
-                     || utf_ptr2char(s) == 0x202f)) {
-        int len = utf_char2bytes(curwin->w_p_lcs_chars.nbsp, buf);
-        buf[len] = NUL;
+                 && (utf_ptr2char(s) == 160 || utf_ptr2char(s) == 0x202f)) {
+        schar_get(buf, curwin->w_p_lcs_chars.nbsp);
       } else {
         memmove(buf, s, (size_t)l);
         buf[l] = NUL;
@@ -1872,7 +1878,9 @@ void msg_prt_line(const char *s, bool list)
       continue;
     } else {
       attr = 0;
-      c = (uint8_t)(*s++);
+      int c = (uint8_t)(*s++);
+      sc_extra = NUL;
+      sc_final = NUL;
       if (list) {
         in_multispace = c == ' ' && (*s == ' '
                                      || (col > 0 && s[-2] == ' '));
@@ -1882,74 +1890,72 @@ void msg_prt_line(const char *s, bool list)
       }
       if (c == TAB && (!list || curwin->w_p_lcs_chars.tab1)) {
         // tab amount depends on current column
-        n_extra = tabstop_padding(col,
-                                  curbuf->b_p_ts,
+        n_extra = tabstop_padding(col, curbuf->b_p_ts,
                                   curbuf->b_p_vts_array) - 1;
         if (!list) {
-          c = ' ';
-          c_extra = ' ';
-          c_final = NUL;
+          sc = schar_from_ascii(' ');
+          sc_extra = schar_from_ascii(' ');
         } else {
-          c = (n_extra == 0 && curwin->w_p_lcs_chars.tab3)
-              ? curwin->w_p_lcs_chars.tab3
-              : curwin->w_p_lcs_chars.tab1;
-          c_extra = curwin->w_p_lcs_chars.tab2;
-          c_final = curwin->w_p_lcs_chars.tab3;
+          sc = (n_extra == 0 && curwin->w_p_lcs_chars.tab3)
+               ? curwin->w_p_lcs_chars.tab3
+               : curwin->w_p_lcs_chars.tab1;
+          sc_extra = curwin->w_p_lcs_chars.tab2;
+          sc_final = curwin->w_p_lcs_chars.tab3;
           attr = HL_ATTR(HLF_0);
         }
-      } else if (c == 160 && list && curwin->w_p_lcs_chars.nbsp != NUL) {
-        c = curwin->w_p_lcs_chars.nbsp;
-        attr = HL_ATTR(HLF_0);
       } else if (c == NUL && list && curwin->w_p_lcs_chars.eol != NUL) {
         p_extra = "";
-        c_extra = NUL;
-        c_final = NUL;
         n_extra = 1;
-        c = curwin->w_p_lcs_chars.eol;
+        sc = curwin->w_p_lcs_chars.eol;
         attr = HL_ATTR(HLF_AT);
         s--;
       } else if (c != NUL && (n = byte2cells(c)) > 1) {
         n_extra = n - 1;
         p_extra = transchar_byte_buf(NULL, c);
-        c_extra = NUL;
-        c_final = NUL;
-        c = (unsigned char)(*p_extra++);
+        sc = schar_from_ascii(*p_extra++);
         // Use special coloring to be able to distinguish <hex> from
         // the same in plain text.
         attr = HL_ATTR(HLF_0);
       } else if (c == ' ') {
         if (lead != NULL && s <= lead && in_multispace
             && curwin->w_p_lcs_chars.leadmultispace != NULL) {
-          c = curwin->w_p_lcs_chars.leadmultispace[multispace_pos++];
+          sc = curwin->w_p_lcs_chars.leadmultispace[multispace_pos++];
           if (curwin->w_p_lcs_chars.leadmultispace[multispace_pos] == NUL) {
             multispace_pos = 0;
           }
           attr = HL_ATTR(HLF_0);
         } else if (lead != NULL && s <= lead && curwin->w_p_lcs_chars.lead != NUL) {
-          c = curwin->w_p_lcs_chars.lead;
+          sc = curwin->w_p_lcs_chars.lead;
           attr = HL_ATTR(HLF_0);
         } else if (trail != NULL && s > trail) {
-          c = curwin->w_p_lcs_chars.trail;
+          sc = curwin->w_p_lcs_chars.trail;
           attr = HL_ATTR(HLF_0);
         } else if (in_multispace
                    && curwin->w_p_lcs_chars.multispace != NULL) {
-          c = curwin->w_p_lcs_chars.multispace[multispace_pos++];
+          sc = curwin->w_p_lcs_chars.multispace[multispace_pos++];
           if (curwin->w_p_lcs_chars.multispace[multispace_pos] == NUL) {
             multispace_pos = 0;
           }
           attr = HL_ATTR(HLF_0);
         } else if (list && curwin->w_p_lcs_chars.space != NUL) {
-          c = curwin->w_p_lcs_chars.space;
+          sc = curwin->w_p_lcs_chars.space;
           attr = HL_ATTR(HLF_0);
+        } else {
+          sc = schar_from_ascii(' ');  // SPACE!
         }
+      } else {
+        sc = schar_from_ascii(c);
       }
     }
 
-    if (c == NUL) {
+    if (sc == NUL) {
       break;
     }
 
-    msg_putchar_attr(c, attr);
+    // TODO(bfredl): this is such baloney. need msg_put_schar
+    char buf[MAX_SCHAR_SIZE];
+    schar_get(buf, sc);
+    msg_puts_attr(buf, attr);
     col++;
   }
   msg_clr_eos();
@@ -2308,7 +2314,7 @@ void msg_scroll_up(bool may_throttle, bool zerocmd)
     msg_grid.dirty_col[msg_grid.rows - 1] = 0;
   }
 
-  grid_fill(&msg_grid_adj, Rows - 1, Rows, 0, Columns, ' ', ' ', HL_ATTR(HLF_MSG));
+  grid_clear(&msg_grid_adj, Rows - 1, Rows, 0, Columns, HL_ATTR(HLF_MSG));
 }
 
 /// Send throttled message output to UI clients
@@ -2352,7 +2358,7 @@ void msg_scroll_flush(void)
     for (int i = MAX(Rows - MAX(delta, 1), 0); i < Rows; i++) {
       int row = i - msg_grid_pos;
       assert(row >= 0);
-      ui_line(&msg_grid, row, 0, msg_grid.dirty_col[row], msg_grid.cols,
+      ui_line(&msg_grid, row, false, 0, msg_grid.dirty_col[row], msg_grid.cols,
               HL_ATTR(HLF_MSG), false);
       msg_grid.dirty_col[row] = 0;
     }
@@ -2823,16 +2829,14 @@ static bool do_more_prompt(int typed_char)
 
           if (toscroll == -1 && !to_redraw) {
             grid_ins_lines(&msg_grid_adj, 0, 1, Rows, 0, Columns);
-            grid_fill(&msg_grid_adj, 0, 1, 0, Columns, ' ', ' ',
-                      HL_ATTR(HLF_MSG));
+            grid_clear(&msg_grid_adj, 0, 1, 0, Columns, HL_ATTR(HLF_MSG));
             // display line at top
             disp_sb_line(0, mp);
           } else {
             // redisplay all lines
             // TODO(bfredl): this case is not optimized (though only concerns
             // event fragmentation, not unnecessary scroll events).
-            grid_fill(&msg_grid_adj, 0, Rows, 0, Columns, ' ', ' ',
-                      HL_ATTR(HLF_MSG));
+            grid_clear(&msg_grid_adj, 0, Rows, 0, Columns, HL_ATTR(HLF_MSG));
             for (int i = 0; mp != NULL && i < Rows - 1; i++) {
               mp = disp_sb_line(i, mp);
               msg_scrolled++;
@@ -2858,8 +2862,7 @@ static bool do_more_prompt(int typed_char)
           // scroll up, display line at bottom
           msg_scroll_up(true, false);
           inc_msg_scrolled();
-          grid_fill(&msg_grid_adj, Rows - 2, Rows - 1, 0, Columns, ' ', ' ',
-                    HL_ATTR(HLF_MSG));
+          grid_clear(&msg_grid_adj, Rows - 2, Rows - 1, 0, Columns, HL_ATTR(HLF_MSG));
           mp_last = disp_sb_line(Rows - 2, mp_last);
           toscroll--;
         }
@@ -2867,8 +2870,7 @@ static bool do_more_prompt(int typed_char)
 
       if (toscroll <= 0) {
         // displayed the requested text, more prompt again
-        grid_fill(&msg_grid_adj, Rows - 1, Rows, 0, Columns, ' ', ' ',
-                  HL_ATTR(HLF_MSG));
+        grid_clear(&msg_grid_adj, Rows - 1, Rows, 0, Columns, HL_ATTR(HLF_MSG));
         msg_moremsg(false);
         continue;
       }
@@ -2881,8 +2883,7 @@ static bool do_more_prompt(int typed_char)
   }
 
   // clear the --more-- message
-  grid_fill(&msg_grid_adj, Rows - 1, Rows, 0, Columns, ' ', ' ',
-            HL_ATTR(HLF_MSG));
+  grid_clear(&msg_grid_adj, Rows - 1, Rows, 0, Columns, HL_ATTR(HLF_MSG));
   redraw_cmdline = true;
   clear_cmdline = false;
   mode_displayed = false;
@@ -2966,10 +2967,8 @@ void msg_clr_eos_force(void)
     }
   }
 
-  grid_fill(&msg_grid_adj, msg_row, msg_row + 1, msg_startcol, msg_endcol,
-            ' ', ' ', HL_ATTR(HLF_MSG));
-  grid_fill(&msg_grid_adj, msg_row + 1, Rows, 0, Columns,
-            ' ', ' ', HL_ATTR(HLF_MSG));
+  grid_clear(&msg_grid_adj, msg_row, msg_row + 1, msg_startcol, msg_endcol, HL_ATTR(HLF_MSG));
+  grid_clear(&msg_grid_adj, msg_row + 1, Rows, 0, Columns, HL_ATTR(HLF_MSG));
 
   redraw_cmdline = true;  // overwritten the command line
   if (msg_row < Rows - 1 || msg_col == 0) {

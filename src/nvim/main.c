@@ -19,13 +19,17 @@
 
 #include "auto/config.h"  // IWYU pragma: keep
 #include "nvim/api/extmark.h"
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/ui.h"
 #include "nvim/arglist.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
+#include "nvim/channel_defs.h"
 #include "nvim/decoration.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/diff.h"
@@ -33,6 +37,7 @@
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
+#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
@@ -46,7 +51,7 @@
 #include "nvim/fold.h"
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
-#include "nvim/gettext.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/hashtab.h"
@@ -70,13 +75,16 @@
 #include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fileio.h"
+#include "nvim/os/fileio_defs.h"
 #include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/lang.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/os/signal.h"
 #include "nvim/os/stdpaths_defs.h"
 #include "nvim/path.h"
@@ -84,6 +92,7 @@
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/runtime.h"
+#include "nvim/runtime_defs.h"
 #include "nvim/shada.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
@@ -97,8 +106,13 @@
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
+
 #ifdef MSWIN
 # include "nvim/os/os_win_console.h"
+#endif
+
+#if defined(MSWIN) && !defined(MAKE_LIB)
+# include "nvim/mbyte.h"
 #endif
 
 // values for "window_layout"
@@ -1542,7 +1556,7 @@ static void handle_quickfix(mparm_T *paramp)
 {
   if (paramp->edit_type == EDIT_QF) {
     if (paramp->use_ef != NULL) {
-      set_string_option_direct(kOptErrorfile, paramp->use_ef, OPT_FREE, SID_CARG);
+      set_string_option_direct(kOptErrorfile, paramp->use_ef, 0, SID_CARG);
     }
     vim_snprintf(IObuff, IOSIZE, "cfile %s", p_ef);
     if (qf_init(NULL, p_ef, p_efm, true, IObuff, p_menc) < 0) {

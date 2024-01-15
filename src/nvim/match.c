@@ -16,13 +16,15 @@
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/fold.h"
-#include "nvim/gettext.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/highlight.h"
+#include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/macros_defs.h"
 #include "nvim/match.h"
 #include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
@@ -666,7 +668,7 @@ bool prepare_search_hl_line(win_T *wp, linenr_T lnum, colnr_T mincol, char **lin
 /// is endcol.
 /// Return the updated search_attr.
 int update_search_hl(win_T *wp, linenr_T lnum, colnr_T col, char **line, match_T *search_hl,
-                     int *has_match_conc, int *match_conc, int lcs_eol_one, bool *on_last_col,
+                     int *has_match_conc, int *match_conc, bool lcs_eol_todo, bool *on_last_col,
                      bool *search_attr_from_match)
 {
   matchitem_T *cur = wp->w_match_head;  // points to the match list
@@ -787,7 +789,7 @@ int update_search_hl(win_T *wp, linenr_T lnum, colnr_T col, char **line, match_T
     }
   }
   // Only highlight one character after the last column.
-  if (*(*line + col) == NUL && (wp->w_p_list && lcs_eol_one == -1)) {
+  if (*(*line + col) == NUL && (wp->w_p_list && !lcs_eol_todo)) {
     search_attr = 0;
   }
   return search_attr;

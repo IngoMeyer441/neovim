@@ -30,8 +30,11 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
 #include "nvim/ascii_defs.h"
+#include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
@@ -51,9 +54,11 @@
 #include "nvim/ex_session.h"
 #include "nvim/fold.h"
 #include "nvim/garray.h"
-#include "nvim/gettext.h"
+#include "nvim/garray_defs.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/highlight.h"
+#include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
@@ -63,6 +68,7 @@
 #include "nvim/lua/executor.h"
 #include "nvim/macros_defs.h"
 #include "nvim/mapping.h"
+#include "nvim/math.h"
 #include "nvim/mbyte.h"
 #include "nvim/memfile.h"
 #include "nvim/memline.h"
@@ -79,10 +85,12 @@
 #include "nvim/os/input.h"
 #include "nvim/os/lang.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/path.h"
 #include "nvim/popupmenu.h"
 #include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
+#include "nvim/regexp_defs.h"
 #include "nvim/runtime.h"
 #include "nvim/search.h"
 #include "nvim/spell.h"
@@ -94,7 +102,9 @@
 #include "nvim/terminal.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
+#include "nvim/ui_defs.h"
 #include "nvim/undo.h"
+#include "nvim/undo_defs.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
@@ -370,9 +380,6 @@ void set_init_1(bool clean_arg)
   check_win_options(curwin);
   check_options();
 
-  // Set all options to their default value
-  set_options_default(OPT_FREE);
-
   // set 'laststatus'
   last_status(false);
 
@@ -433,7 +440,7 @@ static void set_option_default(const OptIndex opt_idx, int opt_flags)
       if (opt->indir != PV_NONE) {
         set_string_option_direct(opt_idx, opt->def_val, opt_flags, 0);
       } else {
-        if ((opt_flags & OPT_FREE) && (flags & P_ALLOCED)) {
+        if (flags & P_ALLOCED) {
           free_string_option(*(char **)(varp));
         }
         *(char **)varp = opt->def_val;
@@ -482,7 +489,7 @@ static void set_option_default(const OptIndex opt_idx, int opt_flags)
 
 /// Set all options (except terminal options) to their default value.
 ///
-/// @param opt_flags  OPT_FREE, OPT_LOCAL and/or OPT_GLOBAL
+/// @param  opt_flags  Option flags.
 static void set_options_default(int opt_flags)
 {
   for (OptIndex opt_idx = 0; opt_idx < kOptIndexCount; opt_idx++) {
@@ -1431,7 +1438,7 @@ int do_set(char *arg, int opt_flags)
         if (*arg == '&') {
           arg++;
           // Only for :set command set global value of local options.
-          set_options_default(OPT_FREE | opt_flags);
+          set_options_default(opt_flags);
           didset_options();
           didset_options2();
           ui_refresh_options();
@@ -1696,10 +1703,10 @@ static void didset_options2(void)
   highlight_changed();
 
   // Parse default for 'fillchars'.
-  set_fillchars_option(curwin, curwin->w_p_fcs, true);
+  set_chars_option(curwin, curwin->w_p_fcs, kFillchars, true);
 
   // Parse default for 'listchars'.
-  set_listchars_option(curwin, curwin->w_p_lcs, true);
+  set_chars_option(curwin, curwin->w_p_lcs, kListchars, true);
 
   // Parse default for 'wildmode'.
   check_opt_wim();
@@ -4991,8 +4998,8 @@ void didset_window_options(win_T *wp, bool valid_cursor)
   check_colorcolumn(wp);
   briopt_check(wp);
   fill_culopt_flags(NULL, wp);
-  set_fillchars_option(wp, wp->w_p_fcs, true);
-  set_listchars_option(wp, wp->w_p_lcs, true);
+  set_chars_option(wp, wp->w_p_fcs, kFillchars, true);
+  set_chars_option(wp, wp->w_p_lcs, kListchars, true);
   parse_winhl_opt(wp);  // sets w_hl_needs_update also for w_p_winbl
   check_blending(wp);
   set_winbar_win(wp, false, valid_cursor);
@@ -6216,7 +6223,7 @@ void set_fileformat(int eol_style, int opt_flags)
 
   // p is NULL if "eol_style" is EOL_UNKNOWN.
   if (p != NULL) {
-    set_string_option_direct(kOptFileformat, p, OPT_FREE | opt_flags, 0);
+    set_string_option_direct(kOptFileformat, p, opt_flags, 0);
   }
 
   // This may cause the buffer to become (un)modified.
@@ -6401,4 +6408,25 @@ static Dictionary vimoption2dict(vimoption_T *opt, int req_scope, buf_T *buf, wi
   PUT(dict, "allows_duplicates", BOOLEAN_OBJ(!(opt->flags & P_NODUP)));
 
   return dict;
+}
+
+/// Check if option is multitype (supports multiple types).
+static bool option_is_multitype(OptIndex opt_idx)
+{
+  const OptTypeFlags type_flags = get_option(opt_idx)->type_flags;
+  assert(type_flags != 0);
+  return !is_power_of_two(type_flags);
+}
+
+/// Check if option supports a specific type.
+bool option_has_type(OptIndex opt_idx, OptValType type)
+{
+  // Ensure that type flags variable can hold all types.
+  STATIC_ASSERT(kOptValTypeSize <= sizeof(OptTypeFlags) * 8,
+                "Option type_flags cannot fit all option types");
+  // Ensure that the type is valid before accessing type_flags.
+  assert(type > kOptValTypeNil && type < kOptValTypeSize);
+  // Bitshift 1 by the value of type to get the type's corresponding flag, and check if it's set in
+  // the type_flags bit field.
+  return get_option(opt_idx)->type_flags & (1 << type);
 }

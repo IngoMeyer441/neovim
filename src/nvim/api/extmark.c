@@ -20,6 +20,7 @@
 #include "nvim/grid.h"
 #include "nvim/highlight_group.h"
 #include "nvim/marktree.h"
+#include "nvim/marktree_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -150,7 +151,7 @@ static Array extmark_to_array(MTPair extmark, bool id, bool add_dict, bool hl_na
 
     PUT(dict, "right_gravity", BOOLEAN_OBJ(mt_right(start)));
 
-    if (extmark.end_pos.row >= 0) {
+    if (mt_paired(start)) {
       PUT(dict, "end_row", INTEGER_OBJ(extmark.end_pos.row));
       PUT(dict, "end_col", INTEGER_OBJ(extmark.end_pos.col));
       PUT(dict, "end_right_gravity", BOOLEAN_OBJ(extmark.end_right_gravity));
