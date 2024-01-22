@@ -3,7 +3,7 @@ You can install Neovim from [download](#install-from-download), [package](#insta
 ---
 
 - To start Neovim, run `nvim` (not `neovim`).
-    - [Discover plugins](Related-projects#plugins).
+    - [Discover plugins](https://github.com/neovim/neovim/wiki/Related-projects#plugins).
 - Before upgrading to a new version, **check [Breaking Changes](https://neovim.io/doc/user/news.html#news-breaking).**
 - For config (vimrc) see [the FAQ](https://neovim.io/doc/user/faq.html#faq-general).
 
@@ -154,17 +154,6 @@ Neovim is in [Debian](https://packages.debian.org/search?keywords=neovim).
 Python (`:python`) support is installable via the package manager on Debian unstable.
 
     sudo apt-get install python3-neovim
-
-If installing via appimage, the following commands may be helpful in updating default paths:
-
-    # CUSTOM_NVIM_PATH=/usr/local/bin/nvim.appimage
-    # Set the above with the correct path, then run the rest of the commands:
-    set -u
-    sudo update-alternatives --install /usr/bin/ex ex "${CUSTOM_NVIM_PATH}" 110
-    sudo update-alternatives --install /usr/bin/vi vi "${CUSTOM_NVIM_PATH}" 110
-    sudo update-alternatives --install /usr/bin/view view "${CUSTOM_NVIM_PATH}" 110
-    sudo update-alternatives --install /usr/bin/vim vim "${CUSTOM_NVIM_PATH}" 110
-    sudo update-alternatives --install /usr/bin/vimdiff vimdiff "${CUSTOM_NVIM_PATH}" 110
 
 ### Exherbo Linux
 
@@ -335,17 +324,6 @@ If you're using an older version Ubuntu you must use:
     sudo easy_install3 pip
 
 For instructions to install the Python modules, see [`:help provider-python`].
-
-If you want to use Neovim for some (or all) of the editor alternatives, use the following commands:
-
-    sudo update-alternatives --install /usr/bin/vi vi /usr/bin/nvim 60
-    sudo update-alternatives --config vi
-    sudo update-alternatives --install /usr/bin/vim vim /usr/bin/nvim 60
-    sudo update-alternatives --config vim
-    sudo update-alternatives --install /usr/bin/editor editor /usr/bin/nvim 60
-    sudo update-alternatives --config editor
-
-Note, however, that special interfaces, like `view` for `nvim -R`, are not supported.  (See [#1646](https://github.com/neovim/neovim/issues/1646) and [#2008](https://github.com/neovim/neovim/pull/2008).)
 
 ### Void-Linux
 

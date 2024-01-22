@@ -2197,7 +2197,7 @@ vim.bo.ft = vim.bo.filetype
 --- Characters to fill the statuslines, vertical separators and special
 --- lines in the window.
 --- It is a comma-separated list of items.  Each item has a name, a colon
---- and the value of that item:
+--- and the value of that item: `E1511`
 ---
 ---   item		default		Used for ~
 ---   stl		' '		statusline of the current window
@@ -2238,7 +2238,7 @@ vim.bo.ft = vim.bo.filetype
 ---
 --- For the "stl", "stlnc", "foldopen", "foldclose" and "foldsep" items
 --- single-byte and multibyte characters are supported.  But double-width
---- characters are not supported.
+--- characters are not supported. `E1512`
 ---
 --- The highlighting used for these items:
 ---   item		highlight group ~
@@ -3829,7 +3829,7 @@ vim.o.list = false
 vim.wo.list = vim.o.list
 
 --- Strings to use in 'list' mode and for the `:list` command.  It is a
---- comma-separated list of string settings.
+--- comma-separated list of string settings. *E1511*
 ---
 --- 						*lcs-eol*
 ---   eol:c		Character to show at the end of each line.  When
@@ -3921,7 +3921,7 @@ vim.wo.list = vim.o.list
 --- 		omitted.
 ---
 --- The characters ':' and ',' should not be used.  UTF-8 characters can
---- be used.  All characters must be single width.
+--- be used.  All characters must be single width. *E1512*
 ---
 --- Each character can be specified as hex:
 ---
@@ -6362,7 +6362,7 @@ vim.go.sol = vim.go.startofline
 --- The 'statuscolumn' width follows that of the default columns and
 --- adapts to the `'numberwidth'`, `'signcolumn'` and `'foldcolumn'` option
 --- values (regardless of whether the sign and fold items are present).
---- Aditionally, the 'statuscolumn' grows with the size of the evaluated
+--- Additionally, the 'statuscolumn' grows with the size of the evaluated
 --- format string, up to a point (following the maximum size of the default
 --- fold, sign and number columns). Shrinking only happens when the number
 --- of lines in a buffer changes, or the 'statuscolumn' option is set.
@@ -6372,6 +6372,9 @@ vim.go.sol = vim.go.startofline
 --- The `v:virtnum` variable is negative when drawing virtual lines, zero
 --- 	      when drawing the actual buffer line, and positive when
 --- 	      drawing the wrapped part of a buffer line.
+---
+--- When using `v:relnum`, keep in mind that cursor movement by itself will
+--- not cause the 'statuscolumn' to update unless `'relativenumber'` is set.
 ---
 --- NOTE: The %@ click execute function item is supported as well but the
 --- specified function will be the same for each row in the same column.

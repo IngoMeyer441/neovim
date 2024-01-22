@@ -1201,27 +1201,30 @@ void comp_col(void)
 /// Redraw entire window "wp" if configured 'signcolumn' width changes.
 static bool win_redraw_signcols(win_T *wp)
 {
-  int width;
-  bool rebuild_stc = false;
   buf_T *buf = wp->w_buffer;
 
-  if (wp->w_minscwidth <= SCL_NO) {
-    if (*wp->w_p_stc) {
-      buf_signcols_validate(wp, buf, true);
-      if (buf->b_signcols.resized) {
-        rebuild_stc = true;
-        wp->w_nrwidth_line_count = 0;
-      }
-    }
-    width = 0;
-  } else if (wp->w_maxscwidth <= 1 && buf->b_signs_with_text >= (size_t)wp->w_maxscwidth) {
-    width = wp->w_maxscwidth;
-  } else {
-    width = MIN(wp->w_maxscwidth, buf_signcols_validate(wp, buf, false));
+  if (!buf->b_signcols.autom
+      && (*wp->w_p_stc != NUL || (wp->w_maxscwidth > 1 && wp->w_minscwidth != wp->w_maxscwidth))) {
+    buf->b_signcols.autom = true;
+    buf_signcols_count_range(buf, 0, buf->b_ml.ml_line_count, MAXLNUM, kFalse);
+  }
+
+  while (buf->b_signcols.max > 0 && buf->b_signcols.count[buf->b_signcols.max - 1] == 0) {
+    buf->b_signcols.resized = true;
+    buf->b_signcols.max--;
+  }
+
+  int width = MIN(wp->w_maxscwidth, buf->b_signcols.max);
+  bool rebuild_stc = buf->b_signcols.resized && *wp->w_p_stc != NUL;
+
+  if (rebuild_stc) {
+    wp->w_nrwidth_line_count = 0;
+  } else if (wp->w_minscwidth == 0 && wp->w_maxscwidth == 1) {
+    width = buf->b_signs_with_text > 0;
   }
 
   int scwidth = wp->w_scwidth;
-  wp->w_scwidth = MAX(wp->w_minscwidth, width);
+  wp->w_scwidth = MAX(MAX(0, wp->w_minscwidth), width);
   return (wp->w_scwidth != scwidth || rebuild_stc);
 }
 
@@ -2282,9 +2285,8 @@ static void win_update(win_T *wp)
 
         // Display one line
         spellvars_T zero_spv = { 0 };
-        row = win_line(wp, lnum, srow, wp->w_grid.rows, false,
-                       foldinfo.fi_lines > 0 ? &zero_spv : &spv,
-                       foldinfo);
+        row = win_line(wp, lnum, srow, wp->w_grid.rows, 0,
+                       foldinfo.fi_lines > 0 ? &zero_spv : &spv, foldinfo);
 
         if (foldinfo.fi_lines == 0) {
           wp->w_lines[idx].wl_folded = false;
@@ -2322,7 +2324,7 @@ static void win_update(win_T *wp)
         // text doesn't need to be drawn, but the number column does.
         foldinfo_T info = wp->w_p_cul && lnum == wp->w_cursor.lnum
                           ? cursorline_fi : fold_info(wp, lnum);
-        win_line(wp, lnum, srow, wp->w_grid.rows, true, &spv, info);
+        win_line(wp, lnum, srow, wp->w_grid.rows, wp->w_lines[idx].wl_size, &spv, info);
       }
 
       // This line does not need to be drawn, advance to the next one.
@@ -2419,8 +2421,7 @@ static void win_update(win_T *wp)
         // for ml_line_count+1 and only draw filler lines
         spellvars_T zero_spv = { 0 };
         foldinfo_T zero_foldinfo = { 0 };
-        row = win_line(wp, wp->w_botline, row, wp->w_grid.rows, false, &zero_spv,
-                       zero_foldinfo);
+        row = win_line(wp, wp->w_botline, row, wp->w_grid.rows, 0, &zero_spv, zero_foldinfo);
       }
     } else if (dollar_vcol == -1) {
       wp->w_botline = lnum;

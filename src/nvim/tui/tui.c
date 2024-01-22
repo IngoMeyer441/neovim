@@ -1321,6 +1321,9 @@ void tui_default_colors_set(TUIData *tui, Integer rgb_fg, Integer rgb_bg, Intege
   invalidate(tui, 0, tui->grid.height, 0, tui->grid.width);
 }
 
+/// Flushes TUI grid state to a buffer (which is later flushed to the TTY by `flush_buf`).
+///
+/// @see flush_buf
 void tui_flush(TUIData *tui)
 {
   UGrid *grid = &tui->grid;
@@ -1505,6 +1508,14 @@ void tui_option_set(TUIData *tui, String name, Object value)
     tui->verbose = value.data.integer;
   } else if (strequal(name.data, "termsync")) {
     tui->sync_output = value.data.boolean;
+  }
+}
+
+void tui_chdir(TUIData *tui, String path)
+{
+  int err = uv_chdir(path.data);
+  if (err != 0) {
+    ELOG("Failed to chdir to %s: %s", path.data, strerror(err));
   }
 }
 
@@ -2339,6 +2350,9 @@ static size_t flush_buf_end(TUIData *tui, char *buf, size_t len)
   return offset;
 }
 
+/// Flushes the rendered buffer to the TTY.
+///
+/// @see tui_flush
 static void flush_buf(TUIData *tui)
 {
   uv_write_t req;
