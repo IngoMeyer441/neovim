@@ -2783,6 +2783,9 @@ nvim_buf_set_extmark({buffer}, {ns_id}, {line}, {col}, {*opts})
                     drawn by a UI. When set, the UI will receive win_extmark
                     events. Note: the mark is positioned by virt_text
                     attributes. Can be used together with virt_text.
+                  • url: A URL to associate with this extmark. In the TUI, the
+                    OSC 8 control sequence is used to generate a clickable
+                    hyperlink to this URL.
 
     Return: ~
         Id of the created/updated extmark
@@ -3332,6 +3335,13 @@ nvim_tabpage_set_var({tabpage}, {name}, {value})
       • {tabpage}  Tabpage handle, or 0 for current tabpage
       • {name}     Variable name
       • {value}    Variable value
+
+nvim_tabpage_set_win({tabpage}, {win})                *nvim_tabpage_set_win()*
+    Sets the current window in a tabpage
+
+    Parameters: ~
+      • {tabpage}  Tabpage handle, or 0 for current tabpage
+      • {win}      Window handle, must already belong to {tabpage}
 
 
 ==============================================================================

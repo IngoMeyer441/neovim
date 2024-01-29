@@ -61,7 +61,7 @@ end
 --- @return fun(): string
 local function macros(s)
   return function()
-    return s
+    return '.string=' .. s
   end
 end
 
@@ -69,7 +69,7 @@ end
 --- @return fun(): string
 local function imacros(s)
   return function()
-    return '(intptr_t)' .. s
+    return '.number=' .. s
   end
 end
 
@@ -1271,7 +1271,7 @@ return {
       abbreviation = 'co',
       cb = 'did_set_lines_or_columns',
       defaults = {
-        if_true = macros('DFLT_COLS'),
+        if_true = imacros('DFLT_COLS'),
         doc = '80 or terminal width',
       },
       desc = [=[
@@ -3181,6 +3181,9 @@ return {
 
         It is not allowed to change text or jump to another window while
         evaluating 'foldtext' |textlock|.
+
+        When set to an empty string, foldtext is disabled, and the line
+        is displayed normally with highlighting and no line wrapping.
       ]=],
       full_name = 'foldtext',
       modelineexpr = true,
@@ -4021,7 +4024,7 @@ return {
     {
       abbreviation = 'imi',
       cb = 'did_set_iminsert',
-      defaults = { if_true = macros('B_IMODE_NONE') },
+      defaults = { if_true = imacros('B_IMODE_NONE') },
       desc = [=[
         Specifies whether :lmap or an Input Method (IM) is to be used in
         Insert mode.  Valid values:
@@ -4047,7 +4050,7 @@ return {
     },
     {
       abbreviation = 'ims',
-      defaults = { if_true = macros('B_IMODE_USE_INSERT') },
+      defaults = { if_true = imacros('B_IMODE_USE_INSERT') },
       desc = [=[
         Specifies whether :lmap or an Input Method (IM) is to be used when
         entering a search pattern.  Valid values:
@@ -4744,7 +4747,7 @@ return {
     {
       cb = 'did_set_lines_or_columns',
       defaults = {
-        if_true = macros('DFLT_ROWS'),
+        if_true = imacros('DFLT_ROWS'),
         doc = '24 or terminal height',
       },
       desc = [=[
@@ -7743,7 +7746,7 @@ return {
         Name of the word list file where words are added for the |zg| and |zw|
         commands.  It must end in ".{encoding}.add".  You need to include the
         path, otherwise the file is placed in the current directory.
-        The path may include characters from 'isfname', space, comma and '@'.
+        The path may include characters from 'isfname', ' ', ',', '@' and ':'.
         							*E765*
         It may also be a comma-separated list of names.  A count before the
         |zg| and |zw| commands can be used to access each.  This allows using
@@ -9288,15 +9291,15 @@ return {
       desc = [=[
         Sets the verbosity level.  Also set by |-V| and |:verbose|.
 
-        Tracing of options in Lua scripts is activated at level 1; Lua scripts
-        are not traced with verbose=0, for performance.
+        Tracing of assignments to options, mappings, etc. in Lua scripts is
+        enabled at level 1; Lua scripts are not traced when 'verbose' is 0,
+        for performance.
 
         If greater than or equal to a given level, Nvim produces the following
         messages:
 
         Level   Messages ~
         ----------------------------------------------------------------------
-        1	Lua assignments to options, mappings, etc.
         2	When a file is ":source"'ed, or |shada| file is read or written.
         3	UI info, terminal capabilities.
         4	Shell commands.

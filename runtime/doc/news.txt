@@ -123,7 +123,8 @@ BREAKING CHANGES IN HEAD                                    *news-breaking-dev*
 The following breaking changes were made during the development cycle to
 unreleased features on Nvim HEAD.
 
-• ...
+• Removed `vim.treesitter.foldtext` as transparent foldtext is now supported
+  https://github.com/neovim/neovim/pull/20750
 • ...
 
 ==============================================================================
@@ -153,6 +154,9 @@ The following new APIs and features were added.
 • |nvim_buf_set_extmark()| supports inline virtual text.
 
 • 'foldtext' now supports virtual text format. |fold-foldtext|
+
+• |'foldtext'| can be set to an empty string to disable and render the line:
+  as normal with regular highlighting and no line wrapping.
 
 • The terminal buffer now supports reflow (wrapped lines adapt when the buffer
   is resized horizontally). Note: Lines that are not visible and kept in
@@ -220,8 +224,6 @@ The following new APIs and features were added.
   • |vim.treesitter.query.edit()| allows live editing of treesitter
     queries.
   • Improved error messages for query parsing.
-  • |vim.treesitter.foldtext()| applies treesitter highlighting to
-    foldtext.
 
 • |vim.ui.open()| opens URIs using the system default handler (macOS `open`,
   Windows `explorer`, Linux `xdg-open`, etc.)
@@ -298,6 +300,12 @@ The following new APIs and features were added.
 
 • |vim.version.le()| and |vim.version.ge()| are added to |vim.version|.
 
+• |extmarks| can be associated with a URL and URLs are included as a new
+  highlight attribute. The TUI will display URLs using the OSC 8 control
+  sequence, enabling clickable text in supporting terminals.
+
+• Added |nvim_tabpage_set_win()| to set the current window of a tabpage.
+
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
 
@@ -333,6 +341,9 @@ The following changes to existing APIs or features add new behavior.
 
 • |:source| without arguments treats a buffer with its 'filetype' set to "lua"
   as Lua code regardless of its extension.
+
+• |:lua| with a |[range]| executes that range in the current buffer as Lua code
+  regardless of its extension.
 
 • |:checkhealth| buffer now implements |folding|. The initial folding status is
   defined by the 'foldenable' option.

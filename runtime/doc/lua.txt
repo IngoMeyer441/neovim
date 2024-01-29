@@ -254,6 +254,14 @@ arguments separated by " " (space) instead of "\t" (tab).
 <    To see the LuaJIT version: >vim
         :lua =jit.version
 <
+:{range}lua
+    Executes buffer lines in {range} as Lua code. Unlike |:source|, this
+    always treats the lines as Lua code.
+
+    Example: select the following code and type ":lua<Enter>" to execute it: >lua
+        print(string.format(
+            'unix time: %s', os.time()))
+<
                                                                 *:lua-heredoc*
 :lua << [trim] [{endmarker}]
 {script}
@@ -266,10 +274,8 @@ arguments separated by " " (space) instead of "\t" (tab).
         function! CurrentLineInfo()
         lua << EOF
         local linenr = vim.api.nvim_win_get_cursor(0)[1]
-        local curline = vim.api.nvim_buf_get_lines(
-                0, linenr - 1, linenr, false)[1]
-        print(string.format("Current line [%d] has %d bytes",
-                linenr, #curline))
+        local curline = vim.api.nvim_buf_get_lines(0, linenr - 1, linenr, false)[1]
+        print(string.format('Line [%d] has %d bytes', linenr, #curline))
         EOF
         endfunction
 <
@@ -613,7 +619,7 @@ vim.highlight.on_yank({opts})                        *vim.highlight.on_yank()*
 vim.highlight.priorities                            *vim.highlight.priorities*
     Table with default priorities used for highlighting:
     • `syntax`: `50`, used for standard syntax highlighting
-    • `treesitter`: `100`, used for tree-sitter-based highlighting
+    • `treesitter`: `100`, used for treesitter-based highlighting
     • `semantic_tokens`: `125`, used for LSP semantic token highlighting
     • `diagnostics`: `150`, used for code analysis such as diagnostics
     • `user`: `200`, used for user-triggered highlights such as LSP document

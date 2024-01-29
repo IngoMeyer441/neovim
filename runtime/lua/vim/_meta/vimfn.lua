@@ -1709,6 +1709,7 @@ function vim.fn.exepath(expr) end
 ---   echo exists("*strftime")
 ---   echo exists("*s:MyFunc")
 ---   echo exists("*MyFunc")
+---   echo exists("*v:lua.Func")
 ---   echo exists("bufcount")
 ---   echo exists(":Make")
 ---   echo exists("#CursorHold")
@@ -2561,6 +2562,8 @@ function vim.fn.getbufinfo(buf) end
 ---   bufnr    Buffer number.
 ---   changed    TRUE if the buffer is modified.
 ---   changedtick  Number of changes made to the buffer.
+---   command    TRUE if the buffer belongs to the
+---       command-line window |cmdwin|.
 ---   hidden    TRUE if the buffer is hidden.
 ---   lastused  Timestamp in seconds, like
 ---       |localtime()|, when the buffer was
@@ -2776,7 +2779,7 @@ function vim.fn.getchar() end
 ---   32  mouse double click
 ---   64  mouse triple click
 ---   96  mouse quadruple click (== 32 + 64)
----   128  command (Macintosh only)
+---   128  command (Mac) or super
 --- Only the modifiers that have not been included in the
 --- character itself are obtained.  Thus Shift-a results in "A"
 --- without a modifier.  Returns 0 if no modifiers are used.
@@ -9683,7 +9686,7 @@ function vim.fn.synIDtrans(synID) end
 ---
 --- @param lnum integer
 --- @param col integer
---- @return {[1]: integer, [2]: string, [3]: integer}[]
+--- @return {[1]: integer, [2]: string, [3]: integer}
 function vim.fn.synconcealed(lnum, col) end
 
 --- Return a |List|, which is the stack of syntax items at the

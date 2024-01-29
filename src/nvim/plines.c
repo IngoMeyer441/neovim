@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "nvim/ascii_defs.h"
+#include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/decoration.h"
@@ -18,6 +19,7 @@
 #include "nvim/mark_defs.h"
 #include "nvim/marktree.h"
 #include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/memline.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
@@ -34,14 +36,14 @@
 
 /// Functions calculating horizontal size of text, when displayed in a window.
 
-/// Return the number of characters 'c' will take on the screen, taking
-/// into account the size of a tab.
+/// Return the number of cells the first char in "p" will take on the screen,
+/// taking into account the size of a tab.
 /// Also see getvcol()
 ///
 /// @param p
 /// @param col
 ///
-/// @return Number of characters.
+/// @return Number of cells.
 int win_chartabsize(win_T *wp, char *p, colnr_T col)
 {
   buf_T *buf = wp->w_buffer;
@@ -56,7 +58,7 @@ int win_chartabsize(win_T *wp, char *p, colnr_T col)
 /// @param startcol
 /// @param s
 ///
-/// @return Number of characters the string will take on the screen.
+/// @return Number of cells the string will take on the screen.
 int linetabsize_col(int startvcol, char *s)
 {
   CharsizeArg csarg;
@@ -75,6 +77,8 @@ int linetabsize(win_T *wp, linenr_T lnum)
   return win_linetabsize(wp, lnum, ml_get_buf(wp->w_buffer, lnum), (colnr_T)MAXCOL);
 }
 
+static const uint32_t inline_filter[4] = {[kMTMetaInline] = kMTFilterSelect };
+
 /// Prepare the structure passed to charsize functions.
 ///
 /// "line" is the start of the line.
@@ -90,10 +94,9 @@ CSType init_charsize_arg(CharsizeArg *csarg, win_T *wp, linenr_T lnum, char *lin
   csarg->indent_width = INT_MIN;
   csarg->use_tabstop = !wp->w_p_list || wp->w_p_lcs_chars.tab1;
 
-  if (lnum > 0 && wp->w_buffer->b_virt_text_inline > 0) {
-    marktree_itr_get(wp->w_buffer->b_marktree, lnum - 1, 0, csarg->iter);
-    MTKey mark = marktree_itr_current(csarg->iter);
-    if (mark.pos.row == lnum - 1) {
+  if (lnum > 0) {
+    if (marktree_itr_get_filter(wp->w_buffer->b_marktree, lnum - 1, 0, lnum, 0,
+                                inline_filter, csarg->iter)) {
       csarg->virt_row = lnum - 1;
     }
   }
@@ -106,14 +109,13 @@ CSType init_charsize_arg(CharsizeArg *csarg, win_T *wp, linenr_T lnum, char *lin
   }
 }
 
-/// Get the number of characters taken up on the screen for the given cts and position.
-/// "cts->cur_text_width_left" and "cts->cur_text_width_right" are set
+/// Get the number of cells taken up on the screen for the given arguments.
+/// "csarg->cur_text_width_left" and "csarg->cur_text_width_right" are set
 /// to the extra size for inline virtual text.
-/// This function is used very often, keep it fast!!!!
 ///
-/// When "cts->max_head_vcol" is positive, only count in "head" the size
-/// of 'showbreak'/'breakindent' before "cts->max_head_vcol".
-/// When "cts->max_head_vcol" is negative, only count in "head" the size
+/// When "csarg->max_head_vcol" is positive, only count in "head" the size
+/// of 'showbreak'/'breakindent' before "csarg->max_head_vcol".
+/// When "csarg->max_head_vcol" is negative, only count in "head" the size
 /// of 'showbreak'/'breakindent' before where cursor should be placed.
 CharSize charsize_regular(CharsizeArg *csarg, char *const cur, colnr_T const vcol,
                           int32_t const cur_char)
@@ -173,7 +175,8 @@ CharSize charsize_regular(CharsizeArg *csarg, char *const cur, colnr_T const vco
           }
         }
       }
-      marktree_itr_next(wp->w_buffer->b_marktree, csarg->iter);
+      marktree_itr_next_filter(wp->w_buffer->b_marktree, csarg->iter, csarg->virt_row + 1, 0,
+                               inline_filter);
     }
   }
 
@@ -274,22 +277,20 @@ CharSize charsize_regular(CharsizeArg *csarg, char *const cur, colnr_T const vco
     size += added;
   }
 
-  char *s = cur;
-  colnr_T vcol_start = 0;  // start from where to consider linebreak
+  bool need_lbr = false;
   // If 'linebreak' set check at a blank before a non-blank if the line
-  // needs a break here
-  if (wp->w_p_lbr && wp->w_p_wrap && wp->w_width_inner != 0) {
+  // needs a break here.
+  if (wp->w_p_lbr && wp->w_p_wrap && wp->w_width_inner != 0
+      && vim_isbreak((uint8_t)cur[0]) && !vim_isbreak((uint8_t)cur[1])) {
     char *t = csarg->line;
     while (vim_isbreak((uint8_t)t[0])) {
       t++;
     }
-    vcol_start = (colnr_T)(t - csarg->line);
+    // 'linebreak' is only needed when not in leading whitespace.
+    need_lbr = cur >= t;
   }
-  if (wp->w_p_lbr && vcol_start <= vcol
-      && vim_isbreak((uint8_t)s[0])
-      && !vim_isbreak((uint8_t)s[1])
-      && wp->w_p_wrap
-      && wp->w_width_inner != 0) {
+  if (need_lbr) {
+    char *s = cur;
     // Count all characters from first non-blank after a blank up to next
     // non-blank after a blank.
     int numberextra = win_col_off(wp);
@@ -324,8 +325,9 @@ CharSize charsize_regular(CharsizeArg *csarg, char *const cur, colnr_T const vco
   return (CharSize){ .width = size, .head = head };
 }
 
-/// Like charsize_regular(), except it doesn't handle virtual text,
-/// linebreak, breakindent and showbreak. Handles normal characters, tabs and wrapping.
+/// Like charsize_regular(), except it doesn't handle inline virtual text,
+/// 'linebreak', 'breakindent' or 'showbreak'.
+/// Handles normal characters, tabs and wrapping.
 /// This function is always inlined.
 ///
 /// @see charsize_regular
@@ -358,9 +360,12 @@ static inline CharSize charsize_fast_impl(win_T *const wp, bool use_tabstop, col
   }
 }
 
-/// Like charsize_regular(), except it doesn't handle virtual text,
-/// linebreak, breakindent and showbreak. Handles normal characters, tabs and wrapping.
+/// Like charsize_regular(), except it doesn't handle inline virtual text,
+/// 'linebreak', 'breakindent' or 'showbreak'.
+/// Handles normal characters, tabs and wrapping.
 /// Can be used if CSType is kCharsizeFast.
+///
+/// @see charsize_regular
 CharSize charsize_fast(CharsizeArg *csarg, colnr_T const vcol, int32_t const cur_char)
   FUNC_ATTR_PURE
 {
@@ -395,14 +400,14 @@ static bool in_win_border(win_T *wp, colnr_T vcol)
   return (vcol - width1) % width2 == width2 - 1;
 }
 
-/// Calculate virtual column until the given 'len'.
+/// Calculate virtual column until the given "len".
 ///
 /// @param arg  Argument to charsize functions.
 /// @param vcol Starting virtual column.
 /// @param len  First byte of the end character, or MAXCOL.
 ///
-/// @return virtual column before the character at 'len',
-/// or full size of the line if 'len' is MAXCOL.
+/// @return virtual column before the character at "len",
+/// or full size of the line if "len" is MAXCOL.
 int linesize_regular(CharsizeArg *const csarg, int vcol, colnr_T const len)
 {
   char *const line = csarg->line;
@@ -422,9 +427,9 @@ int linesize_regular(CharsizeArg *const csarg, int vcol, colnr_T const len)
   return vcol;
 }
 
-/// Like win_linesize_regular, but can be used when CStype is kCharsizeFast.
+/// Like linesize_regular(), but can be used when CStype is kCharsizeFast.
 ///
-/// @see win_linesize_regular
+/// @see linesize_regular
 int linesize_fast(CharsizeArg const *const csarg, int vcol, colnr_T const len)
 {
   win_T *const wp = csarg->win;
@@ -661,7 +666,8 @@ void getvcols(win_T *wp, pos_T *pos1, pos_T *pos2, colnr_T *left, colnr_T *right
 /// Check if there may be filler lines anywhere in window "wp".
 bool win_may_fill(win_T *wp)
 {
-  return (wp->w_p_diff && diffopt_filler()) || wp->w_buffer->b_virt_line_blocks;
+  return ((wp->w_p_diff && diffopt_filler())
+          || buf_meta_total(wp->w_buffer, kMTMetaLines));
 }
 
 /// Return the number of filler lines above "lnum".

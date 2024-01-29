@@ -1,11 +1,14 @@
 #pragma once
 
+#include <stdint.h>
+
 #include "nvim/buffer_defs.h"  // IWYU pragma: keep
 #include "nvim/eval/typval_defs.h"
 #include "nvim/ex_cmds_defs.h"  // IWYU pragma: keep
 #include "nvim/func_attr.h"
 #include "nvim/gettext_defs.h"  // IWYU pragma: keep
 #include "nvim/macros_defs.h"
+#include "nvim/marktree_defs.h"
 #include "nvim/types_defs.h"
 
 /// Values for buflist_getfile()
@@ -80,4 +83,9 @@ static inline varnumber_T buf_get_changedtick(const buf_T *buf)
 static inline varnumber_T buf_get_changedtick(const buf_T *const buf)
 {
   return buf->changedtick_di.di_tv.vval.v_number;
+}
+
+static inline uint32_t buf_meta_total(const buf_T *b, MetaIndex m)
+{
+  return b->b_marktree->meta_root[m];
 }

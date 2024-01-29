@@ -494,6 +494,7 @@ static dict_T *get_buffer_info(buf_T *buf)
   tv_dict_add_nr(dict, S_LEN("changed"), bufIsChanged(buf));
   tv_dict_add_nr(dict, S_LEN("changedtick"), buf_get_changedtick(buf));
   tv_dict_add_nr(dict, S_LEN("hidden"), buf->b_ml.ml_mfp != NULL && buf->b_nwindows == 0);
+  tv_dict_add_nr(dict, S_LEN("command"), buf == cmdwin_buf);
 
   // Get a reference to buffer variables
   tv_dict_add_dict(dict, S_LEN("variables"), buf->b_vars);
@@ -507,7 +508,7 @@ static dict_T *get_buffer_info(buf_T *buf)
   }
   tv_dict_add_list(dict, S_LEN("windows"), windows);
 
-  if (buf->b_signs) {
+  if (buf_has_signs(buf)) {
     // List of signs placed in this buffer
     tv_dict_add_list(dict, S_LEN("signs"), get_buffer_signs(buf));
   }

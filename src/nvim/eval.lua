@@ -2202,6 +2202,7 @@ M.funcs = {
       	echo exists("*strftime")
       	echo exists("*s:MyFunc")
       	echo exists("*MyFunc")
+      	echo exists("*v:lua.Func")
       	echo exists("bufcount")
       	echo exists(":Make")
       	echo exists("#CursorHold")
@@ -3218,6 +3219,8 @@ M.funcs = {
       	bufnr		Buffer number.
       	changed		TRUE if the buffer is modified.
       	changedtick	Number of changes made to the buffer.
+      	command		TRUE if the buffer belongs to the
+      			command-line window |cmdwin|.
       	hidden		TRUE if the buffer is hidden.
       	lastused	Timestamp in seconds, like
       			|localtime()|, when the buffer was
@@ -3460,7 +3463,7 @@ M.funcs = {
       	32	mouse double click
       	64	mouse triple click
       	96	mouse quadruple click (== 32 + 64)
-      	128	command (Macintosh only)
+      	128	command (Mac) or super
       Only the modifiers that have not been included in the
       character itself are obtained.  Thus Shift-a results in "A"
       without a modifier.  Returns 0 if no modifiers are used.
@@ -11549,7 +11552,7 @@ M.funcs = {
     ]=],
     name = 'synconcealed',
     params = { { 'lnum', 'integer' }, { 'col', 'integer' } },
-    returns = '{[1]: integer, [2]: string, [3]: integer}[]',
+    returns = '{[1]: integer, [2]: string, [3]: integer}',
     signature = 'synconcealed({lnum}, {col})',
   },
   synstack = {

@@ -228,7 +228,7 @@ endif()
 find_program(SHELLCHECK_PRG shellcheck ${LINT_REQUIRED})
 find_program(STYLUA_PRG stylua ${LINT_REQUIRED})
 
-set(STYLUA_DIRS runtime scripts src test)
+set(STYLUA_DIRS runtime scripts src test contrib)
 
 add_glob_target(
   TARGET lintlua-luacheck
@@ -263,7 +263,7 @@ add_custom_target(lintcommit
 add_dependencies(lintcommit nvim_bin)
 
 add_custom_target(lint)
-add_dependencies(lint lintc lintlua lintsh lintcommit)
+add_dependencies(lint lintc lintlua lintsh lintcommit lintdoc)
 
 # Format
 add_glob_target(

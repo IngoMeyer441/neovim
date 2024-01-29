@@ -687,7 +687,7 @@ describe('decorations providers', function()
     ]]}
   end)
 
-   it('can add new providers during redraw #26652', function()
+  it('can add new providers during redraw #26652', function()
     setup_provider [[
     local ns = api.nvim_create_namespace('test_no_add')
     function on_do(...)
@@ -696,6 +696,47 @@ describe('decorations providers', function()
     ]]
 
     helpers.assert_alive()
+  end)
+
+  it('supports subpriorities (order of definitions in a query file #27131)', function()
+    insert(mulholland)
+    setup_provider [[
+      local test_ns = api.nvim_create_namespace('mulholland')
+      function on_do(event, ...)
+        if event == "line" then
+          local win, buf, line = ...
+          api.nvim_buf_set_extmark(buf, test_ns, line, 0, {
+            end_row = line + 1,
+            hl_eol = true,
+            hl_group = 'Comment',
+            ephemeral = true,
+            priority = 100,
+            _subpriority = 20,
+          })
+
+          -- This extmark is set last but has a lower subpriority, so the first extmark "wins"
+          api.nvim_buf_set_extmark(buf, test_ns, line, 0, {
+            end_row = line + 1,
+            hl_eol = true,
+            hl_group = 'String',
+            ephemeral = true,
+            priority = 100,
+            _subpriority = 10,
+          })
+        end
+      end
+    ]]
+
+    screen:expect{grid=[[
+      {4:// just to see if there was an accident }|
+      {4:// on Mulholland Drive                  }|
+      {4:try_start();                            }|
+      {4:bufref_T save_buf;                      }|
+      {4:switch_buffer(&save_buf, buf);          }|
+      {4:posp = getmark(mark, false);            }|
+      {4:restore_buffer(&save_buf);^              }|
+                                              |
+    ]]}
   end)
 end)
 
@@ -2203,6 +2244,41 @@ describe('extmark decorations', function()
       {1:│} {1:│} ck(item)                            |
           if hl_id_cell ~= nil then           |
                                               |
+    ]]}
+  end)
+
+  it('supports URLs', function()
+    insert(example_text)
+
+    local url = 'https://example.com'
+
+    local attrs = screen:get_default_attr_ids()
+    table.insert(attrs, {
+      url = url,
+    })
+    screen:set_default_attr_ids(attrs)
+
+    api.nvim_buf_set_extmark(0, ns, 1, 4, {
+      end_col = 14,
+      url = url,
+    })
+
+    screen:expect{grid=[[
+      for _,item in ipairs(items) do                    |
+          {44:local text}, hl_id_cell, count = unpack(item)  |
+          if hl_id_cell ~= nil then                     |
+              hl_id = hl_id_cell                        |
+          end                                           |
+          for _ = 1, (count or 1) do                    |
+              local cell = line[colpos]                 |
+              cell.text = text                          |
+              cell.hl_id = hl_id                        |
+              colpos = colpos+1                         |
+          end                                           |
+      en^d                                               |
+      {1:~                                                 }|
+      {1:~                                                 }|
+                                                        |
     ]]}
   end)
 end)
@@ -4548,6 +4624,7 @@ describe('decorations: signs', function()
       [1] = {foreground = Screen.colors.Blue4, background = Screen.colors.Grey};
       [2] = {foreground = Screen.colors.Blue1, bold = true};
       [3] = {background = Screen.colors.Yellow1, foreground = Screen.colors.Blue1};
+      [4] = {foreground = Screen.colors.Gray100, background = Screen.colors.Red};
     }
 
     ns = api.nvim_create_namespace 'test'
@@ -4995,6 +5072,44 @@ l5
       S1l                 |
       S2^1                 |
       {1:  }l2                |
+                          |
+    ]]}
+  end)
+
+  it('correct width after wiping a buffer', function()
+    screen:try_resize(20, 4)
+    insert(example_test3)
+    feed('gg')
+    local buf = api.nvim_get_current_buf()
+    api.nvim_buf_set_extmark(buf, ns, 0, 0, { sign_text = 'h' })
+    screen:expect{grid=[[
+      h ^l1                |
+      {1:  }l2                |
+      {1:  }l3                |
+                          |
+    ]]}
+    api.nvim_win_set_buf(0, api.nvim_create_buf(false, true))
+    api.nvim_buf_delete(buf, {unload=true, force=true})
+    api.nvim_buf_set_lines(buf, 0, -1, false, {''})
+    api.nvim_win_set_buf(0, buf)
+    screen:expect{grid=[[
+      ^                    |
+      {2:~                   }|*2
+                          |
+    ]]}
+  end)
+
+  it('no crash with sign after many marks #27137', function()
+    screen:try_resize(20, 4)
+    insert('a')
+    for _ = 0, 104 do
+      api.nvim_buf_set_extmark(0, ns, 0, 0, {hl_group = 'Error', end_col = 1})
+    end
+    api.nvim_buf_set_extmark(0, ns, 0, 0, {sign_text = 'S1'})
+
+    screen:expect{grid=[[
+      S1{4:^a}                 |
+      {2:~                   }|*2
                           |
     ]]}
   end)

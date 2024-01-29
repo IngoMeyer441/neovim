@@ -3,12 +3,12 @@ add_library(main_lib INTERFACE)
 # Internally we need to make a distinction between "nvim without runtime files"
 # (nvim_bin) and "nvim with runtime files" (nvim).
 add_executable(nvim_bin EXCLUDE_FROM_ALL)
-set_target_properties(nvim_bin PROPERTIES OUTPUT_NAME nvim)
 
 set_target_properties(nvim_bin
   PROPERTIES
   EXPORT_COMPILE_COMMANDS ON
-  ENABLE_EXPORTS TRUE)
+  ENABLE_EXPORTS TRUE
+  OUTPUT_NAME nvim)
 
 #-------------------------------------------------------------------------------
 # Dependencies
@@ -33,7 +33,7 @@ find_package(Libuv 1.28.0 REQUIRED)
 find_package(Libvterm 0.3.3 REQUIRED)
 find_package(Lpeg REQUIRED)
 find_package(Msgpack 1.0.0 REQUIRED)
-find_package(Treesitter 0.20.8 REQUIRED)
+find_package(Treesitter 0.20.9 REQUIRED)
 find_package(Unibilium 2.0 REQUIRED)
 
 target_link_libraries(main_lib INTERFACE
@@ -953,3 +953,10 @@ add_custom_target(doc-eval DEPENDS ${GEN_EVAL_TOUCH})
 add_custom_target(doc-vim DEPENDS ${VIMDOC_FILES})
 add_custom_target(doc)
 add_dependencies(doc doc-vim doc-eval)
+
+add_custom_target(lintdoc
+  COMMAND ${CMAKE_COMMAND} -E env "VIMRUNTIME=${NVIM_RUNTIME_DIR}"
+    $<TARGET_FILE:nvim_bin> --clean -l scripts/lintdoc.lua
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  USES_TERMINAL)
+add_dependencies(lintdoc nvim)

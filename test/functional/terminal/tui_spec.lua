@@ -8,7 +8,6 @@ local helpers = require('test.functional.helpers')(after_each)
 local thelpers = require('test.functional.terminal.helpers')
 local Screen = require('test.functional.ui.screen')
 local eq = helpers.eq
-local feed_command = helpers.feed_command
 local feed_data = thelpers.feed_data
 local clear = helpers.clear
 local command = helpers.command
@@ -1889,6 +1888,37 @@ describe('TUI', function()
       {3:-- TERMINAL --}                                    |
     ]])
   end)
+
+  it('emits hyperlinks with OSC 8', function()
+    exec_lua([[
+      local buf = vim.api.nvim_get_current_buf()
+      _G.urls = {}
+      vim.api.nvim_create_autocmd('TermRequest', {
+        buffer = buf,
+        callback = function(args)
+          local req = args.data
+          if not req then
+            return
+          end
+          local url = req:match('\027]8;;(.*)$')
+          if url ~= nil then
+            table.insert(_G.urls, url)
+          end
+        end,
+      })
+    ]])
+    child_exec_lua([[
+      vim.api.nvim_buf_set_lines(0, 0, 0, true, {'Hello'})
+      local ns = vim.api.nvim_create_namespace('test')
+      vim.api.nvim_buf_set_extmark(0, ns, 0, 1, {
+        end_col = 3,
+        url = 'https://example.com',
+      })
+    ]])
+    retry(nil, 1000, function()
+      eq({ 'https://example.com', '' }, exec_lua([[return _G.urls]]))
+    end)
+  end)
 end)
 
 describe('TUI', function()
@@ -2747,13 +2777,23 @@ describe('TUI', function()
           local req = args.data
           local payload = req:match('^\027P%+q([%x;]+)$')
           if payload then
-            vim.g.xtgettcap = true
+            local t = {}
+            for cap in vim.gsplit(payload, ';') do
+              local resp = string.format('\027P1+r%s\027\\', payload)
+              vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
+              t[vim.text.hexdecode(cap)] = true
+            end
+            vim.g.xtgettcap = t
             return true
           end
         end,
       })
     ]])
+
+    local child_server = new_pipename()
     screen = thelpers.setup_child_nvim({
+      '--listen',
+      child_server,
       '-u',
       'NONE',
       '-i',
@@ -2769,9 +2809,58 @@ describe('TUI', function()
       },
     })
 
+    screen:expect({ any = '%[No Name%]' })
+
+    local child_session = helpers.connect(child_server)
     retry(nil, 1000, function()
-      eq(true, eval("get(g:, 'xtgettcap', v:false)"))
-      eq(1, eval('&termguicolors'))
+      eq({
+        Tc = true,
+        RGB = true,
+        setrgbf = true,
+        setrgbb = true,
+      }, eval("get(g:, 'xtgettcap', '')"))
+      eq({ true, 1 }, { child_session:request('nvim_eval', '&termguicolors') })
+    end)
+  end)
+
+  it('queries the terminal for OSC 52 support', function()
+    clear()
+    exec_lua([[
+      vim.api.nvim_create_autocmd('TermRequest', {
+        callback = function(args)
+          local req = args.data
+          local payload = req:match('^\027P%+q([%x;]+)$')
+          if payload and vim.text.hexdecode(payload) == 'Ms' then
+            vim.g.xtgettcap = 'Ms'
+            local resp = string.format('\027P1+r%s=%s\027\\', payload, vim.text.hexencode('\027]52;;\027\\'))
+            vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
+            return true
+          end
+        end,
+      })
+    ]])
+
+    local child_server = new_pipename()
+    screen = thelpers.setup_child_nvim({
+      '--listen',
+      child_server,
+      -- Use --clean instead of -u NONE to load the osc52 plugin
+      '--clean',
+    }, {
+      env = {
+        VIMRUNTIME = os.getenv('VIMRUNTIME'),
+
+        -- Only queries when SSH_TTY is set
+        SSH_TTY = '/dev/pts/1',
+      },
+    })
+
+    screen:expect({ any = '%[No Name%]' })
+
+    local child_session = helpers.connect(child_server)
+    retry(nil, 1000, function()
+      eq('Ms', eval("get(g:, 'xtgettcap', '')"))
+      eq({ true, 'OSC 52' }, { child_session:request('nvim_eval', 'g:clipboard.name') })
     end)
   end)
 end)
@@ -2779,17 +2868,13 @@ end)
 describe('TUI bg color', function()
   before_each(clear)
 
-  local attr_ids = {
-    [1] = { reverse = true },
-    [2] = { bold = true },
-    [3] = { reverse = true, bold = true },
-    [4] = { foreground = tonumber('0x00000a') },
-  }
-
   it('is properly set in a nested Nvim instance when background=dark', function()
     command('highlight clear Normal')
     command('set background=dark') -- set outer Nvim background
+    local child_server = new_pipename()
     local screen = thelpers.setup_child_nvim({
+      '--listen',
+      child_server,
       '-u',
       'NONE',
       '-i',
@@ -2799,26 +2884,20 @@ describe('TUI bg color', function()
       '--cmd',
       'set noswapfile',
     })
-    screen:set_default_attr_ids(attr_ids)
-    retry(nil, 30000, function() -- wait for automatic background processing
-      screen:sleep(20)
-      feed_command('set background?') -- check nested Nvim background
-      screen:expect([[
-      {1: }                                                 |
-      {2:~}                                                 |
-      {2:~}                                                 |
-      {2:~}                                                 |
-      {3:[No Name]                       0,0-1          All}|
-        background=dark                                 |
-      {4:-- TERMINAL --}                                    |
-      ]])
+    screen:expect({ any = '%[No Name%]' })
+    local child_session = helpers.connect(child_server)
+    retry(nil, nil, function()
+      eq({ true, 'dark' }, { child_session:request('nvim_eval', '&background') })
     end)
   end)
 
   it('is properly set in a nested Nvim instance when background=light', function()
     command('highlight clear Normal')
     command('set background=light') -- set outer Nvim background
+    local child_server = new_pipename()
     local screen = thelpers.setup_child_nvim({
+      '--listen',
+      child_server,
       '-u',
       'NONE',
       '-i',
@@ -2828,18 +2907,10 @@ describe('TUI bg color', function()
       '--cmd',
       'set noswapfile',
     })
-    retry(nil, 30000, function() -- wait for automatic background processing
-      screen:sleep(20)
-      feed_command('set background?') -- check nested Nvim background
-      screen:expect([[
-      {1: }                                                 |
-      {3:~}                                                 |
-      {3:~}                                                 |
-      {3:~}                                                 |
-      {5:[No Name]                       0,0-1          All}|
-        background=light                                |
-      {3:-- TERMINAL --}                                    |
-      ]])
+    screen:expect({ any = '%[No Name%]' })
+    local child_session = helpers.connect(child_server)
+    retry(nil, nil, function()
+      eq({ true, 'light' }, { child_session:request('nvim_eval', '&background') })
     end)
   end)
 
@@ -2883,18 +2954,13 @@ describe('TUI bg color', function()
       '-c',
       'autocmd OptionSet background echo "did OptionSet, yay!"',
     })
-    retry(nil, 30000, function() -- wait for automatic background processing
-      screen:sleep(20)
-      screen:expect([[
+    screen:expect([[
       {1: }                                                 |
-      {3:~}                                                 |
-      {3:~}                                                 |
-      {3:~}                                                 |
+      {3:~}                                                 |*3
       {5:[No Name]                       0,0-1          All}|
       did OptionSet, yay!                               |
       {3:-- TERMINAL --}                                    |
-      ]])
-    end)
+    ]])
   end)
 end)
 

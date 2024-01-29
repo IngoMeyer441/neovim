@@ -5,10 +5,10 @@ local Range = require('vim.treesitter._range')
 ---@type table<integer,LanguageTree>
 local parsers = setmetatable({}, { __mode = 'v' })
 
----@class TreesitterModule
----@field highlighter TSHighlighter
----@field query TSQueryModule
----@field language TSLanguageModule
+---@class vim.treesitter
+---@field highlighter vim.treesitter.highlighter
+---@field query vim.treesitter.query
+---@field language vim.treesitter.language
 local M = setmetatable({}, {
   __index = function(t, k)
     ---@diagnostic disable:no-unknown
@@ -515,18 +515,6 @@ end
 ---@return string
 function M.foldexpr(lnum)
   return require('vim.treesitter._fold').foldexpr(lnum)
-end
-
---- Returns the highlighted content of the first line of the fold or falls back to |foldtext()|
---- if no treesitter parser is found. Can be set directly to 'foldtext':
----
---- ```lua
---- vim.wo.foldtext = 'v:lua.vim.treesitter.foldtext()'
---- ```
----
----@return { [1]: string, [2]: string[] }[] | string
-function M.foldtext()
-  return require('vim.treesitter._fold').foldtext()
 end
 
 return M

@@ -1791,6 +1791,43 @@ describe('API/extmarks', function()
     feed('vj2ed')
     eq({}, get_extmark_by_id(ns, 4, {}))
   end)
+
+  it('can set a URL', function()
+    set_extmark(ns, 1, 0, 0, { url = 'https://example.com', end_col = 3 })
+    local extmarks = get_extmarks(ns, 0, -1, { details = true })
+    eq(1, #extmarks)
+    eq('https://example.com', extmarks[1][4].url)
+  end)
+
+  it('respects priority', function()
+    screen = Screen.new(15, 10)
+    screen:attach()
+
+    set_extmark(ns, marks[1], 0, 0, {
+      hl_group = 'Comment',
+      end_col = 2,
+      priority = 20,
+    })
+
+    -- Extmark defined after first extmark but has lower priority, first extmark "wins"
+    set_extmark(ns, marks[2], 0, 0, {
+      hl_group = 'String',
+      end_col = 2,
+      priority = 10,
+    })
+
+    screen:expect {
+      grid = [[
+      {1:12}34^5          |
+      {2:~              }|*8
+                     |
+    ]],
+      attr_ids = {
+        [1] = { foreground = Screen.colors.Blue1 },
+        [2] = { foreground = Screen.colors.Blue1, bold = true },
+      },
+    }
+  end)
 end)
 
 describe('Extmarks buffer api with many marks', function()

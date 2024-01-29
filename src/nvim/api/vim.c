@@ -176,6 +176,12 @@ void nvim_set_hl(Integer ns_id, String name, Dict(highlight) *val, Error *err)
   });
   int link_id = -1;
 
+  // Setting URLs directly through highlight attributes is not supported
+  if (HAS_KEY(val, highlight, url)) {
+    api_free_string(val->url);
+    val->url = NULL_STRING;
+  }
+
   HlAttrs attrs = dict2hlattrs(val, true, &link_id, err);
   if (!ERROR_SET(err)) {
     ns_hl_def((NS)ns_id, hl_id, attrs, link_id, val);
@@ -1016,7 +1022,7 @@ Integer nvim_open_term(Buffer buffer, Dict(open_term) *opts, Error *err)
     return 0;
   }
 
-  if (cmdwin_type != 0 && buf == curbuf) {
+  if (buf == cmdwin_buf) {
     api_set_error(err, kErrorTypeException, "%s", e_cmdwin);
     return 0;
   }

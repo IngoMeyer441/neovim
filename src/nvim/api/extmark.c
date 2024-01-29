@@ -14,6 +14,7 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/decoration.h"
+#include "nvim/decoration_defs.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/drawscreen.h"
 #include "nvim/extmark.h"
@@ -480,6 +481,8 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
 ///                   by a UI. When set, the UI will receive win_extmark events.
 ///                   Note: the mark is positioned by virt_text attributes. Can be
 ///                   used together with virt_text.
+///               - url: A URL to associate with this extmark. In the TUI, the OSC 8 control
+///                   sequence is used to generate a clickable hyperlink to this URL.
 ///
 /// @param[out]  err   Error details, if any
 /// @return Id of the created/updated extmark
@@ -493,6 +496,7 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
   DecorSignHighlight sign = DECOR_SIGN_HIGHLIGHT_INIT;
   DecorVirtText virt_text = DECOR_VIRT_TEXT_INIT;
   DecorVirtText virt_lines = DECOR_VIRT_LINES_INIT;
+  char *url = NULL;
   bool has_hl = false;
 
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -546,36 +550,15 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
     col2 = (int)val;
   }
 
-  // uncrustify:off
+  hl.hl_id = (int)opts->hl_group;
+  has_hl = hl.hl_id > 0;
+  sign.hl_id = (int)opts->sign_hl_group;
+  sign.cursorline_hl_id = (int)opts->cursorline_hl_group;
+  sign.number_hl_id = (int)opts->number_hl_group;
+  sign.line_hl_id = (int)opts->line_hl_group;
 
-  // TODO(bfredl): keyset type alias for hl_group? (nil|int|string)
-  struct {
-    const char *name;
-    Object *opt;
-    int *dest;
-  } hls[] = {
-    { "hl_group"           , &opts->hl_group           , &hl.hl_id            },
-    { "sign_hl_group"      , &opts->sign_hl_group      , &sign.hl_id       },
-    { "number_hl_group"    , &opts->number_hl_group    , &sign.number_hl_id     },
-    { "line_hl_group"      , &opts->line_hl_group      , &sign.line_hl_id       },
-    { "cursorline_hl_group", &opts->cursorline_hl_group, &sign.cursorline_hl_id },
-    { NULL, NULL, NULL },
-  };
-
-  // uncrustify:on
-
-  for (int j = 0; hls[j].name && hls[j].dest; j++) {
-    if (hls[j].opt->type != kObjectTypeNil) {
-      if (j > 0) {
-        sign.flags |= kSHIsSign;
-      } else {
-        has_hl = true;
-      }
-      *hls[j].dest = object_to_hl_id(*hls[j].opt, hls[j].name, err);
-      if (ERROR_SET(err)) {
-        goto error;
-      }
-    }
+  if (sign.hl_id || sign.cursorline_hl_id || sign.number_hl_id || sign.line_hl_id) {
+    sign.flags |= kSHIsSign;
   }
 
   if (HAS_KEY(opts, set_extmark, conceal)) {
@@ -698,6 +681,10 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
     has_hl = true;
   }
 
+  if (HAS_KEY(opts, set_extmark, url)) {
+    url = string_to_cstr(opts->url);
+  }
+
   if (opts->ui_watched) {
     hl.flags |= kSHUIWatched;
     if (virt_text.pos == kVPosOverlay) {
@@ -761,15 +748,32 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
       col2 = c;
     }
 
+    DecorPriority subpriority = DECOR_PRIORITY_BASE;
+    if (HAS_KEY(opts, set_extmark, _subpriority)) {
+      VALIDATE_RANGE((opts->_subpriority >= 0 && opts->_subpriority <= UINT16_MAX),
+                     "_subpriority", {
+        goto error;
+      });
+      subpriority = (DecorPriority)opts->_subpriority;
+    }
+
     if (kv_size(virt_text.data.virt_text)) {
-      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_text, NULL), true);
+      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_text, NULL), true,
+                           subpriority);
     }
     if (kv_size(virt_lines.data.virt_lines)) {
-      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_lines, NULL), true);
+      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_lines, NULL), true,
+                           subpriority);
+    }
+    if (url != NULL) {
+      DecorSignHighlight sh = DECOR_SIGN_HIGHLIGHT_INIT;
+      sh.url = url;
+      decor_range_add_sh(&decor_state, r, c, line2, col2, &sh, true, 0, 0, subpriority);
     }
     if (has_hl) {
       DecorSignHighlight sh = decor_sh_from_inline(hl);
-      decor_range_add_sh(&decor_state, r, c, line2, col2, &sh, true, (uint32_t)ns_id, id);
+      decor_range_add_sh(&decor_state, r, c, line2, col2, &sh, true, (uint32_t)ns_id, id,
+                         subpriority);
     }
   } else {
     if (opts->ephemeral) {
@@ -792,7 +796,14 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
     }
 
     uint32_t decor_indexed = DECOR_ID_INVALID;
+    if (url != NULL) {
+      DecorSignHighlight sh = DECOR_SIGN_HIGHLIGHT_INIT;
+      sh.url = url;
+      sh.next = decor_indexed;
+      decor_indexed = decor_put_sh(sh);
+    }
     if (sign.flags & kSHIsSign) {
+      sign.next = decor_indexed;
       decor_indexed = decor_put_sh(sign);
       if (sign.text[0]) {
         decor_flags |= MT_FLAG_DECOR_SIGNTEXT;
@@ -834,6 +845,10 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
 error:
   clear_virttext(&virt_text.data.virt_text);
   clear_virtlines(&virt_lines.data.virt_lines);
+  if (url != NULL) {
+    xfree(url);
+  }
+
   return 0;
 }
 
