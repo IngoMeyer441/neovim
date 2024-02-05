@@ -39,6 +39,7 @@ describe('decorations providers', function()
       [16] = {special = Screen.colors.Red, undercurl = true},
       [17] = {foreground = Screen.colors.Red},
       [18] = {bold = true, foreground = Screen.colors.SeaGreen};
+      [19] = {bold = true};
     }
   end)
 
@@ -737,6 +738,25 @@ describe('decorations providers', function()
       {4:restore_buffer(&save_buf);^              }|
                                               |
     ]]}
+  end)
+
+  it('is not invoked repeatedly in Visual mode with vim.schedule() #20235', function()
+    exec_lua([[_G.cnt = 0]])
+    setup_provider([[
+      function on_do(event, ...)
+        if event == 'win' then
+          vim.schedule(function() end)
+          _G.cnt = _G.cnt + 1
+        end
+      end
+    ]])
+    feed('v')
+    screen:expect([[
+      ^                                        |
+      {1:~                                       }|*6
+      {19:-- VISUAL --}                            |
+    ]])
+    eq(2, exec_lua([[return _G.cnt]]))
   end)
 end)
 
@@ -5095,6 +5115,33 @@ l5
     screen:expect{grid=[[
       ^                    |
       {2:~                   }|*2
+                          |
+    ]]}
+  end)
+
+  it('correct width with moved marks before undo savepos', function()
+    screen:try_resize(20, 4)
+    insert(example_test3)
+    feed('gg')
+    exec_lua([[
+      local ns = vim.api.nvim_create_namespace('')
+      vim.api.nvim_buf_set_extmark(0, ns, 0, 0, { sign_text = 'S1' })
+      vim.api.nvim_buf_set_extmark(0, ns, 1, 0, { sign_text = 'S2' })
+      local s3 = vim.api.nvim_buf_set_extmark(0, ns, 2, 0, { sign_text = 'S3' })
+      local s4 = vim.api.nvim_buf_set_extmark(0, ns, 2, 0, { sign_text = 'S4' })
+      vim.schedule(function()
+        vim.cmd('silent d3')
+        vim.api.nvim_buf_set_extmark(0, ns, 2, 0, { id = s3, sign_text = 'S3' })
+        vim.api.nvim_buf_set_extmark(0, ns, 2, 0, { id = s4, sign_text = 'S4' })
+        vim.cmd('silent undo')
+        vim.api.nvim_buf_del_extmark(0, ns, s3)
+      end)
+    ]])
+
+    screen:expect{grid=[[
+      S1^l1                |
+      S2l2                |
+      S4l3                |
                           |
     ]]}
   end)

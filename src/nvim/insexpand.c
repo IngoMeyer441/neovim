@@ -1294,6 +1294,11 @@ void ins_compl_show_pum(void)
   pum_display(compl_match_array, compl_match_arraysize, cur, array_changed, 0);
   curwin->w_cursor.col = col;
 
+  // After adding leader, set the current match to shown match.
+  if (compl_started && compl_curr_match != compl_shown_match) {
+    compl_curr_match = compl_shown_match;
+  }
+
   if (has_event(EVENT_COMPLETECHANGED)) {
     trigger_complete_changed_event(cur);
   }
@@ -2760,9 +2765,11 @@ static int info_add_completion_info(list_T *li)
 
   // Skip the element with the CP_ORIGINAL_TEXT flag at the beginning, in case of
   // forward completion, or at the end, in case of backward completion.
-  match = forward ? match->cp_next
-                  : (compl_no_select && match_at_original_text(match)
-                     ? match->cp_prev : match->cp_prev->cp_prev);
+  match = (forward || match->cp_prev == NULL
+           ? match->cp_next
+           : (compl_no_select && match_at_original_text(match)
+              ? match->cp_prev
+              : match->cp_prev->cp_prev));
 
   while (match != NULL && !match_at_original_text(match)) {
     dict_T *di = tv_dict_alloc();
