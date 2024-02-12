@@ -31,7 +31,7 @@ describe('highlight: `:syntax manual`', function()
     clear()
     screen = Screen.new(20, 5)
     screen:attach()
-    --syntax highlight for vimcscripts "echo"
+    -- syntax highlight for vimscript's "echo"
     screen:set_default_attr_ids({
       [0] = { bold = true, foreground = Screen.colors.Blue },
       [1] = { bold = true, foreground = Screen.colors.Brown },
@@ -313,35 +313,136 @@ end)
 describe('highlight', function()
   before_each(clear)
 
-  it('visual', function()
-    local screen = Screen.new(20, 4)
+  it('Visual', function()
+    local screen = Screen.new(45, 5)
     screen:attach()
     screen:set_default_attr_ids({
       [1] = { background = Screen.colors.LightGrey },
       [2] = { bold = true, foreground = Screen.colors.Blue1 },
       [3] = { bold = true },
+      [4] = { reverse = true, bold = true },
+      [5] = { reverse = true },
+      [6] = { background = Screen.colors.Grey90 },
     })
     insert([[
       line1 foo bar
+    abcdefghijklmnopqrs
+    ABCDEFGHIJKLMNOPQRS
     ]])
+    feed('gg')
+    command('vsplit')
 
     -- Non-blinking block cursor: does NOT highlight char-at-cursor.
     command('set guicursor=a:block-blinkon0')
-    feed('gg$vhhh')
+    feed('V')
     screen:expect([[
-        line1 foo^ {1:bar}     |
-                          |
-      {2:~                   }|
-      {3:-- VISUAL --}        |
+      {1:  }^l{1:ine1 foo bar}       │{1:  line1 foo bar}       |
+      abcdefghijklmnopqrs   │abcdefghijklmnopqrs   |
+      ABCDEFGHIJKLMNOPQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL LINE --}                            |
+    ]])
+
+    feed('<Esc>$vhhh')
+    screen:expect([[
+        line1 foo^ {1:bar}       │  line1 foo{1: bar}       |
+      abcdefghijklmnopqrs   │abcdefghijklmnopqrs   |
+      ABCDEFGHIJKLMNOPQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL --}                                 |
     ]])
 
     -- Vertical cursor: highlights char-at-cursor. #8983
     command('set guicursor=a:block-blinkon175')
     screen:expect([[
-        line1 foo{1:^ bar}     |
-                          |
-      {2:~                   }|
-      {3:-- VISUAL --}        |
+        line1 foo{1:^ bar}       │  line1 foo{1: bar}       |
+      abcdefghijklmnopqrs   │abcdefghijklmnopqrs   |
+      ABCDEFGHIJKLMNOPQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL --}                                 |
+    ]])
+
+    command('set selection=exclusive')
+    screen:expect([[
+        line1 foo{1:^ ba}r       │  line1 foo{1: ba}r       |
+      abcdefghijklmnopqrs   │abcdefghijklmnopqrs   |
+      ABCDEFGHIJKLMNOPQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL --}                                 |
+    ]])
+
+    feed('o')
+    screen:expect([[
+        line1 foo{1: ba}^r       │  line1 foo{1: ba}r       |
+      abcdefghijklmnopqrs   │abcdefghijklmnopqrs   |
+      ABCDEFGHIJKLMNOPQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL --}                                 |
+    ]])
+
+    feed('V')
+    screen:expect([[
+      {1:  line1 foo ba^r}       │{1:  line1 foo bar}       |
+      abcdefghijklmnopqrs   │abcdefghijklmnopqrs   |
+      ABCDEFGHIJKLMNOPQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL LINE --}                            |
+    ]])
+
+    command('set cursorcolumn')
+    feed('<C-V>')
+    screen:expect([[
+        line1 foo{1: ba}^r       │  line1 foo{1: ba}r       |
+      abcdefghijklmn{6:o}pqrs   │abcdefghijklmnopqrs   |
+      ABCDEFGHIJKLMN{6:O}PQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL BLOCK --}                           |
+    ]])
+
+    command('set selection&')
+    screen:expect([[
+        line1 foo{1: ba^r}       │  line1 foo{1: bar}       |
+      abcdefghijklmn{6:o}pqrs   │abcdefghijklmnopqrs   |
+      ABCDEFGHIJKLMN{6:O}PQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL BLOCK --}                           |
+    ]])
+
+    feed('^')
+    screen:expect([[
+        {1:^line1 foo }bar       │  {1:line1 foo }bar       |
+      ab{6:c}defghijklmnopqrs   │abcdefghijklmnopqrs   |
+      AB{6:C}DEFGHIJKLMNOPQRS   │ABCDEFGHIJKLMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL BLOCK --}                           |
+    ]])
+
+    feed('2j')
+    screen:expect([[
+        {1:line1 foo }bar       │  {1:line1 foo }bar       |
+      ab{1:cdefghijkl}mnopqrs   │ab{1:cdefghijkl}mnopqrs   |
+      AB{1:^CDEFGHIJKL}MNOPQRS   │AB{1:CDEFGHIJKL}MNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL BLOCK --}                           |
+    ]])
+
+    command('set nocursorcolumn')
+    feed('O')
+    screen:expect([[
+        {1:line1 foo }bar       │  {1:line1 foo }bar       |
+      ab{1:cdefghijkl}mnopqrs   │ab{1:cdefghijkl}mnopqrs   |
+      AB{1:CDEFGHIJK^L}MNOPQRS   │AB{1:CDEFGHIJKL}MNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL BLOCK --}                           |
+    ]])
+
+    command('set selection=exclusive')
+    screen:expect([[
+        {1:line1 foo} bar       │  {1:line1 foo} bar       |
+      ab{1:cdefghijk}lmnopqrs   │ab{1:cdefghijk}lmnopqrs   |
+      AB{1:CDEFGHIJK}^LMNOPQRS   │AB{1:CDEFGHIJK}LMNOPQRS   |
+      {4:[No Name] [+]          }{5:[No Name] [+]         }|
+      {3:-- VISUAL BLOCK --}                           |
     ]])
   end)
 
@@ -1601,117 +1702,6 @@ describe('MsgSeparator highlight and msgsep fillchar', function()
       {12:Press}{9: }{12:ENTER}{9: }{12:or}{9: }{12:type}{9: }{12:command}{9: }{12:to}{9: }{12:continue}{9:^           }|
     ]],
     }
-  end)
-end)
-
-describe("'number' and 'relativenumber' highlight", function()
-  before_each(clear)
-
-  it('LineNr, LineNrAbove and LineNrBelow', function()
-    local screen = Screen.new(20, 10)
-    screen:set_default_attr_ids({
-      [1] = { foreground = Screen.colors.Red },
-      [2] = { foreground = Screen.colors.Blue },
-      [3] = { foreground = Screen.colors.Green },
-    })
-    screen:attach()
-    command('set number relativenumber')
-    command('call setline(1, range(50))')
-    command('highlight LineNr guifg=Red')
-    feed('4j')
-    screen:expect([[
-      {1:  4 }0               |
-      {1:  3 }1               |
-      {1:  2 }2               |
-      {1:  1 }3               |
-      {1:5   }^4               |
-      {1:  1 }5               |
-      {1:  2 }6               |
-      {1:  3 }7               |
-      {1:  4 }8               |
-                          |
-    ]])
-    command('highlight LineNrAbove guifg=Blue')
-    screen:expect([[
-      {2:  4 }0               |
-      {2:  3 }1               |
-      {2:  2 }2               |
-      {2:  1 }3               |
-      {1:5   }^4               |
-      {1:  1 }5               |
-      {1:  2 }6               |
-      {1:  3 }7               |
-      {1:  4 }8               |
-                          |
-    ]])
-    command('highlight LineNrBelow guifg=Green')
-    screen:expect([[
-      {2:  4 }0               |
-      {2:  3 }1               |
-      {2:  2 }2               |
-      {2:  1 }3               |
-      {1:5   }^4               |
-      {3:  1 }5               |
-      {3:  2 }6               |
-      {3:  3 }7               |
-      {3:  4 }8               |
-                          |
-    ]])
-    feed('3j')
-    screen:expect([[
-      {2:  7 }0               |
-      {2:  6 }1               |
-      {2:  5 }2               |
-      {2:  4 }3               |
-      {2:  3 }4               |
-      {2:  2 }5               |
-      {2:  1 }6               |
-      {1:8   }^7               |
-      {3:  1 }8               |
-                          |
-    ]])
-  end)
-
-  -- oldtest: Test_relativenumber_callback()
-  it('relative number highlight is updated if cursor is moved from timer', function()
-    local screen = Screen.new(50, 8)
-    screen:set_default_attr_ids({
-      [1] = { foreground = Screen.colors.Brown }, -- LineNr
-      [2] = { bold = true, foreground = Screen.colors.Blue1 }, -- NonText
-    })
-    screen:attach()
-    exec([[
-      call setline(1, ['aaaaa', 'bbbbb', 'ccccc', 'ddddd'])
-      set relativenumber
-      call cursor(4, 1)
-
-      func Func(timer)
-        call cursor(1, 1)
-      endfunc
-
-      call timer_start(300, 'Func')
-    ]])
-    screen:expect({
-      grid = [[
-      {1:  3 }aaaaa                                         |
-      {1:  2 }bbbbb                                         |
-      {1:  1 }ccccc                                         |
-      {1:  0 }^ddddd                                         |
-      {2:~                                                 }|*3
-                                                        |
-    ]],
-      timeout = 100,
-    })
-    screen:expect({
-      grid = [[
-      {1:  0 }^aaaaa                                         |
-      {1:  1 }bbbbb                                         |
-      {1:  2 }ccccc                                         |
-      {1:  3 }ddddd                                         |
-      {2:~                                                 }|*3
-                                                        |
-    ]],
-    })
   end)
 end)
 

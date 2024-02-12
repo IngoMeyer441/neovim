@@ -2773,7 +2773,7 @@ void get_winopts(buf_T *buf)
     curwin->w_changelistidx = wip->wi_changelistidx;
   }
 
-  if (curwin->w_float_config.style == kWinStyleMinimal) {
+  if (curwin->w_config.style == kWinStyleMinimal) {
     didset_window_options(curwin, false);
     win_set_minimal_style(curwin);
   }
@@ -3326,7 +3326,7 @@ void maketitle(void)
     if (*p_titlestring != NUL) {
       if (stl_syntax & STL_IN_TITLE) {
         build_stl_str_hl(curwin, buf, sizeof(buf), p_titlestring,
-                         kOptTitlestring, 0, 0, maxlen, NULL, NULL, NULL);
+                         kOptTitlestring, 0, 0, maxlen, NULL, NULL, NULL, NULL);
         title_str = buf;
       } else {
         title_str = p_titlestring;
@@ -3431,7 +3431,7 @@ void maketitle(void)
     if (*p_iconstring != NUL) {
       if (stl_syntax & STL_IN_ICON) {
         build_stl_str_hl(curwin, icon_str, sizeof(buf), p_iconstring,
-                         kOptIconstring, 0, 0, 0, NULL, NULL, NULL);
+                         kOptIconstring, 0, 0, 0, NULL, NULL, NULL, NULL);
       } else {
         icon_str = p_iconstring;
       }

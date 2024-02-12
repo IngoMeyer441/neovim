@@ -129,7 +129,7 @@ bool keep_msg_more = false;    // keep_msg was set by msgmore()
 //                  Set: When the ruler or typeahead display is overwritten,
 //                  scrolling the screen for some message.
 // keep_msg         Message to be displayed after redrawing the screen, in
-//                  main_loop().
+//                  Normal mode main loop.
 //                  This is an allocated string or NULL when not used.
 
 // Extended msg state, currently used for external UIs with ext_messages
@@ -210,7 +210,11 @@ void msg_grid_validate(void)
     msg_grid_adj.target = &default_grid;
     redraw_cmdline = true;
   } else if (msg_grid.chars && !msg_scrolled && msg_grid_pos != max_rows) {
+    int diff = msg_grid_pos - max_rows;
     msg_grid_set_pos(max_rows, false);
+    if (diff > 0) {
+      grid_clear(&msg_grid_adj, Rows - diff, Rows, 0, Columns, HL_ATTR(HLF_MSG));
+    }
   }
   msg_grid_adj.cols = Columns;
 
@@ -3017,7 +3021,7 @@ void msg_ext_ui_flush(void)
 
   msg_ext_emit_chunk();
   if (msg_ext_chunks.size > 0) {
-    ui_call_msg_show(cstr_as_string((char *)msg_ext_kind),
+    ui_call_msg_show(cstr_as_string(msg_ext_kind),
                      msg_ext_chunks, msg_ext_overwrite);
     if (!msg_ext_overwrite) {
       msg_ext_visible++;

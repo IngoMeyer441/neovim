@@ -3,15 +3,19 @@ local api = vim.api
 ---@class TSDevModule
 local M = {}
 
+---@private
 ---@class TSTreeView
 ---@field ns integer API namespace
----@field opts table Options table with the following keys:
----                  - anon (boolean): If true, display anonymous nodes
----                  - lang (boolean): If true, display the language alongside each node
----                  - indent (number): Number of spaces to indent nested lines. Default is 2.
+---@field opts TSTreeViewOpts
 ---@field nodes TSP.Node[]
 ---@field named TSP.Node[]
 local TSTreeView = {}
+
+---@private
+---@class TSTreeViewOpts
+---@field anon boolean If true, display anonymous nodes.
+---@field lang boolean If true, display the language alongside each node.
+---@field indent number Number of spaces to indent nested lines.
 
 ---@class TSP.Node
 ---@field node TSNode Treesitter node
@@ -39,25 +43,26 @@ local TSTreeView = {}
 ---
 ---@param node TSNode Starting node to begin traversal |tsnode|
 ---@param depth integer Current recursion depth
+---@param field string|nil The field of the current node
 ---@param lang string Language of the tree currently being traversed
 ---@param injections table<string, TSP.Injection> Mapping of node ids to root nodes
 ---                  of injected language trees (see explanation above)
 ---@param tree TSP.Node[] Output table containing a list of tables each representing a node in the tree
-local function traverse(node, depth, lang, injections, tree)
+local function traverse(node, depth, field, lang, injections, tree)
+  table.insert(tree, {
+    node = node,
+    depth = depth,
+    lang = lang,
+    field = field,
+  })
+
   local injection = injections[node:id()]
   if injection then
-    traverse(injection.root, depth, injection.lang, injections, tree)
+    traverse(injection.root, depth + 1, nil, injection.lang, injections, tree)
   end
 
-  for child, field in node:iter_children() do
-    table.insert(tree, {
-      node = child,
-      field = field,
-      depth = depth,
-      lang = lang,
-    })
-
-    traverse(child, depth + 1, lang, injections, tree)
+  for child, child_field in node:iter_children() do
+    traverse(child, depth + 1, child_field, lang, injections, tree)
   end
 
   return tree
@@ -102,7 +107,7 @@ function TSTreeView:new(bufnr, lang)
     end
   end)
 
-  local nodes = traverse(root, 0, parser:lang(), injections, {})
+  local nodes = traverse(root, 0, nil, parser:lang(), injections, {})
 
   local named = {} ---@type TSP.Node[]
   for _, v in ipairs(nodes) do
@@ -115,6 +120,7 @@ function TSTreeView:new(bufnr, lang)
     ns = api.nvim_create_namespace('treesitter/dev-inspect'),
     nodes = nodes,
     named = named,
+    ---@type TSTreeViewOpts
     opts = {
       anon = false,
       lang = false,
@@ -129,16 +135,12 @@ end
 
 local decor_ns = api.nvim_create_namespace('ts.dev')
 
----@param lnum integer
----@param col integer
----@param end_lnum integer
----@param end_col integer
+---@param range Range4
 ---@return string
-local function get_range_str(lnum, col, end_lnum, end_col)
-  if lnum == end_lnum then
-    return string.format('[%d:%d - %d]', lnum + 1, col + 1, end_col)
-  end
-  return string.format('[%d:%d - %d:%d]', lnum + 1, col + 1, end_lnum + 1, end_col)
+local function range_to_string(range)
+  ---@type integer, integer, integer, integer
+  local row, col, end_row, end_col = unpack(range)
+  return string.format('[%d, %d] - [%d, %d]', row, col, end_row, end_col)
 end
 
 ---@param w integer
@@ -212,7 +214,7 @@ function TSTreeView:draw(bufnr)
   local lang_hl_marks = {} ---@type table[]
 
   for i, item in self:iter() do
-    local range_str = get_range_str(item.node:range())
+    local range_str = range_to_string({ item.node:range() })
     local lang_str = self.opts.lang and string.format(' %s', item.lang) or ''
 
     local text ---@type string
