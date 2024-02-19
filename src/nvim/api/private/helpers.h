@@ -34,6 +34,8 @@
 #define CSTR_TO_OBJ(s) STRING_OBJ(cstr_to_string(s))
 #define CSTR_TO_ARENA_STR(arena, s) arena_string(arena, cstr_as_string(s))
 #define CSTR_TO_ARENA_OBJ(arena, s) STRING_OBJ(CSTR_TO_ARENA_STR(arena, s))
+#define CBUF_TO_ARENA_STR(arena, s, len) arena_string(arena, cbuf_as_string((char *)(s), len))
+#define CBUF_TO_ARENA_OBJ(arena, s, len) STRING_OBJ(CBUF_TO_ARENA_STR(arena, s, len))
 
 #define BUFFER_OBJ(s) ((Object) { \
     .type = kObjectTypeBuffer, \
@@ -93,6 +95,8 @@
   name.capacity = maxsize; \
   name.items = name##__items; \
 
+typedef kvec_withinit_t(Object, 16) ArrayBuilder;
+
 #define cbuf_as_string(d, s) ((String) { .data = d, .size = s })
 
 #define STATIC_CSTR_AS_STRING(s) ((String) { .data = s, .size = sizeof("" s) - 1 })
@@ -118,6 +122,8 @@
 #define api_init_object = NIL
 #define api_init_array = ARRAY_DICT_INIT
 #define api_init_dictionary = ARRAY_DICT_INIT
+
+#define KEYDICT_INIT { 0 }
 
 #define api_free_boolean(value)
 #define api_free_integer(value)

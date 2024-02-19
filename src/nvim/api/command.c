@@ -99,7 +99,7 @@
 Dict(cmd) nvim_parse_cmd(String str, Dict(empty) *opts, Arena *arena, Error *err)
   FUNC_API_SINCE(10) FUNC_API_FAST
 {
-  Dict(cmd) result = { 0 };
+  Dict(cmd) result = KEYDICT_INIT;
 
   // Parse command line
   exarg_T ea;
@@ -305,7 +305,7 @@ end:
 ///                  - output: (boolean, default false) Whether to return command output.
 /// @param[out] err  Error details, if any.
 /// @return Command output (non-error, non-shell |:!|) if `output` is true, else empty string.
-String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error *err)
+String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Arena *arena, Error *err)
   FUNC_API_SINCE(10)
 {
   exarg_T ea;
@@ -343,7 +343,7 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
     goto end;
   });
 
-  cmdname = string_to_cstr(cmd->cmd);
+  cmdname = arena_string(arena, cmd->cmd).data;
   ea.cmd = cmdname;
 
   char *p = find_ex_command(&ea, NULL);
@@ -352,9 +352,8 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
   // autocommands defined, trigger the matching autocommands.
   if (p != NULL && ea.cmdidx == CMD_SIZE && ASCII_ISUPPER(*ea.cmd)
       && has_event(EVENT_CMDUNDEFINED)) {
-    p = xstrdup(cmdname);
+    p = arena_string(arena, cmd->cmd).data;
     int ret = apply_autocmds(EVENT_CMDUNDEFINED, p, p, true, NULL);
-    xfree(p);
     // If the autocommands did something and didn't cause an error, try
     // finding the command again.
     p = (ret && !aborting()) ? find_ex_command(&ea, NULL) : ea.cmd;
@@ -383,28 +382,31 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
   if (HAS_KEY(cmd, cmd, args)) {
     // Process all arguments. Convert non-String arguments to String and check if String arguments
     // have non-whitespace characters.
+    args = arena_array(arena, cmd->args.size);
     for (size_t i = 0; i < cmd->args.size; i++) {
       Object elem = cmd->args.items[i];
       char *data_str;
 
       switch (elem.type) {
       case kObjectTypeBoolean:
-        data_str = xcalloc(2, sizeof(char));
+        data_str = arena_alloc(arena, 2, false);
         data_str[0] = elem.data.boolean ? '1' : '0';
         data_str[1] = '\0';
+        ADD_C(args, CSTR_AS_OBJ(data_str));
         break;
       case kObjectTypeBuffer:
       case kObjectTypeWindow:
       case kObjectTypeTabpage:
       case kObjectTypeInteger:
-        data_str = xcalloc(NUMBUFLEN, sizeof(char));
+        data_str = arena_alloc(arena, NUMBUFLEN, false);
         snprintf(data_str, NUMBUFLEN, "%" PRId64, elem.data.integer);
+        ADD_C(args, CSTR_AS_OBJ(data_str));
         break;
       case kObjectTypeString:
         VALIDATE_EXP(!string_iswhite(elem.data.string), "command arg", "non-whitespace", NULL, {
           goto end;
         });
-        data_str = string_to_cstr(elem.data.string);
+        ADD_C(args, elem);
         break;
       default:
         VALIDATE_EXP(false, "command arg", "valid type", api_typename(elem.type), {
@@ -412,8 +414,6 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
         });
         break;
       }
-
-      ADD(args, CSTR_AS_OBJ(data_str));
     }
 
     bool argc_valid;
@@ -514,7 +514,7 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
   VALIDATE_MOD((!ea.forceit || (ea.argt & EX_BANG)), "bang", cmd->cmd.data);
 
   if (HAS_KEY(cmd, cmd, magic)) {
-    Dict(cmd_magic) magic[1] = { 0 };
+    Dict(cmd_magic) magic[1] = KEYDICT_INIT;
     if (!api_dict_to_keydict(magic, KeyDict_cmd_magic_get_field, cmd->magic, err)) {
       goto end;
     }
@@ -532,13 +532,13 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
   }
 
   if (HAS_KEY(cmd, cmd, mods)) {
-    Dict(cmd_mods) mods[1] = { 0 };
+    Dict(cmd_mods) mods[1] = KEYDICT_INIT;
     if (!api_dict_to_keydict(mods, KeyDict_cmd_mods_get_field, cmd->mods, err)) {
       goto end;
     }
 
     if (HAS_KEY(mods, cmd_mods, filter)) {
-      Dict(cmd_mods_filter) filter[1] = { 0 };
+      Dict(cmd_mods_filter) filter[1] = KEYDICT_INIT;
 
       if (!api_dict_to_keydict(&filter, KeyDict_cmd_mods_filter_get_field,
                                mods->filter, err)) {
@@ -666,26 +666,20 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
   }
 
   if (opts->output && capture_local.ga_len > 1) {
-    retv = (String){
-      .data = capture_local.ga_data,
-      .size = (size_t)capture_local.ga_len,
-    };
+    // TODO(bfredl): if there are more cases like this we might want custom xfree-list in arena
+    retv = CBUF_TO_ARENA_STR(arena, capture_local.ga_data, (size_t)capture_local.ga_len);
     // redir usually (except :echon) prepends a newline.
     if (retv.data[0] == '\n') {
-      memmove(retv.data, retv.data + 1, retv.size - 1);
-      retv.data[retv.size - 1] = '\0';
-      retv.size = retv.size - 1;
+      retv.data++;
+      retv.size--;
     }
-    goto end;
   }
 clear_ga:
   if (opts->output) {
     ga_clear(&capture_local);
   }
 end:
-  api_free_array(args);
   xfree(cmdline);
-  xfree(cmdname);
   xfree(ea.args);
   xfree(ea.arglens);
 
@@ -1103,7 +1097,8 @@ void create_user_command(uint64_t channel_id, String name, Object command, Dict(
 
   if (opts->complete.type == kObjectTypeLuaRef) {
     context = EXPAND_USER_LUA;
-    compl_luaref = api_new_luaref(opts->complete.data.luaref);
+    compl_luaref = opts->complete.data.luaref;
+    opts->complete.data.luaref = LUA_NOREF;
   } else if (opts->complete.type == kObjectTypeString) {
     VALIDATE_S(OK == parse_compl_arg(opts->complete.data.string.data,
                                      (int)opts->complete.data.string.size, &context, &argt,
@@ -1123,7 +1118,8 @@ void create_user_command(uint64_t channel_id, String name, Object command, Dict(
     });
 
     argt |= EX_PREVIEW;
-    preview_luaref = api_new_luaref(opts->preview.data.luaref);
+    preview_luaref = opts->preview.data.luaref;
+    opts->preview.data.luaref = LUA_NOREF;
   }
 
   switch (command.type) {

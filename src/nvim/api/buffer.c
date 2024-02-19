@@ -112,7 +112,7 @@ Integer nvim_buf_line_count(Buffer buffer, Error *err)
 ///        Not for Lua callbacks.
 /// @param  opts  Optional parameters.
 ///             - on_lines: Lua callback invoked on change.
-///               Return `true` to detach. Args:
+///               Return a truthy value (not `false` or `nil`) to detach. Args:
 ///               - the string "lines"
 ///               - buffer handle
 ///               - b:changedtick
@@ -125,8 +125,7 @@ Integer nvim_buf_line_count(Buffer buffer, Error *err)
 ///             - on_bytes: Lua callback invoked on change.
 ///               This callback receives more granular information about the
 ///               change compared to on_lines.
-///               Return `true` to detach.
-///               Args:
+///               Return a truthy value (not `false` or `nil`) to detach. Args:
 ///               - the string "bytes"
 ///               - buffer handle
 ///               - b:changedtick
@@ -869,7 +868,7 @@ Integer nvim_buf_get_offset(Buffer buffer, Integer index, Error *err)
 /// @param name       Variable name
 /// @param[out] err   Error details, if any
 /// @return Variable value
-Object nvim_buf_get_var(Buffer buffer, String name, Error *err)
+Object nvim_buf_get_var(Buffer buffer, String name, Arena *arena, Error *err)
   FUNC_API_SINCE(1)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -878,7 +877,7 @@ Object nvim_buf_get_var(Buffer buffer, String name, Error *err)
     return (Object)OBJECT_INIT;
   }
 
-  return dict_get_value(buf->b_vars, name, err);
+  return dict_get_value(buf->b_vars, name, arena, err);
 }
 
 /// Gets a changed tick of a buffer
@@ -906,7 +905,7 @@ Integer nvim_buf_get_changedtick(Buffer buffer, Error *err)
 /// @param[out]  err   Error details, if any
 /// @returns Array of |maparg()|-like dictionaries describing mappings.
 ///          The "buffer" key holds the associated buffer handle.
-ArrayOf(Dictionary) nvim_buf_get_keymap(Buffer buffer, String mode, Error *err)
+ArrayOf(Dictionary) nvim_buf_get_keymap(Buffer buffer, String mode, Arena *arena, Error *err)
   FUNC_API_SINCE(3)
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
@@ -915,7 +914,7 @@ ArrayOf(Dictionary) nvim_buf_get_keymap(Buffer buffer, String mode, Error *err)
     return (Array)ARRAY_DICT_INIT;
   }
 
-  return keymap_array(mode, buf);
+  return keymap_array(mode, buf, arena);
 }
 
 /// Sets a buffer-local |mapping| for the given mode.
@@ -957,7 +956,7 @@ void nvim_buf_set_var(Buffer buffer, String name, Object value, Error *err)
     return;
   }
 
-  dict_set_var(buf->b_vars, name, value, false, false, err);
+  dict_set_var(buf->b_vars, name, value, false, false, NULL, err);
 }
 
 /// Removes a buffer-scoped (b:) variable
@@ -974,7 +973,7 @@ void nvim_buf_del_var(Buffer buffer, String name, Error *err)
     return;
   }
 
-  dict_set_var(buf->b_vars, name, NIL, true, false, err);
+  dict_set_var(buf->b_vars, name, NIL, true, false, NULL, err);
 }
 
 /// Gets the full file name for the buffer
@@ -1175,7 +1174,7 @@ Boolean nvim_buf_set_mark(Buffer buffer, String name, Integer line, Integer col,
 /// uppercase/file mark set in another buffer.
 /// @see |nvim_buf_set_mark()|
 /// @see |nvim_buf_del_mark()|
-ArrayOf(Integer, 2) nvim_buf_get_mark(Buffer buffer, String name, Error *err)
+ArrayOf(Integer, 2) nvim_buf_get_mark(Buffer buffer, String name, Arena *arena, Error *err)
   FUNC_API_SINCE(1)
 {
   Array rv = ARRAY_DICT_INIT;
@@ -1205,8 +1204,9 @@ ArrayOf(Integer, 2) nvim_buf_get_mark(Buffer buffer, String name, Error *err)
     pos = fm->mark;
   }
 
-  ADD(rv, INTEGER_OBJ(pos.lnum));
-  ADD(rv, INTEGER_OBJ(pos.col));
+  rv = arena_array(arena, 2);
+  ADD_C(rv, INTEGER_OBJ(pos.lnum));
+  ADD_C(rv, INTEGER_OBJ(pos.col));
 
   return rv;
 }
@@ -1227,8 +1227,7 @@ ArrayOf(Integer, 2) nvim_buf_get_mark(Buffer buffer, String name, Error *err)
 /// @param fun        Function to call inside the buffer (currently Lua callable
 ///                   only)
 /// @param[out] err   Error details, if any
-/// @return           Return value of function. NB: will deepcopy Lua values
-///                   currently, use upvalues to send Lua references in and out.
+/// @return           Return value of function.
 Object nvim_buf_call(Buffer buffer, LuaRef fun, Error *err)
   FUNC_API_SINCE(7)
   FUNC_API_LUA_ONLY
@@ -1242,7 +1241,7 @@ Object nvim_buf_call(Buffer buffer, LuaRef fun, Error *err)
   aucmd_prepbuf(&aco, buf);
 
   Array args = ARRAY_DICT_INIT;
-  Object res = nlua_call_ref(fun, NULL, args, true, err);
+  Object res = nlua_call_ref(fun, NULL, args, kRetLuaref, NULL, err);
 
   aucmd_restbuf(&aco);
   try_end(err);
@@ -1419,7 +1418,7 @@ static void push_linestr(lua_State *lstate, Array *a, const char *s, size_t len,
   } else {
     String str = STRING_INIT;
     if (len > 0) {
-      str = arena_string(arena, cbuf_as_string((char *)s, len));
+      str = CBUF_TO_ARENA_STR(arena, s, len);
       if (replace_nl) {
         // Vim represents NULs as NLs, but this may confuse clients.
         strchrsub(str.data, '\n', '\0');

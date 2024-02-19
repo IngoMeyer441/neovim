@@ -192,7 +192,6 @@ Object rpc_send_call(uint64_t id, const char *method_name, Array args, ArenaMem 
 
   if (!(channel = find_rpc_channel(id))) {
     api_set_error(err, kErrorTypeException, "Invalid channel: %" PRIu64, id);
-    api_free_array(args);
     return NIL;
   }
 
@@ -201,7 +200,6 @@ Object rpc_send_call(uint64_t id, const char *method_name, Array args, ArenaMem 
   uint32_t request_id = rpc->next_request_id++;
   // Send the msgpack-rpc request
   send_request(channel, request_id, method_name, args);
-  api_free_array(args);
 
   // Push the frame
   ChannelCallFrame frame = { request_id, false, false, NIL, NULL };
@@ -451,7 +449,7 @@ static void request_event(void **argv)
                                               e->type,
                                               e->request_id,
                                               &error,
-                                              result,
+                                              &result,
                                               &out_buffer));
   }
   if (!handler.arena_return) {
@@ -540,7 +538,7 @@ static void send_error(Channel *chan, MsgpackRpcRequestHandler handler, MessageT
                                          type,
                                          id,
                                          &e,
-                                         NIL,
+                                         &NIL,
                                          &out_buffer));
   api_clear_error(&e);
 }
@@ -671,7 +669,7 @@ static WBuffer *serialize_request(uint64_t channel_id, uint32_t request_id, cons
 }
 
 static WBuffer *serialize_response(uint64_t channel_id, MsgpackRpcRequestHandler handler,
-                                   MessageType type, uint32_t response_id, Error *err, Object arg,
+                                   MessageType type, uint32_t response_id, Error *err, Object *arg,
                                    msgpack_sbuffer *sbuffer)
 {
   msgpack_packer pac;
@@ -684,12 +682,11 @@ static WBuffer *serialize_response(uint64_t channel_id, MsgpackRpcRequestHandler
       semsg("paste: %s", err->msg);
       api_clear_error(err);
     } else {
-      Array args = ARRAY_DICT_INIT;
-      ADD(args, INTEGER_OBJ(err->type));
-      ADD(args, CSTR_TO_OBJ(err->msg));
+      MAXSIZE_TEMP_ARRAY(args, 2);
+      ADD_C(args, INTEGER_OBJ(err->type));
+      ADD_C(args, CSTR_AS_OBJ(err->msg));
       msgpack_rpc_serialize_request(0, cstr_as_string("nvim_error_event"),
                                     args, &pac);
-      api_free_array(args);
     }
   } else {
     msgpack_rpc_serialize_response(response_id, err, arg, &pac);

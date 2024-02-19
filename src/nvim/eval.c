@@ -1355,7 +1355,7 @@ Object eval_foldtext(win_T *wp)
     retval = STRING_OBJ(NULL_STRING);
   } else {
     if (tv.v_type == VAR_LIST) {
-      retval = vim_to_object(&tv);
+      retval = vim_to_object(&tv, NULL, false);
     } else {
       retval = STRING_OBJ(cstr_to_string(tv_get_string(&tv)));
     }
@@ -3238,6 +3238,13 @@ static int eval7(char **arg, typval_T *rettv, evalarg_T *const evalarg, bool wan
       } else {
         // skip the name
         check_vars(s, (size_t)len);
+        // If evaluate is false rettv->v_type was not set, but it's needed
+        // in handle_subscript() to parse v:lua, so set it here.
+        if (rettv->v_type == VAR_UNKNOWN && !evaluate && strnequal(s, "v:lua.", 6)) {
+          rettv->v_type = VAR_PARTIAL;
+          rettv->vval.v_partial = vvlua_partial;
+          rettv->vval.v_partial->pt_refcount++;
+        }
         ret = OK;
       }
     }
@@ -3442,7 +3449,7 @@ static int eval_method(char **const arg, typval_T *const rettv, evalarg_T *const
   int len;
   char *name = *arg;
   char *lua_funcname = NULL;
-  if (strncmp(name, "v:lua.", 6) == 0) {
+  if (strnequal(name, "v:lua.", 6)) {
     lua_funcname = name + 6;
     *arg = (char *)skip_luafunc_name(lua_funcname);
     *arg = skipwhite(*arg);  // to detect trailing whitespace later
@@ -6143,8 +6150,8 @@ bool callback_call(Callback *const callback, const int argcount_in, typval_T *co
     break;
 
   case kCallbackLua:
-    rv = nlua_call_ref(callback->data.luaref, NULL, args, false, NULL);
-    return (rv.type == kObjectTypeBoolean && rv.data.boolean == true);
+    rv = nlua_call_ref(callback->data.luaref, NULL, args, kRetNilBool, NULL, NULL);
+    return LUARET_TRUTHY(rv);
 
   case kCallbackNone:
     return false;
@@ -7614,6 +7621,10 @@ int handle_subscript(const char **const arg, typval_T *rettv, evalarg_T *const e
   const char *lua_funcname = NULL;
 
   if (tv_is_luafunc(rettv)) {
+    if (!evaluate) {
+      tv_clear(rettv);
+    }
+
     if (**arg != '.') {
       tv_clear(rettv);
       ret = FAIL;
