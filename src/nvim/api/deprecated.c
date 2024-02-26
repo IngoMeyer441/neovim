@@ -32,8 +32,8 @@
 /// @deprecated Use nvim_exec2() instead.
 /// @see nvim_exec2
 String nvim_exec(uint64_t channel_id, String src, Boolean output, Error *err)
-  FUNC_API_SINCE(7)
-  FUNC_API_DEPRECATED_SINCE(11)
+  FUNC_API_SINCE(7) FUNC_API_DEPRECATED_SINCE(11)
+  FUNC_API_RET_ALLOC
 {
   Dict(exec_opts) opts = { .output = output };
   return exec_impl(channel_id, src, &opts, err);
@@ -42,8 +42,8 @@ String nvim_exec(uint64_t channel_id, String src, Boolean output, Error *err)
 /// @deprecated
 /// @see nvim_exec2
 String nvim_command_output(uint64_t channel_id, String command, Error *err)
-  FUNC_API_SINCE(1)
-  FUNC_API_DEPRECATED_SINCE(7)
+  FUNC_API_SINCE(1) FUNC_API_DEPRECATED_SINCE(7)
+  FUNC_API_RET_ALLOC
 {
   Dict(exec_opts) opts = { .output = true };
   return exec_impl(channel_id, command, &opts, err);
@@ -169,7 +169,7 @@ Integer nvim_buf_set_virtual_text(Buffer buffer, Integer src_id, Integer line, A
   DecorInline decor = { .ext = true, .data.ext.vt = vt, .data.ext.sh_idx = DECOR_ID_INVALID };
 
   extmark_set(buf, ns_id, NULL, (int)line, 0, -1, -1, decor, 0, true,
-              false, false, false, NULL);
+              false, false, false, false, NULL);
   return src_id;
 }
 
@@ -225,12 +225,12 @@ Dictionary nvim_get_hl_by_name(String name, Boolean rgb, Arena *arena, Error *er
 ///                   the end of the buffer.
 /// @param lines      Array of lines
 /// @param[out] err   Error details, if any
-void buffer_insert(Buffer buffer, Integer lnum, ArrayOf(String) lines, Error *err)
+void buffer_insert(Buffer buffer, Integer lnum, ArrayOf(String) lines, Arena *arena, Error *err)
   FUNC_API_DEPRECATED_SINCE(1)
 {
   // "lnum" will be the index of the line after inserting,
   // no matter if it is negative or not
-  nvim_buf_set_lines(0, buffer, lnum, lnum, true, lines, err);
+  nvim_buf_set_lines(0, buffer, lnum, lnum, true, lines, arena, err);
 }
 
 /// Gets a buffer line
@@ -272,13 +272,13 @@ String buffer_get_line(Buffer buffer, Integer index, Arena *arena, Error *err)
 /// @param index    Line index
 /// @param line     Contents of the new line
 /// @param[out] err Error details, if any
-void buffer_set_line(Buffer buffer, Integer index, String line, Error *err)
+void buffer_set_line(Buffer buffer, Integer index, String line, Arena *arena, Error *err)
   FUNC_API_DEPRECATED_SINCE(1)
 {
   Object l = STRING_OBJ(line);
   Array array = { .items = &l, .size = 1 };
   index = convert_index(index);
-  nvim_buf_set_lines(0, buffer, index, index + 1, true,  array, err);
+  nvim_buf_set_lines(0, buffer, index, index + 1, true,  array, arena, err);
 }
 
 /// Deletes a buffer line
@@ -291,12 +291,12 @@ void buffer_set_line(Buffer buffer, Integer index, String line, Error *err)
 /// @param buffer   buffer handle
 /// @param index    line index
 /// @param[out] err Error details, if any
-void buffer_del_line(Buffer buffer, Integer index, Error *err)
+void buffer_del_line(Buffer buffer, Integer index, Arena *arena, Error *err)
   FUNC_API_DEPRECATED_SINCE(1)
 {
   Array array = ARRAY_DICT_INIT;
   index = convert_index(index);
-  nvim_buf_set_lines(0, buffer, index, index + 1, true, array, err);
+  nvim_buf_set_lines(0, buffer, index, index + 1, true, array, arena, err);
 }
 
 /// Retrieves a line range from the buffer
@@ -342,12 +342,13 @@ ArrayOf(String) buffer_get_line_slice(Buffer buffer,
 //                        array will delete the line range)
 /// @param[out] err       Error details, if any
 void buffer_set_line_slice(Buffer buffer, Integer start, Integer end, Boolean include_start,
-                           Boolean include_end, ArrayOf(String) replacement, Error *err)
+                           Boolean include_end, ArrayOf(String) replacement, Arena *arena,
+                           Error *err)
   FUNC_API_DEPRECATED_SINCE(1)
 {
   start = convert_index(start) + !include_start;
   end = convert_index(end) + include_end;
-  nvim_buf_set_lines(0, buffer, start, end, false, replacement, err);
+  nvim_buf_set_lines(0, buffer, start, end, false, replacement, arena, err);
 }
 
 /// Sets a buffer-scoped (b:) variable
@@ -540,7 +541,7 @@ void nvim_set_option(uint64_t channel_id, String name, Object value, Error *err)
 /// @param name     Option name
 /// @param[out] err Error details, if any
 /// @return         Option value (global)
-Object nvim_get_option(String name, Arena *arena, Error *err)
+Object nvim_get_option(String name, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_DEPRECATED_SINCE(11)
 {
@@ -554,7 +555,7 @@ Object nvim_get_option(String name, Arena *arena, Error *err)
 /// @param name       Option name
 /// @param[out] err   Error details, if any
 /// @return Option value
-Object nvim_buf_get_option(Buffer buffer, String name, Arena *arena, Error *err)
+Object nvim_buf_get_option(Buffer buffer, String name, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_DEPRECATED_SINCE(11)
 {
@@ -596,7 +597,7 @@ void nvim_buf_set_option(uint64_t channel_id, Buffer buffer, String name, Object
 /// @param name     Option name
 /// @param[out] err Error details, if any
 /// @return Option value
-Object nvim_win_get_option(Window window, String name, Arena *arena, Error *err)
+Object nvim_win_get_option(Window window, String name, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_DEPRECATED_SINCE(11)
 {

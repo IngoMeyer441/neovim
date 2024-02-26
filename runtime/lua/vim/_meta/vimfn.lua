@@ -3525,6 +3525,48 @@ function vim.fn.getreg(regname, list) end
 --- @return table
 function vim.fn.getreginfo(regname) end
 
+--- Returns the list of strings from {pos1} to {pos2} as if it's
+--- selected in visual mode of {type}.
+--- For possible values of {pos1} and {pos2} see |line()|.
+--- {type} is the selection type:
+---   "v" for |charwise| mode
+---   "V" for |linewise| mode
+---   "<CTRL-V>" for |blockwise-visual| mode
+--- You can get the last selection type by |visualmode()|.
+--- If Visual mode is active, use |mode()| to get the Visual mode
+--- (e.g., in a |:vmap|).
+--- This function uses the line and column number from the
+--- specified position.
+--- It is useful to get text starting and ending in different
+--- columns, such as |charwise-visual| selection.
+---
+--- Note that:
+--- - Order of {pos1} and {pos2} doesn't matter, it will always
+---   return content from the upper left position to the lower
+---   right position.
+--- - If 'virtualedit' is enabled and selection is past the end of
+---   line, resulting lines are filled with blanks.
+--- - If the selection starts or ends in the middle of a multibyte
+---   character, it is not included but its selected part is
+---   substituted with spaces.
+--- - If {pos1} or {pos2} equals "v" (see |line()|) and it is not in
+---   |visual-mode|, an empty list is returned.
+--- - If {pos1}, {pos2} or {type} is an invalid string, an empty
+---   list is returned.
+--- - If {pos1} or {pos2} is a mark in different buffer, an empty
+---   list is returned.
+---
+--- Examples: >
+---   :xnoremap <CR>
+---   \ <Cmd>echom getregion('v', '.', mode())<CR>
+--- <
+---
+--- @param pos1 string
+--- @param pos2 string
+--- @param type string
+--- @return string[]
+function vim.fn.getregion(pos1, pos2, type) end
+
 --- The result is a String, which is type of register {regname}.
 --- The value will be one of:
 ---     "v"      for |charwise| text
@@ -5314,6 +5356,7 @@ function vim.fn.mapset(dict) end
 --- Note that when {count} is added the way {start} works changes,
 --- see above.
 ---
+---         *match-pattern*
 --- See |pattern| for the patterns that are accepted.
 --- The 'ignorecase' option is used to set the ignore-caseness of
 --- the pattern.  'smartcase' is NOT used.  The matching is always
@@ -5471,6 +5514,9 @@ function vim.fn.matcharg(nr) end
 ---
 --- This function works only for loaded buffers. First call
 --- |bufload()| if needed.
+---
+--- See |match-pattern| for information about the effect of some
+--- option settings on the pattern.
 ---
 --- When {buf} is not a valid buffer, the buffer is not loaded or
 --- {lnum} or {end} is not valid then an error is given and an
@@ -5684,6 +5730,9 @@ function vim.fn.matchstr(expr, pat, start, count) end
 ---     text  matched string
 ---     submatches  a List of submatches.  Present only if
 ---     "submatches" is set to v:true in {dict}.
+---
+--- See |match-pattern| for information about the effect of some
+--- option settings on the pattern.
 ---
 --- Example: >vim
 ---     :echo matchstrlist(['tik tok'], '\<\k\+\>')

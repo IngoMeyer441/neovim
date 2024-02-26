@@ -641,10 +641,7 @@ end
 ---       the server may send. For example, clangd sends
 ---       `initialize_result.offsetEncoding` if `capabilities.offsetEncoding` was
 ---       sent to it. You can only modify the `client.offset_encoding` here before
----       any notifications are sent. Most language servers expect to be sent client specified settings after
----       initialization. Nvim does not make this assumption. A
----       `workspace/didChangeConfiguration` notification should be sent
----        to the server during on_init.
+---       any notifications are sent.
 ---
 --- - on_exit Callback (code, signal, client_id) invoked on client
 --- exit.
@@ -1283,7 +1280,7 @@ function lsp.formatexpr(opts)
       local response =
         client.request_sync(ms.textDocument_rangeFormatting, params, timeout_ms, bufnr)
       if response and response.result then
-        lsp.util.apply_text_edits(response.result, 0, client.offset_encoding)
+        lsp.util.apply_text_edits(response.result, bufnr, client.offset_encoding)
         return 0
       end
     end

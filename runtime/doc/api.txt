@@ -1473,9 +1473,9 @@ nvim_set_hl({ns_id}, {name}, {*val})                           *nvim_set_hl()*
                  activate them.
       • {name}   Highlight group name, e.g. "ErrorMsg"
       • {val}    Highlight definition map, accepts the following keys:
-                 • fg (or foreground): color name or "#RRGGBB", see note.
-                 • bg (or background): color name or "#RRGGBB", see note.
-                 • sp (or special): color name or "#RRGGBB"
+                 • fg: color name or "#RRGGBB", see note.
+                 • bg: color name or "#RRGGBB", see note.
+                 • sp: color name or "#RRGGBB"
                  • blend: integer between 0 and 100
                  • bold: boolean
                  • standout: boolean
@@ -2754,28 +2754,24 @@ nvim_buf_set_extmark({buffer}, {ns_id}, {line}, {col}, {*opts})
                     hidden marks, an "invalid" key is added to the "details"
                     array of |nvim_buf_get_extmarks()| and family. If
                     "undo_restore" is false, the extmark is deleted instead.
-                  • priority: a priority value for the highlight group or sign
-                    attribute. For example treesitter highlighting uses a
-                    value of 100.
+                  • priority: a priority value for the highlight group, sign
+                    attribute or virtual text. For virtual text, item with
+                    highest priority is drawn last. For example treesitter
+                    highlighting uses a value of 100.
                   • strict: boolean that indicates extmark should not be
                     placed if the line or column value is past the end of the
                     buffer or end of the line respectively. Defaults to true.
                   • sign_text: string of length 1-2 used to display in the
-                    sign column. Note: ranges are unsupported and decorations
-                    are only applied to start_row
+                    sign column.
                   • sign_hl_group: name of the highlight group used to
-                    highlight the sign column text. Note: ranges are
-                    unsupported and decorations are only applied to start_row
+                    highlight the sign column text.
                   • number_hl_group: name of the highlight group used to
-                    highlight the number column. Note: ranges are unsupported
-                    and decorations are only applied to start_row
+                    highlight the number column.
                   • line_hl_group: name of the highlight group used to
-                    highlight the whole line. Note: ranges are unsupported and
-                    decorations are only applied to start_row
+                    highlight the whole line.
                   • cursorline_hl_group: name of the highlight group used to
-                    highlight the line when the cursor is on the same line as
-                    the mark and 'cursorline' is enabled. Note: ranges are
-                    unsupported and decorations are only applied to start_row
+                    highlight the sign column text when the cursor is on the
+                    same line as the mark and 'cursorline' is enabled.
                   • conceal: string which should be either empty or a single
                     character. Enable concealing similar to |:syn-conceal|.
                     When a character is supplied it is used as |:syn-cchar|.
@@ -2790,6 +2786,8 @@ nvim_buf_set_extmark({buffer}, {ns_id}, {line}, {col}, {*opts})
                   • url: A URL to associate with this extmark. In the TUI, the
                     OSC 8 control sequence is used to generate a clickable
                     hyperlink to this URL.
+                  • scoped: boolean that indicates that the extmark should
+                    only be displayed in the namespace scope. (experimental)
 
     Return: ~
         Id of the created/updated extmark
@@ -2860,9 +2858,38 @@ nvim_set_decoration_provider({ns_id}, {*opts})
                  • on_win: called when starting to redraw a specific window.
                    ["win", winid, bufnr, topline, botline]
                  • on_line: called for each buffer line being redrawn. (The
-                   interaction with fold lines is subject to change) ["win",
+                   interaction with fold lines is subject to change) ["line",
                    winid, bufnr, row]
                  • on_end: called at the end of a redraw cycle ["end", tick]
+
+nvim_win_add_ns({window}, {ns_id})                         *nvim_win_add_ns()*
+    Adds the namespace scope to the window.
+
+    Parameters: ~
+      • {window}  Window handle, or 0 for current window
+      • {ns_id}   the namespace to add
+
+    Return: ~
+        true if the namespace was added, else false
+
+nvim_win_get_ns({window})                                  *nvim_win_get_ns()*
+    Gets all the namespaces scopes associated with a window.
+
+    Parameters: ~
+      • {window}  Window handle, or 0 for current window
+
+    Return: ~
+        a list of namespaces ids
+
+nvim_win_remove_ns({window}, {ns_id})                   *nvim_win_remove_ns()*
+    Removes the namespace scope from the window.
+
+    Parameters: ~
+      • {window}  Window handle, or 0 for current window
+      • {ns_id}   the namespace to remove
+
+    Return: ~
+        true if the namespace was removed, else false
 
 
 ==============================================================================

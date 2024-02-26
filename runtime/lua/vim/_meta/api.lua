@@ -576,28 +576,24 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---                 hidden marks, an "invalid" key is added to the "details"
 ---                 array of `nvim_buf_get_extmarks()` and family. If
 ---                 "undo_restore" is false, the extmark is deleted instead.
----               • priority: a priority value for the highlight group or sign
----                 attribute. For example treesitter highlighting uses a
----                 value of 100.
+---               • priority: a priority value for the highlight group, sign
+---                 attribute or virtual text. For virtual text, item with
+---                 highest priority is drawn last. For example treesitter
+---                 highlighting uses a value of 100.
 ---               • strict: boolean that indicates extmark should not be
 ---                 placed if the line or column value is past the end of the
 ---                 buffer or end of the line respectively. Defaults to true.
 ---               • sign_text: string of length 1-2 used to display in the
----                 sign column. Note: ranges are unsupported and decorations
----                 are only applied to start_row
+---                 sign column.
 ---               • sign_hl_group: name of the highlight group used to
----                 highlight the sign column text. Note: ranges are
----                 unsupported and decorations are only applied to start_row
+---                 highlight the sign column text.
 ---               • number_hl_group: name of the highlight group used to
----                 highlight the number column. Note: ranges are unsupported
----                 and decorations are only applied to start_row
+---                 highlight the number column.
 ---               • line_hl_group: name of the highlight group used to
----                 highlight the whole line. Note: ranges are unsupported and
----                 decorations are only applied to start_row
+---                 highlight the whole line.
 ---               • cursorline_hl_group: name of the highlight group used to
----                 highlight the line when the cursor is on the same line as
----                 the mark and 'cursorline' is enabled. Note: ranges are
----                 unsupported and decorations are only applied to start_row
+---                 highlight the sign column text when the cursor is on the
+---                 same line as the mark and 'cursorline' is enabled.
 ---               • conceal: string which should be either empty or a single
 ---                 character. Enable concealing similar to `:syn-conceal`.
 ---                 When a character is supplied it is used as `:syn-cchar`.
@@ -612,6 +608,8 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---               • url: A URL to associate with this extmark. In the TUI, the
 ---                 OSC 8 control sequence is used to generate a clickable
 ---                 hyperlink to this URL.
+---               • scoped: boolean that indicates that the extmark should
+---                 only be displayed in the namespace scope. (experimental)
 --- @return integer
 function vim.api.nvim_buf_set_extmark(buffer, ns_id, line, col, opts) end
 
@@ -1804,7 +1802,7 @@ function vim.api.nvim_set_current_win(window) end
 ---              • on_win: called when starting to redraw a specific window.
 ---                ["win", winid, bufnr, topline, botline]
 ---              • on_line: called for each buffer line being redrawn. (The
----                interaction with fold lines is subject to change) ["win",
+---                interaction with fold lines is subject to change) ["line",
 ---                winid, bufnr, row]
 ---              • on_end: called at the end of a redraw cycle ["end", tick]
 function vim.api.nvim_set_decoration_provider(ns_id, opts) end
@@ -1818,9 +1816,9 @@ function vim.api.nvim_set_decoration_provider(ns_id, opts) end
 ---              activate them.
 --- @param name string Highlight group name, e.g. "ErrorMsg"
 --- @param val vim.api.keyset.highlight Highlight definition map, accepts the following keys:
----              • fg (or foreground): color name or "#RRGGBB", see note.
----              • bg (or background): color name or "#RRGGBB", see note.
----              • sp (or special): color name or "#RRGGBB"
+---              • fg: color name or "#RRGGBB", see note.
+---              • bg: color name or "#RRGGBB", see note.
+---              • sp: color name or "#RRGGBB"
 ---              • blend: integer between 0 and 100
 ---              • bold: boolean
 ---              • standout: boolean
@@ -1981,6 +1979,13 @@ function vim.api.nvim_tabpage_set_var(tabpage, name, value) end
 --- @param win integer Window handle, must already belong to {tabpage}
 function vim.api.nvim_tabpage_set_win(tabpage, win) end
 
+--- Adds the namespace scope to the window.
+---
+--- @param window integer Window handle, or 0 for current window
+--- @param ns_id integer the namespace to add
+--- @return boolean
+function vim.api.nvim_win_add_ns(window, ns_id) end
+
 --- Calls a function with window as temporary current window.
 ---
 --- @param window integer Window handle, or 0 for current window
@@ -2030,6 +2035,12 @@ function vim.api.nvim_win_get_cursor(window) end
 --- @param window integer Window handle, or 0 for current window
 --- @return integer
 function vim.api.nvim_win_get_height(window) end
+
+--- Gets all the namespaces scopes associated with a window.
+---
+--- @param window integer Window handle, or 0 for current window
+--- @return integer[]
+function vim.api.nvim_win_get_ns(window) end
 
 --- Gets the window number
 ---
@@ -2082,6 +2093,13 @@ function vim.api.nvim_win_hide(window) end
 --- @param window integer Window handle, or 0 for current window
 --- @return boolean
 function vim.api.nvim_win_is_valid(window) end
+
+--- Removes the namespace scope from the window.
+---
+--- @param window integer Window handle, or 0 for current window
+--- @param ns_id integer the namespace to remove
+--- @return boolean
+function vim.api.nvim_win_remove_ns(window, ns_id) end
 
 --- Sets the current buffer in a window, without side effects
 ---

@@ -231,9 +231,10 @@ The following new APIs and features were added.
   • |vim.treesitter.query.edit()| allows live editing of treesitter
     queries.
   • Improved error messages for query parsing.
-  • `:InspectTree` (|vim.treesitter.inspect_tree()|) shows node ranges in
-    0-based indexing instead of 1-based indexing.
-  • `:InspectTree` (|vim.treesitter.inspect_tree()|) shows root nodes
+  • |:InspectTree| shows node ranges in 0-based indexing instead of 1-based
+    indexing.
+  • |:InspectTree| shows root nodes
+  • |:InspectTree| now supports |folding|
 
 • |vim.ui.open()| opens URIs using the system default handler (macOS `open`,
   Windows `explorer`, Linux `xdg-open`, etc.)
@@ -317,6 +318,10 @@ The following new APIs and features were added.
 • Added |nvim_tabpage_set_win()| to set the current window of a tabpage.
 
 • Clicking on a tabpage in the tabline with the middle mouse button closes it.
+
+• |namespace| can now have window scopes. |nvim_win_add_ns()|
+
+• |extmarks| option `scoped`: only show the extmarks in its namespace's scope.
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
