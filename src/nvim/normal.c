@@ -3223,8 +3223,7 @@ static void nv_colon(cmdarg_T *cap)
     clearop(cap->oap);
   } else if (cap->oap->op_type != OP_NOP
              && (cap->oap->start.lnum > curbuf->b_ml.ml_line_count
-                 || cap->oap->start.col >
-                 (colnr_T)strlen(ml_get(cap->oap->start.lnum))
+                 || cap->oap->start.col > ml_get_len(cap->oap->start.lnum)
                  || did_emsg)) {
     // The start of the operator has become invalid by the Ex command.
     clearopbeep(cap->oap);
@@ -3592,7 +3591,7 @@ bool get_visual_text(cmdarg_T *cap, char **pp, size_t *lenp)
   }
   if (VIsual_mode == 'V') {
     *pp = get_cursor_line_ptr();
-    *lenp = strlen(*pp);
+    *lenp = (size_t)get_cursor_line_len();
   } else {
     if (lt(curwin->w_cursor, VIsual)) {
       *pp = ml_get_pos(&curwin->w_cursor);
@@ -3894,6 +3893,10 @@ static void nv_gotofile(cmdarg_T *cap)
   linenr_T lnum = -1;
 
   if (check_text_or_curbuf_locked(cap->oap)) {
+    return;
+  }
+
+  if (!check_can_set_curbuf_disabled()) {
     return;
   }
 
@@ -4233,7 +4236,8 @@ static void nv_brackets(cmdarg_T *cap)
                            (cap->cmdchar == ']'
                             ? curwin->w_cursor.lnum + 1
                             : 1),
-                           MAXLNUM);
+                           MAXLNUM,
+                           false);
       xfree(ptr);
       curwin->w_set_curswant = true;
     }
@@ -4527,9 +4531,8 @@ static void nv_replace(cmdarg_T *cap)
   }
 
   // Abort if not enough characters to replace.
-  char *ptr = get_cursor_pos_ptr();
-  if (strlen(ptr) < (unsigned)cap->count1
-      || (mb_charlen(ptr) < cap->count1)) {
+  if ((size_t)get_cursor_pos_len() < (unsigned)cap->count1
+      || (mb_charlen(get_cursor_pos_ptr()) < cap->count1)) {
     clearopbeep(cap->oap);
     return;
   }
@@ -5347,7 +5350,7 @@ static void nv_gi_cmd(cmdarg_T *cap)
   if (curbuf->b_last_insert.mark.lnum != 0) {
     curwin->w_cursor = curbuf->b_last_insert.mark;
     check_cursor_lnum(curwin);
-    int i = (int)strlen(get_cursor_line_ptr());
+    int i = (int)get_cursor_line_len();
     if (curwin->w_cursor.col > (colnr_T)i) {
       if (virtual_active()) {
         curwin->w_cursor.coladd += curwin->w_cursor.col - i;
@@ -6036,7 +6039,7 @@ bool unadjust_for_sel(void)
       mark_mb_adjustpos(curbuf, pp);
     } else if (pp->lnum > 1) {
       pp->lnum--;
-      pp->col = (colnr_T)strlen(ml_get(pp->lnum));
+      pp->col = ml_get_len(pp->lnum);
       return true;
     }
   }

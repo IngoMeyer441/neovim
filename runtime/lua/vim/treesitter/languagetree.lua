@@ -1,4 +1,4 @@
---- @brief A \*LanguageTree\* contains a tree of parsers: the root treesitter parser for {lang} and
+--- @brief A [LanguageTree]() contains a tree of parsers: the root treesitter parser for {lang} and
 --- any "injected" language parsers, which themselves may inject other languages, recursively.
 --- For example a Lua buffer containing some Vimscript commands needs multiple parsers to fully
 --- understand its contents.
@@ -72,7 +72,7 @@ local TSCallbackNames = {
 ---@field private _callbacks table<TSCallbackName,function[]> Callback handlers
 ---@field package _callbacks_rec table<TSCallbackName,function[]> Callback handlers (recursive)
 ---@field private _children table<string,vim.treesitter.LanguageTree> Injected languages
----@field private _injection_query Query Queries defining injected languages
+---@field private _injection_query vim.treesitter.Query Queries defining injected languages
 ---@field private _injections_processed boolean
 ---@field private _opts table Options
 ---@field private _parser TSParser Parser for language
@@ -93,8 +93,8 @@ local LanguageTree = {}
 ---Optional arguments:
 ---@class vim.treesitter.LanguageTree.new.Opts
 ---@inlinedoc
----@field queries table<string,string>  -- Deprecated
----@field injections table<string,string>
+---@field queries? table<string,string>  -- Deprecated
+---@field injections? table<string,string>
 
 LanguageTree.__index = LanguageTree
 
@@ -473,6 +473,7 @@ function LanguageTree:for_each_child(fn, include_self)
   end
 
   for _, child in pairs(self._children) do
+    --- @diagnostic disable-next-line:deprecated
     child:for_each_child(fn, true)
   end
 end

@@ -5799,7 +5799,8 @@ vim.bo.sw = vim.bo.shiftwidth
 --- 	items, for instance "scanning tags"
 ---   q	do not show "recording @a" when recording a macro	*shm-q*
 ---   F	don't give the file info when editing a file, like	*shm-F*
---- 	`:silent` was used for the command
+--- 	`:silent` was used for the command; note that this also
+--- 	affects messages from 'autoread' reloading
 ---   S	do not show search count message when searching, e.g.	*shm-S*
 --- 	"[1/5]"
 ---
@@ -6745,6 +6746,8 @@ vim.bo.swf = vim.bo.swapfile
 --- 		"split" when both are present.
 ---    uselast	If included, jump to the previously used window when
 --- 		jumping to errors with `quickfix` commands.
+--- If a window has 'winfixbuf' enabled, 'switchbuf' is currently not
+--- applied to the split window.
 ---
 --- @type string
 vim.o.switchbuf = "uselast"
@@ -7872,6 +7875,18 @@ vim.o.window = 0
 vim.o.wi = vim.o.window
 vim.go.window = vim.o.window
 vim.go.wi = vim.go.window
+
+--- If enabled, the buffer and any window that displays it are paired.
+--- For example, attempting to change the buffer with `:edit` will fail.
+--- Other commands which change a window's buffer such as `:cnext` will
+--- also skip any window with 'winfixbuf' enabled. However if a command
+--- has an "!" option, a window can be forced to switch buffers.
+---
+--- @type boolean
+vim.o.winfixbuf = false
+vim.o.wfb = vim.o.winfixbuf
+vim.wo.winfixbuf = vim.o.winfixbuf
+vim.wo.wfb = vim.wo.winfixbuf
 
 --- Keep the window height when windows are opened or closed and
 --- 'equalalways' is set.  Also for `CTRL-W_=`.  Set by default for the

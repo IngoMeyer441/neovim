@@ -3525,11 +3525,13 @@ function vim.fn.getreg(regname, list) end
 --- @return table
 function vim.fn.getreginfo(regname) end
 
---- Returns the list of strings from {pos1} to {pos2} in current
+--- Returns the list of strings from {pos1} to {pos2} from a
 --- buffer.
 ---
 --- {pos1} and {pos2} must both be |List|s with four numbers.
---- See |getpos()| for the format of the list.
+--- See |getpos()| for the format of the list.  It's possible
+--- to specify positions from a different buffer, but please
+--- note the limitations at |getregion-notes|.
 ---
 --- The optional argument {opts} is a Dict and supports the
 --- following items:
@@ -3550,6 +3552,7 @@ function vim.fn.getreginfo(regname) end
 --- This function is useful to get text starting and ending in
 --- different columns, such as a |charwise-visual| selection.
 ---
+---           *getregion-notes*
 --- Note that:
 --- - Order of {pos1} and {pos2} doesn't matter, it will always
 ---   return content from the upper left position to the lower
@@ -3559,8 +3562,12 @@ function vim.fn.getreginfo(regname) end
 --- - If the region is blockwise and it starts or ends in the
 ---   middle of a multi-cell character, it is not included but
 ---   its selected part is substituted with spaces.
---- - If {pos1} or {pos2} is not current in the buffer, an empty
+--- - If {pos1} and {pos2} are not in the same buffer, an empty
 ---   list is returned.
+--- - {pos1} and {pos2} must belong to a |bufloaded()| buffer.
+--- - It is evaluated in current window context, which makes a
+---   difference if the buffer is displayed in a window with
+---   different 'virtualedit' or 'list' values.
 ---
 --- Examples: >
 ---   :xnoremap <CR>
@@ -10591,10 +10598,10 @@ function vim.fn.win_move_statusline(nr, offset) end
 --- @return any
 function vim.fn.win_screenpos(nr) end
 
---- Move the window {nr} to a new split of the window {target}.
---- This is similar to moving to {target}, creating a new window
---- using |:split| but having the same contents as window {nr}, and
---- then closing {nr}.
+--- Temporarily switch to window {target}, then move window {nr}
+--- to a new split adjacent to {target}.
+--- Unlike commands such as |:split|, no new windows are created
+--- (the |window-ID| of window {nr} is unchanged after the move).
 ---
 --- Both {nr} and {target} can be window numbers or |window-ID|s.
 --- Both must be in the current tab page.
