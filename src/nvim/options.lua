@@ -6573,9 +6573,6 @@ return {
         top are deleted if new lines exceed this limit.
         Minimum is 1, maximum is 100000.
         Only in |terminal| buffers.
-
-        Note: Lines that are not visible and kept in scrollback are not
-        reflown when the terminal buffer is resized horizontally.
       ]=],
       full_name = 'scrollback',
       redraw = { 'current_buffer' },
@@ -9822,11 +9819,11 @@ return {
       abbreviation = 'wfb',
       defaults = { if_true = false },
       desc = [=[
-        If enabled, the buffer and any window that displays it are paired.
+        If enabled, the window and the buffer it is displaying are paired.
         For example, attempting to change the buffer with |:edit| will fail.
         Other commands which change a window's buffer such as |:cnext| will
-        also skip any window with 'winfixbuf' enabled. However if a command
-        has an "!" option, a window can be forced to switch buffers.
+        also skip any window with 'winfixbuf' enabled.  However if an Ex
+        command has a "!" modifier, it can force switching buffers.
       ]=],
       full_name = 'winfixbuf',
       pv_name = 'p_wfb',

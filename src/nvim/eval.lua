@@ -7836,6 +7836,9 @@ M.funcs = {
           echo printf("%1$*2$.*3$f", 1.4142135, 6, 2)
       <      1.41
 
+      You will get an overflow error |E1510|, when the field-width
+      or precision will result in a string longer than 6400 chars.
+
       					*E1500*
       You cannot mix positional and non-positional arguments: >vim
           echo printf("%s%1$s", "One", "Two")
@@ -8746,6 +8749,7 @@ M.funcs = {
       When a match has been found its line number is returned.
       If there is no match a 0 is returned and the cursor doesn't
       move.  No error message is given.
+      To get the matched string, use |matchbufline()|.
 
       {flags} is a String, which can contain these character flags:
       'b'	search Backward instead of forward
@@ -12687,9 +12691,7 @@ M.funcs = {
       [1, 1], unless there is a tabline, then it is [2, 1].
       {nr} can be the window number or the |window-ID|.  Use zero
       for the current window.
-      Returns [0, 0] if the window cannot be found in the current
-      tabpage.
-
+      Returns [0, 0] if the window cannot be found.
     ]=],
     name = 'win_screenpos',
     params = { { 'nr', 'integer' } },
@@ -12856,7 +12858,9 @@ M.funcs = {
       	#	the number of the last accessed window (where
       		|CTRL-W_p| goes to).  If there is no previous
       		window or it is in another tab page 0 is
-      		returned.
+      		returned.  May refer to the current window in
+      		some cases (e.g. when evaluating 'statusline'
+      		expressions).
       	{N}j	the number of the Nth window below the
       		current window (where |CTRL-W_j| goes to).
       	{N}k	the number of the Nth window above the current

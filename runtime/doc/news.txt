@@ -179,10 +179,6 @@ The following new APIs and features were added.
 • |'foldtext'| can be set to an empty string to disable and render the line:
   as normal with regular highlighting and no line wrapping.
 
-• The terminal buffer now supports reflow (wrapped lines adapt when the buffer
-  is resized horizontally). Note: Lines that are not visible and kept in
-  |'scrollback'| are not reflown.
-
 • |vim.system()| for running system commands.
 
 • |vim.lpeg| and |vim.re| expose the bundled Lpeg expression grammar parser
@@ -254,6 +250,11 @@ The following new APIs and features were added.
     indexing.
   • |:InspectTree| shows root nodes
   • |:InspectTree| now supports |folding|
+  • The `#set!` directive can set the "url" property of a node to have the
+    node emit a hyperlink. Hyperlinks are UI specific: in the TUI, the OSC 8
+    control sequence is used.
+
+• |:Man| now supports `:hide` modifier to open page in the current window.
 
 • |vim.ui.open()| opens URIs using the system default handler (macOS `open`,
   Windows `explorer`, Linux `xdg-open`, etc.)

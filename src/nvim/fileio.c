@@ -957,7 +957,7 @@ retry:
             int tlen = 0;
             while (true) {
               p = (uint8_t *)ml_get(read_buf_lnum) + read_buf_col;
-              int n = (int)strlen((char *)p);
+              int n = ml_get_len(read_buf_lnum) - read_buf_col;
               if (tlen + n + 1 > size) {
                 // Filled up to "size", append partial line.
                 // Change NL to NUL to reverse the effect done
@@ -3197,7 +3197,7 @@ void buf_reload(buf_T *buf, int orig_mode, bool reload_options)
     curwin->w_topline = old_topline;
   }
   curwin->w_cursor = old_cursor;
-  check_cursor();
+  check_cursor(curwin);
   update_topline(curwin);
   keep_filetype = false;
 
