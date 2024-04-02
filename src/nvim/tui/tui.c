@@ -190,36 +190,6 @@ void tui_start(TUIData **tui_p, int *width, int *height, char **term, bool *rgb)
   *rgb = tui->rgb;
 }
 
-void tui_set_key_encoding(TUIData *tui)
-  FUNC_ATTR_NONNULL_ALL
-{
-  switch (tui->input.key_encoding) {
-  case kKeyEncodingKitty:
-    out(tui, S_LEN("\x1b[>1u"));
-    break;
-  case kKeyEncodingXterm:
-    out(tui, S_LEN("\x1b[>4;2m"));
-    break;
-  case kKeyEncodingLegacy:
-    break;
-  }
-}
-
-static void tui_reset_key_encoding(TUIData *tui)
-  FUNC_ATTR_NONNULL_ALL
-{
-  switch (tui->input.key_encoding) {
-  case kKeyEncodingKitty:
-    out(tui, S_LEN("\x1b[<1u"));
-    break;
-  case kKeyEncodingXterm:
-    out(tui, S_LEN("\x1b[>4;0m"));
-    break;
-  case kKeyEncodingLegacy:
-    break;
-  }
-}
-
 /// Request the terminal's mode (DECRQM).
 ///
 /// @see handle_modereport
@@ -256,6 +226,26 @@ void tui_handle_term_mode(TUIData *tui, TermMode mode, TermModeState state)
   }
 }
 
+/// Query the terminal emulator to see if it supports extended underline.
+static void tui_query_extended_underline(TUIData *tui)
+{
+  // Try to set an undercurl using an SGR sequence, followed by a DECRQSS SGR query.
+  // Reset attributes first, as other code may have set attributes.
+  out(tui, S_LEN("\x1b[0m\x1b[4:3m\x1bP$qm\x1b\\"));
+  tui->print_attr_id = -1;
+}
+
+void tui_enable_extended_underline(TUIData *tui)
+{
+  if (tui->unibi_ext.set_underline_style == -1) {
+    tui->unibi_ext.set_underline_style = (int)unibi_add_ext_str(tui->ut, "ext.set_underline_style",
+                                                                "\x1b[4:%p1%dm");
+  }
+  // Only support colon syntax. #9270
+  tui->unibi_ext.set_underline_color = (int)unibi_add_ext_str(tui->ut, "ext.set_underline_color",
+                                                              "\x1b[58:2::%p1%d:%p2%d:%p3%dm");
+}
+
 /// Query the terminal emulator to see if it supports Kitty's keyboard protocol.
 ///
 /// Write CSI ? u followed by a primary device attributes request (CSI c). If
@@ -269,6 +259,36 @@ static void tui_query_kitty_keyboard(TUIData *tui)
 {
   tui->input.waiting_for_kkp_response = true;
   out(tui, S_LEN("\x1b[?u\x1b[c"));
+}
+
+void tui_set_key_encoding(TUIData *tui)
+  FUNC_ATTR_NONNULL_ALL
+{
+  switch (tui->input.key_encoding) {
+  case kKeyEncodingKitty:
+    out(tui, S_LEN("\x1b[>1u"));
+    break;
+  case kKeyEncodingXterm:
+    out(tui, S_LEN("\x1b[>4;2m"));
+    break;
+  case kKeyEncodingLegacy:
+    break;
+  }
+}
+
+static void tui_reset_key_encoding(TUIData *tui)
+  FUNC_ATTR_NONNULL_ALL
+{
+  switch (tui->input.key_encoding) {
+  case kKeyEncodingKitty:
+    out(tui, S_LEN("\x1b[<1u"));
+    break;
+  case kKeyEncodingXterm:
+    out(tui, S_LEN("\x1b[>4;0m"));
+    break;
+  case kKeyEncodingLegacy:
+    break;
+  }
 }
 
 /// Enable the alternate screen and emit other control sequences to start the TUI.
@@ -307,6 +327,7 @@ static void terminfo_start(TUIData *tui)
   tui->unibi_ext.reset_scroll_region = -1;
   tui->unibi_ext.set_cursor_style = -1;
   tui->unibi_ext.reset_cursor_style = -1;
+  tui->unibi_ext.set_underline_style = -1;
   tui->unibi_ext.set_underline_color = -1;
   tui->unibi_ext.sync = -1;
   tui->out_fd = STDOUT_FILENO;
@@ -348,12 +369,16 @@ static void terminfo_start(TUIData *tui)
   const char *konsolev_env = os_getenv("KONSOLE_VERSION");
   int konsolev = konsolev_env ? (int)strtol(konsolev_env, NULL, 10)
                               : (konsole ? 1 : 0);
+  bool wezterm = strequal(termprg, "WezTerm");
+  const char *weztermv = wezterm ? os_getenv("TERM_PROGRAM_VERSION") : NULL;
+  bool screen = terminfo_is_term_family(term, "screen");
+  bool tmux = terminfo_is_term_family(term, "tmux") || !!os_getenv("TMUX");
 
   // truecolor support must be checked before patching/augmenting terminfo
   tui->rgb = term_has_truecolor(tui, colorterm);
 
   patch_terminfo_bugs(tui, term, colorterm, vtev, konsolev, iterm_env, nsterm);
-  augment_terminfo(tui, term, vtev, konsolev, iterm_env, nsterm);
+  augment_terminfo(tui, term, vtev, konsolev, weztermv, iterm_env, nsterm);
   tui->can_change_scroll_region =
     !!unibi_get_str(tui->ut, unibi_change_scroll_region);
   tui->can_set_lr_margin =
@@ -388,6 +413,12 @@ static void terminfo_start(TUIData *tui)
   // support an older DCS sequence for synchronized output, but we will only use
   // mode 2026
   tui_request_term_mode(tui, kTermModeSynchronizedOutput);
+
+  // Don't use DECRQSS in screen or tmux, as they behave strangely when receiving it.
+  if (tui->unibi_ext.set_underline_style == -1 && !(screen || tmux)) {
+    // Query the terminal to see if it supports extended underline.
+    tui_query_extended_underline(tui);
+  }
 
   // Query the terminal to see if it supports Kitty's keyboard protocol
   tui_query_kitty_keyboard(tui);
@@ -2179,7 +2210,7 @@ static void patch_terminfo_bugs(TUIData *tui, const char *term, const char *colo
 /// This adds stuff that is not in standard terminfo as extended unibilium
 /// capabilities.
 static void augment_terminfo(TUIData *tui, const char *term, int vte_version, int konsolev,
-                             bool iterm_env, bool nsterm)
+                             const char *weztermv, bool iterm_env, bool nsterm)
 {
   unibi_term *ut = tui->ut;
   bool xterm = terminfo_is_term_family(term, "xterm")
@@ -2339,16 +2370,12 @@ static void augment_terminfo(TUIData *tui, const char *term, int vte_version, in
     int ext_bool_Su = unibi_find_ext_bool(ut, "Su");  // used by kitty
     if (vte_version >= 5102 || konsolev >= 221170
         || tmux
-        || (ext_bool_Su != -1
-            && unibi_get_ext_bool(ut, (size_t)ext_bool_Su))) {
-      tui->unibi_ext.set_underline_style = (int)unibi_add_ext_str(ut, "ext.set_underline_style",
-                                                                  "\x1b[4:%p1%dm");
+        || (ext_bool_Su != -1 && unibi_get_ext_bool(ut, (size_t)ext_bool_Su))
+        || (weztermv != NULL && strcmp(weztermv, "20210203-095643") > 0)) {
+      tui_enable_extended_underline(tui);
     }
-  }
-  if (tui->unibi_ext.set_underline_style != -1) {
-    // Only support colon syntax. #9270
-    tui->unibi_ext.set_underline_color = (int)unibi_add_ext_str(ut, "ext.set_underline_color",
-                                                                "\x1b[58:2::%p1%d:%p2%d:%p3%dm");
+  } else {
+    tui_enable_extended_underline(tui);
   }
 
   if (!kitty && (vte_version == 0 || vte_version >= 5400)) {

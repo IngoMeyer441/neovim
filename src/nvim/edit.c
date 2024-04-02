@@ -365,9 +365,10 @@ static void insert_enter(InsertState *s)
   did_cursorhold = false;
 
   // ins_redraw() triggers TextChangedI only when no characters
-  // are in the typeahead buffer, so only reset curbuf->b_last_changedtick
+  // are in the typeahead buffer, so reset curbuf->b_last_changedtick
   // if the TextChangedI was not blocked by char_avail() (e.g. using :norm!)
-  if (!char_avail()) {
+  // and the TextChangedI autocommand has been triggered.
+  if (!char_avail() && curbuf->b_last_changedtick_i == buf_get_changedtick(curbuf)) {
     curbuf->b_last_changedtick = buf_get_changedtick(curbuf);
   }
 }
@@ -3673,23 +3674,6 @@ static void ins_del(void)
   AppendCharToRedobuff(K_DEL);
 }
 
-// Delete one character for ins_bs().
-static void ins_bs_one(colnr_T *vcolp)
-{
-  dec_cursor();
-  getvcol(curwin, &curwin->w_cursor, vcolp, NULL, NULL);
-  if (State & REPLACE_FLAG) {
-    // Don't delete characters before the insert point when in
-    // Replace mode
-    if (curwin->w_cursor.lnum != Insstart.lnum
-        || curwin->w_cursor.col >= Insstart.col) {
-      replace_do_bs(-1);
-    }
-  } else {
-    del_char(false);
-  }
-}
-
 /// Handle Backspace, delete-word and delete-line in Insert mode.
 ///
 /// @param          c                 character that was typed
@@ -3846,42 +3830,74 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
     // Handle deleting one 'shiftwidth' or 'softtabstop'.
     if (mode == BACKSPACE_CHAR
         && ((p_sta && in_indent)
-            || ((get_sts_value() != 0
-                 || tabstop_count(curbuf->b_p_vsts_array))
+            || ((get_sts_value() != 0 || tabstop_count(curbuf->b_p_vsts_array))
                 && curwin->w_cursor.col > 0
                 && (*(get_cursor_pos_ptr() - 1) == TAB
                     || (*(get_cursor_pos_ptr() - 1) == ' '
                         && (!*inserted_space_p || arrow_used)))))) {
-      colnr_T vcol;
-      colnr_T want_vcol;
-
       *inserted_space_p = false;
-      // Compute the virtual column where we want to be.  Since
-      // 'showbreak' may get in the way, need to get the last column of
-      // the previous character.
-      getvcol(curwin, &curwin->w_cursor, &vcol, NULL, NULL);
-      colnr_T start_vcol = vcol;
-      dec_cursor();
-      getvcol(curwin, &curwin->w_cursor, NULL, NULL, &want_vcol);
-      inc_cursor();
+
+      bool const use_ts = !curwin->w_p_list || curwin->w_p_lcs_chars.tab1;
+      char *const line = get_cursor_line_ptr();
+      char *const cursor_ptr = line + curwin->w_cursor.col;
+
+      colnr_T vcol = 0;
+      colnr_T space_vcol = 0;
+      StrCharInfo sci = utf_ptr2StrCharInfo(line);
+      StrCharInfo space_sci = sci;
+      bool prev_space = false;
+
+      // Compute virtual column of cursor position, and find the last
+      // whitespace before cursor that is preceded by non-whitespace.
+      // Use charsize_nowrap() so that virtual text and wrapping are ignored.
+      while (sci.ptr < cursor_ptr) {
+        bool cur_space = ascii_iswhite(sci.chr.value);
+        if (!prev_space && cur_space) {
+          space_sci = sci;
+          space_vcol = vcol;
+        }
+        vcol += charsize_nowrap(curbuf, use_ts, vcol, sci.chr.value);
+        sci = utfc_next(sci);
+        prev_space = cur_space;
+      }
+
+      // Compute the virtual column where we want to be.
+      colnr_T want_vcol = vcol > 0 ? vcol - 1 : 0;
       if (p_sta && in_indent) {
-        int ts = get_sw_value(curbuf);
-        want_vcol = (want_vcol / ts) * ts;
+        want_vcol -= want_vcol % get_sw_value(curbuf);
       } else {
-        want_vcol = tabstop_start(want_vcol,
-                                  get_sts_value(),
-                                  curbuf->b_p_vsts_array);
+        want_vcol = tabstop_start(want_vcol, get_sts_value(), curbuf->b_p_vsts_array);
       }
 
-      // delete characters until we are at or before want_vcol
-      while (vcol > want_vcol && curwin->w_cursor.col > 0
-             && (cc = (uint8_t)(*(get_cursor_pos_ptr() - 1)), ascii_iswhite(cc))) {
-        ins_bs_one(&vcol);
+      // Find the position to stop backspacing.
+      // Use charsize_nowrap() so that virtual text and wrapping are ignored.
+      while (true) {
+        int size = charsize_nowrap(curbuf, use_ts, space_vcol, space_sci.chr.value);
+        if (space_vcol + size > want_vcol) {
+          break;
+        }
+        space_vcol += size;
+        space_sci = utfc_next(space_sci);
+      }
+      colnr_T const want_col = (int)(space_sci.ptr - line);
+
+      // Delete characters until we are at or before want_col.
+      while (curwin->w_cursor.col > want_col) {
+        dec_cursor();
+        if (State & REPLACE_FLAG) {
+          // Don't delete characters before the insert point when in Replace mode.
+          if (curwin->w_cursor.lnum != Insstart.lnum
+              || curwin->w_cursor.col >= Insstart.col) {
+            replace_do_bs(-1);
+          }
+        } else {
+          del_char(false);
+        }
       }
 
-      // insert extra spaces until we are at want_vcol
-      while (vcol < want_vcol) {
-        // Remember the first char we inserted
+      // Insert extra spaces until we are at want_vcol.
+      for (; space_vcol < want_vcol; space_vcol++) {
+        // Remember the first char we inserted.
         if (curwin->w_cursor.lnum == Insstart_orig.lnum
             && curwin->w_cursor.col < Insstart_orig.col) {
           Insstart_orig.col = curwin->w_cursor.col;
@@ -3895,13 +3911,6 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
             replace_push(NUL);
           }
         }
-        getvcol(curwin, &curwin->w_cursor, &vcol, NULL, NULL);
-      }
-
-      // If we are now back where we started delete one character.  Can
-      // happen when using 'sts' and 'linebreak'.
-      if (vcol >= start_vcol) {
-        ins_bs_one(&vcol);
       }
     } else {
       // Delete up to starting point, start of line or previous word.
@@ -4184,7 +4193,7 @@ static void ins_pageup(void)
   }
 
   pos_T tpos = curwin->w_cursor;
-  if (onepage(BACKWARD, 1) == OK) {
+  if (pagescroll(BACKWARD, 1, false) == OK) {
     start_arrow(&tpos);
     can_cindent = true;
   } else {
@@ -4229,7 +4238,7 @@ static void ins_pagedown(void)
   }
 
   pos_T tpos = curwin->w_cursor;
-  if (onepage(FORWARD, 1) == OK) {
+  if (pagescroll(FORWARD, 1, false) == OK) {
     start_arrow(&tpos);
     can_cindent = true;
   } else {

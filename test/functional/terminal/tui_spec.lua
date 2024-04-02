@@ -1485,7 +1485,8 @@ describe('TUI', function()
     feed_data('\027[201~') -- phase 3
     screen:expect_unchanged()
     local _, rv = child_session:request('nvim_exec_lua', [[return _G.paste_phases]], {})
-    eq({ 1, 2, 3 }, rv)
+    -- In rare cases there may be multiple chunks of phase 2 because of timing.
+    eq({ 1, 2, 3 }, { rv[1], rv[2], rv[#rv] })
   end)
 
   it('allows termguicolors to be set at runtime', function()
@@ -1585,6 +1586,35 @@ describe('TUI', function()
       {3:-- TERMINAL --}                                    |
     ]],
     }
+  end)
+
+  -- Note: libvterm doesn't support colored underline or undercurl.
+  it('supports undercurl and underdouble when run in :terminal', function()
+    screen:set_default_attr_ids({
+      [1] = { reverse = true },
+      [2] = { bold = true, reverse = true },
+      [3] = { bold = true },
+      [4] = { foreground = 12 },
+      [5] = { undercurl = true },
+      [6] = { underdouble = true },
+    })
+    child_session:request('nvim_set_hl', 0, 'Visual', { undercurl = true })
+    feed_data('ifoobar\027V')
+    screen:expect([[
+      {5:fooba}{1:r}                                            |
+      {4:~                                                 }|*3
+      {2:[No Name] [+]                                     }|
+      {3:-- VISUAL LINE --}                                 |
+      {3:-- TERMINAL --}                                    |
+    ]])
+    child_session:request('nvim_set_hl', 0, 'Visual', { underdouble = true })
+    screen:expect([[
+      {6:fooba}{1:r}                                            |
+      {4:~                                                 }|*3
+      {2:[No Name] [+]                                     }|
+      {3:-- VISUAL LINE --}                                 |
+      {3:-- TERMINAL --}                                    |
+    ]])
   end)
 
   it('in nvim_list_uis()', function()

@@ -34,6 +34,7 @@
 #include "nvim/strings.h"
 #include "nvim/ui.h"
 #include "nvim/version.h"
+#include "nvim/window.h"
 
 // for ":version", ":intro", and "nvim --version"
 #ifndef NVIM_VERSION_MEDIUM
@@ -2716,7 +2717,9 @@ bool may_show_intro(void)
 {
   return (buf_is_empty(curbuf)
           && (curbuf->b_fname == NULL)
-          && (firstwin->w_next == NULL)
+          && (curbuf->handle == 1)
+          && (curwin->handle == LOWEST_WIN_ID)
+          && one_window(curwin)
           && (vim_strchr(p_shm, SHM_INTRO) == NULL));
 }
 

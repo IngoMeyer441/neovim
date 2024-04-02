@@ -354,6 +354,9 @@ The following changes to existing APIs or features add new behavior.
 
 • |vim.region()| can use a string accepted by |getpos()| as position.
 
+• |vim.on_key()| callbacks receive a second argument for keys typed before
+  mappings are applied.
+
 • |vim.diagnostic.config()| now accepts a function for the virtual_text.prefix
   option, which allows for rendering e.g., diagnostic severities differently.
 
@@ -407,6 +410,9 @@ The following changes to existing APIs or features add new behavior.
   |nvim_buf_set_extmark()| (e.g. "virt_text_pos" and "hl_mode") in its
   "virtual_text" table, which gives users more control over how diagnostic
   virtual text is displayed.
+
+• |vim.diagnostic.get()| and |vim.diagnostic.count()| accept multiple
+  namespaces rather than just a single namespace.
 
 • Extmarks now fully support multi-line ranges, and a single extmark can be
   used to highlight a range of arbitrary length. The |nvim_buf_set_extmark()|

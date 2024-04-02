@@ -968,7 +968,7 @@ vim.str_byteindex({str}, {index}, {use_utf16})           *vim.str_byteindex()*
     Convert UTF-32 or UTF-16 {index} to byte index. If {use_utf16} is not
     supplied, it defaults to false (use UTF-32). Returns the byte index.
 
-    Invalid UTF-8 and NUL is treated like by |vim.str_byteindex()|. An {index}
+    Invalid UTF-8 and NUL is treated like in |vim.str_utfindex()|. An {index}
     in the middle of a UTF-16 sequence is rounded upwards to the end of that
     sequence.
 
@@ -1640,12 +1640,14 @@ vim.on_key({fn}, {ns_id})                                       *vim.on_key()*
     Note: ~
       • {fn} will be removed on error.
       • {fn} will not be cleared by |nvim_buf_clear_namespace()|
-      • {fn} will receive the keys after mappings have been evaluated
 
     Parameters: ~
-      • {fn}     (`fun(key: string)?`) Function invoked on every key press.
-                 |i_CTRL-V| Passing in nil when {ns_id} is specified removes
-                 the callback associated with namespace {ns_id}.
+      • {fn}     (`fun(key: string, typed: string)?`) Function invoked on
+                 every key press. |i_CTRL-V| {key} is the key after mappings
+                 have been applied, and {typed} is the key(s) before mappings
+                 are applied, which may be empty if {key} is produced by
+                 non-typed keys. When {fn} is nil and {ns_id} is specified,
+                 the callback associated with namespace {ns_id} is removed.
       • {ns_id}  (`integer?`) Namespace ID. If nil or 0, generates and returns
                  a new |nvim_create_namespace()| id.
 
@@ -2954,13 +2956,14 @@ vim.fs.joinpath({...})                                     *vim.fs.joinpath()*
 
 vim.fs.normalize({path}, {opts})                          *vim.fs.normalize()*
     Normalize a path to a standard format. A tilde (~) character at the
-    beginning of the path is expanded to the user's home directory and any
-    backslash (\) characters are converted to forward slashes (/). Environment
-    variables are also expanded.
+    beginning of the path is expanded to the user's home directory and
+    environment variables are also expanded.
+
+    On Windows, backslash (\) characters are converted to forward slashes (/).
 
     Examples: >lua
         vim.fs.normalize('C:\\\\Users\\\\jdoe')
-        -- 'C:/Users/jdoe'
+        -- On Windows: 'C:/Users/jdoe'
 
         vim.fs.normalize('~/src/neovim')
         -- '/home/jdoe/src/neovim'

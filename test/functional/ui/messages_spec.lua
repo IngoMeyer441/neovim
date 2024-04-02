@@ -1604,13 +1604,14 @@ describe('ui/ext_messages', function()
       [5] = { foreground = Screen.colors.Blue1 },
       [6] = { reverse = true },
       [7] = { bold = true, reverse = true },
+      [8] = { background = Screen.colors.Plum1 },
     })
   end)
 
   it('supports intro screen', function()
     -- intro message is not externalized. But check that it still works.
     -- Note parts of it depends on version or is indeterministic. We ignore those parts.
-    screen:expect([[
+    local introscreen = [[
       ^                                                                                |
       {1:~                                                                               }|*4
       {MATCH:.*}|
@@ -1628,14 +1629,27 @@ describe('ui/ext_messages', function()
       {1:~                        }Help poor children in Uganda!{1:                          }|
       {1:~                }type  :help iccf{5:<Enter>}       for information {1:                 }|
       {1:~                                                                               }|*5
-    ]])
+    ]]
+    local showmode = { { '-- INSERT --', 3 } }
+    screen:expect(introscreen)
 
     -- <c-l> (same as :mode) does _not_ clear intro message
     feed('<c-l>i')
+    screen:expect { grid = introscreen, showmode = showmode }
+
+    -- opening a float without focus also does not
+    local win = api.nvim_open_win(api.nvim_create_buf(false, false), false, {
+      relative = 'editor',
+      height = 1,
+      width = 5,
+      row = 1,
+      col = 5,
+    })
     screen:expect {
       grid = [[
       ^                                                                                |
-      {1:~                                                                               }|*4
+      {1:~    }{8:     }{1:                                                                      }|
+      {1:~                                                                               }|*3
       {MATCH:.*}|
       {1:~                                                                               }|
       {1:~                 }Nvim is open source and freely distributable{1:                  }|
@@ -1652,8 +1666,11 @@ describe('ui/ext_messages', function()
       {1:~                }type  :help iccf{5:<Enter>}       for information {1:                 }|
       {1:~                                                                               }|*5
     ]],
-      showmode = { { '-- INSERT --', 3 } },
+      showmode = showmode,
     }
+
+    api.nvim_win_close(win, true)
+    screen:expect { grid = introscreen, showmode = showmode }
 
     -- but editing text does..
     feed('x')
@@ -1662,7 +1679,7 @@ describe('ui/ext_messages', function()
       x^                                                                               |
       {1:~                                                                               }|*23
     ]],
-      showmode = { { '-- INSERT --', 3 } },
+      showmode = showmode,
     }
 
     feed('<esc>:intro<cr>')
@@ -1696,6 +1713,58 @@ describe('ui/ext_messages', function()
       grid = [[
       ^x                                                                               |
       {1:~                                                                               }|*23
+    ]],
+    }
+  end)
+
+  it('clears intro screen when new buffer is active', function()
+    api.nvim_set_current_buf(api.nvim_create_buf(true, false))
+    screen:expect {
+      grid = [[
+      ^                                                                                |
+      {1:~                                                                               }|*23
+    ]],
+    }
+  end)
+
+  it('clears intro screen when new buffer is active in floating window', function()
+    local win_opts = { relative = 'editor', height = 1, width = 5, row = 1, col = 5 }
+    api.nvim_open_win(api.nvim_create_buf(false, false), true, win_opts)
+    screen:expect {
+      grid = [[
+                                                                                      |
+      {1:~    }{8:^     }{1:                                                                      }|
+      {1:~                                                                               }|*22
+    ]],
+    }
+  end)
+
+  it('clears intro screen when initial buffer is active in floating window', function()
+    local win_opts = { relative = 'editor', height = 1, width = 5, row = 1, col = 5 }
+    api.nvim_open_win(api.nvim_get_current_buf(), true, win_opts)
+    screen:expect {
+      grid = [[
+                                                                                      |
+      {1:~    }{8:^     }{1:                                                                      }|
+      {1:~                                                                               }|*22
+    ]],
+    }
+  end)
+
+  it('clears intro screen when initial window is converted to be floating', function()
+    exec_lua([[
+      local init_win_id = vim.api.nvim_get_current_win()
+      vim.cmd('split')
+      local win_opts = { relative = 'editor', height = 1, width = 5, row = 1, col = 5 }
+      vim.api.nvim_win_set_config(init_win_id, win_opts)
+      vim.api.nvim_set_current_win(init_win_id)
+    ]])
+    screen:expect {
+      grid = [[
+                                                                                      |
+      {1:~    }{8:^     }{1:                                                                      }|
+      {1:~                                                                               }|*21
+      {6:[No Name]                                                                       }|
     ]],
     }
   end)

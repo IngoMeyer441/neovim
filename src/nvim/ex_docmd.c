@@ -216,6 +216,38 @@ static void restore_dbg_stuff(struct dbg_stuff *dsp)
   current_exception = dsp->current_exception;
 }
 
+/// Check if ffname differs from fnum.
+/// fnum is a buffer number. 0 == current buffer, 1-or-more must be a valid buffer ID.
+/// ffname is a full path to where a buffer lives on-disk or would live on-disk.
+static bool is_other_file(int fnum, char *ffname)
+{
+  if (fnum != 0) {
+    if (fnum == curbuf->b_fnum) {
+      return false;
+    }
+
+    return true;
+  }
+
+  if (ffname == NULL) {
+    return true;
+  }
+
+  if (*ffname == NUL) {
+    return false;
+  }
+
+  if (!curbuf->file_id_valid
+      && curbuf->b_sfname != NULL
+      && *curbuf->b_sfname != NUL) {
+    // This occurs with unsaved buffers. In which case `ffname`
+    // actually corresponds to curbuf->b_sfname
+    return path_fnamecmp(ffname, curbuf->b_sfname) != 0;
+  }
+
+  return otherfile(ffname);
+}
+
 /// Repeatedly get commands for Ex mode, until the ":vi" command is given.
 void do_exmode(void)
 {
@@ -4368,12 +4400,15 @@ static int get_tabpage_arg(exarg_T *eap)
       tab_number = 0;
     } else {
       tab_number = (int)eap->line2;
-      char *cmdp = eap->cmd;
-      while (--cmdp > *eap->cmdlinep && (*cmdp == ' ' || ascii_isdigit(*cmdp))) {}
-      if (!unaccept_arg0 && *cmdp == '-') {
-        tab_number--;
-        if (tab_number < unaccept_arg0) {
-          eap->errmsg = _(e_invrange);
+      if (!unaccept_arg0) {
+        char *cmdp = eap->cmd;
+        while (--cmdp > *eap->cmdlinep
+               && (ascii_iswhite(*cmdp) || ascii_isdigit(*cmdp))) {}
+        if (*cmdp == '-') {
+          tab_number--;
+          if (tab_number < unaccept_arg0) {
+            eap->errmsg = _(e_invrange);
+          }
         }
       }
     }
@@ -5368,11 +5403,13 @@ static void ex_find(exarg_T *eap)
 /// ":edit", ":badd", ":balt", ":visual".
 static void ex_edit(exarg_T *eap)
 {
+  char *ffname = eap->cmdidx == CMD_enew ? NULL : eap->arg;
+
   // Exclude commands which keep the window's current buffer
   if (eap->cmdidx != CMD_badd
       && eap->cmdidx != CMD_balt
       // All other commands must obey 'winfixbuf' / ! rules
-      && !check_can_set_curbuf_forceit(eap->forceit)) {
+      && (is_other_file(0, ffname) && !check_can_set_curbuf_forceit(eap->forceit))) {
     return;
   }
 
@@ -7345,7 +7382,7 @@ void filetype_maybe_enable(void)
 /// ":setfiletype [FALLBACK] {name}"
 static void ex_setfiletype(exarg_T *eap)
 {
-  if (did_filetype) {
+  if (curbuf->b_did_filetype) {
     return;
   }
 
@@ -7356,7 +7393,7 @@ static void ex_setfiletype(exarg_T *eap)
 
   set_option_value_give_err(kOptFiletype, CSTR_AS_OPTVAL(arg), OPT_LOCAL);
   if (arg != eap->arg) {
-    did_filetype = false;
+    curbuf->b_did_filetype = false;
   }
 }
 
