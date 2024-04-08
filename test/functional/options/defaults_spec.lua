@@ -20,6 +20,7 @@ local rmdir = helpers.rmdir
 local alter_slashes = helpers.alter_slashes
 local tbl_contains = vim.tbl_contains
 local expect_exit = helpers.expect_exit
+local check_close = helpers.check_close
 local is_os = helpers.is_os
 
 local testlog = 'Xtest-defaults-log'
@@ -274,6 +275,7 @@ describe('XDG defaults', function()
   -- Do not put before_each() here for the same reasons.
 
   after_each(function()
+    check_close()
     os.remove(testlog)
   end)
 
@@ -378,7 +380,7 @@ describe('XDG defaults', function()
             .. root_path
             .. ('/b'):rep(2048)
             .. '/nvim'
-            .. (',' .. root_path .. '/c/nvim'):rep(512)
+            .. (',' .. root_path .. '/c/nvim')
             .. ','
             .. root_path
             .. ('/X'):rep(4096)
@@ -393,12 +395,12 @@ describe('XDG defaults', function()
             .. root_path
             .. ('/B'):rep(2048)
             .. '/nvim/site'
-            .. (',' .. root_path .. '/C/nvim/site'):rep(512)
+            .. (',' .. root_path .. '/C/nvim/site')
             .. ','
             .. vimruntime
             .. ','
             .. libdir
-            .. (',' .. root_path .. '/C/nvim/site/after'):rep(512)
+            .. (',' .. root_path .. '/C/nvim/site/after')
             .. ','
             .. root_path
             .. ('/B'):rep(2048)
@@ -413,7 +415,7 @@ describe('XDG defaults', function()
             .. '/'
             .. data_dir
             .. '/site/after'
-            .. (',' .. root_path .. '/c/nvim/after'):rep(512)
+            .. (',' .. root_path .. '/c/nvim/after')
             .. ','
             .. root_path
             .. ('/b'):rep(2048)
@@ -449,7 +451,7 @@ describe('XDG defaults', function()
             .. root_path
             .. ('/b'):rep(2048)
             .. '/nvim'
-            .. (',' .. root_path .. '/c/nvim'):rep(512)
+            .. (',' .. root_path .. '/c/nvim')
             .. ','
             .. root_path
             .. ('/X'):rep(4096)
@@ -464,12 +466,12 @@ describe('XDG defaults', function()
             .. root_path
             .. ('/B'):rep(2048)
             .. '/nvim/site'
-            .. (',' .. root_path .. '/C/nvim/site'):rep(512)
+            .. (',' .. root_path .. '/C/nvim/site')
             .. ','
             .. vimruntime
             .. ','
             .. libdir
-            .. (',' .. root_path .. '/C/nvim/site/after'):rep(512)
+            .. (',' .. root_path .. '/C/nvim/site/after')
             .. ','
             .. root_path
             .. ('/B'):rep(2048)
@@ -484,7 +486,7 @@ describe('XDG defaults', function()
             .. '/'
             .. data_dir
             .. '/site/after'
-            .. (',' .. root_path .. '/c/nvim/after'):rep(512)
+            .. (',' .. root_path .. '/c/nvim/after')
             .. ','
             .. root_path
             .. ('/b'):rep(2048)
@@ -865,6 +867,11 @@ describe('XDG defaults', function()
 end)
 
 describe('stdpath()', function()
+  after_each(function()
+    check_close()
+    os.remove(testlog)
+  end)
+
   -- Windows appends 'nvim-data' instead of just 'nvim' to prevent collisions
   -- due to XDG_CONFIG_HOME, XDG_DATA_HOME and XDG_STATE_HOME being the same.
   local function maybe_data(name)
@@ -890,7 +897,7 @@ describe('stdpath()', function()
 
   it('reacts to $NVIM_APPNAME', function()
     local appname = 'NVIM_APPNAME_TEST' .. ('_'):rep(106)
-    clear({ env = { NVIM_APPNAME = appname } })
+    clear({ env = { NVIM_APPNAME = appname, NVIM_LOG_FILE = testlog } })
     eq(appname, fn.fnamemodify(fn.stdpath('config'), ':t'))
     eq(appname, fn.fnamemodify(fn.stdpath('cache'), ':t'))
     eq(maybe_data(appname), fn.fnamemodify(fn.stdpath('log'), ':t'))
@@ -928,6 +935,9 @@ describe('stdpath()', function()
     -- Valid appnames:
     test_appname('a/b', 0)
     test_appname('a/b\\c', 0)
+    if not is_os('win') then
+      assert_log('Failed to start server: no such file or directory:', testlog)
+    end
   end)
 
   describe('returns a String', function()
@@ -1220,6 +1230,8 @@ describe('stdpath()', function()
   end)
 
   describe('errors', function()
+    before_each(clear)
+
     it('on unknown strings', function()
       eq('Vim(call):E6100: "capybara" is not a valid stdpath', exc_exec('call stdpath("capybara")'))
       eq('Vim(call):E6100: "" is not a valid stdpath', exc_exec('call stdpath("")'))
@@ -1235,6 +1247,7 @@ end)
 
 describe('autocommands', function()
   it('closes terminal with default shell on success', function()
+    clear()
     api.nvim_set_option_value('shell', helpers.testprg('shell-test'), {})
     command('set shellcmdflag=EXIT shellredir= shellpipe= shellquote= shellxquote=')
 

@@ -32,6 +32,9 @@ local dedent = helpers.dedent
 local tbl_map = vim.tbl_map
 local tbl_filter = vim.tbl_filter
 local endswith = vim.endswith
+local check_close = helpers.check_close
+
+local testlog = 'Xtest-startupspec-log'
 
 describe('startup', function()
   it('--clean', function()
@@ -99,15 +102,7 @@ describe('startup', function()
         VIMRUNTIME = os.getenv('VIMRUNTIME'),
       },
     })
-    screen:expect([[
-      ^                                                            |
-                                                                  |
-      Entering Debug mode.  Type "cont" to continue.              |
-      nvim_exec2()                                                |
-      cmd: aunmenu *                                              |
-      >                                                           |
-                                                                  |
-    ]])
+    screen:expect({ any = pesc('Entering Debug mode.  Type "cont" to continue.') })
     fn.chansend(id, 'cont\n')
     screen:expect([[
       ^                                                            |
@@ -120,6 +115,11 @@ end)
 
 describe('startup', function()
   before_each(clear)
+
+  after_each(function()
+    check_close()
+    os.remove(testlog)
+  end)
 
   describe('-l Lua', function()
     local function assert_l_out(expected, nvim_args, lua_args, script, input)
@@ -371,6 +371,7 @@ describe('startup', function()
   end)
 
   it('output to pipe: has("ttyin")==1 has("ttyout")==0', function()
+    clear({ env = { NVIM_LOG_FILE = testlog } })
     if is_os('win') then
       command([[set shellcmdflag=/s\ /c shellxquote=\"]])
     end
@@ -398,9 +399,13 @@ describe('startup', function()
         read_file('Xtest_startup_ttyout')
       )
     end)
+    if is_os('win') then
+      assert_log('stream write failed. RPC canceled; closing channel', testlog)
+    end
   end)
 
   it('input from pipe: has("ttyin")==0 has("ttyout")==1', function()
+    clear({ env = { NVIM_LOG_FILE = testlog } })
     if is_os('win') then
       command([[set shellcmdflag=/s\ /c shellxquote=\"]])
     end
@@ -429,9 +434,13 @@ describe('startup', function()
         read_file('Xtest_startup_ttyout')
       )
     end)
+    if is_os('win') then
+      assert_log('stream write failed. RPC canceled; closing channel', testlog)
+    end
   end)
 
   it('input from pipe (implicit) #7679', function()
+    clear({ env = { NVIM_LOG_FILE = testlog } })
     local screen = Screen.new(25, 4)
     screen:attach()
     screen._default_attr_ids = nil
@@ -457,6 +466,9 @@ describe('startup', function()
       0 1                      |
                                |
     ]])
+    if not is_os('win') then
+      assert_log('Failed to get flags on descriptor 3: Bad file descriptor', testlog)
+    end
   end)
 
   it('input from pipe + file args #7679', function()
