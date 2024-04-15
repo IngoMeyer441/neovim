@@ -17,6 +17,7 @@
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
+#include "nvim/change.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand_defs.h"
@@ -763,8 +764,8 @@ void fill_evalarg_from_eap(evalarg_T *evalarg, exarg_T *eap, bool skip)
     return;
   }
 
-  if (getline_equal(eap->getline, eap->cookie, getsourceline)) {
-    evalarg->eval_getline = eap->getline;
+  if (getline_equal(eap->ea_getline, eap->cookie, getsourceline)) {
+    evalarg->eval_getline = eap->ea_getline;
     evalarg->eval_cookie = eap->cookie;
   }
 }
@@ -968,7 +969,8 @@ int skip_expr(char **pp, evalarg_T *const evalarg)
 
 /// Convert "tv" to a string.
 ///
-/// @param convert  when true convert a List into a sequence of lines.
+/// @param convert  when true convert a List into a sequence of lines
+///                 and a Dict into a textual representation of the Dict.
 ///
 /// @return  an allocated string.
 static char *typval2string(typval_T *tv, bool convert)
@@ -984,6 +986,8 @@ static char *typval2string(typval_T *tv, bool convert)
     }
     ga_append(&ga, NUL);
     return (char *)ga.ga_data;
+  } else if (convert && tv->v_type == VAR_DICT) {
+    return encode_tv2string(tv, NULL);
   }
   return xstrdup(tv_get_string(tv));
 }
@@ -1892,7 +1896,7 @@ void *eval_for_line(const char *arg, bool *errp, exarg_T *eap, evalarg_T *const 
 
   *errp = true;  // Default: there is an error.
 
-  const char *expr = skip_var_list(arg, &fi->fi_varcount, &fi->fi_semicolon);
+  const char *expr = skip_var_list(arg, &fi->fi_varcount, &fi->fi_semicolon, false);
   if (expr == NULL) {
     return fi;
   }
@@ -8202,7 +8206,7 @@ void ex_execute(exarg_T *eap)
         did_emsg = save_did_emsg;
       }
     } else if (eap->cmdidx == CMD_execute) {
-      do_cmdline(ga.ga_data, eap->getline, eap->cookie, DOCMD_NOWAIT|DOCMD_VERBOSE);
+      do_cmdline(ga.ga_data, eap->ea_getline, eap->cookie, DOCMD_NOWAIT|DOCMD_VERBOSE);
     }
   }
 
@@ -8905,6 +8909,7 @@ void invoke_prompt_callback(void)
   // Add a new line for the prompt before invoking the callback, so that
   // text can always be inserted above the last line.
   ml_append(lnum, "", 0, false);
+  appended_lines_mark(lnum, 1);
   curwin->w_cursor.lnum = lnum + 1;
   curwin->w_cursor.col = 0;
 

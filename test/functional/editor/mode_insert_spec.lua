@@ -1,14 +1,14 @@
 -- Insert-mode tests.
 
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.functional.testutil')()
 local Screen = require('test.functional.ui.screen')
-local clear, feed, insert = helpers.clear, helpers.feed, helpers.insert
-local expect = helpers.expect
-local command = helpers.command
-local eq = helpers.eq
-local eval = helpers.eval
-local curbuf_contents = helpers.curbuf_contents
-local api = helpers.api
+local clear, feed, insert = t.clear, t.feed, t.insert
+local expect = t.expect
+local command = t.command
+local eq = t.eq
+local eval = t.eval
+local curbuf_contents = t.curbuf_contents
+local api = t.api
 
 describe('insert-mode', function()
   before_each(function()
@@ -52,43 +52,34 @@ describe('insert-mode', function()
     end)
 
     it('double quote is removed after hit-enter prompt #22609', function()
-      local screen = Screen.new(60, 6)
-      screen:set_default_attr_ids({
-        [0] = { bold = true, foreground = Screen.colors.Blue }, -- NonText
-        [1] = { foreground = Screen.colors.Blue }, -- SpecialKey
-        [2] = { foreground = Screen.colors.SlateBlue },
-        [3] = { bold = true }, -- ModeMsg
-        [4] = { reverse = true, bold = true }, -- MsgSeparator
-        [5] = { background = Screen.colors.Red, foreground = Screen.colors.White }, -- ErrorMsg
-        [6] = { foreground = Screen.colors.SeaGreen, bold = true }, -- MoreMsg
-      })
+      local screen = Screen.new(50, 6)
       screen:attach()
       feed('i<C-R>')
       screen:expect([[
-        {1:^"}                                                           |
-        {0:~                                                           }|*4
-        {3:-- INSERT --}                                                |
+        {18:^"}                                                 |
+        {1:~                                                 }|*4
+        {5:-- INSERT --}                                      |
       ]])
-      feed('={}')
+      feed("=function('add')")
       screen:expect([[
-        {1:"}                                                           |
-        {0:~                                                           }|*4
-        ={2:{}}^                                                         |
-      ]])
-      feed('<CR>')
-      screen:expect([[
-        {1:"}                                                           |
-        {0:~                                                           }|
-        {4:                                                            }|
-        ={2:{}}                                                         |
-        {5:E731: Using a Dictionary as a String}                        |
-        {6:Press ENTER or type command to continue}^                     |
+        {18:"}                                                 |
+        {1:~                                                 }|*4
+        ={25:function}{16:(}{26:'add'}{16:)}^                                  |
       ]])
       feed('<CR>')
       screen:expect([[
-        ^                                                            |
-        {0:~                                                           }|*4
-        {3:-- INSERT --}                                                |
+        {18:"}                                                 |
+        {1:~                                                 }|
+        {3:                                                  }|
+        ={25:function}{16:(}{26:'add'}{16:)}                                  |
+        {9:E729: Using a Funcref as a String}                 |
+        {6:Press ENTER or type command to continue}^           |
+      ]])
+      feed('<CR>')
+      screen:expect([[
+        ^                                                  |
+        {1:~                                                 }|*4
+        {5:-- INSERT --}                                      |
       ]])
     end)
   end)
@@ -232,10 +223,10 @@ describe('insert-mode', function()
     end
 
     local function test_cols(expected_cols)
-      local cols = { { helpers.fn.col('.'), helpers.fn.virtcol('.') } }
+      local cols = { { t.fn.col('.'), t.fn.virtcol('.') } }
       for _ = 2, #expected_cols do
         feed('<BS>')
-        table.insert(cols, { helpers.fn.col('.'), helpers.fn.virtcol('.') })
+        table.insert(cols, { t.fn.col('.'), t.fn.virtcol('.') })
       end
       eq(expected_cols, cols)
     end

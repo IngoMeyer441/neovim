@@ -1,18 +1,18 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.functional.testutil')()
 local Screen = require('test.functional.ui.screen')
 
-local clear = helpers.clear
-local feed = helpers.feed
-local insert = helpers.insert
-local exec_lua = helpers.exec_lua
-local exec = helpers.exec
-local expect_events = helpers.expect_events
-local api = helpers.api
-local fn = helpers.fn
-local command = helpers.command
-local eq = helpers.eq
-local assert_alive = helpers.assert_alive
-local pcall_err = helpers.pcall_err
+local clear = t.clear
+local feed = t.feed
+local insert = t.insert
+local exec_lua = t.exec_lua
+local exec = t.exec
+local expect_events = t.expect_events
+local api = t.api
+local fn = t.fn
+local command = t.command
+local eq = t.eq
+local assert_alive = t.assert_alive
+local pcall_err = t.pcall_err
 
 describe('decorations providers', function()
   local screen
@@ -667,6 +667,33 @@ describe('decorations providers', function()
     ]])
   end)
 
+  it('on_line is invoked only for buffer lines', function()
+    insert(mulholland)
+    command('vnew')
+    insert(mulholland)
+    feed('dd')
+    command('windo diffthis')
+
+    exec_lua([[
+      out_of_bound = false
+    ]])
+    setup_provider([[
+      local function on_do(kind, _, bufnr, row)
+        if kind == 'line' then
+          if not api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] then
+            out_of_bound = true
+          end
+        end
+      end
+    ]])
+
+    feed('<C-e>')
+
+    exec_lua([[
+      assert(out_of_bound == false)
+    ]])
+  end)
+
   it('errors gracefully', function()
     insert(mulholland)
 
@@ -696,7 +723,7 @@ describe('decorations providers', function()
     end
     ]]
 
-    helpers.assert_alive()
+    t.assert_alive()
   end)
 
   it('supports subpriorities (order of definitions in a query file #27131)', function()
@@ -2411,7 +2438,7 @@ describe('extmark decorations', function()
                                                         |
     ]]}
 
-    helpers.assert_alive()
+    t.assert_alive()
   end)
 
   it('priority ordering of overlay or win_col virtual text at same position', function()
@@ -4867,6 +4894,88 @@ if (h->n_buckets < new_n_buckets) { // expand
                                                         |
     ]])
   end)
+
+  it('works with full page scrolling #28290', function()
+    screen:try_resize(20, 8)
+    command('call setline(1, range(20))')
+    api.nvim_buf_set_extmark(0, ns, 10, 0, { virt_lines = {{{'VIRT1'}}, {{'VIRT2'}}} })
+    screen:expect([[
+      ^0                   |
+      1                   |
+      2                   |
+      3                   |
+      4                   |
+      5                   |
+      6                   |
+                          |
+    ]])
+    feed('<C-F>')
+    screen:expect([[
+      ^5                   |
+      6                   |
+      7                   |
+      8                   |
+      9                   |
+      10                  |
+      VIRT1               |
+                          |
+    ]])
+    feed('<C-F>')
+    screen:expect([[
+      ^10                  |
+      VIRT1               |
+      VIRT2               |
+      11                  |
+      12                  |
+      13                  |
+      14                  |
+                          |
+    ]])
+    feed('<C-F>')
+    screen:expect([[
+      ^13                  |
+      14                  |
+      15                  |
+      16                  |
+      17                  |
+      18                  |
+      19                  |
+                          |
+    ]])
+    feed('<C-B>')
+    screen:expect([[
+      10                  |
+      VIRT1               |
+      VIRT2               |
+      11                  |
+      12                  |
+      ^13                  |
+      14                  |
+                          |
+    ]])
+    feed('<C-B>')
+    screen:expect([[
+      5                   |
+      6                   |
+      7                   |
+      8                   |
+      9                   |
+      ^10                  |
+      VIRT1               |
+                          |
+    ]])
+    feed('<C-B>')
+    screen:expect([[
+      0                   |
+      1                   |
+      2                   |
+      3                   |
+      4                   |
+      5                   |
+      ^6                   |
+                          |
+    ]])
+  end)
 end)
 
 describe('decorations: signs', function()
@@ -5044,8 +5153,8 @@ l5
     insert(example_test3)
     feed 'gg'
 
-    helpers.command('sign define Oldsign text=x')
-    helpers.command([[exe 'sign place 42 line=2 name=Oldsign buffer=' . bufnr('')]])
+    t.command('sign define Oldsign text=x')
+    t.command([[exe 'sign place 42 line=2 name=Oldsign buffer=' . bufnr('')]])
 
     api.nvim_buf_set_extmark(0, ns, 0, -1, {sign_text='S1'})
     api.nvim_buf_set_extmark(0, ns, 1, -1, {sign_text='S2'})
@@ -5068,8 +5177,8 @@ l5
     insert(example_test3)
     feed 'gg'
 
-    helpers.command('sign define Oldsign text=x')
-    helpers.command([[exe 'sign place 42 line=2 name=Oldsign buffer=' . bufnr('')]])
+    t.command('sign define Oldsign text=x')
+    t.command([[exe 'sign place 42 line=2 name=Oldsign buffer=' . bufnr('')]])
 
     api.nvim_buf_set_extmark(0, ns, 0, -1, {sign_text='S1'})
     api.nvim_buf_set_extmark(0, ns, 1, -1, {sign_text='S2'})

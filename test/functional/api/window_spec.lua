@@ -1,27 +1,27 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.functional.testutil')()
 local Screen = require('test.functional.ui.screen')
 local clear, curbuf, curbuf_contents, curwin, eq, neq, matches, ok, feed, insert, eval =
-  helpers.clear,
-  helpers.api.nvim_get_current_buf,
-  helpers.curbuf_contents,
-  helpers.api.nvim_get_current_win,
-  helpers.eq,
-  helpers.neq,
-  helpers.matches,
-  helpers.ok,
-  helpers.feed,
-  helpers.insert,
-  helpers.eval
-local poke_eventloop = helpers.poke_eventloop
-local exec = helpers.exec
-local exec_lua = helpers.exec_lua
-local fn = helpers.fn
-local request = helpers.request
+  t.clear,
+  t.api.nvim_get_current_buf,
+  t.curbuf_contents,
+  t.api.nvim_get_current_win,
+  t.eq,
+  t.neq,
+  t.matches,
+  t.ok,
+  t.feed,
+  t.insert,
+  t.eval
+local poke_eventloop = t.poke_eventloop
+local exec = t.exec
+local exec_lua = t.exec_lua
+local fn = t.fn
+local request = t.request
 local NIL = vim.NIL
-local api = helpers.api
-local command = helpers.command
-local pcall_err = helpers.pcall_err
-local assert_alive = helpers.assert_alive
+local api = t.api
+local command = t.command
+local pcall_err = t.pcall_err
+local assert_alive = t.assert_alive
 
 describe('API/win', function()
   before_each(clear)
@@ -1162,27 +1162,6 @@ describe('API/win', function()
   end)
 
   describe('open_win', function()
-    it('noautocmd option works', function()
-      command('autocmd BufEnter,BufLeave,BufWinEnter * let g:fired = 1')
-      api.nvim_open_win(api.nvim_create_buf(true, true), true, {
-        relative = 'win',
-        row = 3,
-        col = 3,
-        width = 12,
-        height = 3,
-        noautocmd = true,
-      })
-      eq(0, fn.exists('g:fired'))
-      api.nvim_open_win(api.nvim_create_buf(true, true), true, {
-        relative = 'win',
-        row = 3,
-        col = 3,
-        width = 12,
-        height = 3,
-      })
-      eq(1, fn.exists('g:fired'))
-    end)
-
     it('disallowed in cmdwin if enter=true or buf=cmdwin_buf', function()
       local new_buf = api.nvim_create_buf(true, true)
       feed('q:')
@@ -1297,7 +1276,7 @@ describe('API/win', function()
         local tab1 = api.nvim_get_current_tabpage()
         local tab1_win = api.nvim_get_current_win()
 
-        helpers.command('tabnew')
+        t.command('tabnew')
         local tab2 = api.nvim_get_current_tabpage()
         local tab2_win = api.nvim_get_current_win()
 
@@ -1405,6 +1384,24 @@ describe('API/win', function()
       ]=])
       return info
     end
+
+    it('noautocmd option works', function()
+      local info = setup_tabbed_autocmd_test()
+
+      api.nvim_open_win(
+        info.other_buf,
+        true,
+        { split = 'left', win = info.tab2_curwin, noautocmd = true }
+      )
+      eq({}, eval('result'))
+
+      api.nvim_open_win(
+        info.orig_buf,
+        true,
+        { relative = 'editor', row = 0, col = 0, width = 10, height = 10, noautocmd = true }
+      )
+      eq({}, eval('result'))
+    end)
 
     it('fires expected autocmds when creating splits without entering', function()
       local info = setup_tabbed_autocmd_test()

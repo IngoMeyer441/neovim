@@ -1,9 +1,9 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.functional.testutil')()
 local Screen = require('test.functional.ui.screen')
-local clear = helpers.clear
-local command = helpers.command
-local expect = helpers.expect
-local feed = helpers.feed
+local clear = t.clear
+local command = t.command
+local expect = t.expect
+local feed = t.feed
 local sleep = vim.uv.sleep
 
 before_each(clear)
@@ -56,20 +56,20 @@ describe('edit', function()
       {1:~                                                           }|*4
       {5:-- INSERT --}                                                |
     ]])
-    feed('={}')
+    feed('=0z')
     screen:expect([[
       {18:"}                                                           |
       {1:~                                                           }|*4
-      ={16:{}}^                                                         |
+      ={26:0}{9:z}^                                                         |
     ]])
-    -- trying to insert a dictionary produces an error
+    -- trying to insert a blob produces an error
     feed('<CR>')
     screen:expect([[
       {18:"}                                                           |
       {1:~                                                           }|
       {3:                                                            }|
-      ={16:{}}                                                         |
-      {9:E731: Using a Dictionary as a String}                        |
+      ={26:0}{9:z}                                                         |
+      {9:E976: Using a Blob as a String}                              |
       {6:Press ENTER or type command to continue}^                     |
     ]])
 

@@ -1320,7 +1320,7 @@ func Test_edit_PAGEUP_PAGEDOWN()
   call feedkeys("A\<PageUp>\<esc>", 'tnix')
   call assert_equal([0, 10, 1, 0], getpos('.'))
   call feedkeys("A\<PageUp>\<esc>", 'tnix')
-  call assert_equal([0, 2, 11, 0], getpos('.'))
+  call assert_equal([0, 10, 11, 0], getpos('.'))
   " <S-Up> is the same as <PageUp>
   " <S-Down> is the same as <PageDown>
   call cursor(1, 1)
@@ -1343,7 +1343,7 @@ func Test_edit_PAGEUP_PAGEDOWN()
   call feedkeys("A\<S-Up>\<esc>", 'tnix')
   call assert_equal([0, 10, 1, 0], getpos('.'))
   call feedkeys("A\<S-Up>\<esc>", 'tnix')
-  call assert_equal([0, 2, 11, 0], getpos('.'))
+  call assert_equal([0, 10, 11, 0], getpos('.'))
   set nostartofline
   call cursor(30, 11)
   norm! zt
@@ -1356,7 +1356,7 @@ func Test_edit_PAGEUP_PAGEDOWN()
   call feedkeys("A\<PageUp>\<esc>", 'tnix')
   call assert_equal([0, 10, 11, 0], getpos('.'))
   call feedkeys("A\<PageUp>\<esc>", 'tnix')
-  call assert_equal([0, 2, 11, 0], getpos('.'))
+  call assert_equal([0, 10, 11, 0], getpos('.'))
   call cursor(1, 1)
   call feedkeys("A\<PageDown>\<esc>", 'tnix')
   call assert_equal([0, 9, 11, 0], getpos('.'))
@@ -1381,7 +1381,7 @@ func Test_edit_PAGEUP_PAGEDOWN()
   call feedkeys("A\<S-Up>\<esc>", 'tnix')
   call assert_equal([0, 10, 11, 0], getpos('.'))
   call feedkeys("A\<S-Up>\<esc>", 'tnix')
-  call assert_equal([0, 2, 11, 0], getpos('.'))
+  call assert_equal([0, 10, 11, 0], getpos('.'))
   call cursor(1, 1)
   call feedkeys("A\<S-Down>\<esc>", 'tnix')
   call assert_equal([0, 9, 11, 0], getpos('.'))
@@ -1983,8 +1983,8 @@ func Test_edit_ctrl_r_failed()
 
   let buf = RunVimInTerminal('', #{rows: 6, cols: 60})
 
-  " trying to insert a dictionary produces an error
-  call term_sendkeys(buf, "i\<C-R>={}\<CR>")
+  " trying to insert a blob produces an error
+  call term_sendkeys(buf, "i\<C-R>=0z\<CR>")
 
   " ending Insert mode should put the cursor back on the ':'
   call term_sendkeys(buf, ":\<Esc>")
