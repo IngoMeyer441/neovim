@@ -1812,6 +1812,7 @@ vim.system({cmd}, {opts}, {on_exit})                            *vim.system()*
 
     Return: ~
         (`vim.SystemObj`) Object with the fields:
+        • cmd (string[]) Command name and args
         • pid (integer) Process ID
         • wait (fun(timeout: integer|nil): SystemCompleted) Wait for the
           process to complete. Upon timeout the process is sent the KILL
@@ -2027,6 +2028,43 @@ vim.is_callable({f})                                       *vim.is_callable()*
 
     Return: ~
         (`boolean`) `true` if `f` is callable, else `false`
+
+vim.isarray({t})                                               *vim.isarray()*
+    Tests if `t` is an "array": a table indexed only by integers (potentially
+    non-contiguous).
+
+    If the indexes start from 1 and are contiguous then the array is also a
+    list. |vim.islist()|
+
+    Empty table `{}` is an array, unless it was created by |vim.empty_dict()|
+    or returned as a dict-like |API| or Vimscript result, for example from
+    |rpcrequest()| or |vim.fn|.
+
+    Parameters: ~
+      • {t}  (`table?`)
+
+    Return: ~
+        (`boolean`) `true` if array-like table, else `false`.
+
+    See also: ~
+      • https://github.com/openresty/luajit2#tableisarray
+
+vim.islist({t})                                                 *vim.islist()*
+    Tests if `t` is a "list": a table indexed only by contiguous integers
+    starting from 1 (what |lua-length| calls a "regular array").
+
+    Empty table `{}` is a list, unless it was created by |vim.empty_dict()| or
+    returned as a dict-like |API| or Vimscript result, for example from
+    |rpcrequest()| or |vim.fn|.
+
+    Parameters: ~
+      • {t}  (`table?`)
+
+    Return: ~
+        (`boolean`) `true` if list-like table, else `false`.
+
+    See also: ~
+      • |vim.isarray()|
 
 vim.list_contains({t}, {value})                          *vim.list_contains()*
     Checks if a list-like table (integer keys without gaps) contains `value`.
@@ -2247,20 +2285,6 @@ vim.tbl_filter({func}, {t})                                 *vim.tbl_filter()*
     Return: ~
         (`any[]`) Table of filtered values
 
-vim.tbl_flatten({t})                                       *vim.tbl_flatten()*
-    Creates a copy of a list-like table such that any nested tables are
-    "unrolled" and appended to the result.
-
-    Parameters: ~
-      • {t}  (`table`) List-like table
-
-    Return: ~
-        (`table`) Flattened copy of the given list-like table
-
-    See also: ~
-      • From
-        https://github.com/premake/premake-core/blob/master/src/base/table.lua
-
 vim.tbl_get({o}, {...})                                        *vim.tbl_get()*
     Index into a table (first argument) via string keys passed as subsequent
     arguments. Return `nil` if the key does not exist.
@@ -2278,26 +2302,6 @@ vim.tbl_get({o}, {...})                                        *vim.tbl_get()*
     Return: ~
         (`any`) Nested value indexed by key (if it exists), else nil
 
-vim.tbl_isarray({t})                                       *vim.tbl_isarray()*
-    Tests if `t` is an "array": a table indexed only by integers (potentially
-    non-contiguous).
-
-    If the indexes start from 1 and are contiguous then the array is also a
-    list. |vim.tbl_islist()|
-
-    Empty table `{}` is an array, unless it was created by |vim.empty_dict()|
-    or returned as a dict-like |API| or Vimscript result, for example from
-    |rpcrequest()| or |vim.fn|.
-
-    Parameters: ~
-      • {t}  (`table`)
-
-    Return: ~
-        (`boolean`) `true` if array-like table, else `false`.
-
-    See also: ~
-      • https://github.com/openresty/luajit2#tableisarray
-
 vim.tbl_isempty({t})                                       *vim.tbl_isempty()*
     Checks if a table is empty.
 
@@ -2309,23 +2313,6 @@ vim.tbl_isempty({t})                                       *vim.tbl_isempty()*
 
     See also: ~
       • https://github.com/premake/premake-core/blob/master/src/base/table.lua
-
-vim.tbl_islist({t})                                         *vim.tbl_islist()*
-    Tests if `t` is a "list": a table indexed only by contiguous integers
-    starting from 1 (what |lua-length| calls a "regular array").
-
-    Empty table `{}` is a list, unless it was created by |vim.empty_dict()| or
-    returned as a dict-like |API| or Vimscript result, for example from
-    |rpcrequest()| or |vim.fn|.
-
-    Parameters: ~
-      • {t}  (`table`)
-
-    Return: ~
-        (`boolean`) `true` if list-like table, else `false`.
-
-    See also: ~
-      • |vim.tbl_isarray()|
 
 vim.tbl_keys({t})                                             *vim.tbl_keys()*
     Return a list of all keys used in a table. However, the order of the
@@ -2375,7 +2362,8 @@ vim.trim({s})                                                     *vim.trim()*
       • https://www.lua.org/pil/20.2.html
 
 vim.validate({opt})                                           *vim.validate()*
-    Validates a parameter specification (types and values).
+    Validates a parameter specification (types and values). Specs are
+    evaluated in alphanumeric order, until the first failure.
 
     Usage example: >lua
         function user.new(name, age, hobbies)
@@ -2568,16 +2556,21 @@ vim.ui.open({path})                                            *vim.ui.open()*
     Expands "~/" and environment variables in filesystem paths.
 
     Examples: >lua
+        -- Asynchronous.
         vim.ui.open("https://neovim.io/")
         vim.ui.open("~/path/to/file")
-        vim.ui.open("$VIMRUNTIME")
+        -- Synchronous (wait until the process exits).
+        local cmd, err = vim.ui.open("$VIMRUNTIME")
+        if cmd then
+          cmd:wait()
+        end
 <
 
     Parameters: ~
       • {path}  (`string`) Path or URL to open
 
     Return (multiple): ~
-        (`vim.SystemCompleted?`) Command result, or nil if not found.
+        (`vim.SystemObj?`) Command object, or nil if not found.
         (`string?`) Error message on failure
 
     See also: ~
@@ -2957,26 +2950,40 @@ vim.fs.joinpath({...})                                     *vim.fs.joinpath()*
 vim.fs.normalize({path}, {opts})                          *vim.fs.normalize()*
     Normalize a path to a standard format. A tilde (~) character at the
     beginning of the path is expanded to the user's home directory and
-    environment variables are also expanded.
+    environment variables are also expanded. "." and ".." components are also
+    resolved, except when the path is relative and trying to resolve it would
+    result in an absolute path.
+    • "." as the only part in a relative path:
+      • "." => "."
+      • "././" => "."
+    • ".." when it leads outside the current directory
+      • "foo/../../bar" => "../bar"
+      • "../../foo" => "../../foo"
+    • ".." in the root directory returns the root directory.
+      • "/../../" => "/"
 
     On Windows, backslash (\) characters are converted to forward slashes (/).
 
     Examples: >lua
-        vim.fs.normalize('C:\\\\Users\\\\jdoe')
-        -- On Windows: 'C:/Users/jdoe'
-
-        vim.fs.normalize('~/src/neovim')
-        -- '/home/jdoe/src/neovim'
-
-        vim.fs.normalize('$XDG_CONFIG_HOME/nvim/init.vim')
-        -- '/Users/jdoe/.config/nvim/init.vim'
+        [[C:\Users\jdoe]]                         => "C:/Users/jdoe"
+        "~/src/neovim"                            => "/home/jdoe/src/neovim"
+        "$XDG_CONFIG_HOME/nvim/init.vim"          => "/Users/jdoe/.config/nvim/init.vim"
+        "~/src/nvim/api/../tui/./tui.c"           => "/home/jdoe/src/nvim/tui/tui.c"
+        "./foo/bar"                               => "foo/bar"
+        "foo/../../../bar"                        => "../../bar"
+        "/home/jdoe/../../../bar"                 => "/bar"
+        "C:foo/../../baz"                         => "C:../baz"
+        "C:/foo/../../baz"                        => "C:/baz"
+        [[\\?\UNC\server\share\foo\..\..\..\bar]] => "//?/UNC/server/share/bar"
 <
 
     Parameters: ~
       • {path}  (`string`) Path to normalize
       • {opts}  (`table?`) A table with the following fields:
-                • {expand_env} (`boolean`, default: `true`) Expand environment
-                  variables.
+                • {expand_env}? (`boolean`, default: `true`) Expand
+                  environment variables.
+                • {win}? (`boolean`, default: `true` in Windows, `false`
+                  otherwise) Path is a Windows path.
 
     Return: ~
         (`string`) Normalized path
@@ -3850,27 +3857,6 @@ Examples: >lua
     -- { "a", "b" }
 <
 
-In addition to the |vim.iter()| function, the |vim.iter| module provides
-convenience functions like |vim.iter.filter()| and |vim.iter.totable()|.
-
-
-filter({f}, {src})                                         *vim.iter.filter()*
-    Filters a table or other |iterable|. >lua
-        -- Equivalent to:
-        vim.iter(src):filter(f):totable()
-<
-
-    Parameters: ~
-      • {f}    (`fun(...):boolean`) Filter function. Accepts the current
-               iterator or table values as arguments and returns true if those
-               values should be kept in the final table
-      • {src}  (`table|function`) Table or iterator function to filter
-
-    Return: ~
-        (`table`)
-
-    See also: ~
-      • |Iter:filter()|
 
 Iter:all({pred})                                                  *Iter:all()*
     Returns true if all items in the iterator match the given predicate.
@@ -4294,36 +4280,6 @@ Iter:totable()                                                *Iter:totable()*
     The generated table is a list-like table with consecutive, numeric
     indices. To create a map-like table with arbitrary keys, use
     |Iter:fold()|.
-
-    Return: ~
-        (`table`)
-
-map({f}, {src})                                               *vim.iter.map()*
-    Maps a table or other |iterable|. >lua
-        -- Equivalent to:
-        vim.iter(src):map(f):totable()
-<
-
-    Parameters: ~
-      • {f}    (`fun(...): any?`) Map function. Accepts the current iterator
-               or table values as arguments and returns one or more new
-               values. Nil values are removed from the final table.
-      • {src}  (`table|function`) Table or iterator function to filter
-
-    Return: ~
-        (`table`)
-
-    See also: ~
-      • |Iter:map()|
-
-totable({f})                                              *vim.iter.totable()*
-    Collects an |iterable| into a table. >lua
-        -- Equivalent to:
-        vim.iter(f):totable()
-<
-
-    Parameters: ~
-      • {f}  (`function`) Iterator function
 
     Return: ~
         (`table`)

@@ -158,12 +158,13 @@ func s:GetFilenameChecks() abort
     \ 'clean': ['file.dcl', 'file.icl'],
     \ 'clojure': ['file.clj', 'file.cljs', 'file.cljx', 'file.cljc', 'init.trans', 'any/etc/translate-shell', '.trans'],
     \ 'cmake': ['CMakeLists.txt', 'file.cmake', 'file.cmake.in'],
+    \ 'cmakecache': ['CMakeCache.txt'],
     \ 'cmod': ['file.cmod'],
     \ 'cmusrc': ['any/.cmus/autosave', 'any/.cmus/rc', 'any/.cmus/command-history', 'any/.cmus/file.theme', 'any/cmus/rc', 'any/cmus/file.theme', '/.cmus/autosave', '/.cmus/command-history', '/.cmus/file.theme', '/.cmus/rc', '/cmus/file.theme', '/cmus/rc'],
     \ 'cobol': ['file.cbl', 'file.cob', 'file.lib'],
     \ 'coco': ['file.atg'],
     \ 'conaryrecipe': ['file.recipe'],
-    \ 'conf': ['auto.master', 'file.conf', 'texdoc.cnf', '.x11vncrc', '.chktexrc', '.ripgreprc', 'ripgreprc', 'file.ctags'],
+    \ 'conf': ['auto.master', 'file.conf', 'texdoc.cnf', '.x11vncrc', '.chktexrc', '.ripgreprc', 'ripgreprc', 'file.ctags', '.mbsyncrc'],
     \ 'config': ['configure.in', 'configure.ac', '/etc/hostname.file', 'any/etc/hostname.file'],
     \ 'confini': ['pacman.conf', 'paru.conf', 'mpv.conf', 'any/.aws/config', 'any/.aws/credentials', 'file.nmconnection'],
     \ 'context': ['tex/context/any/file.tex', 'file.mkii', 'file.mkiv', 'file.mkvi', 'file.mkxl', 'file.mklx'],
@@ -220,7 +221,7 @@ func s:GetFilenameChecks() abort
     \            '.coveragerc', '.pypirc', '.gitlint', '.oelint.cfg', 'pylintrc', '.pylintrc',
     \            '/home/user/.config/bpython/config', '/home/user/.config/mypy/config', '.wakatime.cfg', '.replyrc',
     \            'psprint.conf', 'sofficerc', 'any/.config/lxqt/globalkeyshortcuts.conf', 'any/.config/screengrab/screengrab.conf',
-    \            'any/.local/share/flatpak/repo/config'],
+    \            'any/.local/share/flatpak/repo/config', '.notmuch-config'],
     \ 'dot': ['file.dot', 'file.gv'],
     \ 'dracula': ['file.drac', 'file.drc', 'filelvs', 'filelpe', 'drac.file', 'lpe', 'lvs', 'some-lpe', 'some-lvs'],
     \ 'dtd': ['file.dtd'],
@@ -361,9 +362,9 @@ func s:GetFilenameChecks() abort
     \ 'jq': ['file.jq'],
     \ 'jovial': ['file.jov', 'file.j73', 'file.jovial'],
     \ 'jproperties': ['file.properties', 'file.properties_xx', 'file.properties_xx_xx', 'some.properties_xx_xx_file', 'org.eclipse.xyz.prefs'],
-    \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.geojson', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', 'file.jupyterlab-settings', '.prettierrc', '.firebaserc', '.stylelintrc', 'file.slnf', 'file.sublime-project', 'file.sublime-settings', 'file.sublime-workspace', 'file.bd', 'file.bda', 'file.xci'],
+    \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.geojson', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', 'file.jupyterlab-settings', '.prettierrc', '.firebaserc', '.stylelintrc', 'file.slnf', 'file.sublime-project', 'file.sublime-settings', 'file.sublime-workspace', 'file.bd', 'file.bda', 'file.xci', 'flake.lock'],
     \ 'json5': ['file.json5'],
-    \ 'jsonc': ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc'],
+    \ 'jsonc': ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.jscsrc', '.vsconfig', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc'],
     \ 'jsonl': ['file.jsonl'],
     \ 'jsonnet': ['file.jsonnet', 'file.libsonnet'],
     \ 'jsp': ['file.jsp'],
@@ -477,6 +478,7 @@ func s:GetFilenameChecks() abort
     \ 'msidl': ['file.odl', 'file.mof'],
     \ 'msql': ['file.msql'],
     \ 'mojo': ['file.mojo', 'file.🔥'],
+    \ 'msmtp': ['.msmtprc'],
     \ 'mupad': ['file.mu'],
     \ 'mush': ['file.mush'],
     \ 'mustache': ['file.mustache'],
@@ -593,7 +595,7 @@ func s:GetFilenameChecks() abort
     \ 'readline': ['.inputrc', 'inputrc'],
     \ 'rego': ['file.rego'],
     \ 'remind': ['.reminders', 'file.remind', 'file.rem', '.reminders-file'],
-    \ 'requirements': ['file.pip', 'requirements.txt'],
+    \ 'requirements': ['file.pip', 'requirements.txt', 'dev-requirements.txt', 'constraints.txt', 'requirements.in', 'requirements/dev.txt', 'requires/dev.txt'],
     \ 'rescript': ['file.res', 'file.resi'],
     \ 'resolv': ['resolv.conf'],
     \ 'reva': ['file.frt'],
@@ -2432,6 +2434,28 @@ func Test_def_file()
   split Xfile.def
   call assert_equal('modula2', &filetype)
   call assert_equal('pim', b:modula2.dialect)
+  bwipe!
+
+  filetype off
+endfunc
+
+func Test_uci_file()
+  filetype on
+
+  call mkdir('any/etc/config', 'pR')
+  call writefile(['config firewall'], 'any/etc/config/firewall', 'D')
+  split any/etc/config/firewall
+  call assert_equal('uci', &filetype)
+  bwipe!
+
+  call writefile(['# config for nginx here'], 'any/etc/config/firewall', 'D')
+  split any/etc/config/firewall
+  call assert_notequal('uci', &filetype)
+  bwipe!
+
+  call writefile(['# Copyright Cool Cats 1997', 'config firewall'], 'any/etc/config/firewall', 'D')
+  split any/etc/config/firewall
+  call assert_equal('uci', &filetype)
   bwipe!
 
   filetype off

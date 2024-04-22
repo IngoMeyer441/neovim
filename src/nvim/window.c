@@ -753,7 +753,19 @@ void win_set_buf(win_T *win, buf_T *buf, Error *err)
   }
 
   try_start();
+
+  const int save_acd = p_acd;
+  if (!switchwin.sw_same_win) {
+    // Temporarily disable 'autochdir' when setting buffer in another window.
+    p_acd = false;
+  }
+
   int result = do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD, buf->b_fnum, 0);
+
+  if (!switchwin.sw_same_win) {
+    p_acd = save_acd;
+  }
+
   if (!try_end(err) && result == FAIL) {
     api_set_error(err,
                   kErrorTypeException,
@@ -5887,10 +5899,6 @@ static void frame_setheight(frame_T *curfrp, int height)
 
   if (curfrp->fr_parent == NULL) {
     // topframe: can only change the command line height
-    // Avoid doing so with external messages.
-    if (ui_has(kUIMessages)) {
-      return;
-    }
     if (height > ROWS_AVAIL) {
       // If height is greater than the available space, try to create space for
       // the frame by reducing 'cmdheight' if possible, while making sure
@@ -6229,12 +6237,6 @@ const char *did_set_winminwidth(optset_T *args FUNC_ATTR_UNUSED)
 void win_drag_status_line(win_T *dragwin, int offset)
 {
   frame_T *fr = dragwin->w_frame;
-
-  // Avoid changing command line height with external messages.
-  if (fr->fr_next == NULL && ui_has(kUIMessages)) {
-    return;
-  }
-
   frame_T *curfr = fr;
   if (fr != topframe) {         // more than one window
     fr = fr->fr_parent;

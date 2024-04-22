@@ -14,7 +14,8 @@ local M = {}
 local function starsetf(ft, opts)
   return {
     function(path, bufnr)
-      local f = type(ft) == 'function' and ft(path, bufnr) or ft
+      -- Note: when `ft` is a function its return value may be nil.
+      local f = type(ft) ~= 'function' and ft or ft(path, bufnr)
       if not vim.g.ft_ignore_pat then
         return f
       end
@@ -1298,6 +1299,7 @@ local filename = {
   ['init.trans'] = 'clojure',
   ['.trans'] = 'clojure',
   ['CMakeLists.txt'] = 'cmake',
+  ['CMakeCache.txt'] = 'cmakecache',
   ['.cling_history'] = 'cpp',
   ['.alias'] = detect.csh,
   ['.cshrc'] = detect.csh,
@@ -1311,6 +1313,7 @@ local filename = {
   ['.chktexrc'] = 'conf',
   ['.ripgreprc'] = 'conf',
   ripgreprc = 'conf',
+  ['.mbsyncrc'] = 'conf',
   ['configure.in'] = 'config',
   ['configure.ac'] = 'config',
   crontab = 'crontab',
@@ -1352,6 +1355,7 @@ local filename = {
   ['.wakatime.cfg'] = 'dosini',
   ['nfs.conf'] = 'dosini',
   ['nfsmount.conf'] = 'dosini',
+  ['.notmuch-config'] = 'dosini',
   ['pacman.conf'] = 'confini',
   ['paru.conf'] = 'confini',
   ['mpv.conf'] = 'confini',
@@ -1432,13 +1436,16 @@ local filename = {
   ['.firebaserc'] = 'json',
   ['.prettierrc'] = 'json',
   ['.stylelintrc'] = 'json',
+  ['flake.lock'] = 'json',
   ['.babelrc'] = 'jsonc',
   ['.eslintrc'] = 'jsonc',
   ['.hintrc'] = 'jsonc',
+  ['.jscsrc'] = 'jsonc',
   ['.jsfmtrc'] = 'jsonc',
   ['.jshintrc'] = 'jsonc',
   ['.luaurc'] = 'jsonc',
   ['.swrc'] = 'jsonc',
+  ['.vsconfig'] = 'jsonc',
   ['.justfile'] = 'just',
   Kconfig = 'kconfig',
   ['Kconfig.debug'] = 'kconfig',
@@ -1486,6 +1493,7 @@ local filename = {
   ['mplayer.conf'] = 'mplayerconf',
   mrxvtrc = 'mrxvtrc',
   ['.mrxvtrc'] = 'mrxvtrc',
+  ['.msmtprc'] = 'msmtp',
   ['.mysql_history'] = 'mysql',
   ['/etc/nanorc'] = 'nanorc',
   Neomuttrc = 'neomuttrc',
@@ -1553,6 +1561,8 @@ local filename = {
   ['.inputrc'] = 'readline',
   ['.reminders'] = 'remind',
   ['requirements.txt'] = 'requirements',
+  ['constraints.txt'] = 'requirements',
+  ['requirements.in'] = 'requirements',
   ['resolv.conf'] = 'resolv',
   ['robots.txt'] = 'robots',
   Gemfile = 'ruby',
@@ -1720,9 +1730,8 @@ local pattern = {
   ['.*%.blade%.php'] = 'blade',
   ['bzr_log%..*'] = 'bzr',
   ['.*enlightenment/.*%.cfg'] = 'c',
-  ['${HOME}/cabal%.config'] = 'cabalconfig',
-  ['${HOME}/%.config/cabal/config'] = 'cabalconfig',
-  ['${XDG_CONFIG_HOME}/cabal/config'] = 'cabalconfig',
+  ['.*/%.cabal/config'] = 'cabalconfig',
+  ['.*/cabal/config'] = 'cabalconfig',
   ['cabal%.project%..*'] = starsetf('cabalproject'),
   ['.*/%.calendar/.*'] = starsetf('calendar'),
   ['.*/share/calendar/.*/calendar%..*'] = starsetf('calendar'),
@@ -2047,6 +2056,9 @@ local pattern = {
   ['.*/queries/.*%.scm'] = 'query', -- treesitter queries (Neovim only)
   ['.*,v'] = 'rcs',
   ['%.reminders.*'] = starsetf('remind'),
+  ['.*%-requirements%.txt'] = 'requirements',
+  ['requirements/.*%.txt'] = 'requirements',
+  ['requires/.*%.txt'] = 'requirements',
   ['[rR]akefile.*'] = starsetf('ruby'),
   ['[rR]antfile'] = 'ruby',
   ['[rR]akefile'] = 'ruby',
@@ -2128,6 +2140,7 @@ local pattern = {
   ['.*/%.init/.*%.conf'] = 'upstart',
   ['.*/usr/share/upstart/.*%.override'] = 'upstart',
   ['.*%.[Ll][Oo][Gg]'] = detect.log,
+  ['.*/etc/config/.*'] = starsetf(detect.uci),
   ['.*%.vhdl_[0-9].*'] = starsetf('vhdl'),
   ['.*%.ws[fc]'] = 'wsh',
   ['.*/Xresources/.*'] = starsetf('xdefaults'),

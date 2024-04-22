@@ -1294,7 +1294,7 @@ char *addstar(char *fname, size_t len, int context)
     }
   } else {
     retval = xmalloc(len + 4);
-    xstrlcpy(retval, fname, len + 1);
+    xmemcpyz(retval, fname, len);
 
     // Don't add a star to *, ~, ~user, $var or `cmd`.
     // * would become **, which walks the whole tree.
@@ -2938,7 +2938,7 @@ void ExpandGeneric(const char *const pat, expand_T *xp, regmatch_T *regmatch, ch
 static void expand_shellcmd_onedir(char *buf, char *s, size_t l, char *pat, char ***matches,
                                    int *numMatches, int flags, hashtab_T *ht, garray_T *gap)
 {
-  xstrlcpy(buf, s, l + 1);
+  xmemcpyz(buf, s, l);
   add_pathsep(buf);
   l = strlen(buf);
   xstrlcpy(buf + l, pat, MAXPATHL - l);
@@ -2986,7 +2986,6 @@ static void expand_shellcmd(char *filepat, char ***matches, int *numMatches, int
   char *path = NULL;
   garray_T ga;
   char *buf = xmalloc(MAXPATHL);
-  char *e;
   int flags = flagsarg;
   bool did_curdir = false;
 
@@ -3022,7 +3021,7 @@ static void expand_shellcmd(char *filepat, char ***matches, int *numMatches, int
   ga_init(&ga, (int)sizeof(char *), 10);
   hashtab_T found_ht;
   hash_init(&found_ht);
-  for (char *s = path;; s = e) {
+  for (char *s = path, *e;; s = e) {
     e = vim_strchr(s, ENV_SEPCHAR);
     if (e == NULL) {
       e = s + strlen(s);
@@ -3047,6 +3046,7 @@ static void expand_shellcmd(char *filepat, char ***matches, int *numMatches, int
     if (l > MAXPATHL - 5) {
       break;
     }
+    assert(l <= strlen(s));
     expand_shellcmd_onedir(buf, s, l, pat, matches, numMatches, flags, &found_ht, &ga);
     if (*e != NUL) {
       e++;

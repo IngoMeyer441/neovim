@@ -329,7 +329,7 @@ describe('vim.diagnostic', function()
     eq(
       { 1, 1, 2, 0, 2 },
       exec_lua [[
-      vim.diagnostic.disable(diagnostic_bufnr, diagnostic_ns)
+      vim.diagnostic.enable(false, { bufnr = diagnostic_bufnr, ns_id = diagnostic_ns })
       return {
         count_diagnostics(diagnostic_bufnr, vim.diagnostic.severity.ERROR, diagnostic_ns),
         count_diagnostics(diagnostic_bufnr, vim.diagnostic.severity.WARN, other_ns),
@@ -344,7 +344,7 @@ describe('vim.diagnostic', function()
     eq(
       all_highlights,
       exec_lua([[
-      vim.diagnostic.enable(diagnostic_bufnr, diagnostic_ns)
+      vim.diagnostic.enable(true, { bufnr = diagnostic_bufnr, ns_id = diagnostic_ns })
       return {
         count_diagnostics(diagnostic_bufnr, vim.diagnostic.severity.ERROR, diagnostic_ns),
         count_diagnostics(diagnostic_bufnr, vim.diagnostic.severity.WARN, other_ns),
@@ -371,7 +371,7 @@ describe('vim.diagnostic', function()
       vim.diagnostic.set(diagnostic_ns, diagnostic_bufnr, ns_1_diags)
       vim.diagnostic.set(other_ns, diagnostic_bufnr, ns_2_diags)
 
-      vim.diagnostic.disable(diagnostic_bufnr, diagnostic_ns)
+      vim.diagnostic.enable(false, { bufnr = diagnostic_bufnr, ns_id = diagnostic_ns })
 
       return {
         count_extmarks(diagnostic_bufnr, diagnostic_ns),
@@ -383,8 +383,8 @@ describe('vim.diagnostic', function()
     eq(
       { 4, 0 },
       exec_lua [[
-      vim.diagnostic.enable(diagnostic_bufnr, diagnostic_ns)
-      vim.diagnostic.disable(diagnostic_bufnr, other_ns)
+      vim.diagnostic.enable(true, { bufnr = diagnostic_bufnr, ns_id = diagnostic_ns })
+      vim.diagnostic.enable(false, { bufnr = diagnostic_bufnr, ns_id = other_ns })
 
       return {
         count_extmarks(diagnostic_bufnr, diagnostic_ns),
@@ -478,7 +478,32 @@ describe('vim.diagnostic', function()
   end)
 
   describe('enable() and disable()', function()
-    it('works without arguments', function()
+    it('validation', function()
+      matches('expected boolean, got table', pcall_err(exec_lua, [[vim.diagnostic.enable({})]]))
+      matches(
+        'filter: expected table, got string',
+        pcall_err(exec_lua, [[vim.diagnostic.enable(false, '')]])
+      )
+      matches(
+        'Invalid buffer id: 42',
+        pcall_err(exec_lua, [[vim.diagnostic.enable(true, { bufnr = 42 })]])
+      )
+      matches(
+        'expected boolean, got number',
+        pcall_err(exec_lua, [[vim.diagnostic.enable(42, {})]])
+      )
+      matches('expected boolean, got table', pcall_err(exec_lua, [[vim.diagnostic.enable({}, 42)]]))
+
+      -- Deprecated signature.
+      matches('Invalid buffer id: 42', pcall_err(exec_lua, [[vim.diagnostic.enable(42)]]))
+      -- Deprecated signature.
+      matches(
+        'namespace does not exist or is anonymous',
+        pcall_err(exec_lua, [[vim.diagnostic.enable(nil, 42)]])
+      )
+    end)
+
+    it('without arguments', function()
       local result = exec_lua [[
         vim.api.nvim_win_set_buf(0, diagnostic_bufnr)
 
@@ -500,7 +525,7 @@ describe('vim.diagnostic', function()
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns))
 
-        vim.diagnostic.disable()
+        vim.diagnostic.enable(false)
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns))
@@ -532,7 +557,7 @@ describe('vim.diagnostic', function()
       eq(4, result[4])
     end)
 
-    it('works with only a buffer argument', function()
+    it('with buffer argument', function()
       local result = exec_lua [[
         local other_bufnr = vim.api.nvim_create_buf(true, false)
 
@@ -561,19 +586,19 @@ describe('vim.diagnostic', function()
                              count_extmarks(diagnostic_bufnr, other_ns) +
                              count_extmarks(other_bufnr, diagnostic_ns))
 
-        vim.diagnostic.disable(diagnostic_bufnr)
+        vim.diagnostic.enable(false, { bufnr = diagnostic_bufnr })
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns) +
                              count_extmarks(other_bufnr, diagnostic_ns))
 
-        vim.diagnostic.enable(diagnostic_bufnr)
+        vim.diagnostic.enable(true, { bufnr = diagnostic_bufnr })
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns) +
                              count_extmarks(other_bufnr, diagnostic_ns))
 
-        vim.diagnostic.disable(other_bufnr)
+        vim.diagnostic.enable(false, { bufnr = other_bufnr })
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns) +
@@ -588,7 +613,7 @@ describe('vim.diagnostic', function()
       eq(3, result[4])
     end)
 
-    it('works with only a namespace argument', function()
+    it('with a namespace argument', function()
       local result = exec_lua [[
         vim.api.nvim_win_set_buf(0, diagnostic_bufnr)
 
@@ -610,17 +635,17 @@ describe('vim.diagnostic', function()
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns))
 
-        vim.diagnostic.disable(nil, diagnostic_ns)
+        vim.diagnostic.enable(false, { ns_id = diagnostic_ns })
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns))
 
-        vim.diagnostic.enable(nil, diagnostic_ns)
+        vim.diagnostic.enable(true, { ns_id = diagnostic_ns })
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns))
 
-        vim.diagnostic.disable(nil, other_ns)
+        vim.diagnostic.enable(false, { ns_id = other_ns })
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns))
@@ -634,8 +659,11 @@ describe('vim.diagnostic', function()
       eq(2, result[4])
     end)
 
-    it('works with both a buffer and a namespace argument', function()
-      local result = exec_lua [[
+    --- @return table
+    local function test_enable(legacy)
+      local result = exec_lua(
+        [[
+        local legacy = ...
         local other_bufnr = vim.api.nvim_create_buf(true, false)
 
         vim.api.nvim_win_set_buf(0, diagnostic_bufnr)
@@ -663,34 +691,68 @@ describe('vim.diagnostic', function()
                              count_extmarks(diagnostic_bufnr, other_ns) +
                              count_extmarks(other_bufnr, diagnostic_ns))
 
-        vim.diagnostic.disable(diagnostic_bufnr, diagnostic_ns)
+        if legacy then
+          vim.diagnostic.disable(diagnostic_bufnr, diagnostic_ns)
+        else
+          vim.diagnostic.enable(false, { bufnr = diagnostic_bufnr, ns_id = diagnostic_ns })
+        end
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns) +
                              count_extmarks(other_bufnr, diagnostic_ns))
 
-        vim.diagnostic.disable(diagnostic_bufnr, other_ns)
+        if legacy then
+          vim.diagnostic.disable(diagnostic_bufnr, other_ns)
+        else
+          vim.diagnostic.enable(false, { bufnr = diagnostic_bufnr, ns_id = other_ns })
+        end
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns) +
                              count_extmarks(other_bufnr, diagnostic_ns))
 
-        vim.diagnostic.enable(diagnostic_bufnr, diagnostic_ns)
+        if legacy then
+          vim.diagnostic.enable(diagnostic_bufnr, diagnostic_ns)
+        else
+          vim.diagnostic.enable(true, { bufnr = diagnostic_bufnr, ns_id = diagnostic_ns })
+        end
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns) +
                              count_extmarks(other_bufnr, diagnostic_ns))
 
-        -- Should have no effect
-        vim.diagnostic.disable(other_bufnr, other_ns)
+        if legacy then
+          -- Should have no effect
+          vim.diagnostic.disable(other_bufnr, other_ns)
+        else
+          -- Should have no effect
+          vim.diagnostic.enable(false, { bufnr = other_bufnr, ns_id = other_ns })
+        end
 
         table.insert(result, count_extmarks(diagnostic_bufnr, diagnostic_ns) +
                              count_extmarks(diagnostic_bufnr, other_ns) +
                              count_extmarks(other_bufnr, diagnostic_ns))
 
         return result
-      ]]
+      ]],
+        legacy
+      )
 
+      return result
+    end
+
+    it('with both buffer and namespace arguments', function()
+      local result = test_enable(false)
+      eq(4, result[1])
+      eq(2, result[2])
+      eq(1, result[3])
+      eq(3, result[4])
+      eq(3, result[5])
+    end)
+
+    it('with both buffer and namespace arguments (deprecated signature)', function()
+      -- Exercise the legacy/deprecated signature.
+      local result = test_enable(true)
       eq(4, result[1])
       eq(2, result[2])
       eq(1, result[3])
@@ -1555,7 +1617,7 @@ describe('vim.diagnostic', function()
   end)
 
   describe('set()', function()
-    it('validates its arguments', function()
+    it('validation', function()
       matches(
         'expected a list of diagnostics',
         pcall_err(exec_lua, [[vim.diagnostic.set(1, 0, {lnum = 1, col = 2})]])
@@ -1742,7 +1804,7 @@ describe('vim.diagnostic', function()
       eq(
         0,
         exec_lua [[
-        vim.diagnostic.disable(diagnostic_bufnr, diagnostic_ns)
+        vim.diagnostic.enable(false, { bufnr = diagnostic_bufnr, ns_id = diagnostic_ns })
         vim.diagnostic.set(diagnostic_ns, diagnostic_bufnr, {
           make_error('Diagnostic From Server 1:1', 1, 1, 1, 1),
         })
@@ -1753,7 +1815,7 @@ describe('vim.diagnostic', function()
       eq(
         2,
         exec_lua [[
-        vim.diagnostic.enable(diagnostic_bufnr, diagnostic_ns)
+        vim.diagnostic.enable(true, { bufnr = diagnostic_bufnr, ns_id = diagnostic_ns })
         return count_extmarks(diagnostic_bufnr, diagnostic_ns)
       ]]
       )
@@ -2711,7 +2773,41 @@ describe('vim.diagnostic', function()
       )
     end)
 
-    it('checks if diagnostics are disabled in a buffer', function()
+    it('is_enabled', function()
+      eq(
+        { false, false, false, false, false },
+        exec_lua [[
+        vim.diagnostic.set(diagnostic_ns, diagnostic_bufnr, {
+          make_error('Diagnostic #1', 1, 1, 1, 1),
+        })
+        vim.api.nvim_set_current_buf(diagnostic_bufnr)
+        vim.diagnostic.enable(false)
+        return {
+          vim.diagnostic.is_enabled(),
+          vim.diagnostic.is_enabled{ bufnr = 0 },
+          vim.diagnostic.is_enabled{ bufnr = diagnostic_bufnr },
+          vim.diagnostic.is_enabled{ bufnr = diagnostic_bufnr, ns_id = diagnostic_ns },
+          vim.diagnostic.is_enabled{ bufnr = 0, ns_id = diagnostic_ns },
+        }
+      ]]
+      )
+
+      eq(
+        { true, true, true, true, true },
+        exec_lua [[
+        vim.diagnostic.enable()
+        return {
+          vim.diagnostic.is_enabled(),
+          vim.diagnostic.is_enabled{ bufnr = 0 },
+          vim.diagnostic.is_enabled{ bufnr = diagnostic_bufnr },
+          vim.diagnostic.is_enabled{ bufnr = diagnostic_bufnr, ns_id = diagnostic_ns },
+          vim.diagnostic.is_enabled{ bufnr = 0, ns_id = diagnostic_ns },
+        }
+      ]]
+      )
+    end)
+
+    it('is_disabled (deprecated)', function()
       eq(
         { true, true, true, true },
         exec_lua [[

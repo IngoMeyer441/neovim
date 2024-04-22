@@ -893,8 +893,8 @@ static bool normal_get_command_count(NormalState *s)
   // Handle a count before a command and compute ca.count0.
   // Note that '0' is a command and not the start of a count, but it's
   // part of a count after other digits.
-  while ((s->c >= '1' && s->c <= '9') || (s->ca.count0 != 0
-                                          && (s->c == K_DEL || s->c == K_KDEL || s->c == '0'))) {
+  while ((s->c >= '1' && s->c <= '9')
+         || (s->ca.count0 != 0 && (s->c == K_DEL || s->c == K_KDEL || s->c == '0'))) {
     if (s->c == K_DEL || s->c == K_KDEL) {
       s->ca.count0 /= 10;
       del_from_showcmd(4);            // delete the digit and ~@%
@@ -1968,9 +1968,16 @@ bool add_to_showcmd(int c)
     }
   }
 
-  char *p = transchar(c);
-  if (*p == ' ') {
-    STRCPY(p, "<20>");
+  char *p;
+  char mbyte_buf[MB_MAXCHAR + 1];
+  if (c <= 0x7f || !vim_isprintc(c)) {
+    p = transchar(c);
+    if (*p == ' ') {
+      STRCPY(p, "<20>");
+    }
+  } else {
+    mbyte_buf[utf_char2bytes(c, mbyte_buf)] = NUL;
+    p = mbyte_buf;
   }
   size_t old_len = strlen(showcmd_buf);
   size_t extra_len = strlen(p);
@@ -2036,8 +2043,7 @@ void pop_showcmd(void)
 
 static void display_showcmd(void)
 {
-  int len = (int)strlen(showcmd_buf);
-  showcmd_is_clear = (len == 0);
+  showcmd_is_clear = (showcmd_buf[0] == NUL);
 
   if (*p_sloc == 's') {
     if (showcmd_is_clear) {
@@ -2058,14 +2064,11 @@ static void display_showcmd(void)
     return;
   }
   // 'showcmdloc' is "last" or empty
-  if (p_ch == 0 && !ui_has(kUIMessages)) {
-    return;
-  }
 
   if (ui_has(kUIMessages)) {
     MAXSIZE_TEMP_ARRAY(content, 1);
     MAXSIZE_TEMP_ARRAY(chunk, 2);
-    if (len > 0) {
+    if (!showcmd_is_clear) {
       // placeholder for future highlight support
       ADD_C(chunk, INTEGER_OBJ(0));
       ADD_C(chunk, CSTR_AS_OBJ(showcmd_buf));
@@ -2074,13 +2077,17 @@ static void display_showcmd(void)
     ui_call_msg_showcmd(content);
     return;
   }
+  if (p_ch == 0) {
+    return;
+  }
 
   msg_grid_validate();
   int showcmd_row = Rows - 1;
   grid_line_start(&msg_grid_adj, showcmd_row);
 
+  int len = 0;
   if (!showcmd_is_clear) {
-    grid_line_puts(sc_col, showcmd_buf, -1, HL_ATTR(HLF_MSG));
+    len = grid_line_puts(sc_col, showcmd_buf, -1, HL_ATTR(HLF_MSG));
   }
 
   // clear the rest of an old message by outputting up to SHOWCMD_COLS spaces

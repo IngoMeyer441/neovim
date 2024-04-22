@@ -95,10 +95,19 @@ do
     { silent = true, expr = true, desc = ':help v_@-default' }
   )
 
-  --- Map |gx| to call |vim.ui.open| on the identifier under the cursor
+  --- Map |gx| to call |vim.ui.open| on the <cfile> at cursor.
   do
     local function do_open(uri)
-      local _, err = vim.ui.open(uri)
+      local cmd, err = vim.ui.open(uri)
+      local rv = cmd and cmd:wait(1000) or nil
+      if cmd and rv and rv.code ~= 0 then
+        err = ('vim.ui.open: command %s (%d): %s'):format(
+          (rv.code == 124 and 'timeout' or 'failed'),
+          rv.code,
+          vim.inspect(cmd.cmd)
+        )
+      end
+
       if err then
         vim.notify(err, vim.log.levels.ERROR)
       end
@@ -486,4 +495,12 @@ if tty then
       end)
     end
   end
+end
+
+--- Default 'grepprg' to ripgrep if available.
+if vim.fn.executable('rg') == 1 then
+  -- Match :grep default, otherwise rg searches cwd by default
+  -- Use -uuu to make ripgrep not do its default filtering
+  vim.o.grepprg = 'rg --vimgrep -uuu $* ' .. (vim.fn.has('unix') == 1 and '/dev/null' or 'nul')
+  vim.o.grepformat = '%f:%l:%c:%m'
 end

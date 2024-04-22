@@ -121,6 +121,7 @@ vim.log = {
 ---   asynchronously. Receives SystemCompleted object, see return of SystemObj:wait().
 ---
 --- @return vim.SystemObj Object with the fields:
+---   - cmd (string[]) Command name and args
 ---   - pid (integer) Process ID
 ---   - wait (fun(timeout: integer|nil): SystemCompleted) Wait for the process to complete. Upon
 ---     timeout the process is sent the KILL signal (9) and the exit code is set to 124. Cannot
@@ -1048,10 +1049,11 @@ function vim.deprecate(name, alternative, version, plugin, backtrace)
     plugin = { plugin, 'string', true },
   }
   plugin = plugin or 'Nvim'
+  local will_be_removed = 'will be removed'
 
   -- Only issue warning if feature is hard-deprecated as specified by MAINTAIN.md.
-  -- e.g., when planned to be removed in version = '0.12' (soft-deprecated since 0.10-dev),
-  -- show warnings since 0.11, including 0.11-dev (hard_deprecated_since = 0.11-dev).
+  -- Example: if removal_version is 0.12 (soft-deprecated since 0.10-dev), show warnings starting at
+  -- 0.11, including 0.11-dev (hard_deprecated_since = 0.11-dev).
   if plugin == 'Nvim' then
     local current_version = vim.version() ---@type vim.Version
     local removal_version = assert(vim.version.parse(version))
@@ -1074,14 +1076,17 @@ function vim.deprecate(name, alternative, version, plugin, backtrace)
 
     if not is_hard_deprecated then
       return
+    elseif current_version >= removal_version then
+      will_be_removed = 'was removed'
     end
   end
 
   local msg = ('%s is deprecated'):format(name)
   msg = alternative and ('%s, use %s instead.'):format(msg, alternative) or (msg .. '.')
-  msg = ('%s%s\nThis feature will be removed in %s version %s'):format(
+  msg = ('%s%s\nFeature %s in %s %s'):format(
     msg,
     (plugin == 'Nvim' and ' :help deprecated' or ''),
+    will_be_removed,
     plugin,
     version
   )

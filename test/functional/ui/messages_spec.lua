@@ -685,7 +685,18 @@ describe('ui/ext_messages', function()
     ]],
       ruler = { { '2,1     All' } },
     }
-    feed('d')
+    feed('<c-v>k2l')
+    screen:expect({
+      grid = [[
+        {17:ab}^cde                    |
+        {17:123}45                    |
+        {1:~                        }|*3
+      ]],
+      showmode = { { '-- VISUAL BLOCK --', 5 } },
+      showcmd = { { '2x3' } },
+      ruler = { { '1,3     All' } },
+    })
+    feed('o<esc>d')
     screen:expect {
       grid = [[
       abcde                    |
@@ -1535,6 +1546,35 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
       {3:[No Name]                                                   }|
                                                                   |*4
     ]])
+  end)
+
+  it('supports :intro with cmdheight=0 #26505', function()
+    screen:try_resize(80, 24)
+    command('set cmdheight=0')
+    feed(':intro<CR>')
+    screen:expect([[
+                                                                                      |*5
+      {MATCH:.*}|
+                                                                                      |
+                        Nvim is open source and freely distributable                  |
+                                  https://neovim.io/#chat                             |
+                                                                                      |
+                       type  :help nvim{18:<Enter>}       if you are new!                  |
+                       type  :checkhealth{18:<Enter>}     to optimize Nvim                 |
+                       type  :q{18:<Enter>}               to exit                          |
+                       type  :help{18:<Enter>}            for help                         |
+                                                                                      |
+      {MATCH: +}type  :help news{18:<Enter>} to see changes in v{MATCH:%d+%.%d+ +}|
+                                                                                      |
+                               Help poor children in Uganda!                          |
+                       type  :help iccf{18:<Enter>}       for information                  |
+                                                                                      |*2
+      {3:                                                                                }|
+                                                                                      |
+      {6:Press ENTER or type command to continue}^                                         |
+    ]])
+    feed('<CR>')
+    assert_alive()
   end)
 end)
 
