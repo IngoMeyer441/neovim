@@ -1,12 +1,14 @@
-local t = require('test.functional.testutil')()
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
+
 local eq = t.eq
-local exec_lua = t.exec_lua
-local clear = t.clear
-local feed = t.feed
-local fn = t.fn
+local exec_lua = n.exec_lua
+local clear = n.clear
+local feed = n.feed
+local fn = n.fn
 local assert_log = t.assert_log
-local check_close = t.check_close
+local check_close = n.check_close
 
 local testlog = 'Xtest_lua_ui_event_log'
 
@@ -112,7 +114,7 @@ describe('vim.ui_attach', function()
 
   it('does not crash on exit', function()
     fn.system({
-      t.nvim_prog,
+      n.nvim_prog,
       '-u',
       'NONE',
       '-i',
@@ -124,7 +126,7 @@ describe('vim.ui_attach', function()
       '--cmd',
       'quitall!',
     })
-    eq(0, t.eval('v:shell_error'))
+    eq(0, n.eval('v:shell_error'))
   end)
 
   it('can receive accurate message kinds even if they are history', function()
@@ -152,6 +154,24 @@ describe('vim.ui_attach', function()
         },
       },
     }, actual, vim.inspect(actual))
+  end)
+
+  it('ui_refresh() activates correct capabilities without remote UI', function()
+    screen:detach()
+    exec_lua('vim.ui_attach(ns, { ext_cmdline = true }, on_event)')
+    eq(1, n.api.nvim_get_option_value('cmdheight', {}))
+    exec_lua('vim.ui_detach(ns)')
+    exec_lua('vim.ui_attach(ns, { ext_messages = true }, on_event)')
+    n.api.nvim_set_option_value('cmdheight', 1, {})
+    screen:attach()
+    eq(1, n.api.nvim_get_option_value('cmdheight', {}))
+  end)
+
+  it("ui_refresh() sets 'cmdheight' for all open tabpages with ext_messages", function()
+    exec_lua('vim.cmd.tabnew()')
+    exec_lua('vim.ui_attach(ns, { ext_messages = true }, on_event)')
+    exec_lua('vim.cmd.tabnext()')
+    eq(0, n.api.nvim_get_option_value('cmdheight', {}))
   end)
 end)
 

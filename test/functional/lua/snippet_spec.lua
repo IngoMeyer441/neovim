@@ -1,15 +1,16 @@
-local t = require('test.functional.testutil')()
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 
-local buf_lines = t.buf_lines
-local clear = t.clear
+local buf_lines = n.buf_lines
+local clear = n.clear
 local eq = t.eq
-local exec_lua = t.exec_lua
-local feed = t.feed
-local api = t.api
-local fn = t.fn
+local exec_lua = n.exec_lua
+local feed = n.feed
+local api = n.api
+local fn = n.fn
 local matches = t.matches
 local pcall_err = t.pcall_err
-local poke_eventloop = t.poke_eventloop
+local poke_eventloop = n.poke_eventloop
 local retry = t.retry
 
 describe('vim.snippet', function()
@@ -245,7 +246,7 @@ describe('vim.snippet', function()
   it('correctly indents with newlines', function()
     local curbuf = api.nvim_get_current_buf()
     test_expand_success(
-      { 'function($2)\n$3\nend' },
+      { 'function($2)\n\t$3\nend' },
       { 'function()', '  ', 'end' },
       [[
       vim.opt.sw = 2
@@ -254,8 +255,30 @@ describe('vim.snippet', function()
     )
     api.nvim_buf_set_lines(curbuf, 0, -1, false, {})
     test_expand_success(
-      { 'func main() {\n$1\n}' },
+      { 'function($2)\n$3\nend' },
+      { 'function()', '', 'end' },
+      [[
+      vim.opt.sw = 2
+      vim.opt.expandtab = true
+    ]]
+    )
+    api.nvim_buf_set_lines(curbuf, 0, -1, false, {})
+    test_expand_success(
+      { 'func main() {\n\t$1\n}' },
       { 'func main() {', '\t', '}' },
+      [[
+      vim.opt.sw = 4
+      vim.opt.ts = 4
+      vim.opt.expandtab = false
+    ]]
+    )
+    api.nvim_buf_set_lines(curbuf, 0, -1, false, {})
+    test_expand_success(
+      { '${1:name} :: ${2}\n${1:name} ${3}= ${0:undefined}' },
+      {
+        'name :: ',
+        'name = undefined',
+      },
       [[
       vim.opt.sw = 4
       vim.opt.ts = 4

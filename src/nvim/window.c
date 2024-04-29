@@ -827,7 +827,8 @@ void ui_ext_win_position(win_T *wp, bool validate)
         row += row_off;
         col += col_off;
         if (c.bufpos.lnum >= 0) {
-          pos_T pos = { c.bufpos.lnum + 1, c.bufpos.col, 0 };
+          int lnum = MIN(c.bufpos.lnum + 1, win->w_buffer->b_ml.ml_line_count);
+          pos_T pos = { lnum, c.bufpos.col, 0 };
           int trow, tcol, tcolc, tcole;
           textpos2screenpos(win, &pos, &trow, &tcol, &tcolc, &tcole, true);
           row += trow - 1;
@@ -2466,6 +2467,7 @@ void win_init_empty(win_T *wp)
   wp->w_topline = 1;
   wp->w_topfill = 0;
   wp->w_botline = 2;
+  wp->w_valid = 0;
   wp->w_s = &wp->w_buffer->b_s;
 }
 
@@ -2869,7 +2871,8 @@ int win_close(win_T *win, bool free_buf, bool force)
         if (wp == curwin) {
           break;
         }
-        if (!wp->w_p_pvw && !bt_quickfix(wp->w_buffer)) {
+        if (!wp->w_p_pvw && !bt_quickfix(wp->w_buffer)
+            && !(wp->w_floating && !wp->w_config.focusable)) {
           curwin = wp;
           break;
         }
@@ -5125,7 +5128,14 @@ win_T *win_alloc(win_T *after, bool hidden)
   block_autocmds();
   // link the window in the window list
   if (!hidden) {
-    win_append(after, new_wp, NULL);
+    tabpage_T *tp = NULL;
+    if (after) {
+      tp = win_find_tabpage(after);
+      if (tp == curtab) {
+        tp = NULL;
+      }
+    }
+    win_append(after, new_wp, tp);
   }
 
   new_wp->w_wincol = 0;
