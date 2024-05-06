@@ -3628,11 +3628,11 @@ function vim.fn.getregtype(regname) end
 ---
 --- Examples: >vim
 ---   echo getscriptinfo({'name': 'myscript'})
----   echo getscriptinfo({'sid': 15}).variables
+---   echo getscriptinfo({'sid': 15})[0].variables
 --- <
 ---
 --- @param opts? table
---- @return any
+--- @return vim.fn.getscriptinfo.ret[]
 function vim.fn.getscriptinfo(opts) end
 
 --- If {tabnr} is not specified, then information about all the
@@ -6583,7 +6583,7 @@ function vim.fn.prevnonblank(lnum) end
 ---
 --- @param fmt any
 --- @param expr1? any
---- @return any
+--- @return string
 function vim.fn.printf(fmt, expr1) end
 
 --- Returns the effective prompt text for buffer {buf}.  {buf} can

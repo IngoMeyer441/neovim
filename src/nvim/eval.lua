@@ -4470,11 +4470,12 @@ M.funcs = {
 
       Examples: >vim
       	echo getscriptinfo({'name': 'myscript'})
-      	echo getscriptinfo({'sid': 15}).variables
+      	echo getscriptinfo({'sid': 15})[0].variables
       <
     ]=],
     name = 'getscriptinfo',
     params = { { 'opts', 'table' } },
+    returns = 'vim.fn.getscriptinfo.ret[]',
     signature = 'getscriptinfo([{opts}])',
   },
   gettabinfo = {
@@ -7902,6 +7903,7 @@ M.funcs = {
     name = 'printf',
     params = { { 'fmt', 'any' }, { 'expr1', 'any' } },
     signature = 'printf({fmt}, {expr1} ...)',
+    returns = 'string',
   },
   prompt_getprompt = {
     args = 1,

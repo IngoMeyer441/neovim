@@ -14,14 +14,21 @@ function vim.api.nvim__buf_debug_extmarks(buffer, keys, dot) end
 
 --- @private
 --- @param buffer integer
---- @param first integer
---- @param last integer
-function vim.api.nvim__buf_redraw_range(buffer, first, last) end
-
---- @private
---- @param buffer integer
 --- @return table<string,any>
 function vim.api.nvim__buf_stats(buffer) end
+
+--- @private
+--- EXPERIMENTAL: this API may change in the future.
+---
+--- Sets info for the completion item at the given index. If the info text was
+--- shown in a window, returns the window and buffer ids, or empty dict if not
+--- shown.
+---
+--- @param index integer Completion candidate index
+--- @param opts vim.api.keyset.complete_set Optional parameters.
+---             • info: (string) info text.
+--- @return table<string,any>
+function vim.api.nvim__complete_set(index, opts) end
 
 --- @private
 --- @return string
@@ -91,6 +98,32 @@ function vim.api.nvim__inspect_cell(grid, row, col) end
 --- so this function can be used to force a cache clear in a test.
 ---
 function vim.api.nvim__invalidate_glyph_cache() end
+
+--- @private
+--- EXPERIMENTAL: this API may change in the future.
+---
+--- Instruct Nvim to redraw various components.
+---
+--- @param opts vim.api.keyset.redraw Optional parameters.
+---             • win: Target a specific `window-ID` as described below.
+---             • buf: Target a specific buffer number as described below.
+---             • flush: Update the screen with pending updates.
+---             • valid: When present mark `win`, `buf`, or all windows for
+---               redraw. When `true`, only redraw changed lines (useful for
+---               decoration providers). When `false`, forcefully redraw.
+---             • range: Redraw a range in `buf`, the buffer in `win` or the
+---               current buffer (useful for decoration providers). Expects a
+---               tuple `[first, last]` with the first and last line number of
+---               the range, 0-based end-exclusive `api-indexing`.
+---             • cursor: Immediately update cursor position on the screen in
+---               `win` or the current window.
+---             • statuscolumn: Redraw the 'statuscolumn' in `buf`, `win` or
+---               all windows.
+---             • statusline: Redraw the 'statusline' in `buf`, `win` or all
+---               windows.
+---             • winbar: Redraw the 'winbar' in `buf`, `win` or all windows.
+---             • tabline: Redraw the 'tabline'.
+function vim.api.nvim__redraw(opts) end
 
 --- @private
 --- @return any[]
@@ -822,16 +855,6 @@ function vim.api.nvim_command(command) end
 --- @return string
 function vim.api.nvim_command_output(command) end
 
---- Set info for the completion candidate index. if the info was shown in a
---- window, then the window and buffer ids are returned for further
---- customization. If the text was not shown, an empty dict is returned.
----
---- @param index integer the completion candidate index
---- @param opts vim.api.keyset.complete_set Optional parameters.
----             • info: (string) info text.
---- @return table<string,any>
-function vim.api.nvim_complete_set(index, opts) end
-
 --- Create or get an autocommand group `autocmd-groups`.
 ---
 --- To get an existing group id, do:
@@ -897,8 +920,8 @@ function vim.api.nvim_create_augroup(name, opts) end
 ---             • callback (function|string) optional: Lua function (or
 ---               Vimscript function name, if string) called when the event(s)
 ---               is triggered. Lua callback can return a truthy value (not
----               `false` or `nil`) to delete the autocommand. Receives a
----               table argument with these keys:
+---               `false` or `nil`) to delete the autocommand. Receives one
+---               argument, a table with these keys:              *event-args*
 ---               • id: (number) autocommand id
 ---               • event: (string) name of the triggered event
 ---                 `autocmd-events`
@@ -907,7 +930,7 @@ function vim.api.nvim_create_augroup(name, opts) end
 ---               • buf: (number) expanded value of <abuf>
 ---               • file: (string) expanded value of <afile>
 ---               • data: (any) arbitrary data passed from
----                 `nvim_exec_autocmds()`
+---                 `nvim_exec_autocmds()`                        *event-data*
 ---             • command (string) optional: Vim command to execute on event.
 ---               Cannot be used with {callback}
 ---             • once (boolean) optional: defaults to false. Run the

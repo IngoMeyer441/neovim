@@ -98,19 +98,18 @@ do
   --- Map |gx| to call |vim.ui.open| on the <cfile> at cursor.
   do
     local function do_open(uri)
-      local ok, cmd_or_err = vim.ui.open(uri)
-      local rv = ok and (cmd_or_err --[[@as vim.SystemObj]]):wait(1000) or nil
-      if rv and rv.code ~= 0 then
-        ok = false
-        cmd_or_err = ('vim.ui.open: command %s (%d): %s'):format(
+      local cmd, err = vim.ui.open(uri)
+      local rv = cmd and cmd:wait(1000) or nil
+      if cmd and rv and rv.code ~= 0 then
+        err = ('vim.ui.open: command %s (%d): %s'):format(
           (rv.code == 124 and 'timeout' or 'failed'),
           rv.code,
-          vim.inspect(cmd_or_err.cmd)
+          vim.inspect(cmd.cmd)
         )
       end
 
-      if not ok then
-        vim.notify(cmd_or_err --[[@as string]], vim.log.levels.ERROR)
+      if err then
+        vim.notify(err, vim.log.levels.ERROR)
       end
     end
 
@@ -184,26 +183,22 @@ do
   do
     vim.keymap.set('n', ']d', function()
       vim.diagnostic.goto_next({ float = false })
-    end, {
-      desc = 'Jump to the next diagnostic with the highest severity',
-    })
+    end, { desc = 'Jump to the next diagnostic' })
 
     vim.keymap.set('n', '[d', function()
       vim.diagnostic.goto_prev({ float = false })
-    end, {
-      desc = 'Jump to the previous diagnostic with the highest severity',
-    })
+    end, { desc = 'Jump to the previous diagnostic' })
 
     vim.keymap.set('n', '<C-W>d', function()
       vim.diagnostic.open_float()
-    end, {
-      desc = 'Open a floating window showing diagnostics under the cursor',
-    })
+    end, { desc = 'Show diagnostics under the cursor' })
 
-    vim.keymap.set('n', '<C-W><C-D>', '<C-W>d', {
-      remap = true,
-      desc = 'Open a floating window showing diagnostics under the cursor',
-    })
+    vim.keymap.set(
+      'n',
+      '<C-W><C-D>',
+      '<C-W>d',
+      { remap = true, desc = 'Show diagnostics under the cursor' }
+    )
   end
 end
 
@@ -255,7 +250,7 @@ do
 
   vim.api.nvim_create_autocmd('TermRequest', {
     group = nvim_terminal_augroup,
-    desc = 'Respond to OSC foreground/background color requests',
+    desc = 'Handles OSC foreground/background color requests',
     callback = function(args)
       --- @type integer
       local channel = vim.bo[args.buf].channel

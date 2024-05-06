@@ -592,23 +592,12 @@ A subset of the `vim.*` API is available in threads. This includes:
 ==============================================================================
 VIM.HIGHLIGHT                                                  *vim.highlight*
 
-Nvim includes a function for highlighting a selection on yank.
-
-To enable it, add the following to your `init.vim`: >vim
-    au TextYankPost * silent! lua vim.highlight.on_yank()
-<
-
-You can customize the highlight group and the duration of the highlight via: >vim
-    au TextYankPost * silent! lua vim.highlight.on_yank {higroup="IncSearch", timeout=150}
-<
-
-If you want to exclude visual selections from highlighting on yank, use: >vim
-    au TextYankPost * silent! lua vim.highlight.on_yank {on_visual=false}
-<
-
-
 vim.highlight.on_yank({opts})                        *vim.highlight.on_yank()*
-    Highlight the yanked text
+    Highlight the yanked text during a |TextYankPost| event.
+
+    Add the following to your `init.vim`: >vim
+        autocmd TextYankPost * silent! lua vim.highlight.on_yank {higroup='Visual', timeout=300}
+<
 
     Parameters: ~
       • {opts}  (`table?`) Optional parameters
@@ -2562,8 +2551,8 @@ vim.ui.open({path})                                            *vim.ui.open()*
         vim.ui.open("https://neovim.io/")
         vim.ui.open("~/path/to/file")
         -- Synchronous (wait until the process exits).
-        local ok, cmd = vim.ui.open("$VIMRUNTIME")
-        if ok then
+        local cmd, err = vim.ui.open("$VIMRUNTIME")
+        if cmd then
           cmd:wait()
         end
 <
@@ -2572,8 +2561,8 @@ vim.ui.open({path})                                            *vim.ui.open()*
       • {path}  (`string`) Path or URL to open
 
     Return (multiple): ~
-        (`boolean`) false if command not found, else true.
-        (`vim.SystemObj|string`) Command object, or error message on failure
+        (`vim.SystemObj?`) Command object, or nil if not found.
+        (`string?`) Error message on failure, or nil on success.
 
     See also: ~
       • |vim.system()|
@@ -4002,18 +3991,22 @@ Iter:flatten({depth})                                         *Iter:flatten()*
         (`Iter`)
 
 Iter:fold({init}, {f})                                           *Iter:fold()*
-    Folds ("reduces") an iterator into a single value.
+    Folds ("reduces") an iterator into a single value.         *Iter:reduce()*
 
     Examples: >lua
         -- Create a new table with only even values
-        local t = { a = 1, b = 2, c = 3, d = 4 }
-        local it = vim.iter(t)
-        it:filter(function(k, v) return v % 2 == 0 end)
-        it:fold({}, function(t, k, v)
-          t[k] = v
-          return t
-        end)
-        -- { b = 2, d = 4 }
+        vim.iter({ a = 1, b = 2, c = 3, d = 4 })
+          :filter(function(k, v) return v % 2 == 0 end)
+          :fold({}, function(acc, k, v)
+            acc[k] = v
+            return acc
+          end) --> { b = 2, d = 4 }
+
+        -- Get the "maximum" item of an iterable.
+        vim.iter({ -99, -4, 3, 42, 0, 0, 7 })
+          :fold({}, function(acc, v)
+            acc.max = math.max(v, acc.max or v) return acc
+          end) --> { max = 42 }
 <
 
     Parameters: ~
@@ -4306,8 +4299,33 @@ Iter:totable()                                                *Iter:totable()*
 ==============================================================================
 Lua module: vim.snippet                                          *vim.snippet*
 
-vim.snippet.active()                                    *vim.snippet.active()*
-    Returns `true` if there's an active snippet in the current buffer.
+*vim.snippet.ActiveFilter*
+
+    Fields: ~
+      • {direction}  (`vim.snippet.Direction`) Navigation direction. -1 for
+                     previous, 1 for next.
+
+
+vim.snippet.active({filter})                            *vim.snippet.active()*
+    Returns `true` if there's an active snippet in the current buffer,
+    applying the given filter if provided.
+
+    You can use this function to navigate a snippet as follows: >lua
+        vim.keymap.set({ 'i', 's' }, '<Tab>', function()
+           if vim.snippet.active({ direction = 1 }) then
+             return '<cmd>lua vim.snippet.jump(1)<cr>'
+           else
+             return '<Tab>'
+           end
+         end, { expr = true })
+<
+
+    Parameters: ~
+      • {filter}  (`vim.snippet.ActiveFilter?`) Filter to constrain the search
+                  with:
+                  • `direction` (vim.snippet.Direction): Navigation direction.
+                    Will return `true` if the snippet can be jumped in the
+                    given direction. See |vim.snippet.ActiveFilter|.
 
     Return: ~
         (`boolean`)
@@ -4320,7 +4338,7 @@ vim.snippet.expand({input})                             *vim.snippet.expand()*
     https://microsoft.github.io/language-server-protocol/specification/#snippet_syntax
     for the specification of valid input.
 
-    Tabstops are highlighted with hl-SnippetTabstop.
+    Tabstops are highlighted with |hl-SnippetTabstop|.
 
     Parameters: ~
       • {input}  (`string`)
@@ -4342,26 +4360,6 @@ vim.snippet.jump({direction})                             *vim.snippet.jump()*
     Parameters: ~
       • {direction}  (`vim.snippet.Direction`) Navigation direction. -1 for
                      previous, 1 for next.
-
-vim.snippet.jumpable({direction})                     *vim.snippet.jumpable()*
-    Returns `true` if there is an active snippet which can be jumped in the
-    given direction. You can use this function to navigate a snippet as
-    follows: >lua
-        vim.keymap.set({ 'i', 's' }, '<Tab>', function()
-           if vim.snippet.jumpable(1) then
-             return '<cmd>lua vim.snippet.jump(1)<cr>'
-           else
-             return '<Tab>'
-           end
-         end, { expr = true })
-<
-
-    Parameters: ~
-      • {direction}  (`vim.snippet.Direction`) Navigation direction. -1 for
-                     previous, 1 for next.
-
-    Return: ~
-        (`boolean`)
 
 
 ==============================================================================

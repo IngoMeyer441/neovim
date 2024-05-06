@@ -61,7 +61,7 @@ options are not restored when the LSP client is stopped or detached.
 - |K| is mapped to |vim.lsp.buf.hover()| unless |'keywordprg'| is customized or
   a custom keymap for `K` exists.
 
-                 *crr* *v_crr* *crn* *i_CTRL-S* *v_CTRL-R_CTRL-R* *v_CTRL-R_r*
+                 *crr* *crn* *i_CTRL-S* *v_CTRL-R_CTRL-R* *v_CTRL-R_r*
 Some keymaps are created unconditionally when Nvim starts:
 - "crn" is mapped in Normal mode to |vim.lsp.buf.rename()|
 - "crr" is mapped in Normal mode to |vim.lsp.buf.code_action()|
@@ -1611,8 +1611,8 @@ enable({enable}, {filter})                       *vim.lsp.inlay_hint.enable()*
     Parameters: ~
       • {enable}  (`boolean?`) true/nil to enable, false to disable
       • {filter}  (`table?`) Optional filters |kwargs|, or `nil` for all.
-                  • {bufnr} (`integer?`) Buffer number, or 0/nil for current
-                    buffer.
+                  • {bufnr} (`integer?`) Buffer number, or 0 for current
+                    buffer, or nil for all.
 
 get({filter})                                       *vim.lsp.inlay_hint.get()*
     Get the list of inlay hints, (optionally) restricted by buffer or range.
@@ -1645,13 +1645,15 @@ get({filter})                                       *vim.lsp.inlay_hint.get()*
         • {client_id} (`integer`)
         • {inlay_hint} (`lsp.InlayHint`)
 
-is_enabled({bufnr})                          *vim.lsp.inlay_hint.is_enabled()*
+is_enabled({filter})                         *vim.lsp.inlay_hint.is_enabled()*
 
     Note: ~
       • This API is pre-release (unstable).
 
     Parameters: ~
-      • {bufnr}  (`integer?`) Buffer handle, or 0 for current
+      • {filter}  (`table`) Optional filters |kwargs|, or `nil` for all.
+                  • {bufnr} (`integer?`) Buffer number, or 0 for current
+                    buffer, or nil for all.
 
     Return: ~
         (`boolean`)

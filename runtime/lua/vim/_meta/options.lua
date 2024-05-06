@@ -974,7 +974,7 @@ vim.bo.comments = vim.o.comments
 vim.bo.com = vim.bo.comments
 
 --- A template for a comment.  The "%s" in the value is replaced with the
---- comment text.  For example, C uses "/*%s*/". Currently only used to
+--- comment text. For example, C uses "/*%s*/". Used for `commenting` and to
 --- add markers for folding, see `fold-marker`.
 ---
 --- @type string
@@ -7446,6 +7446,7 @@ vim.bo.vts = vim.bo.vartabstop
 ---
 --- Level   Messages ~
 --- ----------------------------------------------------------------------
+--- 1	Enables Lua tracing (see above). Does not produce messages.
 --- 2	When a file is ":source"'ed, or `shada` file is read or written.
 --- 3	UI info, terminal capabilities.
 --- 4	Shell commands.

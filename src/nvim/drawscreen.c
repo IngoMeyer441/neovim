@@ -821,25 +821,25 @@ static void win_redr_border(win_T *wp)
 /// Set cursor to its position in the current window.
 void setcursor(void)
 {
-  setcursor_mayforce(false);
+  setcursor_mayforce(curwin, false);
 }
 
 /// Set cursor to its position in the current window.
 /// @param force  when true, also when not redrawing.
-void setcursor_mayforce(bool force)
+void setcursor_mayforce(win_T *wp, bool force)
 {
   if (force || redrawing()) {
-    validate_cursor(curwin);
+    validate_cursor(wp);
 
-    ScreenGrid *grid = &curwin->w_grid;
-    int row = curwin->w_wrow;
-    int col = curwin->w_wcol;
-    if (curwin->w_p_rl) {
+    ScreenGrid *grid = &wp->w_grid;
+    int row = wp->w_wrow;
+    int col = wp->w_wcol;
+    if (wp->w_p_rl) {
       // With 'rightleft' set and the cursor on a double-wide character,
       // position it on the leftmost column.
-      col = curwin->w_width_inner - curwin->w_wcol
-            - ((utf_ptr2cells(get_cursor_pos_ptr()) == 2
-                && vim_isprintc(gchar_cursor())) ? 2 : 1);
+      char *cursor = ml_get_buf(wp->w_buffer, wp->w_cursor.lnum) + wp->w_cursor.col;
+      col = wp->w_width_inner - wp->w_wcol - ((utf_ptr2cells(cursor) == 2
+                                               && vim_isprintc(utf_ptr2char(cursor))) ? 2 : 1);
     }
 
     grid_adjust(&grid, &row, &col);
@@ -927,7 +927,13 @@ int showmode(void)
     msg_ext_clear(true);
   }
 
-  // don't make non-flushed message part of the showmode
+  // Don't make non-flushed message part of the showmode and reset global
+  // variables before flushing to to avoid recursiveness.
+  bool draw_mode = redraw_mode;
+  bool clear_cmd = clear_cmdline;
+  redraw_cmdline = false;
+  redraw_mode = false;
+  clear_cmdline = false;
   msg_ext_ui_flush();
 
   msg_grid_validate();
@@ -950,8 +956,8 @@ int showmode(void)
     msg_check_for_delay(false);
 
     // if the cmdline is more than one line high, erase top lines
-    bool need_clear = clear_cmdline;
-    if (clear_cmdline && cmdline_row < Rows - 1) {
+    bool need_clear = clear_cmd;
+    if (clear_cmd && cmdline_row < Rows - 1) {
       msg_clr_cmdline();  // will reset clear_cmdline
     }
 
@@ -1073,7 +1079,7 @@ int showmode(void)
     }
 
     mode_displayed = true;
-    if (need_clear || clear_cmdline || redraw_mode) {
+    if (need_clear || clear_cmd || draw_mode) {
       msg_clr_eos();
     }
     msg_didout = false;                 // overwrite this message
@@ -1082,10 +1088,10 @@ int showmode(void)
     msg_no_more = false;
     lines_left = save_lines_left;
     need_wait_return = nwr_save;        // never ask for hit-return for this
-  } else if (clear_cmdline && msg_silent == 0) {
+  } else if (clear_cmd && msg_silent == 0) {
     // Clear the whole command line.  Will reset "clear_cmdline".
     msg_clr_cmdline();
-  } else if (redraw_mode) {
+  } else if (draw_mode) {
     msg_pos_mode();
     msg_clr_eos();
   }
@@ -1107,10 +1113,6 @@ int showmode(void)
     win_redr_ruler(ruler_win);
     grid_line_flush();
   }
-
-  redraw_cmdline = false;
-  redraw_mode = false;
-  clear_cmdline = false;
 
   return length;
 }
@@ -2711,7 +2713,7 @@ void redraw_buf_line_later(buf_T *buf, linenr_T line, bool force)
   }
 }
 
-void redraw_buf_range_later(buf_T *buf,  linenr_T firstline, linenr_T lastline)
+void redraw_buf_range_later(buf_T *buf, linenr_T firstline, linenr_T lastline)
 {
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     if (wp->w_buffer == buf

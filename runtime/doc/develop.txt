@@ -309,6 +309,11 @@ See also |dev-naming|.
   - return iterable instead of table
   - mimic the pairs() or ipairs() interface if the function is intended to be
     used in a "for" loop.
+  - when a result-or-error interface is needed, return `result|nil, errmsg|nil`: >
+    ---@return Foo|nil # Result object, or nil if not found.
+    ---@return nil|string # Error message on failure, or nil on success.
+<
+    - Examples: |vim.ui.open()| |io.open()| |luv-error-handling|
 
 Interface conventions ~
 
@@ -532,6 +537,8 @@ External UIs are expected to implement these common features:
   published in this event. See also "mouse_on", "mouse_off".
 - UIs generally should NOT set |$NVIM_APPNAME| (unless explicitly requested by
   the user).
+- Support the text decorations/attributes given by |ui-event-hl_attr_define|.
+  The "url" attr should be presented as a clickable hyperlink.
 
 
  vim:tw=78:ts=8:sw=4:et:ft=help:norl:

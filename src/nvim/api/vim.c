@@ -45,10 +45,12 @@
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
 #include "nvim/lua/executor.h"
+#include "nvim/lua/treesitter.h"
 #include "nvim/macros_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
 #include "nvim/mark_defs.h"
+#include "nvim/math.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -1806,12 +1808,13 @@ Float nvim__id_float(Float flt)
 /// @return Map of various internal stats.
 Dictionary nvim__stats(Arena *arena)
 {
-  Dictionary rv = arena_dict(arena, 5);
+  Dictionary rv = arena_dict(arena, 6);
   PUT_C(rv, "fsync", INTEGER_OBJ(g_stats.fsync));
   PUT_C(rv, "log_skip", INTEGER_OBJ(g_stats.log_skip));
   PUT_C(rv, "lua_refcount", INTEGER_OBJ(nlua_get_global_ref_count()));
   PUT_C(rv, "redraw", INTEGER_OBJ(g_stats.redraw));
   PUT_C(rv, "arena_alloc_count", INTEGER_OBJ((Integer)arena_alloc_count));
+  PUT_C(rv, "ts_query_parse_count", INTEGER_OBJ((Integer)tslua_query_parse_count));
   return rv;
 }
 
@@ -2280,20 +2283,18 @@ void nvim_error_event(uint64_t channel_id, Integer lvl, String data)
   ELOG("async error on channel %" PRId64 ": %s", channel_id, data.size ? data.data : "");
 }
 
-/// Set info for the completion candidate index.
-/// if the info was shown in a window, then the
-/// window and buffer ids are returned for further
-/// customization. If the text was not shown, an
-/// empty dict is returned.
+/// EXPERIMENTAL: this API may change in the future.
 ///
-/// @param index  the completion candidate index
+/// Sets info for the completion item at the given index. If the info text was shown in a window,
+/// returns the window and buffer ids, or empty dict if not shown.
+///
+/// @param index  Completion candidate index
 /// @param opts   Optional parameters.
 ///       - info: (string) info text.
 /// @return Dictionary containing these keys:
 ///       - winid: (number) floating window id
 ///       - bufnr: (number) buffer id in floating window
-Dictionary nvim_complete_set(Integer index, Dict(complete_set) *opts, Arena *arena)
-  FUNC_API_SINCE(12)
+Dictionary nvim__complete_set(Integer index, Dict(complete_set) *opts, Arena *arena)
 {
   Dictionary rv = arena_dict(arena, 2);
   if (HAS_KEY(opts, complete_set, info)) {
@@ -2304,4 +2305,160 @@ Dictionary nvim_complete_set(Integer index, Dict(complete_set) *opts, Arena *are
     }
   }
   return rv;
+}
+
+static void redraw_status(win_T *wp, Dict(redraw) *opts, bool *flush)
+{
+  if (opts->statuscolumn && *wp->w_p_stc != NUL) {
+    wp->w_nrwidth_line_count = 0;
+    changed_window_setting(wp);
+  }
+  win_grid_alloc(wp);
+
+  // Flush later in case winbar was just hidden or shown for the first time, or
+  // statuscolumn is being drawn.
+  if (wp->w_lines_valid == 0) {
+    *flush = true;
+  }
+
+  // Mark for redraw in case flush will happen, otherwise redraw now.
+  if (*flush && (opts->statusline || opts->winbar)) {
+    wp->w_redr_status = true;
+  } else if (opts->statusline || opts->winbar) {
+    win_check_ns_hl(wp);
+    if (opts->winbar) {
+      win_redr_winbar(wp);
+    }
+    if (opts->statusline) {
+      win_redr_status(wp);
+    }
+    win_check_ns_hl(NULL);
+  }
+}
+
+/// EXPERIMENTAL: this API may change in the future.
+///
+/// Instruct Nvim to redraw various components.
+///
+/// @see |:redraw|
+///
+/// @param opts  Optional parameters.
+///               - win: Target a specific |window-ID| as described below.
+///               - buf: Target a specific buffer number as described below.
+///               - flush: Update the screen with pending updates.
+///               - valid: When present mark `win`, `buf`, or all windows for
+///                 redraw. When `true`, only redraw changed lines (useful for
+///                 decoration providers). When `false`, forcefully redraw.
+///               - range: Redraw a range in `buf`, the buffer in `win` or the
+///                 current buffer (useful for decoration providers). Expects a
+///                 tuple `[first, last]` with the first and last line number
+///                 of the range, 0-based end-exclusive |api-indexing|.
+///               - cursor: Immediately update cursor position on the screen in
+///                 `win` or the current window.
+///               - statuscolumn: Redraw the 'statuscolumn' in `buf`, `win` or
+///                 all windows.
+///               - statusline: Redraw the 'statusline' in `buf`, `win` or all
+///                 windows.
+///               - winbar: Redraw the 'winbar' in `buf`, `win` or all windows.
+///               - tabline: Redraw the 'tabline'.
+void nvim__redraw(Dict(redraw) *opts, Error *err)
+  FUNC_API_SINCE(12)
+{
+  win_T *win = NULL;
+  buf_T *buf = NULL;
+
+  if (HAS_KEY(opts, redraw, win)) {
+    win = find_window_by_handle(opts->win, err);
+    if (ERROR_SET(err)) {
+      return;
+    }
+  }
+
+  if (HAS_KEY(opts, redraw, buf)) {
+    VALIDATE(win == NULL, "%s", "cannot use both 'buf' and 'win'", {
+      return;
+    });
+    buf = find_buffer_by_handle(opts->buf, err);
+    if (ERROR_SET(err)) {
+      return;
+    }
+  }
+
+  int count = (win != NULL) + (buf != NULL);
+  VALIDATE(popcount(opts->is_set__redraw_) > count, "%s", "at least one action required", {
+    return;
+  });
+
+  if (HAS_KEY(opts, redraw, valid)) {
+    // UPD_VALID redraw type does not actually do anything on it's own. Setting
+    // it here without scrolling or changing buffer text seems pointless but
+    // the expectation is that this may be called by decoration providers whose
+    // "on_win" callback may set "w_redr_top/bot".
+    int type = opts->valid ? UPD_VALID : UPD_NOT_VALID;
+    if (win != NULL) {
+      redraw_later(win, type);
+    } else if (buf != NULL) {
+      redraw_buf_later(buf, type);
+    } else {
+      redraw_all_later(type);
+    }
+  }
+
+  if (HAS_KEY(opts, redraw, range)) {
+    VALIDATE(kv_size(opts->range) == 2
+             && kv_A(opts->range, 0).type == kObjectTypeInteger
+             && kv_A(opts->range, 1).type == kObjectTypeInteger
+             && kv_A(opts->range, 0).data.integer >= 0
+             && kv_A(opts->range, 1).data.integer >= -1,
+             "%s", "Invalid 'range': Expected 2-tuple of Integers", {
+      return;
+    });
+    linenr_T first = (linenr_T)kv_A(opts->range, 0).data.integer + 1;
+    linenr_T last = (linenr_T)kv_A(opts->range, 1).data.integer;
+    buf_T *rbuf = win ? win->w_buffer : (buf ? buf : curbuf);
+    if (last == -1) {
+      last = rbuf->b_ml.ml_line_count;
+    }
+    redraw_buf_range_later(rbuf, first, last);
+  }
+
+  if (opts->cursor) {
+    setcursor_mayforce(win ? win : curwin, true);
+  }
+
+  bool flush = opts->flush;
+  if (opts->tabline) {
+    // Flush later in case tabline was just hidden or shown for the first time.
+    if (redraw_tabline && firstwin->w_lines_valid == 0) {
+      flush = true;
+    } else {
+      draw_tabline();
+    }
+  }
+
+  bool save_lz = p_lz;
+  int save_rd = RedrawingDisabled;
+  RedrawingDisabled = 0;
+  p_lz = false;
+  if (opts->statuscolumn || opts->statusline || opts->winbar) {
+    if (win == NULL) {
+      FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+        if (buf == NULL || wp->w_buffer == buf) {
+          redraw_status(wp, opts, &flush);
+        }
+      }
+    } else {
+      redraw_status(win, opts, &flush);
+    }
+  }
+
+  // Flush pending screen updates if "flush" or "clear" is true, or when
+  // redrawing a status component may have changed the grid dimensions.
+  if (flush && !cmdpreview) {
+    update_screen();
+  }
+  ui_flush();
+
+  RedrawingDisabled = save_rd;
+  p_lz = save_lz;
 }
