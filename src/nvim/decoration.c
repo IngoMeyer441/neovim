@@ -346,7 +346,12 @@ char *next_virt_text_chunk(VirtText vt, size_t *pos, int *attr)
   for (; text == NULL && *pos < kv_size(vt); (*pos)++) {
     text = kv_A(vt, *pos).text;
     int hl_id = kv_A(vt, *pos).hl_id;
-    *attr = hl_combine_attr(*attr, hl_id > 0 ? syn_id2attr(hl_id) : 0);
+    if (hl_id >= 0) {
+      *attr = MAX(*attr, 0);
+      if (hl_id > 0) {
+        *attr = hl_combine_attr(*attr, syn_id2attr(hl_id));
+      }
+    }
   }
   return text;
 }
@@ -790,7 +795,7 @@ void buf_signcols_count_range(buf_T *buf, int row1, int row2, int add, TriState 
   }
 
   // Allocate an array of integers holding the number of signs in the range.
-  int *count = xcalloc(sizeof(int), (size_t)(row2 + 1 - row1));
+  int *count = xcalloc((size_t)(row2 + 1 - row1), sizeof(int));
   MarkTreeIter itr[1];
   MTPair pair = { 0 };
 
