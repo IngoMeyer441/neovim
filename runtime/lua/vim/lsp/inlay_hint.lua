@@ -98,7 +98,7 @@ function M.on_inlayhint(err, result, ctx, _)
   api.nvim__redraw({ buf = bufnr, valid = true })
 end
 
---- |lsp-handler| for the method `textDocument/inlayHint/refresh`
+--- |lsp-handler| for the method `workspace/inlayHint/refresh`
 ---@param ctx lsp.HandlerContext
 ---@private
 function M.on_refresh(err, _, ctx, _)
@@ -136,7 +136,8 @@ end
 --- local hint = vim.lsp.inlay_hint.get({ bufnr = 0 })[1] -- 0 for current buffer
 ---
 --- local client = vim.lsp.get_client_by_id(hint.client_id)
---- resolved_hint = client.request_sync('inlayHint/resolve', hint.inlay_hint, 100, 0).result
+--- local resp = client.request_sync('inlayHint/resolve', hint.inlay_hint, 100, 0)
+--- local resolved_hint = assert(resp and resp.result, resp.err)
 --- vim.lsp.util.apply_text_edits(resolved_hint.textEdits, 0, client.encoding)
 ---
 --- location = resolved_hint.label[1].location
@@ -368,24 +369,14 @@ api.nvim_set_decoration_provider(namespace, {
   end,
 })
 
+--- Query whether inlay hint is enabled in the {filter}ed scope
 --- @param filter vim.lsp.inlay_hint.enable.Filter
 --- @return boolean
 --- @since 12
 function M.is_enabled(filter)
-  ---@type integer
-  local bufnr
-  if type(filter) == 'number' then
-    vim.deprecate(
-      'vim.lsp.inlay_hint.is_enabled(bufnr:number)',
-      'vim.lsp.inlay_hint.is_enabled(filter:table)',
-      '0.10-dev'
-    )
-    bufnr = filter
-  else
-    vim.validate({ filter = { filter, 'table', true } })
-    filter = filter or {}
-    bufnr = filter.bufnr
-  end
+  vim.validate({ filter = { filter, 'table', true } })
+  filter = filter or {}
+  local bufnr = filter.bufnr
 
   vim.validate({ bufnr = { bufnr, 'number', true } })
   if bufnr == nil then
@@ -402,7 +393,7 @@ end
 --- Buffer number, or 0 for current buffer, or nil for all.
 --- @field bufnr integer?
 
---- Enables or disables inlay hints for a buffer.
+--- Enables or disables inlay hints for the {filter}ed scope.
 ---
 --- To "toggle", pass the inverse of `is_enabled()`:
 ---
@@ -414,15 +405,6 @@ end
 --- @param filter vim.lsp.inlay_hint.enable.Filter?
 --- @since 12
 function M.enable(enable, filter)
-  if type(enable) == 'number' or type(filter) == 'boolean' then
-    vim.deprecate(
-      'vim.lsp.inlay_hint.enable(bufnr:number, enable:boolean)',
-      'vim.lsp.inlay_hint.enable(enable:boolean, filter:table)',
-      '0.10-dev'
-    )
-    error('see :help vim.lsp.inlay_hint.enable() for updated parameters')
-  end
-
   vim.validate({ enable = { enable, 'boolean', true }, filter = { filter, 'table', true } })
   enable = enable == nil or enable
   filter = filter or {}

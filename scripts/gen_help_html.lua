@@ -50,6 +50,7 @@ local spell_dict = {
 local spell_ignore_files = {
   ['backers.txt'] = true,
   ['news.txt'] = { 'tree-sitter' }, -- in news, may refer to the upstream "tree-sitter" library
+  ['news-0.10.txt'] = { 'tree-sitter' },
 }
 local language = nil
 
@@ -63,10 +64,16 @@ local new_layout = {
   ['channel.txt'] = true,
   ['deprecated.txt'] = true,
   ['develop.txt'] = true,
+  ['dev_style.txt'] = true,
+  ['dev_theme.txt'] = true,
+  ['dev_tools.txt'] = true,
+  ['dev_vimpatch.txt'] = true,
+  ['faq.txt'] = true,
   ['lua.txt'] = true,
   ['luaref.txt'] = true,
   ['news.txt'] = true,
   ['news-0.9.txt'] = true,
+  ['news-0.10.txt'] = true,
   ['nvim.txt'] = true,
   ['pi_health.txt'] = true,
   ['provider.txt'] = true,
@@ -525,6 +532,8 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
     return ('%s<a href="%s">%s</a>%s'):format(ws(), fixed_url, fixed_url, removed_chars)
   elseif node_name == 'word' or node_name == 'uppercase_name' then
     return text
+  elseif node_name == 'note' then
+    return ('<b>%s</b>'):format(text)
   elseif node_name == 'h1' or node_name == 'h2' or node_name == 'h3' then
     if is_noise(text, stats.noise_lines) then
       return '' -- Discard common "noise" lines.
@@ -687,6 +696,8 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
       return string.format('%s</span>', s)
     end
     return s
+  elseif node_name == 'modeline' then
+    return ''
   elseif node_name == 'ERROR' then
     if ignore_parse_error(opt.fname, trimmed) then
       return text
@@ -1088,14 +1099,19 @@ local function gen_css(fname)
       padding-bottom: 10px;
       /* Tabs are used for alignment in old docs, so we must match Vim's 8-char expectation. */
       tab-size: 8;
-      white-space: pre;
+      white-space: pre-wrap;
       font-size: 16px;
       font-family: ui-monospace,SFMono-Regular,SF Mono,Menlo,Consolas,Liberation Mono,monospace;
+      word-wrap: break-word;
     }
-    .old-help-para pre {
-      /* All text in .old-help-para is formatted as "white-space:pre" so text following <pre> is
-         already visually separated by the linebreak. */
+    .old-help-para pre, .old-help-para pre:hover {
+      /* Text following <pre> is already visually separated by the linebreak. */
       margin-bottom: 0;
+      /* Long lines that exceed the textwidth should not be wrapped (no "pre-wrap").
+         Since text may overflow horizontally, we make the contents to be scrollable
+         (only if necessary) to prevent overlapping with the navigation bar at the right. */
+      white-space: pre;
+      overflow-x: auto;
     }
 
     /* TODO: should this rule be deleted? help tags are rendered as <code> or <span>, not <a> */

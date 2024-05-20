@@ -694,8 +694,8 @@ buf_request_sync({bufnr}, {method}, {params}, {timeout_ms})
                       milliseconds to wait for a result.
 
     Return (multiple): ~
-        (`table<integer, {err: lsp.ResponseError, result: any}>?`) result Map
-        of client_id:request_result.
+        (`table<integer, {error: lsp.ResponseError?, result: any}>?`) result
+        Map of client_id:request_result.
         (`string?`) err On timeout, cancel, or error, `err` is a string
         describing the failure reason, and `result` is nil.
 
@@ -1589,14 +1589,11 @@ save({lenses}, {bufnr}, {client_id})                 *vim.lsp.codelens.save()*
 Lua module: vim.lsp.inlay_hint                                *lsp-inlay_hint*
 
 enable({enable}, {filter})                       *vim.lsp.inlay_hint.enable()*
-    Enables or disables inlay hints for a buffer.
+    Enables or disables inlay hints for the {filter}ed scope.
 
     To "toggle", pass the inverse of `is_enabled()`: >lua
         vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled())
 <
-
-    Note: ~
-      • This API is pre-release (unstable).
 
     Parameters: ~
       • {enable}  (`boolean?`) true/nil to enable, false to disable
@@ -1611,7 +1608,8 @@ get({filter})                                       *vim.lsp.inlay_hint.get()*
         local hint = vim.lsp.inlay_hint.get({ bufnr = 0 })[1] -- 0 for current buffer
 
         local client = vim.lsp.get_client_by_id(hint.client_id)
-        resolved_hint = client.request_sync('inlayHint/resolve', hint.inlay_hint, 100, 0).result
+        local resp = client.request_sync('inlayHint/resolve', hint.inlay_hint, 100, 0)
+        local resolved_hint = assert(resp and resp.result, resp.err)
         vim.lsp.util.apply_text_edits(resolved_hint.textEdits, 0, client.encoding)
 
         location = resolved_hint.label[1].location
@@ -1620,9 +1618,6 @@ get({filter})                                       *vim.lsp.inlay_hint.get()*
           position = location.range.start,
         })
 <
-
-    Note: ~
-      • This API is pre-release (unstable).
 
     Parameters: ~
       • {filter}  (`table?`) Optional filters |kwargs|:
@@ -1636,9 +1631,7 @@ get({filter})                                       *vim.lsp.inlay_hint.get()*
         • {inlay_hint} (`lsp.InlayHint`)
 
 is_enabled({filter})                         *vim.lsp.inlay_hint.is_enabled()*
-
-    Note: ~
-      • This API is pre-release (unstable).
+    Query whether inlay hint is enabled in the {filter}ed scope
 
     Parameters: ~
       • {filter}  (`table`) Optional filters |kwargs|, or `nil` for all.

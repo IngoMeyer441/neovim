@@ -532,14 +532,13 @@ end
 
 --- @alias vim.snippet.Direction -1 | 1
 
---- Jumps within the active snippet in the given direction.
---- If the jump isn't possible, the function call does nothing.
+--- Jumps to the next (or previous) placeholder in the current snippet, if possible.
 ---
---- You can use this function to navigate a snippet as follows:
+--- For example, map `<Tab>` to jump while a snippet is active:
 ---
 --- ```lua
 --- vim.keymap.set({ 'i', 's' }, '<Tab>', function()
----    if vim.snippet.jumpable(1) then
+---    if vim.snippet.active({ direction = 1 }) then
 ---      return '<cmd>lua vim.snippet.jump(1)<cr>'
 ---    else
 ---      return '<Tab>'

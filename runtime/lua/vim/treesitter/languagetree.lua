@@ -225,7 +225,10 @@ function LanguageTree:_log(...)
   self._logger('nvim', table.concat(msg, ' '))
 end
 
---- Invalidates this parser and all its children
+--- Invalidates this parser and its children.
+---
+--- Should only be called when the tracked state of the LanguageTree is not valid against the parse
+--- tree in treesitter. Doesn't clear filesystem cache. Called often, so needs to be fast.
 ---@param reload boolean|nil
 function LanguageTree:invalidate(reload)
   self._valid = false
@@ -458,24 +461,6 @@ function LanguageTree:parse(range)
   end
 
   return self._trees
-end
-
----@deprecated Misleading name. Use `LanguageTree:children()` (non-recursive) instead,
----            add recursion yourself if needed.
---- Invokes the callback for each |LanguageTree| and its children recursively
----
----@param fn fun(tree: vim.treesitter.LanguageTree, lang: string)
----@param include_self? boolean Whether to include the invoking tree in the results
-function LanguageTree:for_each_child(fn, include_self)
-  vim.deprecate('LanguageTree:for_each_child()', 'LanguageTree:children()', '0.11')
-  if include_self then
-    fn(self, self._lang)
-  end
-
-  for _, child in pairs(self._children) do
-    --- @diagnostic disable-next-line:deprecated
-    child:for_each_child(fn, true)
-  end
 end
 
 --- Invokes the callback for each |LanguageTree| recursively.
