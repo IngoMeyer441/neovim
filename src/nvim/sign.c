@@ -21,6 +21,7 @@
 #include "nvim/decoration_defs.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
+#include "nvim/errors.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -125,8 +126,8 @@ static void buf_set_sign(buf_T *buf, uint32_t *id, char *group, int prio, linenr
                          | (has_hl ? MT_FLAG_DECOR_SIGNHL : 0);
 
   DecorInline decor = { .ext = true, .data.ext = { .vt = NULL, .sh_idx = decor_put_sh(sign) } };
-  extmark_set(buf, ns, id, lnum - 1, 0, -1, -1, decor, decor_flags, true,
-              false, true, true, false, NULL);
+  extmark_set(buf, ns, id, MIN(buf->b_ml.ml_line_count, lnum) - 1, 0, -1, -1,
+              decor, decor_flags, true, false, true, true, NULL);
 }
 
 /// For an existing, placed sign with "id", modify the sign, group or priority.
@@ -246,12 +247,6 @@ static int buf_delete_signs(buf_T *buf, char *group, int id, linenr_T atlnum)
     return FAIL;
   }
 
-  // When deleting the last sign need to redraw the windows to remove the
-  // sign column. Not when curwin is NULL (this means we're exiting).
-  if (!buf_meta_total(buf, kMTMetaSignText) && curwin != NULL) {
-    changed_line_abv_curs();
-  }
-
   return OK;
 }
 
@@ -297,8 +292,8 @@ static void sign_list_placed(buf_T *rbuf, char *group)
         qsort((void *)&kv_A(signs, 0), kv_size(signs), sizeof(MTKey), sign_row_cmp);
 
         for (size_t i = 0; i < kv_size(signs); i++) {
-          namebuf[0] = '\0';
-          groupbuf[0] = '\0';
+          namebuf[0] = NUL;
+          groupbuf[0] = NUL;
           MTKey mark = kv_A(signs, i);
 
           DecorSignHighlight *sh = decor_find_sign(mt_decor(mark));
@@ -499,22 +494,11 @@ static void sign_list_by_name(char *name)
   }
 }
 
-static void may_force_numberwidth_recompute(buf_T *buf, int unplace)
-{
-  FOR_ALL_TAB_WINDOWS(tp, wp)
-  if (wp->w_buffer == buf
-      && (wp->w_p_nu || wp->w_p_rnu)
-      && (unplace || wp->w_nrwidth_width < 2)
-      && (*wp->w_p_scl == 'n' && *(wp->w_p_scl + 1) == 'u')) {
-    wp->w_nrwidth_line_count = 0;
-  }
-}
-
 /// Place a sign at the specified file location or update a sign.
 static int sign_place(uint32_t *id, char *group, char *name, buf_T *buf, linenr_T lnum, int prio)
 {
   // Check for reserved character '*' in group name
-  if (group != NULL && (*group == '*' || *group == '\0')) {
+  if (group != NULL && (*group == '*' || *group == NUL)) {
     return FAIL;
   }
 
@@ -531,11 +515,7 @@ static int sign_place(uint32_t *id, char *group, char *name, buf_T *buf, linenr_
     // ":sign place {id} file={fname}": change sign type and/or priority
     lnum = buf_mod_sign(buf, id, group, prio, sp);
   }
-  if (lnum > 0) {
-    // When displaying signs in the 'number' column, if the width of the
-    // number column is less than 2, then force recomputing the width.
-    may_force_numberwidth_recompute(buf, false);
-  } else {
+  if (lnum <= 0) {
     semsg(_("E885: Not possible to change sign %s"), name);
     return FAIL;
   }
@@ -560,13 +540,6 @@ static int sign_unplace_inner(buf_T *buf, int id, char *group, linenr_T atlnum)
     if (ns < 0 || !extmark_del_id(buf, (uint32_t)ns, (uint32_t)id)) {
       return FAIL;
     }
-  }
-
-  // When all the signs in a buffer are removed, force recomputing the
-  // number column width (if enabled) in all the windows displaying the
-  // buffer if 'signcolumn' is set to 'number' in that window.
-  if (!buf_meta_total(buf, kMTMetaSignText)) {
-    may_force_numberwidth_recompute(buf, true);
   }
 
   return OK;
@@ -676,14 +649,14 @@ static void sign_place_cmd(buf_T *buf, linenr_T lnum, char *name, int id, char *
     //   :sign place
     //   :sign place group={group}
     //   :sign place group=*
-    if (lnum >= 0 || name != NULL || (group != NULL && *group == '\0')) {
+    if (lnum >= 0 || name != NULL || (group != NULL && *group == NUL)) {
       emsg(_(e_invarg));
     } else {
       sign_list_placed(buf, group);
     }
   } else {
     // Place a new sign
-    if (name == NULL || buf == NULL || (group != NULL && *group == '\0')) {
+    if (name == NULL || buf == NULL || (group != NULL && *group == NUL)) {
       emsg(_(e_invarg));
       return;
     }
@@ -695,7 +668,7 @@ static void sign_place_cmd(buf_T *buf, linenr_T lnum, char *name, int id, char *
 /// ":sign unplace" command
 static void sign_unplace_cmd(buf_T *buf, linenr_T lnum, const char *name, int id, char *group)
 {
-  if (lnum >= 0 || name != NULL || (group != NULL && *group == '\0')) {
+  if (lnum >= 0 || name != NULL || (group != NULL && *group == NUL)) {
     emsg(_(e_invarg));
     return;
   }
@@ -722,7 +695,7 @@ static void sign_jump_cmd(buf_T *buf, linenr_T lnum, const char *name, int id, c
     return;
   }
 
-  if (buf == NULL || (group != NULL && *group == '\0') || lnum >= 0 || name != NULL) {
+  if (buf == NULL || (group != NULL && *group == NUL) || lnum >= 0 || name != NULL) {
     // File or buffer is not specified or an empty group is used
     // or a line number or a sign name is specified.
     emsg(_(e_invarg));
@@ -1343,7 +1316,7 @@ void f_sign_getplaced(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
         if (group == NULL) {
           return;
         }
-        if (*group == '\0') {  // empty string means global group
+        if (*group == NUL) {  // empty string means global group
           group = NULL;
         }
       }

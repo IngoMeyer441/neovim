@@ -12,6 +12,9 @@
 "   2024 May 08 by Vim Project: cleanup legacy Win9X checks
 "   2024 May 09 by Vim Project: remove hard-coded private.ppk
 "   2024 May 10 by Vim Project: recursively delete directories by default
+"   2024 May 13 by Vim Project: prefer scp over pscp
+"   2024 Jun 04 by Vim Project: set bufhidden if buffer changed, nohidden is set and buffer shall be switched (#14915)
+"   2024 Jun 13 by Vim Project: glob() on Windows fails when a directory name contains [] (#14952)
 " Former Maintainer:	Charles E Campbell
 " GetLatestVimScripts: 1075 1 :AutoInstall: netrw.vim
 " Copyright:    Copyright (C) 2016 Charles E. Campbell {{{1
@@ -5681,6 +5684,9 @@ fun! s:NetrwEditFile(cmd,opt,fname)
    exe "NetrwKeepj keepalt ".a:opt." ".a:cmd." ".fnameescape(a:fname)
   else
 "   call Decho("exe NetrwKeepj ".a:opt." ".a:cmd." ".fnameescape(a:fname))
+    if a:cmd =~# 'e\%[new]!' && !&hidden && getbufvar(bufname('%'), '&modified', 0)
+      call setbufvar(bufname('%'), '&bufhidden', 'hide')
+    endif
    exe "NetrwKeepj ".a:opt." ".a:cmd." ".fnameescape(a:fname)
   endif
 "  call Dret("s:NetrwEditFile")
@@ -5751,16 +5757,20 @@ fun! s:NetrwGlob(direntry,expr,pare)
     let filelist= w:netrw_treedict[a:direntry]
    endif
    let w:netrw_liststyle= keep_liststyle
-  elseif v:version > 704 || (v:version == 704 && has("patch656"))
-   let filelist= glob(s:ComposePath(fnameescape(a:direntry),a:expr),0,1,1)
-   if a:pare
-    let filelist= map(filelist,'substitute(v:val, "^.*/", "", "")')
-   endif
   else
-   let filelist= glob(s:ComposePath(fnameescape(a:direntry),a:expr),0,1)
-   if a:pare
-    let filelist= map(filelist,'substitute(v:val, "^.*/", "", "")')
-   endif
+   let path= s:ComposePath(fnameescape(a:direntry),a:expr) 
+    if has("win32")
+     " escape [ so it is not detected as wildcard character, see :h wildcard
+     let path= substitute(path, '[', '[[]', 'g')
+    endif
+    if v:version > 704 || (v:version == 704 && has("patch656"))
+     let filelist= glob(path,0,1,1)
+    else
+     let filelist= glob(path,0,1)
+    endif
+    if a:pare
+     let filelist= map(filelist,'substitute(v:val, "^.*/", "", "")')
+    endif
   endif
 "  call Dret("s:NetrwGlob ".string(filelist))
   return filelist

@@ -348,7 +348,7 @@ api.nvim_set_decoration_provider(namespace, {
                 text = text .. part.value
               end
             end
-            local vt = {} --- @type {[1]: string, [2]: string?}[]
+            local vt = {} --- @type [string, string?][]
             if hint.paddingLeft then
               vt[#vt + 1] = { ' ' }
             end
@@ -370,7 +370,7 @@ api.nvim_set_decoration_provider(namespace, {
 })
 
 --- Query whether inlay hint is enabled in the {filter}ed scope
---- @param filter vim.lsp.inlay_hint.enable.Filter
+--- @param filter? vim.lsp.inlay_hint.enable.Filter
 --- @return boolean
 --- @since 12
 function M.is_enabled(filter)

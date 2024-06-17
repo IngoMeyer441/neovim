@@ -43,6 +43,7 @@
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
+#include "nvim/errors.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/getchar.h"
@@ -1545,7 +1546,7 @@ int utf16_to_utf8(const wchar_t *utf16, int utf16len, char **utf8)
     return uv_translate_sys_error(GetLastError());
   }
 
-  (*utf8)[bufsize] = '\0';
+  (*utf8)[bufsize] = NUL;
   return 0;
 }
 

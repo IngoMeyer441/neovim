@@ -46,6 +46,7 @@ local luacats_grammar = require('scripts.luacats_grammar')
 --- @field type string
 --- @field desc string
 --- @field access? 'private'|'package'|'protected'
+--- @field nodoc? true
 
 --- @class nvim.luacats.parser.class
 --- @field kind 'class'
@@ -270,6 +271,7 @@ local function fun2field(fun)
     type = table.concat(parts, ''),
     access = fun.access,
     desc = fun.desc,
+    nodoc = fun.nodoc,
   }
 end
 
@@ -458,7 +460,7 @@ local function dump_uncommitted(filename, uncommitted)
   local out_path = 'luacats-uncommited/' .. filename:gsub('/', '%%') .. '.txt'
   if #uncommitted > 0 then
     print(string.format('Could not commit %d objects in %s', #uncommitted, filename))
-    vim.fn.mkdir(assert(vim.fs.dirname(out_path)), 'p')
+    vim.fn.mkdir(vim.fs.dirname(out_path), 'p')
     local f = assert(io.open(out_path, 'w'))
     for i, x in ipairs(uncommitted) do
       f:write(i)

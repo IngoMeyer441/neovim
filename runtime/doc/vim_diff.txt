@@ -138,8 +138,15 @@ of these in your config by simply removing the mapping, e.g. ":unmap Y".
 - * |v_star-default|
 - gc |gc-default| |v_gc-default| |o_gc-default|
 - gcc |gcc-default|
+- gr prefix |gr-default|
+  - |grn|
+  - |grr|
+  - |gra|
+- <C-S> |i_CTRL-S|
 - ]d |]d-default|
 - [d |[d-default|
+- [D |[D-default|
+- ]D |]D-default|
 - <C-W>d |CTRL-W_d-default|
 - Nvim LSP client defaults |lsp-defaults|
   - K |K-lsp-default|
@@ -159,6 +166,14 @@ nvim_terminal:
   when 'background' is "light". While this may not reflect the actual
   foreground/background color, it permits 'background' to be retained for a
   nested Nvim instance running in the terminal emulator.
+- TermOpen: Sets default options for |terminal| buffers:
+    - 'nomodifiable'
+    - 'undolevels' set to -1
+    - 'textwidth' set to 0
+    - 'nowrap'
+    - 'nolist'
+    - 'winhighlight' uses |hl-StatusLineTerm| and |hl-StatusLineTermNC| in
+      place of |hl-StatusLine| and |hl-StatusLineNC|
 
 nvim_cmdwin:
 - CmdwinEnter: Limits syntax sync to maxlines=1 in the |cmdwin|.
@@ -531,6 +546,8 @@ Highlight groups:
 - Highlight groups names are allowed to contain `@` characters.
   - It is an error to define a highlight group with a name that doesn't match
     the regexp `[a-zA-Z0-9_.@-]*` (see |group-name|).
+- |hl-StatusLineTerm| |hl-StatusLineTermNC| are implemented as 'winhighlight'
+  window-local highlights which are set by the default |TermOpen| handler.
 
 Macro (|recording|) behavior:
 - Replay of a macro recorded during :lmap produces the same actions as when it
@@ -657,17 +674,6 @@ Eval:
 Events:
 - *SafeStateAgain*
 - *SigUSR1* Use |Signal| to detect `SIGUSR1` signal instead.
-
-Highlight groups:
-- *hl-StatusLineTerm* *hl-StatusLineTermNC* are unnecessary because Nvim
-  supports 'winhighlight' window-local highlights. For example, to mimic Vim's
-  StatusLineTerm:  >vim
-      hi StatusLineTerm ctermfg=black ctermbg=green
-      hi StatusLineTermNC ctermfg=green
-      autocmd TermOpen,WinEnter * if &buftype=='terminal'
-        \|setlocal winhighlight=StatusLine:StatusLineTerm,StatusLineNC:StatusLineTermNC
-        \|else|setlocal winhighlight=|endif
-<
 
 Options:
 - *'aleph'* *'al'*

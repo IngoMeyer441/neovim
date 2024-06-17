@@ -75,7 +75,6 @@ local new_layout = {
   ['news-0.9.txt'] = true,
   ['news-0.10.txt'] = true,
   ['nvim.txt'] = true,
-  ['pi_health.txt'] = true,
   ['provider.txt'] = true,
   ['ui.txt'] = true,
   ['vim_diff.txt'] = true,
@@ -837,8 +836,7 @@ local function gen_one(fname, to_fname, old, commit, parser_path)
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3" />
     <link rel="preconnect" href="https://X185E15FPG-dsn.algolia.net" crossorigin />
 
-    <link href="/css/normalize.min.css" rel="stylesheet">
-    <link href="/css/bootstrap.css" rel="stylesheet">
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
     <link href="/css/main.css" rel="stylesheet">
     <link href="help.css" rel="stylesheet">
     <link href="/highlight/styles/neovim.min.css" rel="stylesheet">
@@ -1374,7 +1372,7 @@ function M.validate(help_dir, include, parser_path)
   parser_path = parser_path and vim.fn.expand(parser_path) or nil
 
   for _, f in ipairs(helpfiles) do
-    local helpfile = assert(vim.fs.basename(f))
+    local helpfile = vim.fs.basename(f)
     local rv = validate_one(f, parser_path)
     print(('validated (%-4s errors): %s'):format(#rv.parse_errors, helpfile))
     if #rv.parse_errors > 0 then
@@ -1432,17 +1430,14 @@ end
 ---    :help files, we can be precise about the tolerances here.
 --- @param help_dir? string e.g. '$VIMRUNTIME/doc' or './runtime/doc'
 function M.test_gen(help_dir)
-  local tmpdir = assert(vim.fs.dirname(vim.fn.tempname()))
+  local tmpdir = vim.fs.dirname(vim.fn.tempname())
   help_dir = vim.fn.expand(help_dir or '$VIMRUNTIME/doc')
   print('doc path = ' .. vim.uv.fs_realpath(help_dir))
 
-  local rv = M.gen(
-    help_dir,
-    tmpdir,
-    -- Because gen() is slow (~30s), this test is limited to a few files.
-    { 'pi_health.txt', 'help.txt', 'index.txt', 'nvim.txt' }
-  )
-  eq(4, #rv.helpfiles)
+  -- Because gen() is slow (~30s), this test is limited to a few files.
+  local input = { 'help.txt', 'index.txt', 'nvim.txt' }
+  local rv = M.gen(help_dir, tmpdir, input)
+  eq(#input, #rv.helpfiles)
   eq(0, rv.err_count, 'parse errors in :help docs')
   eq({}, rv.invalid_links, 'invalid tags in :help docs')
 end

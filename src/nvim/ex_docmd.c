@@ -29,6 +29,7 @@
 #include "nvim/digraph.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -1728,12 +1729,6 @@ int execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo, bool preview)
   }
 
   const char *errormsg = NULL;
-#undef ERROR
-#define ERROR(msg) \
-  do { \
-    errormsg = msg; \
-    goto end; \
-  } while (0)
 
   cmdmod_T save_cmdmod = cmdmod;
   cmdmod = cmdinfo->cmdmod;
@@ -1744,16 +1739,19 @@ int execute_cmd(exarg_T *eap, CmdParseInfo *cmdinfo, bool preview)
   if (!MODIFIABLE(curbuf) && (eap->argt & EX_MODIFY)
       // allow :put in terminals
       && !(curbuf->terminal && eap->cmdidx == CMD_put)) {
-    ERROR(_(e_modifiable));
+    errormsg = _(e_modifiable);
+    goto end;
   }
   if (!IS_USER_CMDIDX(eap->cmdidx)) {
     if (cmdwin_type != 0 && !(eap->argt & EX_CMDWIN)) {
       // Command not allowed in the command line window
-      ERROR(_(e_cmdwin));
+      errormsg = _(e_cmdwin);
+      goto end;
     }
     if (text_locked() && !(eap->argt & EX_LOCK_OK)) {
       // Command not allowed when text is locked
-      ERROR(_(get_text_locked_msg()));
+      errormsg = _(get_text_locked_msg());
+      goto end;
     }
   }
   // Disallow editing another buffer when "curbuf->b_ro_locked" is set.
@@ -1801,7 +1799,6 @@ end:
 
   do_cmdline_end();
   return retv;
-#undef ERROR
 }
 
 static void profile_cmd(const exarg_T *eap, cstack_T *cstack, LineGetter fgetline, void *cookie)
@@ -2695,7 +2692,7 @@ int parse_command_modifiers(exarg_T *eap, const char **errormsg, cmdmod_T *cmod,
 
 /// Apply the command modifiers.  Saves current state in "cmdmod", call
 /// undo_cmdmod() later.
-static void apply_cmdmod(cmdmod_T *cmod)
+void apply_cmdmod(cmdmod_T *cmod)
 {
   if ((cmod->cmod_flags & CMOD_SANDBOX) && !cmod->cmod_did_sandbox) {
     sandbox++;
@@ -3506,7 +3503,7 @@ static linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, bool
         }
         searchcmdlen = 0;
         flags = silent ? 0 : SEARCH_HIS | SEARCH_MSG;
-        if (!do_search(NULL, c, c, cmd, 1, flags, NULL)) {
+        if (!do_search(NULL, c, c, cmd, strlen(cmd), 1, flags, NULL)) {
           curwin->w_cursor = pos;
           cmd = NULL;
           goto error;
@@ -3543,7 +3540,7 @@ static linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, bool
         pos.coladd = 0;
         if (searchit(curwin, curbuf, &pos, NULL,
                      *cmd == '?' ? BACKWARD : FORWARD,
-                     "", 1, SEARCH_MSG, i, NULL) != FAIL) {
+                     "", 0, 1, SEARCH_MSG, i, NULL) != FAIL) {
           lnum = pos.lnum;
         } else {
           cmd = NULL;
@@ -3829,8 +3826,8 @@ char *replace_makeprg(exarg_T *eap, char *arg, char **cmdlinep)
       // No $* in arg, build "<makeprg> <arg>" instead
       new_cmdline = xmalloc(strlen(program) + strlen(arg) + 2);
       STRCPY(new_cmdline, program);
-      STRCAT(new_cmdline, " ");
-      STRCAT(new_cmdline, arg);
+      strcat(new_cmdline, " ");
+      strcat(new_cmdline, arg);
     }
 
     msg_make(arg);
@@ -4117,7 +4114,7 @@ static char *getargcmd(char **argp)
 
   if (*arg == '+') {        // +[command]
     arg++;
-    if (ascii_isspace(*arg) || *arg == '\0') {
+    if (ascii_isspace(*arg) || *arg == NUL) {
       command = dollar_command;
     } else {
       command = arg;
@@ -7239,7 +7236,7 @@ char *expand_sfile(char *arg)
       memmove(newres, result, (size_t)(p - result));
       STRCPY(newres + (p - result), repl);
       len = strlen(newres);
-      STRCAT(newres, p + srclen);
+      strcat(newres, p + srclen);
       xfree(repl);
       xfree(result);
       result = newres;

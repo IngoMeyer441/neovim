@@ -465,6 +465,7 @@ static void draw_sign(bool nrcol, win_T *wp, winlinevars_T *wlv, int sign_idx, i
     int fill = nrcol ? number_width(wp) + 1 : SIGN_WIDTH;
     draw_col_fill(wlv, schar_from_ascii(' '), fill, attr);
     int sign_pos = wlv->off - SIGN_WIDTH - (int)nrcol;
+    assert(sign_pos >= 0);
     linebuf_char[sign_pos] = sattr.text[0];
     linebuf_char[sign_pos + 1] = sattr.text[1];
   } else {
@@ -586,12 +587,13 @@ static void draw_statuscol(win_T *wp, winlinevars_T *wlv, linenr_T lnum, int vir
 
   char buf[MAXPATHL];
   // When a buffer's line count has changed, make a best estimate for the full
-  // width of the status column by building with "w_nrwidth_line_count". Add
-  // potentially truncated width and rebuild before drawing anything.
+  // width of the status column by building with the largest possible line number.
+  // Add potentially truncated width and rebuild before drawing anything.
   if (wp->w_statuscol_line_count != wp->w_nrwidth_line_count) {
     wp->w_statuscol_line_count = wp->w_nrwidth_line_count;
     set_vim_var_nr(VV_VIRTNUM, 0);
-    int width = build_statuscol_str(wp, wp->w_nrwidth_line_count, 0, buf, stcp);
+    int width = build_statuscol_str(wp, wp->w_nrwidth_line_count,
+                                    wp->w_nrwidth_line_count, buf, stcp);
     if (width > stcp->width) {
       int addwidth = MIN(width - stcp->width, MAX_STCWIDTH - stcp->width);
       wp->w_nrwidth += addwidth;
@@ -1421,7 +1423,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
       line = ml_get_buf(wp->w_buffer, lnum);
       ptr = line + linecol;
 
-      if (len == 0 || (int)wp->w_cursor.col > ptr - line) {
+      if (len == 0 || wp->w_cursor.col > linecol) {
         // no bad word found at line start, don't check until end of a
         // word
         spell_hlf = HLF_COUNT;
@@ -1595,6 +1597,10 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
       if (has_decor && wlv.row == startrow + wlv.filler_lines) {
         // hide virt_text on text hidden by 'nowrap' or 'smoothscroll'
         decor_redraw_col(wp, (colnr_T)(ptr - line) - 1, wlv.off, true, &decor_state);
+      }
+      if (wlv.col >= grid->cols) {
+        wlv.col = wlv.off = grid->cols;
+        goto end_check;
       }
     }
 
@@ -2650,13 +2656,6 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
         conceal_cursor_used = conceal_cursor_line(curwin);
       }
 
-      // When the window is too narrow draw all "@" lines.
-      if (leftcols_width >= wp->w_grid.cols && is_wrapped) {
-        win_draw_end(wp, schar_from_ascii('@'), true, wlv.row, wp->w_grid.rows, HLF_AT);
-        set_empty_rows(wp, wlv.row);
-        wlv.row = endrow;
-      }
-
       break;
     }
 
@@ -2844,10 +2843,12 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
       }
     }
 
+end_check:
     // At end of screen line and there is more to come: Display the line
     // so far.  If there is no more to display it is caught above.
     if (wlv.col >= grid->cols && (!has_foldtext || virt_line_offset >= 0)
-        && (*ptr != NUL
+        && (wlv.col <= leftcols_width
+            || *ptr != NUL
             || wlv.filler_todo > 0
             || (wp->w_p_list && wp->w_p_lcs_chars.eol != NUL && lcs_eol_todo)
             || (wlv.n_extra != 0 && (wlv.sc_extra != NUL || *wlv.p_extra != NUL))

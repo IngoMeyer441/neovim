@@ -273,6 +273,7 @@ local config = {
       'buf.lua',
       'diagnostic.lua',
       'codelens.lua',
+      'completion.lua',
       'inlay_hint.lua',
       'tagfunc.lua',
       'semantic_tokens.lua',
@@ -361,6 +362,21 @@ local config = {
       fun.name = vim.split(fun.name, '.', { plain = true })[2]
     end,
   },
+  health = {
+    filename = 'health.txt',
+    files = {
+      'runtime/lua/vim/health.lua',
+    },
+    section_order = {
+      'health.lua',
+    },
+    section_fmt = function(_name)
+      return 'Checkhealth'
+    end,
+    helptag_fmt = function(name)
+      return name:lower()
+    end,
+  },
 }
 
 --- @param ty string
@@ -405,8 +421,11 @@ local function render_type(ty, generics, default)
 end
 
 --- @param p nvim.luacats.parser.param|nvim.luacats.parser.field
-local function should_render_param(p)
-  return not p.access and not contains(p.name, { '_', 'self' })
+local function should_render_field_or_param(p)
+  return not p.nodoc
+    and not p.access
+    and not contains(p.name, { '_', 'self' })
+    and not vim.startswith(p.name, '_')
 end
 
 --- @param desc? string
@@ -508,7 +527,7 @@ end
 local function render_fields_or_params(xs, generics, classes, exclude_types)
   local ret = {} --- @type string[]
 
-  xs = vim.tbl_filter(should_render_param, xs)
+  xs = vim.tbl_filter(should_render_field_or_param, xs)
 
   local indent = 0
   for _, p in ipairs(xs) do
@@ -798,7 +817,7 @@ local function get_script_path()
 end
 
 local script_path = get_script_path()
-local base_dir = vim.fs.dirname(assert(vim.fs.dirname(script_path)))
+local base_dir = vim.fs.dirname(vim.fs.dirname(script_path))
 
 local function delete_lines_below(doc_file, tokenstr)
   local lines = {} --- @type string[]
@@ -919,7 +938,7 @@ local function gen_target(cfg)
 
   expand_files(cfg.files)
 
-  --- @type table<string,{[1]:table<string,nvim.luacats.parser.class>, [2]: nvim.luacats.parser.fun[], [3]: string[]}>
+  --- @type table<string,[table<string,nvim.luacats.parser.class>, nvim.luacats.parser.fun[], string[]]>
   local file_results = {}
 
   --- @type table<string,nvim.luacats.parser.class>
@@ -950,7 +969,7 @@ local function gen_target(cfg)
       end
     end
     -- FIXME: Using f_base will confuse `_meta/protocol.lua` with `protocol.lua`
-    local f_base = assert(vim.fs.basename(f))
+    local f_base = vim.fs.basename(f)
     sections[f_base] = make_section(f_base, cfg, briefs_txt, funs_txt)
   end
 

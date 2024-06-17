@@ -85,13 +85,13 @@ do
   vim.keymap.set(
     'x',
     'Q',
-    "mode() == 'V' ? ':normal! @<C-R>=reg_recorded()<CR><CR>' : 'Q'",
+    "mode() ==# 'V' ? ':normal! @<C-R>=reg_recorded()<CR><CR>' : 'Q'",
     { silent = true, expr = true, desc = ':help v_Q-default' }
   )
   vim.keymap.set(
     'x',
     '@',
-    "mode() == 'V' ? ':normal! @'.getcharstr().'<CR>' : '@'",
+    "mode() ==# 'V' ? ':normal! @'.getcharstr().'<CR>' : '@'",
     { silent = true, expr = true, desc = ':help v_@-default' }
   )
 
@@ -107,22 +107,25 @@ do
           vim.inspect(cmd.cmd)
         )
       end
-
-      if err then
-        vim.notify(err, vim.log.levels.ERROR)
-      end
+      return err
     end
 
     local gx_desc =
       'Opens filepath or URI under cursor with the system handler (file explorer, web browser, …)'
     vim.keymap.set({ 'n' }, 'gx', function()
-      do_open(vim.fn.expand('<cfile>'))
+      local err = do_open(require('vim.ui')._get_url())
+      if err then
+        vim.notify(err, vim.log.levels.ERROR)
+      end
     end, { desc = gx_desc })
     vim.keymap.set({ 'x' }, 'gx', function()
       local lines =
         vim.fn.getregion(vim.fn.getpos('.'), vim.fn.getpos('v'), { type = vim.fn.mode() })
       -- Trim whitespace on each line and concatenate.
-      do_open(table.concat(vim.iter(lines):map(vim.trim):totable()))
+      local err = do_open(table.concat(vim.iter(lines):map(vim.trim):totable()))
+      if err then
+        vim.notify(err, vim.log.levels.ERROR)
+      end
     end, { desc = gx_desc })
   end
 
@@ -146,18 +149,51 @@ do
     vim.keymap.set({ 'o' }, 'gc', textobject_rhs, { desc = 'Comment textobject' })
   end
 
+  --- Default maps for LSP functions.
+  ---
+  --- These are mapped unconditionally to avoid different behavior depending on whether an LSP
+  --- client is attached. If no client is attached, or if a server does not support a capability, an
+  --- error message is displayed rather than exhibiting different behavior.
+  ---
+  --- See |grr|, |grn|, |gra|, |i_CTRL-S|.
+  do
+    vim.keymap.set('n', 'grn', function()
+      vim.lsp.buf.rename()
+    end, { desc = 'vim.lsp.buf.rename()' })
+
+    vim.keymap.set({ 'n', 'x' }, 'gra', function()
+      vim.lsp.buf.code_action()
+    end, { desc = 'vim.lsp.buf.code_action()' })
+
+    vim.keymap.set('n', 'grr', function()
+      vim.lsp.buf.references()
+    end, { desc = 'vim.lsp.buf.references()' })
+
+    vim.keymap.set('i', '<C-S>', function()
+      vim.lsp.buf.signature_help()
+    end, { desc = 'vim.lsp.buf.signature_help()' })
+  end
+
   --- Map [d and ]d to move to the previous/next diagnostic. Map <C-W>d to open a floating window
   --- for the diagnostic under the cursor.
   ---
   --- See |[d-default|, |]d-default|, and |CTRL-W_d-default|.
   do
     vim.keymap.set('n', ']d', function()
-      vim.diagnostic.goto_next({ float = false })
-    end, { desc = 'Jump to the next diagnostic' })
+      vim.diagnostic.jump({ count = vim.v.count1 })
+    end, { desc = 'Jump to the next diagnostic in the current buffer' })
 
     vim.keymap.set('n', '[d', function()
-      vim.diagnostic.goto_prev({ float = false })
-    end, { desc = 'Jump to the previous diagnostic' })
+      vim.diagnostic.jump({ count = -vim.v.count1 })
+    end, { desc = 'Jump to the previous diagnostic in the current buffer' })
+
+    vim.keymap.set('n', ']D', function()
+      vim.diagnostic.jump({ count = math.huge, wrap = false })
+    end, { desc = 'Jump to the last diagnostic in the current buffer' })
+
+    vim.keymap.set('n', '[D', function()
+      vim.diagnostic.jump({ count = -math.huge, wrap = false })
+    end, { desc = 'Jump to the first diagnostic in the current buffer' })
 
     vim.keymap.set('n', '<C-W>d', function()
       vim.diagnostic.open_float()
@@ -246,6 +282,26 @@ do
     end,
   })
 
+  vim.api.nvim_create_autocmd('TermOpen', {
+    group = nvim_terminal_augroup,
+    desc = 'Default settings for :terminal buffers',
+    callback = function()
+      vim.bo.modifiable = false
+      vim.bo.undolevels = -1
+      vim.bo.scrollback = vim.o.scrollback < 0 and 10000 or math.max(1, vim.o.scrollback)
+      vim.bo.textwidth = 0
+      vim.wo[0][0].wrap = false
+      vim.wo[0][0].list = false
+
+      -- This is gross. Proper list options support when?
+      local winhl = vim.o.winhighlight
+      if winhl ~= '' then
+        winhl = winhl .. ','
+      end
+      vim.wo[0][0].winhighlight = winhl .. 'StatusLine:StatusLineTerm,StatusLineNC:StatusLineTermNC'
+    end,
+  })
+
   vim.api.nvim_create_autocmd('CmdwinEnter', {
     pattern = '[:>]',
     desc = 'Limit syntax sync to maxlines=1 in the command window',
@@ -266,7 +322,10 @@ do
         return
       end
       vim.v.swapchoice = 'e' -- Choose "(E)dit".
-      vim.notify(('W325: Ignoring swapfile from Nvim process %d'):format(info.pid))
+      vim.notify(
+        ('W325: Ignoring swapfile from Nvim process %d'):format(info.pid),
+        vim.log.levels.WARN
+      )
     end,
   })
 
@@ -431,10 +490,14 @@ do
     --- response indicates that it does support truecolor enable 'termguicolors',
     --- but only if the user has not already disabled it.
     do
-      if tty.rgb then
-        -- The TUI was able to determine truecolor support
+      local colorterm = os.getenv('COLORTERM')
+      if tty.rgb or colorterm == 'truecolor' or colorterm == '24bit' then
+        -- The TUI was able to determine truecolor support or $COLORTERM explicitly indicates
+        -- truecolor support
         setoption('termguicolors', true)
-      else
+      elseif colorterm == nil or colorterm == '' then
+        -- Neither the TUI nor $COLORTERM indicate that truecolor is supported, so query the
+        -- terminal
         local caps = {} ---@type table<string, boolean>
         require('vim.termcap').query({ 'Tc', 'RGB', 'setrgbf', 'setrgbb' }, function(cap, found)
           if not found then

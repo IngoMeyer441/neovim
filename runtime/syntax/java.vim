@@ -3,7 +3,7 @@
 " Maintainer:		Aliaksei Budavei <0x000c70 AT gmail DOT com>
 " Former Maintainer:	Claudio Fleiner <claudio@fleiner.com>
 " Repository:		https://github.com/zzzyxwvut/java-vim.git
-" Last Change:		2024 May 10
+" Last Change:		2024 Jun 15
 
 " Please check :help java.vim for comments on some of the options available.
 
@@ -14,7 +14,6 @@ if !exists("main_syntax")
   endif
   " we define it here so that included files can test for it
   let main_syntax='java'
-  syn region javaFold start="{" end="}" transparent fold
 endif
 
 let s:cpo_save = &cpo
@@ -39,6 +38,18 @@ else
   function! s:ReportOnce(dummy)
   endfunction
 endif
+
+function! JavaSyntaxFoldTextExpr() abort
+  return getline(v:foldstart) !~ '/\*\+\s*$'
+    \ ? foldtext()
+    \ : printf('+-%s%3d lines: ',
+	  \ v:folddashes,
+	  \ (v:foldend - v:foldstart + 1)) .
+	\ getline(v:foldstart + 1)
+endfunction
+
+" E120 for "fdt=s:JavaSyntaxFoldTextExpr()" before v8.2.3900.
+setlocal foldtext=JavaSyntaxFoldTextExpr()
 
 " Admit the ASCII dollar sign to keyword characters (JLS-17, §3.8):
 try
@@ -99,6 +110,7 @@ syn match   javaClassDecl	"\<record\>\%(\s*(\)\@!"
 syn match   javaClassDecl	"^class\>"
 syn match   javaClassDecl	"[^.]\s*\<class\>"ms=s+1
 syn match   javaAnnotation	"@\%(\K\k*\.\)*\K\k*\>"
+syn region  javaAnnotation	transparent matchgroup=javaAnnotationStart start=/@\%(\K\k*\.\)*\K\k*(/ end=/)/ skip=/\/\*.\{-}\*\/\|\/\/.*$/ contains=javaAnnotation,javaParenT,javaBlock,javaString,javaBoolean,javaNumber,javaTypedef,javaComment,javaLineComment
 syn match   javaClassDecl	"@interface\>"
 syn keyword javaBranch		break continue nextgroup=javaUserLabelRef skipwhite
 syn match   javaUserLabelRef	"\k\+" contained
@@ -215,7 +227,7 @@ syn keyword javaLabelVarType	contained var
 syn keyword javaLabelCastType	contained char byte short int
 " Allow for the contingency of the enclosing region not being able to
 " _keep_ its _end_, e.g. case ':':.
-syn region  javaLabelWhenClause	contained transparent matchgroup=javaLabel start="\<when\>" matchgroup=NONE end=":"me=e-1 end="->"me=e-2 contains=TOP,javaExternal
+syn region  javaLabelWhenClause	contained transparent matchgroup=javaLabel start="\<when\>" matchgroup=NONE end=":"me=e-1 end="->"me=e-2 contains=TOP,javaExternal,javaLambdaDef
 syn match   javaLabelNumber	contained "\<0\>[lL]\@!"
 syn match   javaLabelNumber	contained "\<\%(0\%([xX]\x\%(_*\x\)*\|_*\o\%(_*\o\)*\|[bB][01]\%(_*[01]\)*\)\|[1-9]\%(_*\d\)*\)\>[lL]\@!"
 hi def link javaLabelDefault	javaLabel
@@ -237,7 +249,7 @@ if exists("java_comment_strings")
   syn cluster javaCommentSpecial2 add=javaComment2String,javaCommentCharacter,javaNumber,javaStrTempl
 endif
 
-syn region  javaComment		matchgroup=javaCommentStart start="/\*" end="\*/" contains=@javaCommentSpecial,javaTodo,javaCommentError,javaSpaceError,@Spell
+syn region  javaComment		 matchgroup=javaCommentStart start="/\*" end="\*/" contains=@javaCommentSpecial,javaTodo,javaCommentError,javaSpaceError,@Spell fold
 syn match   javaCommentStar	 contained "^\s*\*[^/]"me=e-1
 syn match   javaCommentStar	 contained "^\s*\*$"
 syn match   javaLineComment	"//.*" contains=@javaCommentSpecial2,javaTodo,javaCommentMarkupTag,javaSpaceError,@Spell
@@ -268,7 +280,7 @@ if !exists("java_ignore_javadoc") && main_syntax != 'jsp'
     call s:ReportOnce(v:exception)
   endtry
 
-  syn region javaDocComment	start="/\*\*" end="\*/" keepend contains=javaCommentTitle,@javaHtml,javaDocTags,javaDocSeeTag,javaDocCodeTag,javaDocSnippetTag,javaTodo,javaCommentError,javaSpaceError,@Spell
+  syn region javaDocComment	start="/\*\*" end="\*/" keepend contains=javaCommentTitle,@javaHtml,javaDocTags,javaDocSeeTag,javaDocCodeTag,javaDocSnippetTag,javaTodo,javaCommentError,javaSpaceError,@Spell fold
   exec 'syn region javaCommentTitle contained matchgroup=javaDocComment start="/\*\*" matchgroup=javaCommentTitle end="\.$" end="\.[ \t\r]\@=" end="\%(^\s*\**\s*\)\@' . s:ff.Peek('80', '') . '<=@"me=s-2,he=s-1 end="\*/"me=s-1,he=s-1 contains=@javaHtml,javaCommentStar,javaTodo,javaCommentError,javaSpaceError,@Spell,javaDocTags,javaDocSeeTag,javaDocCodeTag,javaDocSnippetTag'
   syn region javaCommentTitle	contained matchgroup=javaDocComment start="/\*\*\s*\r\=\n\=\s*\**\s*\%({@return\>\)\@=" matchgroup=javaCommentTitle end="}\%(\s*\.*\)*" contains=@javaHtml,javaCommentStar,javaTodo,javaCommentError,javaSpaceError,@Spell,javaDocTags,javaDocSeeTag,javaDocCodeTag,javaDocSnippetTag
   syn region javaDocTags	contained start="{@\%(li\%(teral\|nk\%(plain\)\=\)\|inherit[Dd]oc\|doc[rR]oot\|value\)\>" end="}"
@@ -347,9 +359,6 @@ if exists("java_highlight_functions")
     " Match: [@ɐ] [abstract] [<α, β>] Τʬ[<γ>][[][]] μʭʭ(/* ... */);
     exec 'syn region javaFuncDef start=/' . s:ff.Engine('\%#=2', '') . '^\s\+\%(\%(@\%(\K\k*\.\)*\K\k*\>\)\s\+\)*\%(p\%(ublic\|rotected\|rivate\)\s\+\)\=\%(\%(abstract\|default\)\s\+\|\%(\%(final\|\%(native\|strictfp\)\|s\%(tatic\|ynchronized\)\)\s\+\)*\)\=\%(<.*[[:space:]-]\@' . s:ff.Peek('1', '') . '<!>\s\+\)\=\%(void\|\%(b\%(oolean\|yte\)\|char\|short\|int\|long\|float\|double\|\%(\<\K\k*\>\.\)*\<' . s:ff.UpperCase('[$_[:upper:]]', '[^a-z0-9]') . '\k*\>\%(<[^(){}]*[[:space:]-]\@' . s:ff.Peek('1', '') . '<!>\)\=\)\%(\[\]\)*\)\s\+\<' . s:ff.LowerCase('[$_[:lower:]]', '[^A-Z0-9]') . '\k*\>\s*(/ end=/)/ skip=/\/\*.\{-}\*\/\|\/\/.*$/ contains=@javaFuncParams'
   endif
-
-  exec 'syn match javaLambdaDef "\<\K\k*\>\%(\<default\>\)\@' . s:ff.Peek('7', '') . '<!\s*->"'
-  syn match javaBraces "[{}]"
 endif
 
 if exists("java_highlight_debug")
@@ -404,14 +413,18 @@ if exists("java_highlight_debug")
 endif
 
 if exists("java_mark_braces_in_parens_as_errors")
-  syn match javaInParen		 contained "[{}]"
-  hi def link javaInParen	javaError
+  syn match javaInParen contained "[{}]"
+  hi def link javaInParen javaError
 endif
 
+" Try not to fold top-level-type bodies under assumption that there is
+" but one such body.
+exec 'syn region javaBlock transparent start="\%(^\|^\S[^:]\+\)\@' . s:ff.Peek('120', '') . '<!{" end="}" fold'
+
 " catch errors caused by wrong parenthesis
-syn region  javaParenT	transparent matchgroup=javaParen  start="(" end=")" contains=@javaTop,javaParenT1
-syn region  javaParenT1 transparent matchgroup=javaParen1 start="(" end=")" contains=@javaTop,javaParenT2 contained
-syn region  javaParenT2 transparent matchgroup=javaParen2 start="(" end=")" contains=@javaTop,javaParenT  contained
+syn region  javaParenT	transparent matchgroup=javaParen  start="(" end=")" contains=@javaTop,javaInParen,javaParenT1
+syn region  javaParenT1 transparent matchgroup=javaParen1 start="(" end=")" contains=@javaTop,javaInParen,javaParenT2 contained
+syn region  javaParenT2 transparent matchgroup=javaParen2 start="(" end=")" contains=@javaTop,javaInParen,javaParenT contained
 syn match   javaParenError	 ")"
 " catch errors caused by wrong square parenthesis
 syn region  javaParenT	transparent matchgroup=javaParen  start="\[" end="\]" contains=@javaTop,javaParenT1
@@ -421,14 +434,31 @@ syn match   javaParenError	 "\]"
 
 hi def link javaParenError	javaError
 
+" Lambda expressions (JLS-17, §15.27).
 if exists("java_highlight_functions")
   " Make ()-matching definitions after the parenthesis error catcher.
-  exec 'syn match javaLambdaDef "\k\@' . s:ff.Peek('4', '') . '<!(\%(\k\|[[:space:]<>?\[\]@,.]\)*)\s*->"'
+  "
+  " Match: ([@A [@B ...] final] var a[, var b, ...]) ->
+  "	| ([@A [@B ...] final] T[<α>][[][]] a[, T b, ...]) ->
+  " There is no recognition of expressions interspersed with comments
+  " or of expressions whose parameterised parameter types are written
+  " across multiple lines.
+  exec 'syn match javaLambdaDef "\k\@' . s:ff.Peek('4', '') . '<!([[:space:]\n]*\%(\%(@\%(\K\k*\.\)*\K\k*\>\%((\_.\{-1,})\)\{-,1}[[:space:]\n]\+\)*\%(final[[:space:]\n]\+\)\=\%(\<\K\k*\>\.\)*\<\K\k*\>\%(<[^(){}]*[[:space:]-]\@' . s:ff.Peek('1', '') . '<!>\)\=\%(\%(\%(\[\]\)\+\|\.\.\.\)\)\=[[:space:]\n]\+\<\K\k*\>\%(\[\]\)*\%(,[[:space:]\n]*\)\=\)\+)[[:space:]\n]*->" contains=javaAnnotation,javaParamModifier,javaLambdaVarType,javaType,@javaClasses,javaVarArg'
+  " Match: () ->
+  "	| (a[, b, ...]) ->
+  exec 'syn match javaLambdaDef "\k\@' . s:ff.Peek('4', '') . '<!([[:space:]\n]*\%(\<\K\k*\>\%(,[[:space:]\n]*\)\=\)*)[[:space:]\n]*->"'
+  " Match: a ->
+  exec 'syn match javaLambdaDef "\<\K\k*\>\%(\<default\>\)\@' . s:ff.Peek('7', '') . '<![[:space:]\n]*->"'
+
+  syn keyword javaParamModifier contained final
+  hi def link javaParamModifier javaConceptKind
+  syn keyword javaLambdaVarType contained var
+  hi def link javaLambdaVarType javaOperator
 endif
 
 " The @javaTop cluster comprises non-contained Java syntax groups.
 " Note that the syntax file "aidl.vim" relies on its availability.
-syn cluster javaTop contains=TOP,javaDocComment,javaFold,javaParenError,javaParenT
+syn cluster javaTop contains=TOP,javaDocComment,javaBlock,javaParenError,javaParenT
 
 if !exists("java_minlines")
   let java_minlines = 10
@@ -446,7 +476,6 @@ exec "syn sync ccomment javaComment minlines=" . java_minlines
 hi def link javaLambdaDef		Function
 hi def link javaFuncDef		Function
 hi def link javaVarArg			Function
-hi def link javaBraces			Function
 hi def link javaBranch			Conditional
 hi def link javaUserLabelRef		javaUserLabel
 hi def link javaLabel			Label
@@ -481,6 +510,7 @@ hi def link javaConstant		Constant
 hi def link javaTypedef		Typedef
 hi def link javaTodo			Todo
 hi def link javaAnnotation		PreProc
+hi def link javaAnnotationStart		javaAnnotation
 
 hi def link javaCommentTitle		SpecialComment
 hi def link javaDocTags		Special
@@ -515,4 +545,20 @@ let b:spell_options = "contained"
 let &cpo = s:cpo_save
 unlet s:module_info_cur_buf s:ff s:cpo_save
 
+" See ":help vim9-mix".
+if !has("vim9script")
+  finish
+endif
+
+def! s:JavaSyntaxFoldTextExpr(): string
+  return getline(v:foldstart) !~ '/\*\+\s*$'
+    ? foldtext()
+    : printf('+-%s%3d lines: ',
+	  v:folddashes,
+	  (v:foldend - v:foldstart + 1)) ..
+	getline(v:foldstart + 1)
+enddef
+
+setlocal foldtext=s:JavaSyntaxFoldTextExpr()
+delfunction! g:JavaSyntaxFoldTextExpr
 " vim: sw=2 ts=8 noet sta

@@ -3,7 +3,7 @@ local protocol = require('vim.lsp.protocol')
 local ms = protocol.Methods
 local util = require('vim.lsp.util')
 local api = vim.api
-local completion = require('vim.lsp._completion')
+local completion = require('vim.lsp.completion')
 
 --- @type table<string,lsp.Handler>
 local M = {}
@@ -646,6 +646,7 @@ M[ms.window_showMessage] = function(_, result, ctx, _)
   if message_type == protocol.MessageType.Error then
     err_message('LSP[', client_name, '] ', message)
   else
+    --- @type string
     local message_type_name = protocol.MessageType[message_type]
     api.nvim_out_write(string.format('LSP[%s][%s] %s\n', client_name, message_type_name, message))
   end

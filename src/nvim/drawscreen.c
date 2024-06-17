@@ -65,6 +65,7 @@
 #include "nvim/autocmd.h"
 #include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/cursor.h"
@@ -715,13 +716,16 @@ void end_search_hl(void)
   screen_search_hl.rm.regprog = NULL;
 }
 
-static void win_redr_bordertext(win_T *wp, VirtText vt, int col)
+static void win_redr_bordertext(win_T *wp, VirtText vt, int col, BorderTextType bt)
 {
   for (size_t i = 0; i < kv_size(vt);) {
-    int attr = 0;
+    int attr = -1;
     char *text = next_virt_text_chunk(vt, &i, &attr);
     if (text == NULL) {
       break;
+    }
+    if (attr == -1) {  // No highlight specified.
+      attr = wp->w_ns_hl_attr[bt == kBorderTextTitle ? HLF_BTITLE : HLF_BFOOTER];
     }
     attr = hl_apply_winblend(wp, attr);
     col += grid_line_puts(col, text, -1, attr);
@@ -773,7 +777,7 @@ static void win_redr_border(win_T *wp)
     if (wp->w_config.title) {
       int title_col = win_get_bordertext_col(icol, wp->w_config.title_width,
                                              wp->w_config.title_pos);
-      win_redr_bordertext(wp, wp->w_config.title_chunks, title_col);
+      win_redr_bordertext(wp, wp->w_config.title_chunks, title_col, kBorderTextTitle);
     }
     if (adj[1]) {
       grid_line_put_schar(icol + adj[3], chars[2], attrs[2]);
@@ -809,7 +813,7 @@ static void win_redr_border(win_T *wp)
     if (wp->w_config.footer) {
       int footer_col = win_get_bordertext_col(icol, wp->w_config.footer_width,
                                               wp->w_config.footer_pos);
-      win_redr_bordertext(wp, wp->w_config.footer_chunks, footer_col);
+      win_redr_bordertext(wp, wp->w_config.footer_chunks, footer_col, kBorderTextFooter);
     }
     if (adj[1]) {
       grid_line_put_schar(icol + adj[3], chars[4], attrs[4]);
@@ -927,13 +931,7 @@ int showmode(void)
     msg_ext_clear(true);
   }
 
-  // Don't make non-flushed message part of the showmode and reset global
-  // variables before flushing to to avoid recursiveness.
-  bool draw_mode = redraw_mode;
-  bool clear_cmd = clear_cmdline;
-  redraw_cmdline = false;
-  redraw_mode = false;
-  clear_cmdline = false;
+  // Don't make non-flushed message part of the showmode.
   msg_ext_ui_flush();
 
   msg_grid_validate();
@@ -956,8 +954,8 @@ int showmode(void)
     msg_check_for_delay(false);
 
     // if the cmdline is more than one line high, erase top lines
-    bool need_clear = clear_cmd;
-    if (clear_cmd && cmdline_row < Rows - 1) {
+    bool need_clear = clear_cmdline;
+    if (clear_cmdline && cmdline_row < Rows - 1) {
       msg_clr_cmdline();  // will reset clear_cmdline
     }
 
@@ -1079,7 +1077,7 @@ int showmode(void)
     }
 
     mode_displayed = true;
-    if (need_clear || clear_cmd || draw_mode) {
+    if (need_clear || clear_cmdline || redraw_mode) {
       msg_clr_eos();
     }
     msg_didout = false;                 // overwrite this message
@@ -1088,10 +1086,10 @@ int showmode(void)
     msg_no_more = false;
     lines_left = save_lines_left;
     need_wait_return = nwr_save;        // never ask for hit-return for this
-  } else if (clear_cmd && msg_silent == 0) {
+  } else if (clear_cmdline && msg_silent == 0) {
     // Clear the whole command line.  Will reset "clear_cmdline".
     msg_clr_cmdline();
-  } else if (draw_mode) {
+  } else if (redraw_mode) {
     msg_pos_mode();
     msg_clr_eos();
   }
@@ -1113,6 +1111,10 @@ int showmode(void)
     win_redr_ruler(ruler_win);
     grid_line_flush();
   }
+
+  redraw_cmdline = false;
+  redraw_mode = false;
+  clear_cmdline = false;
 
   return length;
 }
@@ -1544,6 +1546,7 @@ static void win_update(win_T *wp)
   // Force redraw when width of 'number' or 'relativenumber' column changes.
   if (wp->w_nrwidth != nrwidth_new) {
     type = UPD_NOT_VALID;
+    changed_line_abv_curs_win(wp);
     wp->w_nrwidth = nrwidth_new;
   } else {
     // Set mod_top to the first line that needs displaying because of

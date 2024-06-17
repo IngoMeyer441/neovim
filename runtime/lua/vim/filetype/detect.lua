@@ -594,7 +594,7 @@ function M.frm(_, bufnr)
 end
 
 --- @type vim.filetype.mapfn
-function M.fvwm_1(_, _)
+function M.fvwm_v1(_, _)
   return 'fvwm', function(bufnr)
     vim.b[bufnr].fvwm_version = 1
   end
@@ -647,6 +647,30 @@ function M.header(_, bufnr)
     return 'ch'
   else
     return 'cpp'
+  end
+end
+
+--- Recursively search for Hare source files in a directory and any
+--- subdirectories, up to a given depth.
+--- @param dir string
+--- @param depth number
+--- @return boolean
+local function is_hare_module(dir, depth)
+  depth = math.max(depth, 0)
+  for name, _ in vim.fs.dir(dir, { depth = depth + 1 }) do
+    if name:find('%.ha$') then
+      return true
+    end
+  end
+  return false
+end
+
+--- @type vim.filetype.mapfn
+function M.haredoc(path, _)
+  if vim.g.filetype_haredoc then
+    if is_hare_module(vim.fs.dirname(path), vim.g.haredoc_search_depth or 1) then
+      return 'haredoc'
+    end
   end
 end
 
@@ -1331,7 +1355,7 @@ end
 function M.sgml(_, bufnr)
   local lines = table.concat(getlines(bufnr, 1, 5))
   if lines:find('linuxdoc') then
-    return 'smgllnx'
+    return 'sgmllnx'
   elseif lines:find('<!DOCTYPE.*DocBook') then
     return 'docbk',
       function(b)
@@ -1759,6 +1783,7 @@ local patterns_hashbang = {
   ['^janet\\>'] = { 'janet', { vim_regex = true } },
   ['^dart\\>'] = { 'dart', { vim_regex = true } },
   ['^execlineb\\>'] = { 'execline', { vim_regex = true } },
+  ['^vim\\>'] = { 'vim', { vim_regex = true } },
 }
 
 ---@private

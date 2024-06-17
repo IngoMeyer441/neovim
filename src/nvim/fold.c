@@ -22,6 +22,7 @@
 #include "nvim/decoration.h"
 #include "nvim/diff.h"
 #include "nvim/drawscreen.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/ex_session.h"
@@ -3314,7 +3315,7 @@ void f_foldtext(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     char *r = xmalloc(len);
     snprintf(r, len, txt, dashes, count);
     len = strlen(r);
-    STRCAT(r, s);
+    strcat(r, s);
     // remove 'foldmarker' and 'commentstring'
     foldtext_cleanup(r + len);
     rettv->vval.v_string = r;

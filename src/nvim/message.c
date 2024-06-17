@@ -18,6 +18,7 @@
 #include "nvim/channel.h"
 #include "nvim/charset.h"
 #include "nvim/drawscreen.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -2689,7 +2690,7 @@ static void msg_puts_printf(const char *str, const ptrdiff_t maxlen)
         *p++ = '\r';
       }
       memcpy(p, s, (size_t)len);
-      *(p + len) = '\0';
+      *(p + len) = NUL;
       if (info_message) {
         printf("%s", buf);
       } else {

@@ -115,6 +115,7 @@ struct TUIData {
   kvec_t(HlAttrs) attrs;
   int print_attr_id;
   bool default_attr;
+  bool set_default_colors;
   bool can_clear_attr;
   ModeShape showing_mode;
   Integer verbose;
@@ -167,14 +168,6 @@ void tui_start(TUIData **tui_p, int *width, int *height, char **term, bool *rgb)
   tui->seen_error_exit = 0;
   tui->loop = &main_loop;
   tui->url = -1;
-  // Because setting the default colors is delayed until after startup to avoid
-  // flickering with the default colorscheme background, any flush that happens
-  // during startup in turn would result in clearing invalidated regions with
-  // uninitialized attrs(black). Instead initialize clear_attrs with current
-  // terminal background so that it is at least not perceived as flickering, even
-  // though it may be different from the colorscheme that is set during startup.
-  tui->clear_attrs.rgb_bg_color = normal_bg;
-  tui->clear_attrs.cterm_bg_color = (int16_t)cterm_normal_bg_color;
 
   kv_init(tui->invalid_regions);
   kv_init(tui->urlbuf);
@@ -502,10 +495,6 @@ static void terminfo_stop(TUIData *tui)
   unibi_out_ext(tui, tui->unibi_ext.disable_bracketed_paste);
   // Disable focus reporting
   unibi_out_ext(tui, tui->unibi_ext.disable_focus_reporting);
-
-  // Disable synchronized output
-  UNIBI_SET_NUM_VAR(tui->params[0], 0);
-  unibi_out_ext(tui, tui->unibi_ext.sync);
 
   flush_buf(tui);
   uv_tty_reset_mode();
@@ -1021,7 +1010,16 @@ static void clear_region(TUIData *tui, int top, int bot, int left, int right, in
 {
   UGrid *grid = &tui->grid;
 
-  update_attrs(tui, attr_id);
+  // Setting the default colors is delayed until after startup to avoid flickering
+  // with the default colorscheme background. Consequently, any flush that happens
+  // during startup would result in clearing invalidated regions with zeroed
+  // clear_attrs, perceived as a black flicker. Reset attributes to clear with
+  // current terminal background instead(#28667, #28668).
+  if (tui->set_default_colors) {
+    update_attrs(tui, attr_id);
+  } else {
+    unibi_out(tui, unibi_exit_attribute_mode);
+  }
 
   // Background is set to the default color and the right edge matches the
   // screen end, try to use terminal codes for clearing the requested area.
@@ -1432,6 +1430,7 @@ void tui_default_colors_set(TUIData *tui, Integer rgb_fg, Integer rgb_bg, Intege
     clear_region(tui, 0, tui->height, 0, tui->width, 0);
   }
   tui->initial_clear = 2;
+  tui->set_default_colors = true;
   invalidate(tui, 0, tui->grid.height, 0, tui->grid.width);
 }
 
@@ -1867,20 +1866,12 @@ static int unibi_find_ext_bool(unibi_term *ut, const char *name)
   return -1;
 }
 
-/// Determine if the terminal supports truecolor or not:
+/// Determine if the terminal supports truecolor or not.
 ///
-/// 1. If $COLORTERM is "24bit" or "truecolor", return true
-/// 2. Else, check terminfo for Tc, RGB, setrgbf, or setrgbb capabilities. If
-///    found, return true
-/// 3. Else, return false
+/// If terminfo contains Tc, RGB, or both setrgbf and setrgbb capabilities, return true.
 static bool term_has_truecolor(TUIData *tui, const char *colorterm)
 {
-  // Check $COLORTERM
-  if (strequal(colorterm, "truecolor") || strequal(colorterm, "24bit")) {
-    return true;
-  }
-
-  // Check for Tc and RGB
+  // Check for Tc or RGB
   for (size_t i = 0; i < unibi_count_ext_bool(tui->ut); i++) {
     const char *n = unibi_get_ext_bool_name(tui->ut, i);
     if (n && (!strcmp(n, "Tc") || !strcmp(n, "RGB"))) {
@@ -2521,7 +2512,7 @@ static const char *tui_get_stty_erase(int fd)
   struct termios t;
   if (tcgetattr(fd, &t) != -1) {
     stty_erase[0] = (char)t.c_cc[VERASE];
-    stty_erase[1] = '\0';
+    stty_erase[1] = NUL;
     DLOG("stty/termios:erase=%s", stty_erase);
   }
 #endif

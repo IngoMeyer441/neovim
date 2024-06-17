@@ -466,14 +466,14 @@ ASTRO						*astro.vim* *ft-astro-syntax*
 Configuration
 
 The following variables control certain syntax highlighting features.
-You can add them to your .vimrc: >
+You can add them to your .vimrc.
+
+To enable TypeScript and TSX for ".astro" files (default "disable"): >
 	let g:astro_typescript = "enable"
 <
-Enables TypeScript and TSX for ".astro" files. Default Value: "disable" >
+To enable Stylus for ".astro" files (default "disable"): >
 	let g:astro_stylus = "enable"
 <
-Enables Stylus for ".astro" files. Default Value: "disable"
-
 NOTE: You need to install an external plugin to support stylus in astro files.
 
 
@@ -1437,7 +1437,7 @@ Note: Syntax folding might slow down syntax highlighting significantly,
 especially for large files.
 
 
-HTML/OS (by Aestiva)				*htmlos.vim* *ft-htmlos-syntax*
+HTML/OS (BY AESTIVA)				*htmlos.vim* *ft-htmlos-syntax*
 
 The coloring scheme for HTML/OS works as follows:
 
@@ -2575,6 +2575,13 @@ To highlight R code in knitr chunk headers, add to your |vimrc|: >
 	let rrst_syn_hl_chunk = 1
 
 
+RASI					*rasi.vim* *ft-rasi-syntax*
+
+Rasi stands for Rofi Advanced Style Information. It is used by the program
+rofi to style the rendering of the search window. The language is heavily
+inspired by CSS stylesheet. Files with the following extensions are recognized
+as rasi files: .rasi.
+
 READLINE				*readline.vim* *ft-readline-syntax*
 
 The readline library is primarily used by the BASH shell, which adds quite a
@@ -3289,6 +3296,19 @@ set "tf_minlines" to the value you desire.  Example: >
 
 	:let tf_minlines = your choice
 <
+TYPESCRIPT				*typescript.vim* *ft-typescript-syntax*
+				*typescriptreact.vim* *ft-typescriptreact-syntax*
+
+There is one option to control the TypeScript syntax highlighting.
+
+						*g:typescript_host_keyword*
+When this variable is set to 1, host-specific APIs such as `addEventListener`
+are highlighted. To disable set it to zero in your .vimrc: >
+
+	let g:typescript_host_keyword = 0
+<
+The default value is 1.
+
 VIM			*vim.vim*		*ft-vim-syntax*
 			*g:vimsyn_minlines*	*g:vimsyn_maxlines*
 There is a trade-off between more accurate syntax highlighting versus screen
@@ -3307,23 +3327,31 @@ The g:vimsyn_embed option allows users to select what, if any, types of
 embedded script highlighting they wish to have. >
 
    g:vimsyn_embed == 0      : disable (don't embed any scripts)
-   g:vimsyn_embed == 'lpPr' : support embedded lua, perl, python and ruby
+   g:vimsyn_embed == 'lpPr' : support embedded Lua, Perl, Python and Ruby
 <
 This option is disabled by default.
 						*g:vimsyn_folding*
-
-Some folding is now supported with syntax/vim.vim: >
+Some folding is now supported with when 'foldmethod' is set to "syntax": >
 
    g:vimsyn_folding == 0 or doesn't exist: no syntax-based folding
    g:vimsyn_folding =~ 'a' : augroups
    g:vimsyn_folding =~ 'f' : fold functions
    g:vimsyn_folding =~ 'h' : fold heredocs
-   g:vimsyn_folding =~ 'l' : fold lua      script
-   g:vimsyn_folding =~ 'p' : fold perl     script
-   g:vimsyn_folding =~ 'P' : fold python   script
-   g:vimsyn_folding =~ 'r' : fold ruby     script
+   g:vimsyn_folding =~ 'l' : fold Lua      script
+   g:vimsyn_folding =~ 'p' : fold Perl     script
+   g:vimsyn_folding =~ 'P' : fold Python   script
+   g:vimsyn_folding =~ 'r' : fold Ruby     script
 <
-							*g:vimsyn_noerror*
+
+By default, g:vimsyn_folding is unset.  Concatenate the indicated characters
+to support folding of multiple syntax constructs (e.g.,
+g:vimsyn_folding = "fh" will enable folding of both functions and heredocs).
+
+						*g:vimsyn_comment_strings*
+By default, strings are highlighted inside comments.  This may be disabled by
+setting g:vimsyn_comment_strings to false.
+
+						*g:vimsyn_noerror*
 Not all error highlighting that syntax/vim.vim does may be correct; Vim script
 is a difficult language to highlight correctly.  A way to suppress error
 highlighting is to put the following line in your |vimrc|: >
@@ -4986,7 +5014,6 @@ IncSearch	'incsearch' highlighting; also used for the text replaced with
 		":s///c".
 							*hl-Substitute*
 Substitute	|:substitute| replacement text highlighting.
-
 							*hl-LineNr*
 LineNr		Line number for ":number" and ":#" commands, and when 'number'
 		or 'relativenumber' option is set.
@@ -5006,7 +5033,6 @@ CursorLineSign	Like SignColumn when 'cursorline' is set for the cursor line.
 							*hl-MatchParen*
 MatchParen	Character under the cursor or just before it, if it
 		is a paired bracket, and its match. |pi_paren.txt|
-
 							*hl-ModeMsg*
 ModeMsg		'showmode' message (e.g., "-- INSERT --").
 							*hl-MsgArea*
@@ -5048,11 +5074,15 @@ PmenuExtraSel	Popup menu: Selected item "extra text".
 PmenuSbar	Popup menu: Scrollbar.
 							*hl-PmenuThumb*
 PmenuThumb	Popup menu: Thumb of the scrollbar.
+							*hl-PmenuMatch*
+PmenuMatch	Popup menu: Matched text in normal item
+							*hl-PmenuMatchSel*
+PmenuMatchSel	Popup menu: Matched text in selected item
 							*hl-Question*
 Question	|hit-enter| prompt and yes/no questions.
 							*hl-QuickFixLine*
 QuickFixLine	Current |quickfix| item in the quickfix window. Combined with
-                |hl-CursorLine| when the cursor is there.
+		|hl-CursorLine| when the cursor is there.
 							*hl-Search*
 Search		Last search pattern highlighting (see 'hlsearch').
 		Also used for similar items that need to stand out.
@@ -5079,6 +5109,11 @@ SpellRare	Word that is recognized by the spellchecker as one that is
 StatusLine	Status line of current window.
 							*hl-StatusLineNC*
 StatusLineNC	Status lines of not-current windows.
+							*hl-StatusLineTerm*
+StatusLineTerm	Status line of |terminal| window.
+							*hl-StatusLineTermNC*
+StatusLineTermNC
+		Status line of non-current |terminal| windows.
 							*hl-TabLine*
 TabLine		Tab pages line, not active tab page label.
 							*hl-TabLineFill*

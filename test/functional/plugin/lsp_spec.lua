@@ -255,7 +255,7 @@ describe('LSP', function()
         return
       end
       local expected_handlers = {
-        { NIL, {}, { method = 'shutdown', bufnr = 1, client_id = 1 } },
+        { NIL, {}, { method = 'shutdown', bufnr = 1, client_id = 1, version = 0 } },
         { NIL, {}, { method = 'test', client_id = 1 } },
       }
       test_rpc_server {
@@ -475,6 +475,12 @@ describe('LSP', function()
         local server = _create_server()
         local bufnr = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_set_current_buf(bufnr)
+        local detach_called = false
+        vim.api.nvim_create_autocmd("LspDetach", {
+          callback = function()
+            detach_called = true
+          end
+        })
         local client_id = vim.lsp.start({ name = 'detach-dummy', cmd = server.cmd })
         assert(client_id, "lsp.start must return client_id")
         local client = vim.lsp.get_client_by_id(client_id)
@@ -486,11 +492,70 @@ describe('LSP', function()
           client_id = client_id,
           num_attached_before = num_attached_before,
           num_attached_after = num_attached_after,
+          detach_called = detach_called,
         }
       ]])
       eq(true, result ~= nil, 'exec_lua must return result')
       eq(1, result.num_attached_before)
       eq(0, result.num_attached_after)
+      eq(true, result.detach_called)
+    end)
+
+    it('should not re-attach buffer if it was deleted in on_init #28575', function()
+      clear()
+      exec_lua(create_server_definition)
+      exec_lua([[
+        local server = _create_server({
+          handlers = {
+            initialize = function(method, params, callback)
+              vim.schedule(function()
+                callback(nil, { capabilities = {} })
+              end)
+            end
+          }
+        })
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local on_init_called = false
+        local client_id = vim.lsp.start({
+          name = 'detach-dummy',
+          cmd = server.cmd,
+          on_init = function()
+            vim.api.nvim_buf_delete(bufnr, {})
+            on_init_called = true
+          end
+        })
+        vim.lsp.buf_attach_client(bufnr, client_id)
+        local ok = vim.wait(1000, function() return on_init_called end)
+        assert(ok, "on_init was not called")
+      ]])
+    end)
+
+    it('should allow on_lines + nvim_buf_delete during LSP initialization #28575', function()
+      clear()
+      exec_lua(create_server_definition)
+      exec_lua([[
+        local initialized = false
+        local server = _create_server({
+          handlers = {
+            initialize = function(method, params, callback)
+              vim.schedule(function()
+                callback(nil, { capabilities = {} })
+                initialized = true
+              end)
+            end
+          }
+        })
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(bufnr)
+        local client_id = vim.lsp.start({
+          name = 'detach-dummy',
+          cmd = server.cmd,
+        })
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {"hello"})
+        vim.api.nvim_buf_delete(bufnr, {})
+        local ok = vim.wait(1000, function() return initialized end)
+        assert(ok, "lsp did not initialize")
+      ]])
     end)
 
     it('client should return settings via workspace/configuration handler', function()
@@ -662,7 +727,7 @@ describe('LSP', function()
             }
           },
           handlers = {
-            ['textDocument/willSaveWaitUntil'] = function()
+            ['textDocument/willSaveWaitUntil'] = function(_, _, callback)
               local text_edit = {
                 range = {
                   start = { line = 0, character = 0 },
@@ -670,7 +735,7 @@ describe('LSP', function()
                 },
                 newText = 'Hello'
               }
-              return { text_edit, }
+              callback(nil, { text_edit, })
             end
           },
         })
@@ -883,7 +948,11 @@ describe('LSP', function()
     it('should forward ContentModified to callback', function()
       local expected_handlers = {
         { NIL, {}, { method = 'finish', client_id = 1 } },
-        { { code = -32801 }, NIL, { method = 'error_code_test', bufnr = 1, client_id = 1 } },
+        {
+          { code = -32801 },
+          NIL,
+          { method = 'error_code_test', bufnr = 1, client_id = 1, version = 0 },
+        },
       }
       local client --- @type vim.lsp.Client
       test_rpc_server {
@@ -913,7 +982,7 @@ describe('LSP', function()
     it('should track pending requests to the language server', function()
       local expected_handlers = {
         { NIL, {}, { method = 'finish', client_id = 1 } },
-        { NIL, {}, { method = 'slow_request', bufnr = 1, client_id = 1 } },
+        { NIL, {}, { method = 'slow_request', bufnr = 1, client_id = 1, version = 0 } },
       }
       local client --- @type vim.lsp.Client
       test_rpc_server {
@@ -980,7 +1049,7 @@ describe('LSP', function()
     it('should clear pending and cancel requests on reply', function()
       local expected_handlers = {
         { NIL, {}, { method = 'finish', client_id = 1 } },
-        { NIL, {}, { method = 'slow_request', bufnr = 1, client_id = 1 } },
+        { NIL, {}, { method = 'slow_request', bufnr = 1, client_id = 1, version = 0 } },
       }
       local client --- @type vim.lsp.Client
       test_rpc_server {
@@ -1019,7 +1088,7 @@ describe('LSP', function()
     it('should trigger LspRequest autocmd when requests table changes', function()
       local expected_handlers = {
         { NIL, {}, { method = 'finish', client_id = 1 } },
-        { NIL, {}, { method = 'slow_request', bufnr = 1, client_id = 1 } },
+        { NIL, {}, { method = 'slow_request', bufnr = 1, client_id = 1, version = 0 } },
       }
       local client --- @type vim.lsp.Client
       test_rpc_server {
@@ -1299,6 +1368,7 @@ describe('LSP', function()
             },
             bufnr = 2,
             client_id = 1,
+            version = 0,
           },
         },
         { NIL, {}, { method = 'start', client_id = 1 } },
@@ -1724,9 +1794,9 @@ describe('LSP', function()
       }
       exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1, 'utf-16')
       eq({
-        '',
-        '123',
-        'fooFbar',
+        '3',
+        'foo',
+        '12Fbar',
         '123irst guy',
         'baz line of text',
         'The next line of text',
@@ -1748,9 +1818,9 @@ describe('LSP', function()
       }
       exec_lua('vim.lsp.util.apply_text_edits(...)', edits, 1, 'utf-16')
       eq({
-        '',
-        '123',
-        'fooFbar',
+        '3',
+        'foo',
+        '12Fbar',
         '123irst guy',
         'baz line of text',
         'The next line of text',
@@ -2625,13 +2695,15 @@ describe('LSP', function()
         {
           filename = '/fake/uri',
           lnum = 1,
+          end_lnum = 2,
           col = 3,
+          end_col = 4,
           text = 'testing',
           user_data = {
             uri = 'file:///fake/uri',
             range = {
               start = { line = 0, character = 2 },
-              ['end'] = { line = 0, character = 3 },
+              ['end'] = { line = 1, character = 3 },
             },
           },
         },
@@ -2645,7 +2717,7 @@ describe('LSP', function()
             uri = 'file:///fake/uri',
             range = {
               start = { line = 0, character = 2 },
-              ['end'] = { line = 0, character = 3 },
+              ['end'] = { line = 1, character = 3 },
             }
           },
         }
@@ -2658,7 +2730,9 @@ describe('LSP', function()
         {
           filename = '/fake/uri',
           lnum = 1,
+          end_lnum = 1,
           col = 3,
+          end_col = 4,
           text = 'testing',
           user_data = {
             targetUri = 'file:///fake/uri',
@@ -4136,8 +4210,8 @@ describe('LSP', function()
             }
           },
           handlers = {
-            ["textDocument/codeAction"] = function()
-              return {
+            ["textDocument/codeAction"] = function(_, _, callback)
+              callback(nil, {
                 {
                   title = "Code Action 1",
                   command = {
@@ -4145,10 +4219,10 @@ describe('LSP', function()
                     command = "command:1",
                   }
                 }
-              }
+              })
             end,
-            ["codeAction/resolve"] = function()
-              return nil, "resolve failed"
+            ["codeAction/resolve"] = function(_, _, callback)
+              callback("resolve failed", nil)
             end,
           }
         })
@@ -4336,7 +4410,7 @@ describe('LSP', function()
               },
             },
             handlers = {
-              ["textDocument/codeLens"] = function(method, params)
+              ["textDocument/codeLens"] = function(method, params, callback)
                 local lenses = {
                   {
                     range = {
@@ -4349,7 +4423,7 @@ describe('LSP', function()
                     },
                   },
                 }
-                return lenses
+                callback(nil, lenses)
               end,
             }
           })
@@ -4657,13 +4731,13 @@ describe('LSP', function()
           },
           handlers = {
             ---@return lsp.Location[]
-            ['textDocument/definition'] = function()
-              return { _G.mock_locations[1] }
+            ['textDocument/definition'] = function(_, _, callback)
+              callback(nil, { _G.mock_locations[1] })
             end,
             ---@return lsp.WorkspaceSymbol[]
-            ['workspace/symbol'] = function(_, request)
+            ['workspace/symbol'] = function(_, request, callback)
               assert(request.query == 'foobar')
-              return {
+              callback(nil, {
                 {
                   name = 'foobar',
                   kind = 13, ---@type lsp.SymbolKind
@@ -4674,7 +4748,7 @@ describe('LSP', function()
                   kind = 12, ---@type lsp.SymbolKind
                   location = _G.mock_locations[2],
                 }
-              }
+              })
             end,
           },
         })

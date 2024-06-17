@@ -1,11 +1,14 @@
-*pi_health.txt*   Healthcheck framework
+*health.txt*               Nvim
 
-Author: TJ DeVries <devries.timothyj@gmail.com>
 
-                                      Type |gO| to see the table of contents.
+                 NVIM REFERENCE MANUAL
+
+
+                                       Type |gO| to see the table of contents.
 
 ==============================================================================
-Introduction                            *health*
+Checkhealth                                                           *health*
+
 
 health.vim is a minimal framework to help users troubleshoot configuration and
 any other environment conditions that a plugin might care about. Nvim ships
@@ -18,12 +21,11 @@ To run all healthchecks, use: >vim
 <
 Plugin authors are encouraged to write new healthchecks. |health-dev|
 
-==============================================================================
-Commands                                *health-commands*
+Commands                                                     *health-commands*
 
-                                                             *:che* *:checkhealth*
+                                                           *:che* *:checkhealth*
 :che[ckhealth]  Run all healthchecks.
-                                        *E5009*
+                                                                       *E5009*
                 Nvim depends on |$VIMRUNTIME|, 'runtimepath' and 'packpath' to
                 find the standard "runtime files" for syntax highlighting,
                 filetype-specific behavior, and standard plugins (including
@@ -33,7 +35,7 @@ Commands                                *health-commands*
 :che[ckhealth] {plugins}
                 Run healthcheck(s) for one or more plugins. E.g. to run only
                 the standard Nvim healthcheck: >vim
-                        :checkhealth nvim
+                        :checkhealth vim.health
 <
                 To run the healthchecks for the "foo" and "bar" plugins
                 (assuming they are on 'runtimepath' and they have implemented
@@ -46,33 +48,8 @@ Commands                                *health-commands*
                         :checkhealth vim.lsp vim.treesitter
                         :checkhealth vim*
 <
-==============================================================================
-Functions                               *health-functions* *vim.health*
 
-The Lua "health" module can be used to create new healthchecks. To get started
-see |health-dev|.
-
-vim.health.start({name})                                     *vim.health.start()*
-        Starts a new report. Most plugins should call this only once, but if
-        you want different sections to appear in your report, call this once
-        per section.
-
-vim.health.info({msg})                                        *vim.health.info()*
-        Reports an informational message.
-
-vim.health.ok({msg})                                            *vim.health.ok()*
-        Reports a "success" message.
-
-vim.health.warn({msg} [, {advice}])                           *vim.health.warn()*
-        Reports a warning. {advice} is an optional list of suggestions to
-        present to the user.
-
-vim.health.error({msg} [, {advice}])                         *vim.health.error()*
-        Reports an error. {advice} is an optional list of suggestions to
-        present to the user.
-
-==============================================================================
-Create a healthcheck                                    *health-dev*
+Create a healthcheck                                   *health-dev* *vim.health*
 
 Healthchecks are functions that check the user environment, configuration, or
 any other prerequisites that a plugin cares about. Nvim ships with
@@ -119,4 +96,39 @@ with your plugin name: >lua
         return M
 
 
-vim:et:tw=78:ts=8:ft=help:fdm=marker
+error({msg}, {...})                                       *vim.health.error()*
+    Reports an error.
+
+    Parameters: ~
+      • {msg}  (`string`)
+      • {...}  (`string|string[]`) Optional advice
+
+info({msg})                                                *vim.health.info()*
+    Reports an informational message.
+
+    Parameters: ~
+      • {msg}  (`string`)
+
+ok({msg})                                                    *vim.health.ok()*
+    Reports a "success" message.
+
+    Parameters: ~
+      • {msg}  (`string`)
+
+start({name})                                             *vim.health.start()*
+    Starts a new report. Most plugins should call this only once, but if you
+    want different sections to appear in your report, call this once per
+    section.
+
+    Parameters: ~
+      • {name}  (`string`)
+
+warn({msg}, {...})                                         *vim.health.warn()*
+    Reports a warning.
+
+    Parameters: ~
+      • {msg}  (`string`)
+      • {...}  (`string|string[]`) Optional advice
+
+
+ vim:tw=78:ts=8:sw=4:sts=4:et:ft=help:norl:

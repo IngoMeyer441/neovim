@@ -24,6 +24,7 @@
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/ex_cmds2.h"
@@ -281,8 +282,10 @@ void op_shift(oparg_T *oap, bool curs_top, int amount)
 /// @param call_changed_bytes  call changed_bytes()
 void shift_line(bool left, bool round, int amount, int call_changed_bytes)
 {
-  const int sw_val = get_sw_value_indent(curbuf);
-
+  int sw_val = get_sw_value_indent(curbuf, left);
+  if (sw_val == 0) {
+    sw_val = 1;              // shouldn't happen, just in case
+  }
   int count = get_indent();  // get current indent
 
   if (round) {  // round off indent
@@ -327,7 +330,7 @@ static void shift_block(oparg_T *oap, int amount)
   const int oldstate = State;
   char *newp;
   const int oldcol = curwin->w_cursor.col;
-  const int sw_val = get_sw_value_indent(curbuf);
+  const int sw_val = get_sw_value_indent(curbuf, left);
   const int ts_val = (int)curbuf->b_p_ts;
   struct block_def bd;
   int incr;
@@ -2663,7 +2666,7 @@ static void op_yank_reg(oparg_T *oap, bool message, yankreg_T *reg, bool append)
       char *pnew = xmalloc(strlen(curr->y_array[curr->y_size - 1])
                            + strlen(reg->y_array[0]) + 1);
       STRCPY(pnew, curr->y_array[--j]);
-      STRCAT(pnew, reg->y_array[0]);
+      strcat(pnew, reg->y_array[0]);
       xfree(curr->y_array[j]);
       xfree(reg->y_array[0]);
       curr->y_array[j++] = pnew;
@@ -3428,7 +3431,7 @@ void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
           totlen = strlen(y_array[y_size - 1]);
           char *newp = xmalloc((size_t)ml_get_len(lnum) - (size_t)col + totlen + 1);
           STRCPY(newp, y_array[y_size - 1]);
-          STRCAT(newp, ptr);
+          strcat(newp, ptr);
           // insert second line
           ml_append(lnum, newp, 0, false);
           new_lnum++;
@@ -4253,11 +4256,13 @@ void charwise_block_prep(pos_T start, pos_T end, struct block_def *bdp, linenr_T
 {
   colnr_T startcol = 0;
   colnr_T endcol = MAXCOL;
-  bool is_oneChar = false;
   colnr_T cs, ce;
   char *p = ml_get(lnum);
+
   bdp->startspaces = 0;
   bdp->endspaces = 0;
+  bdp->is_oneChar = false;
+  bdp->start_char_vcols = 0;
 
   if (lnum == start.lnum) {
     startcol = start.col;
@@ -4265,7 +4270,8 @@ void charwise_block_prep(pos_T start, pos_T end, struct block_def *bdp, linenr_T
       getvcol(curwin, &start, &cs, NULL, &ce);
       if (ce != cs && start.coladd > 0) {
         // Part of a tab selected -- but don't double-count it.
-        bdp->startspaces = (ce - cs + 1) - start.coladd;
+        bdp->start_char_vcols = ce - cs + 1;
+        bdp->startspaces = bdp->start_char_vcols - start.coladd;
         if (bdp->startspaces < 0) {
           bdp->startspaces = 0;
         }
@@ -4285,7 +4291,7 @@ void charwise_block_prep(pos_T start, pos_T end, struct block_def *bdp, linenr_T
                                && utf_head_off(p, p + endcol) == 0)) {
         if (start.lnum == end.lnum && start.col == end.col) {
           // Special case: inside a single char
-          is_oneChar = true;
+          bdp->is_oneChar = true;
           bdp->startspaces = end.coladd - start.coladd + inclusive;
           endcol = startcol;
         } else {
@@ -4298,11 +4304,12 @@ void charwise_block_prep(pos_T start, pos_T end, struct block_def *bdp, linenr_T
   if (endcol == MAXCOL) {
     endcol = ml_get_len(lnum);
   }
-  if (startcol > endcol || is_oneChar) {
+  if (startcol > endcol || bdp->is_oneChar) {
     bdp->textlen = 0;
   } else {
     bdp->textlen = endcol - startcol + inclusive;
   }
+  bdp->textcol = startcol;
   bdp->textstart = p + startcol;
 }
 
@@ -4718,7 +4725,7 @@ bool do_addsub(int op_type, pos_T *pos, int length, linenr_T Prenum1)
         buf2[i++] = ((n >> --bits) & 0x1) ? '1' : '0';
       }
 
-      buf2[i] = '\0';
+      buf2[i] = NUL;
     } else if (pre == 0) {
       vim_snprintf(buf2, ARRAY_SIZE(buf2), "%" PRIu64, (uint64_t)n);
     } else if (pre == '0') {
@@ -4740,7 +4747,7 @@ bool do_addsub(int op_type, pos_T *pos, int length, linenr_T Prenum1)
       }
     }
     *ptr = NUL;
-    STRCAT(buf1, buf2);
+    strcat(buf1, buf2);
     ins_str(buf1);              // insert the new number
     endpos = curwin->w_cursor;
     if (curwin->w_cursor.col) {

@@ -214,7 +214,7 @@ end
 ---@param t table<T, any> (table) Table
 ---@return T[] : List of keys
 function vim.tbl_keys(t)
-  vim.validate({ t = { t, 't' } })
+  vim.validate('t', t, 'table')
   --- @cast t table<any,any>
 
   local keys = {}
@@ -231,7 +231,7 @@ end
 ---@param t table<any, T> (table) Table
 ---@return T[] : List of values
 function vim.tbl_values(t)
-  vim.validate({ t = { t, 't' } })
+  vim.validate('t', t, 'table')
 
   local values = {}
   for _, v in
@@ -332,7 +332,7 @@ end
 ---@param value any Value to compare
 ---@return boolean `true` if `t` contains `value`
 function vim.list_contains(t, value)
-  vim.validate({ t = { t, 't' } })
+  vim.validate('t', t, 'table')
   --- @cast t table<any,any>
 
   for _, v in ipairs(t) do
@@ -350,7 +350,7 @@ end
 ---@param t table Table to check
 ---@return boolean `true` if `t` is empty
 function vim.tbl_isempty(t)
-  vim.validate({ t = { t, 't' } })
+  vim.validate('t', t, 'table')
   return next(t) == nil
 end
 
@@ -379,7 +379,7 @@ local function tbl_extend(behavior, deep_extend, ...)
 
   for i = 1, select('#', ...) do
     local tbl = select(i, ...)
-    vim.validate({ ['after the second argument'] = { tbl, 't' } })
+    vim.validate('after the second argument', tbl, 'table')
     --- @cast tbl table<any,any>
     if tbl then
       for k, v in pairs(tbl) do
@@ -580,7 +580,7 @@ end
 ---@return fun(table: table<K, V>, index?: K):K, V # |for-in| iterator over sorted keys and their values
 ---@return T
 function vim.spairs(t)
-  assert(type(t) == 'table', ('expected table, got %s'):format(type(t)))
+  vim.validate('t', t, 'table')
   --- @cast t table<any,any>
 
   -- collect the keys
@@ -691,7 +691,7 @@ end
 ---@param t table Table
 ---@return integer : Number of non-nil values in table
 function vim.tbl_count(t)
-  vim.validate({ t = { t, 't' } })
+  vim.validate('t', t, 'table')
   --- @cast t table<any,any>
 
   local count = 0
@@ -723,7 +723,7 @@ end
 ---@param s string String to trim
 ---@return string String with whitespace removed from its beginning and end
 function vim.trim(s)
-  vim.validate({ s = { s, 's' } })
+  vim.validate('s', s, 'string')
   return s:match('^%s*(.*%S)') or ''
 end
 
@@ -733,7 +733,7 @@ end
 ---@param s string String to escape
 ---@return string %-escaped pattern string
 function vim.pesc(s)
-  vim.validate({ s = { s, 's' } })
+  vim.validate('s', s, 'string')
   return (s:gsub('[%(%)%.%%%+%-%*%?%[%]%^%$]', '%%%1'))
 end
 
@@ -743,7 +743,8 @@ end
 ---@param prefix string Prefix to match
 ---@return boolean `true` if `prefix` is a prefix of `s`
 function vim.startswith(s, prefix)
-  vim.validate({ s = { s, 's' }, prefix = { prefix, 's' } })
+  vim.validate('s', s, 'string')
+  vim.validate('prefix', prefix, 'string')
   return s:sub(1, #prefix) == prefix
 end
 
@@ -753,7 +754,8 @@ end
 ---@param suffix string Suffix to match
 ---@return boolean `true` if `suffix` is a suffix of `s`
 function vim.endswith(s, suffix)
-  vim.validate({ s = { s, 's' }, suffix = { suffix, 's' } })
+  vim.validate('s', s, 'string')
+  vim.validate('suffix', suffix, 'string')
   return #suffix == 0 or s:sub(-#suffix) == suffix
 end
 
@@ -787,7 +789,7 @@ do
   }
 
   --- @nodoc
-  --- @class vim.validate.Spec {[1]: any, [2]: string|string[], [3]: boolean }
+  --- @class vim.validate.Spec [any, string|string[], boolean]
   --- @field [1] any Argument value
   --- @field [2] string|string[]|fun(v:any):boolean, string? Type name, or callable
   --- @field [3]? boolean
@@ -877,8 +879,30 @@ do
     return true
   end
 
-  --- Validates a parameter specification (types and values). Specs are evaluated in alphanumeric
-  --- order, until the first failure.
+  --- Validate function arguments.
+  ---
+  --- This function has two valid forms:
+  ---
+  --- 1. vim.validate(name: str, value: any, type: string, optional?: bool)
+  --- 2. vim.validate(spec: table)
+  ---
+  --- Form 1 validates that argument {name} with value {value} has the type
+  --- {type}. {type} must be a value returned by |lua-type()|. If {optional} is
+  --- true, then {value} may be null. This form is significantly faster and
+  --- should be preferred for simple cases.
+  ---
+  --- Example:
+  ---
+  --- ```lua
+  --- function vim.startswith(s, prefix)
+  ---   vim.validate('s', s, 'string')
+  ---   vim.validate('prefix', prefix, 'string')
+  ---   ...
+  --- end
+  --- ```
+  ---
+  --- Form 2 validates a parameter specification (types and values). Specs are
+  --- evaluated in alphanumeric order, until the first failure.
   ---
   --- Usage example:
   ---
@@ -930,8 +954,32 @@ do
   ---               only if the argument is valid. Can optionally return an additional
   ---               informative error message as the second returned value.
   ---             - msg: (optional) error string if validation fails
-  function vim.validate(opt)
-    local ok, err_msg = is_valid(opt)
+  --- @overload fun(name: string, val: any, expected: string, optional?: boolean)
+  function vim.validate(opt, ...)
+    local ok = false
+    local err_msg ---@type string?
+    local narg = select('#', ...)
+    if narg == 0 then
+      ok, err_msg = is_valid(opt)
+    elseif narg >= 2 then
+      -- Overloaded signature for fast/simple cases
+      local name = opt --[[@as string]]
+      local v, expected, optional = ... ---@type string, string, boolean?
+      local actual = type(v)
+
+      ok = (actual == expected) or (v == nil and optional == true)
+      if not ok then
+        err_msg = ('%s: expected %s, got %s%s'):format(
+          name,
+          expected,
+          actual,
+          v and (' (%s)'):format(v) or ''
+        )
+      end
+    else
+      error('invalid arguments')
+    end
+
     if not ok then
       error(err_msg, 2)
     end
@@ -1089,6 +1137,84 @@ function vim._defer_require(root, mod)
       return t[k]
     end,
   })
+end
+
+--- @nodoc
+--- @class vim.context.mods
+--- @field buf? integer
+--- @field emsg_silent? boolean
+--- @field hide? boolean
+--- @field horizontal? boolean
+--- @field keepalt? boolean
+--- @field keepjumps? boolean
+--- @field keepmarks? boolean
+--- @field keeppatterns? boolean
+--- @field lockmarks? boolean
+--- @field noautocmd? boolean
+--- @field options? table<string, any>
+--- @field sandbox? boolean
+--- @field silent? boolean
+--- @field unsilent? boolean
+--- @field win? integer
+
+--- Executes function `f` with the given context specification.
+---
+--- @param context vim.context.mods
+function vim._with(context, f)
+  vim.validate('context', context, 'table')
+  vim.validate('f', f, 'function')
+
+  vim.validate('context.buf', context.buf, 'number', true)
+  vim.validate('context.emsg_silent', context.emsg_silent, 'boolean', true)
+  vim.validate('context.hide', context.hide, 'boolean', true)
+  vim.validate('context.horizontal', context.horizontal, 'boolean', true)
+  vim.validate('context.keepalt', context.keepalt, 'boolean', true)
+  vim.validate('context.keepjumps', context.keepjumps, 'boolean', true)
+  vim.validate('context.keepmarks', context.keepmarks, 'boolean', true)
+  vim.validate('context.keeppatterns', context.keeppatterns, 'boolean', true)
+  vim.validate('context.lockmarks', context.lockmarks, 'boolean', true)
+  vim.validate('context.noautocmd', context.noautocmd, 'boolean', true)
+  vim.validate('context.options', context.options, 'table', true)
+  vim.validate('context.sandbox', context.sandbox, 'boolean', true)
+  vim.validate('context.silent', context.silent, 'boolean', true)
+  vim.validate('context.unsilent', context.unsilent, 'boolean', true)
+  vim.validate('context.win', context.win, 'number', true)
+
+  -- Check buffer exists
+  if context.buf then
+    if not vim.api.nvim_buf_is_valid(context.buf) then
+      error('Invalid buffer id: ' .. context.buf)
+    end
+  end
+
+  -- Check window exists
+  if context.win then
+    if not vim.api.nvim_win_is_valid(context.win) then
+      error('Invalid window id: ' .. context.win)
+    end
+  end
+
+  -- Store original options
+  local previous_options ---@type table<string, any>
+  if context.options then
+    previous_options = {}
+    for k, v in pairs(context.options) do
+      previous_options[k] =
+        vim.api.nvim_get_option_value(k, { win = context.win, buf = context.buf })
+      vim.api.nvim_set_option_value(k, v, { win = context.win, buf = context.buf })
+    end
+  end
+
+  local retval = { vim._with_c(context, f) }
+
+  -- Restore original options
+  if previous_options then
+    for k, v in pairs(previous_options) do
+      vim.api.nvim_set_option_value(k, v, { win = context.win, buf = context.buf })
+    end
+  end
+
+  return unpack(retval)
 end
 
 return vim
