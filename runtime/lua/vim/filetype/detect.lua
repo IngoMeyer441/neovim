@@ -472,6 +472,41 @@ function M.def(_, bufnr)
 end
 
 --- @type vim.filetype.mapfn
+function M.dsp(path, bufnr)
+  if vim.g.filetype_dsp then
+    return vim.g.filetype_dsp
+  end
+
+  -- Test the filename
+  local file_name = fn.fnamemodify(path, ':t')
+  if file_name:find('^[mM]akefile.*$') then
+    return 'make'
+  end
+
+  -- Test the file contents
+  for _, line in ipairs(getlines(bufnr, 1, 200)) do
+    if
+      findany(line, {
+        -- Check for comment style
+        [[#.*]],
+        -- Check for common lines
+        [[^.*Microsoft Developer Studio Project File.*$]],
+        [[^!MESSAGE This is not a valid makefile\..+$]],
+        -- Check for keywords
+        [[^!(IF,ELSEIF,ENDIF).*$]],
+        -- Check for common assignments
+        [[^SOURCE=.*$]],
+      })
+    then
+      return 'make'
+    end
+  end
+
+  -- Otherwise, assume we have a Faust file
+  return 'faust'
+end
+
+--- @type vim.filetype.mapfn
 function M.e(_, bufnr)
   if vim.g.filetype_euphoria then
     return vim.g.filetype_euphoria
@@ -676,10 +711,15 @@ end
 
 --- @type vim.filetype.mapfn
 function M.html(_, bufnr)
-  for _, line in ipairs(getlines(bufnr, 1, 10)) do
+  for _, line in ipairs(getlines(bufnr, 1, 40)) do
     if matchregex(line, [[\<DTD\s\+XHTML\s]]) then
       return 'xhtml'
-    elseif matchregex(line, [[\c{%\s*\(extends\|block\|load\)\>\|{#\s\+]]) then
+    elseif
+      matchregex(
+        line,
+        [[\c{%\s*\(autoescape\|block\|comment\|csrf_token\|cycle\|debug\|extends\|filter\|firstof\|for\|if\|ifchanged\|include\|load\|lorem\|now\|query_string\|regroup\|resetcycle\|spaceless\|templatetag\|url\|verbatim\|widthratio\|with\)\>\|{#\s\+]]
+      )
+    then
       return 'htmldjango'
     end
   end
