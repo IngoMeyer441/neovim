@@ -50,6 +50,12 @@ EDITOR
 • |hl-CurSearch| now behaves the same as Vim and no longer updates on every
   cursor movement.
 
+VIM SCRIPT
+
+• |v:msgpack_types| has the type "binary" removed. |msgpackparse()| no longer
+  treats BIN, STR and FIXSTR as separate types. Any of these is returned as a
+  string if possible, or a |blob| if the value contained embedded NUL:s.
+
 EVENTS
 
 • TODO
@@ -121,6 +127,9 @@ LSP
 • Completion side effects (including snippet expansion, execution of commands
   and application of additional text edits) is now built-in.
 • |vim.lsp.util.locations_to_items()| sets `end_col` and `end_lnum` fields.
+• |vim.lsp.buf.format()| now supports passing a list of ranges
+  via the `range` parameter (this requires support for the
+  `textDocument/rangesFormatting` request).
 
 LUA
 

@@ -56,6 +56,7 @@ lsp._request_name_to_capability = {
   [ms.workspace_symbol] = { 'workspaceSymbolProvider' },
   [ms.textDocument_references] = { 'referencesProvider' },
   [ms.textDocument_rangeFormatting] = { 'documentRangeFormattingProvider' },
+  [ms.textDocument_rangesFormatting] = { 'documentRangeFormattingProvider', 'rangesSupport' },
   [ms.textDocument_formatting] = { 'documentFormattingProvider' },
   [ms.textDocument_completion] = { 'completionProvider' },
   [ms.textDocument_documentHighlight] = { 'documentHighlightProvider' },
@@ -351,7 +352,7 @@ function lsp._set_defaults(client, bufnr)
   then
     vim.bo[bufnr].formatexpr = 'v:lua.vim.lsp.formatexpr()'
   end
-  api.nvim_buf_call(bufnr, function()
+  vim._with({ buf = bufnr }, function()
     if
       client.supports_method(ms.textDocument_hover)
       and is_empty_or_default(bufnr, 'keywordprg')
@@ -377,9 +378,9 @@ local function reset_defaults(bufnr)
   if vim.bo[bufnr].formatexpr == 'v:lua.vim.lsp.formatexpr()' then
     vim.bo[bufnr].formatexpr = nil
   end
-  api.nvim_buf_call(bufnr, function()
+  vim._with({ buf = bufnr }, function()
     local keymap = vim.fn.maparg('K', 'n', false, true)
-    if keymap and keymap.callback == vim.lsp.buf.hover then
+    if keymap and keymap.callback == vim.lsp.buf.hover and keymap.buffer == 1 then
       vim.keymap.del('n', 'K', { buffer = bufnr })
     end
   end)
