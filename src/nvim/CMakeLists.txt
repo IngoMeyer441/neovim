@@ -160,6 +160,9 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
   # ENABLE_EXPORTS is set to true. See
   # https://github.com/neovim/neovim/issues/25295
   target_link_options(nvim_bin PRIVATE "-Wl,-export_dynamic")
+  # Apple Clang 16's new deduplication pass leads to lock-up on start
+  # TODO(clason): verify that problem remains after release or remove
+  target_link_options(nvim_bin PRIVATE "-Wl,-no_deduplicate")
 elseif(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
   target_link_libraries(main_lib INTERFACE pthread c++abi)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
@@ -479,7 +482,6 @@ endif()
 if(MSVC)
   list(APPEND gen_cflags -wd4003)
 endif()
-list(APPEND gen_cflags -O2)
 
 set(NVIM_VERSION_GIT_H ${PROJECT_BINARY_DIR}/cmake.config/auto/versiondef_git.h)
 add_custom_target(update_version_stamp
@@ -707,6 +709,12 @@ target_sources(main_lib INTERFACE
   ${NVIM_HEADERS}
   ${EXTERNAL_SOURCES}
   ${EXTERNAL_HEADERS})
+
+if(WIN32)
+  # add windows resource file pointing to the neovim icon
+  # this makes the icon appear for the neovim exe and associated filetypes
+  target_sources(nvim_bin PRIVATE ${NVIM_RUNTIME_DIR}/windows_icon.rc)
+endif()
 
 target_sources(nlua0 PUBLIC ${NLUA0_SOURCES})
 
