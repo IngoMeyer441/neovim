@@ -49,6 +49,9 @@ EDITOR
   now appear left of lower priority signs.
 • |hl-CurSearch| now behaves the same as Vim and no longer updates on every
   cursor movement.
+• Moving in the buffer list using |:bnext| and similar commands behaves as
+  documented and skips help buffers if run from a non-help buffer, otherwise
+  it moves to another help buffer.
 
 VIM SCRIPT
 
@@ -66,7 +69,8 @@ LSP
 
 LUA
 
-• TODO
+• API functions now consistently return an empty dictionary as
+  |vim.empty_dict()|. Earlier, a |lua-special-tbl| was sometimes used.
 
 OPTIONS
 
@@ -138,6 +142,7 @@ LUA
 OPTIONS
 
 • 'completeopt' flag "fuzzy" enables |fuzzy-matching| during |ins-completion|.
+• 'tabclose' controls which tab page to focus when closing a tab page.
 
 PERFORMANCE
 

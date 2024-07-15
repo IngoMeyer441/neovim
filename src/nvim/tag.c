@@ -2583,6 +2583,10 @@ int get_tagfname(tagname_T *tnp, int first, char *buf)
       // move the filename one char forward and truncate the
       // filepath with a NUL
       filename = path_tail(buf);
+      if (r_ptr != NULL) {
+        STRMOVE(r_ptr + 1, r_ptr);
+        r_ptr++;
+      }
       STRMOVE(filename + 1, filename);
       *filename++ = NUL;
 
@@ -3184,7 +3188,7 @@ static int find_extra(char **pp)
 //
 // Free a single entry in a tag stack
 //
-static void tagstack_clear_entry(taggy_T *item)
+void tagstack_clear_entry(taggy_T *item)
 {
   XFREE_CLEAR(item->tagname);
   XFREE_CLEAR(item->user_data);
