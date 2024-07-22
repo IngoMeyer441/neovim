@@ -254,8 +254,8 @@ func Test_sign_completion()
                 \ 'SpellLocal SpellRare', @:)
   endfor
 
-  call writefile(repeat(["Sun is shining"], 30), "XsignOne")
-  call writefile(repeat(["Sky is blue"], 30), "XsignTwo")
+  call writefile(repeat(["Sun is shining"], 30), "XsignOne", 'D')
+  call writefile(repeat(["Sky is blue"], 30), "XsignTwo", 'D')
   call feedkeys(":sign define Sign icon=Xsig\<C-A>\<C-B>\"\<CR>", 'tx')
   call assert_equal('"sign define Sign icon=XsignOne XsignTwo', @:)
 
@@ -332,8 +332,6 @@ func Test_sign_completion()
   sign undefine Sign1
   sign undefine Sign2
   enew
-  call delete('XsignOne')
-  call delete('XsignTwo')
 endfunc
 
 func Test_sign_invalid_commands()
@@ -476,7 +474,7 @@ func Test_sign_funcs()
   call assert_fails('call sign_getdefined({})', 'E731:')
 
   " Tests for sign_place()
-  call writefile(repeat(["Sun is shining"], 30), "Xsign")
+  call writefile(repeat(["Sun is shining"], 30), "Xsign", 'D')
   edit Xsign
 
   call assert_equal(10, sign_place(10, '', 'sign1', 'Xsign',
@@ -582,7 +580,6 @@ func Test_sign_funcs()
 	      \ 'priority' : 10}]}],
 	      \ sign_getplaced('%', {'lnum' : 22}))
 
-  call delete("Xsign")
   call sign_unplace('*')
   call sign_undefine()
   enew | only
@@ -595,7 +592,7 @@ func Test_sign_group()
   call sign_unplace('*')
   call sign_undefine()
 
-  call writefile(repeat(["Sun is shining"], 30), "Xsign")
+  call writefile(repeat(["Sun is shining"], 30), "Xsign", 'D')
 
   let attr = {'text' : '=>', 'linehl' : 'Search', 'texthl' : 'Error'}
   call assert_equal(0, sign_define("sign1", attr))
@@ -836,7 +833,6 @@ func Test_sign_group()
   " Error cases
   call assert_fails("sign place 3 group= name=sign1 buffer=" . bnum, 'E474:')
 
-  call delete("Xsign")
   call sign_unplace('*')
   call sign_undefine()
   enew | only
@@ -879,8 +875,8 @@ func Test_sign_unplace()
   call sign_undefine()
 
   " Create two files and define signs
-  call writefile(repeat(["Sun is shining"], 30), "Xsign1")
-  call writefile(repeat(["It is beautiful"], 30), "Xsign2")
+  call writefile(repeat(["Sun is shining"], 30), "Xsign1", 'D')
+  call writefile(repeat(["It is beautiful"], 30), "Xsign2", 'D')
 
   let attr = {'text' : '=>', 'linehl' : 'Search', 'texthl' : 'Error'}
   call sign_define("sign1", attr)
@@ -1189,8 +1185,6 @@ func Test_sign_unplace()
   call sign_unplace('*')
   call sign_undefine()
   enew | only
-  call delete("Xsign1")
-  call delete("Xsign2")
 endfunc
 
 " Tests for auto-generating the sign identifier.
@@ -1202,7 +1196,7 @@ func Test_aaa_sign_id_autogen()
   let attr = {'text' : '=>', 'linehl' : 'Search', 'texthl' : 'Error'}
   call assert_equal(0, sign_define("sign1", attr))
 
-  call writefile(repeat(["Sun is shining"], 30), "Xsign")
+  call writefile(repeat(["Sun is shining"], 30), "Xsign", 'D')
   edit Xsign
 
   call assert_equal(1, sign_place(0, '', 'sign1', 'Xsign',
@@ -1224,7 +1218,6 @@ func Test_aaa_sign_id_autogen()
   call assert_equal(10,
 	      \ sign_getplaced('Xsign', {'id' : 1})[0].signs[0].lnum)
 
-  call delete("Xsign")
   call sign_unplace('*')
   call sign_undefine()
   enew | only
@@ -1815,11 +1808,12 @@ func Test_sign_cursor_position()
   let lines =<< trim END
 	call setline(1, [repeat('x', 75), 'mmmm', 'yyyy'])
 	call cursor(2,1)
-   	sign define s1 texthl=Search text==>
+	sign define s1 texthl=Search text==>
+	sign define s2 linehl=Pmenu
 	redraw
-   	sign place 10 line=2 name=s1
+	sign place 10 line=2 name=s1
   END
-  call writefile(lines, 'XtestSigncolumn')
+  call writefile(lines, 'XtestSigncolumn', 'D')
   let buf = RunVimInTerminal('-S XtestSigncolumn', {'rows': 6})
   call VerifyScreenDump(buf, 'Test_sign_cursor_1', {})
 
@@ -1827,15 +1821,18 @@ func Test_sign_cursor_position()
   call term_sendkeys(buf, ":sign define s1 text=-)\<CR>")
   call VerifyScreenDump(buf, 'Test_sign_cursor_2', {})
 
-  " update cursor position calculation
-  call term_sendkeys(buf, "lh")
-  call term_sendkeys(buf, ":sign unplace 10\<CR>")
+  " Also place a line HL sign
+  call term_sendkeys(buf, ":sign place 11 line=2 name=s2\<CR>")
   call VerifyScreenDump(buf, 'Test_sign_cursor_3', {})
 
+  " update cursor position calculation
+  call term_sendkeys(buf, "lh")
+  call term_sendkeys(buf, ":sign unplace 11\<CR>")
+  call term_sendkeys(buf, ":sign unplace 10\<CR>")
+  call VerifyScreenDump(buf, 'Test_sign_cursor_4', {})
 
   " clean up
   call StopVimInTerminal(buf)
-  call delete('XtestSigncolumn')
 endfunc
 
 " Return the 'len' characters in screen starting from (row,col)
@@ -1954,7 +1951,7 @@ endfunc
 
 " Test for managing multiple signs using the sign functions
 func Test_sign_funcs_multi()
-  call writefile(repeat(["Sun is shining"], 30), "Xsign")
+  call writefile(repeat(["Sun is shining"], 30), "Xsign", 'D')
   edit Xsign
   let bnum = bufnr('')
 
@@ -2067,5 +2064,13 @@ func Test_sign_funcs_multi()
   call sign_unplace('*')
   call sign_undefine()
   enew!
-  call delete("Xsign")
 endfunc
+
+func Test_sign_null_list()
+  eval v:_null_list->sign_define()
+  eval v:_null_list->sign_placelist()
+  eval v:_null_list->sign_undefine()
+  eval v:_null_list->sign_unplacelist()
+endfunc
+
+" vim: shiftwidth=2 sts=2 expandtab

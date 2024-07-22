@@ -108,6 +108,7 @@ func s:GetFilenameChecks() abort
     \ 'asn': ['file.asn', 'file.asn1'],
     \ 'asterisk': ['asterisk/file.conf', 'asterisk/file.conf-file', 'some-asterisk/file.conf', 'some-asterisk/file.conf-file'],
     \ 'astro': ['file.astro'],
+    \ 'asy': ['file.asy'],
     \ 'atlas': ['file.atl', 'file.as'],
     \ 'authzed': ['schema.zed'],
     \ 'autohotkey': ['file.ahk'],
@@ -225,7 +226,7 @@ func s:GetFilenameChecks() abort
     \            'psprint.conf', 'sofficerc', 'any/.config/lxqt/globalkeyshortcuts.conf', 'any/.config/screengrab/screengrab.conf',
     \            'any/.local/share/flatpak/repo/config', '.notmuch-config'],
     \ 'dot': ['file.dot', 'file.gv'],
-    \ 'dracula': ['file.drac', 'file.drc', 'filelvs', 'filelpe', 'drac.file', 'lpe', 'lvs', 'some-lpe', 'some-lvs'],
+    \ 'dracula': ['file.drac', 'file.drc', 'file.lvs', 'file.lpe', 'drac.file'],
     \ 'dtd': ['file.dtd'],
     \ 'dtrace': ['/usr/lib/dtrace/io.d'],
     \ 'dts': ['file.dts', 'file.dtsi', 'file.dtso', 'file.its', 'file.keymap'],
@@ -437,6 +438,7 @@ func s:GetFilenameChecks() abort
     \ 'matlab': ['file.m'],
     \ 'maxima': ['file.demo', 'file.dmt', 'file.dm1', 'file.dm2', 'file.dm3',
     \            'file.wxm', 'maxima-init.mac'],
+    \ 'mediawiki': ['file.mw', 'file.wiki'],
     \ 'mel': ['file.mel'],
     \ 'mermaid': ['file.mmd', 'file.mmdc', 'file.mermaid'],
     \ 'meson': ['meson.build', 'meson.options', 'meson_options.txt'],
@@ -471,7 +473,7 @@ func s:GetFilenameChecks() abort
     \ 'mgp': ['file.mgp'],
     \ 'mib': ['file.mib', 'file.my'],
     \ 'mix': ['file.mix', 'file.mixal'],
-    \ 'mma': ['file.nb'],
+    \ 'mma': ['file.nb', 'file.wl'],
     \ 'mmp': ['file.mmp'],
     \ 'modconf': ['/etc/modules.conf', '/etc/modules', '/etc/conf.modules', '/etc/modprobe.file', 'any/etc/conf.modules', 'any/etc/modprobe.file', 'any/etc/modules', 'any/etc/modules.conf'],
     \ 'modula3': ['file.m3', 'file.mg', 'file.i3', 'file.ig', 'file.lm3'],
@@ -650,7 +652,8 @@ func s:GetFilenameChecks() abort
     \ 'sh': ['.bashrc', '.bash_profile', '.bash-profile', '.bash_logout', '.bash-logout', '.bash_aliases', '.bash-aliases', '.bash_history', '.bash-history',
     \        '/tmp/bash-fc-3Ozjlw', '/tmp/bash-fc.3Ozjlw', 'PKGBUILD', 'APKBUILD', 'file.bash', '/usr/share/doc/bash-completion/filter.sh',
     \        '/etc/udev/cdsymlinks.conf', 'any/etc/udev/cdsymlinks.conf', 'file.bats', '.ash_history', 'any/etc/neofetch/config.conf', '.xprofile',
-    \        'user-dirs.defaults', 'user-dirs.dirs', 'makepkg.conf', '.makepkg.conf', 'file.mdd', 'file.cygport', '.env', '.envrc'],
+    \        'user-dirs.defaults', 'user-dirs.dirs', 'makepkg.conf', '.makepkg.conf', 'file.mdd', 'file.cygport', '.env', '.envrc', 'devscripts.conf',
+    \        '.devscripts'],
     \ 'sieve': ['file.siv', 'file.sieve'],
     \ 'sil': ['file.sil'],
     \ 'simula': ['file.sim'],
@@ -2569,6 +2572,71 @@ func Test_uci_file()
   split any/etc/config/firewall
   call assert_equal('uci', &filetype)
   bwipe!
+
+  filetype off
+endfunc
+
+func Test_pro_file()
+  filetype on
+
+  "Prolog
+  call writefile([':-module(test/1,'], 'Xfile.pro', 'D')
+  split Xfile.pro
+  call assert_equal('prolog', &filetype)
+  bwipe!
+
+  call writefile(['% comment'], 'Xfile.pro', 'D')
+  split Xfile.pro
+  call assert_equal('prolog', &filetype)
+  bwipe!
+
+  call writefile(['/* multiline comment'], 'Xfile.pro', 'D')
+  split Xfile.pro
+  call assert_equal('prolog', &filetype)
+  bwipe!
+
+  call writefile(['rule(test, 1.7).'], 'Xfile.pro', 'D')
+  split Xfile.pro
+  call assert_equal('prolog', &filetype)
+  bwipe!
+
+  " IDL
+  call writefile(['x = findgen(100)/10'], 'Xfile.pro', 'D')
+  split Xfile.pro
+  call assert_equal('idlang', &filetype)
+
+  filetype off
+endfunc
+
+
+func Test_pl_file()
+  filetype on
+
+  "Prolog
+  call writefile([':-module(test/1,'], 'Xfile.pl', 'D')
+  split Xfile.pl
+  call assert_equal('prolog', &filetype)
+  bwipe!
+
+  call writefile(['% comment'], 'Xfile.pl', 'D')
+  split Xfile.pl
+  call assert_equal('prolog', &filetype)
+  bwipe!
+
+  call writefile(['/* multiline comment'], 'Xfile.pl', 'D')
+  split Xfile.pl
+  call assert_equal('prolog', &filetype)
+  bwipe!
+
+  call writefile(['rule(test, 1.7).'], 'Xfile.pl', 'D')
+  split Xfile.pl
+  call assert_equal('prolog', &filetype)
+  bwipe!
+
+  " Perl
+  call writefile(['%data = (1, 2, 3);'], 'Xfile.pl', 'D')
+  split Xfile.pl
+  call assert_equal('perl', &filetype)
 
   filetype off
 endfunc
