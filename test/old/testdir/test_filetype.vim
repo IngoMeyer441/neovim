@@ -296,7 +296,7 @@ func s:GetFilenameChecks() abort
     \ 'gitsendemail': ['.gitsendemail.msg.xxxxxx'],
     \ 'gkrellmrc': ['gkrellmrc', 'gkrellmrc_x'],
     \ 'gleam': ['file.gleam'],
-    \ 'glsl': ['file.glsl'],
+    \ 'glsl': ['file.glsl', 'file.vert', 'file.tesc', 'file.tese', 'file.geom', 'file.frag', 'file.comp', 'file.rgen', 'file.rmiss', 'file.rchit', 'file.rahit', 'file.rint', 'file.rcall'],
     \ 'gn': ['file.gn', 'file.gni'],
     \ 'gnash': ['gnashrc', '.gnashrc', 'gnashpluginrc', '.gnashpluginrc'],
     \ 'gnuplot': ['file.gpi', '.gnuplot', 'file.gnuplot', '.gnuplot_history'],
@@ -369,7 +369,7 @@ func s:GetFilenameChecks() abort
     \ 'jq': ['file.jq'],
     \ 'jovial': ['file.jov', 'file.j73', 'file.jovial'],
     \ 'jproperties': ['file.properties', 'file.properties_xx', 'file.properties_xx_xx', 'some.properties_xx_xx_file', 'org.eclipse.xyz.prefs'],
-    \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.geojson', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', 'file.jupyterlab-settings', '.prettierrc', '.firebaserc', '.stylelintrc', '.lintstagedrc', 'file.slnf', 'file.sublime-project', 'file.sublime-settings', 'file.sublime-workspace', 'file.bd', 'file.bda', 'file.xci', 'flake.lock', 'pack.mcmeta'],
+    \ 'json': ['file.json', 'file.jsonp', 'file.json-patch', 'file.geojson', 'file.webmanifest', 'Pipfile.lock', 'file.ipynb', 'file.jupyterlab-settings', '.prettierrc', '.firebaserc', '.stylelintrc', '.lintstagedrc', 'file.slnf', 'file.sublime-project', 'file.sublime-settings', 'file.sublime-workspace', 'file.bd', 'file.bda', 'file.xci', 'flake.lock', 'pack.mcmeta', 'deno.lock'],
     \ 'json5': ['file.json5'],
     \ 'jsonc': ['file.jsonc', '.babelrc', '.eslintrc', '.jsfmtrc', '.jshintrc', '.jscsrc', '.vsconfig', '.hintrc', '.swrc', 'jsconfig.json', 'tsconfig.json', 'tsconfig.test.json', 'tsconfig-test.json', '.luaurc'],
     \ 'jsonl': ['file.jsonl'],
@@ -433,7 +433,7 @@ func s:GetFilenameChecks() abort
     \ 'map': ['file.map'],
     \ 'maple': ['file.mv', 'file.mpl', 'file.mws'],
     \ 'markdown': ['file.markdown', 'file.mdown', 'file.mkd', 'file.mkdn', 'file.mdwn', 'file.md'],
-    \ 'mason': ['file.mason', 'file.mhtml', 'file.comp'],
+    \ 'mason': ['file.mason', 'file.mhtml'],
     \ 'master': ['file.mas', 'file.master'],
     \ 'matlab': ['file.m'],
     \ 'maxima': ['file.demo', 'file.dmt', 'file.dm1', 'file.dm2', 'file.dm3',
@@ -2637,6 +2637,23 @@ func Test_pl_file()
   call writefile(['%data = (1, 2, 3);'], 'Xfile.pl', 'D')
   split Xfile.pl
   call assert_equal('perl', &filetype)
+
+  filetype off
+endfunc
+
+func Test_make_file()
+  filetype on
+
+  " Microsoft Makefile
+  call writefile(['# Makefile for Windows', '!if "$(VIMDLL)" == "yes"'], 'XMakefile.mak', 'D')
+  split XMakefile.mak
+  call assert_equal(1, get(b:, 'make_microsoft', 0))
+  bwipe!
+
+  call writefile(['# get the list of tests', 'include testdir/Make_all.mak'], 'XMakefile.mak', 'D')
+  split XMakefile.mak
+  call assert_equal(0, get(b:, 'make_microsoft', 0))
+  bwipe!
 
   filetype off
 endfunc

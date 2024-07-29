@@ -158,8 +158,7 @@ CharSize charsize_regular(CharsizeArg *csarg, char *const cur, colnr_T const vco
       if (mark.pos.row != csarg->virt_row || mark.pos.col > col) {
         break;
       } else if (mark.pos.col == col) {
-        if (!mt_end(mark) && (mark.flags & MT_FLAG_DECOR_VIRT_TEXT_INLINE)
-            && ns_in_win(mark.ns, wp)) {
+        if (!mt_invalid(mark) && ns_in_win(mark.ns, wp)) {
           DecorInline decor = mt_decor(mark);
           DecorVirtText *vt = decor.ext ? decor.data.ext.vt : NULL;
           while (vt) {
@@ -713,7 +712,7 @@ bool win_may_fill(win_T *wp)
 /// @return Number of filler lines above lnum
 int win_get_fill(win_T *wp, linenr_T lnum)
 {
-  int virt_lines = decor_virt_lines(wp, lnum, NULL, kNone);
+  int virt_lines = decor_virt_lines(wp, lnum, NULL);
 
   // be quick when there are no filler lines
   if (diffopt_filler()) {
