@@ -268,12 +268,12 @@ function vim.fn.assert_exception(error, msg) end
 --- <
 --- If {msg} is empty then it is not used.  Do this to get the
 --- default message when passing the {lnum} argument.
----
+---           *E1115*
 --- When {lnum} is present and not negative, and the {error}
 --- argument is present and matches, then this is compared with
 --- the line number at which the error was reported. That can be
 --- the line number in a function or in a script.
----
+---           *E1116*
 --- When {context} is present it is used as a pattern and matched
 --- against the context (script name or function name) where
 --- {lnum} is located in.
@@ -4699,6 +4699,10 @@ function vim.fn.isnan(expr) end
 ---   for [key, value] in items(mydict)
 ---      echo key .. ': ' .. value
 ---   endfor
+--- <
+--- A List or a String argument is also supported.  In these
+--- cases, items() returns a List with the index and the value at
+--- the index.
 ---
 --- @param dict any
 --- @return any

@@ -1,6 +1,6 @@
 " zip.vim: Handles browsing zipfiles
 " AUTOLOAD PORTION
-" Date:		Jul 24, 2024
+" Date:		Jul 30, 2024
 " Version:	33
 " Maintainer:	This runtime file is looking for a new maintainer.
 " Former Maintainer:	Charles E Campbell
@@ -8,6 +8,8 @@
 " 2024 Jun 16 by Vim Project: handle whitespace on Windows properly (#14998)
 " 2024 Jul 23 by Vim Project: fix 'x' command
 " 2024 Jul 24 by Vim Project: use delete() function
+" 2024 Jul 20 by Vim Project: fix opening remote zipfile
+" 2024 Aug 04 by Vim Project: escape '[' in name of file to be extracted
 " License:	Vim License  (see vim's :help license)
 " Copyright:	Copyright (C) 2005-2019 Charles E. Campbell {{{1
 "		Permission is hereby granted to use and distribute this code,
@@ -73,15 +75,11 @@ endif
 " ---------------------------------------------------------------------
 " zip#Browse: {{{2
 fun! zip#Browse(zipfile)
-"  call Dfunc("zip#Browse(zipfile<".a:zipfile.">)")
-  " sanity check: insure that the zipfile has "PK" as its first two letters
-  "               (zipped files have a leading PK as a "magic cookie")
-  if !filereadable(a:zipfile) || readfile(a:zipfile, "", 1)[0] !~ '^PK'
-   exe "noswapfile noautocmd noswapfile e ".fnameescape(a:zipfile)
-"   call Dret("zip#Browse : not a zipfile<".a:zipfile.">")
+  " sanity check: ensure that the zipfile has "PK" as its first two letters
+  "               (zip files have a leading PK as a "magic cookie")
+  if filereadable(a:zipfile) && readblob(a:zipfile, 0, 2) != 0z50.4B
+   exe "noswapfile noautocmd e " .. fnameescape(a:zipfile)
    return
-"  else        " Decho
-"   call Decho("zip#Browse: a:zipfile<".a:zipfile."> passed PK test - it's a zip file")
   endif
 
   let repkeep= &report
@@ -97,9 +95,7 @@ fun! zip#Browse(zipfile)
   if !executable(g:zip_unzipcmd)
    redraw!
    echohl Error | echo "***error*** (zip#Browse) unzip not available on your system"
-"   call inputsave()|call input("Press <cr> to continue")|call inputrestore()
    let &report= repkeep
-"   call Dret("zip#Browse")
    return
   endif
   if !filereadable(a:zipfile)
@@ -107,13 +103,10 @@ fun! zip#Browse(zipfile)
     " if it's an url, don't complain, let url-handlers such as vim do its thing
     redraw!
     echohl Error | echo "***error*** (zip#Browse) File not readable<".a:zipfile.">" | echohl None
-"    call inputsave()|call input("Press <cr> to continue")|call inputrestore()
    endif
    let &report= repkeep
-"   call Dret("zip#Browse : file<".a:zipfile."> not readable")
    return
   endif
-"  call Decho("passed sanity checks")
   if &ma != 1
    set ma
   endif
@@ -226,8 +219,8 @@ fun! zip#Read(fname,mode)
   else
    let zipfile = substitute(a:fname,'^.\{-}zipfile://\(.\{-}\)::[^\\].*$','\1','')
    let fname   = substitute(a:fname,'^.\{-}zipfile://.\{-}::\([^\\].*\)$','\1','')
-   let fname   = substitute(fname, '[', '[[]', 'g')
   endif
+  let fname    = substitute(fname, '[', '[[]', 'g')
   " sanity check
   if !executable(substitute(g:zip_unzipcmd,'\s\+.*$','',''))
    redraw!
@@ -238,7 +231,7 @@ fun! zip#Read(fname,mode)
   endif
 
   " the following code does much the same thing as
-  "   exe "keepj sil! r! ".g:zip_unzipcmd." -p -- ".s:Escape(zipfile,1)." ".s:Escape(fnameescape(fname),1)
+  "   exe "keepj sil! r! ".g:zip_unzipcmd." -p -- ".s:Escape(zipfile,1)." ".s:Escape(fname,1)
   " but allows zipfile://... entries in quickfix lists
   let temp = tempname()
   let fn   = expand('%:p')
