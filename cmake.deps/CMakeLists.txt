@@ -27,13 +27,11 @@ set(DEPS_IGNORE_SHA FALSE)
 option(USE_BUNDLED "Use bundled dependencies." ON)
 
 option(USE_BUNDLED_LIBUV "Use the bundled libuv." ${USE_BUNDLED})
-option(USE_BUNDLED_LIBVTERM "Use the bundled libvterm." ${USE_BUNDLED})
 option(USE_BUNDLED_LPEG "Use the bundled lpeg." ${USE_BUNDLED})
 # PUC Lua is only used for tests, unless explicitly requested.
 option(USE_BUNDLED_LUA "Use the bundled version of lua." OFF)
 option(USE_BUNDLED_LUAJIT "Use the bundled version of luajit." ${USE_BUNDLED})
 option(USE_BUNDLED_LUV "Use the bundled version of luv." ${USE_BUNDLED})
-option(USE_BUNDLED_MSGPACK "Use the bundled msgpack." ${USE_BUNDLED})
 option(USE_BUNDLED_TS "Use the bundled treesitter runtime." ${USE_BUNDLED})
 option(USE_BUNDLED_TS_PARSERS "Use the bundled treesitter parsers." ${USE_BUNDLED})
 option(USE_BUNDLED_UNIBILIUM "Use the bundled unibilium." ${USE_BUNDLED})
@@ -97,16 +95,8 @@ if(USE_BUNDLED_UNIBILIUM)
   include(BuildUnibilium)
 endif()
 
-if(USE_BUNDLED_LIBVTERM)
-  include(BuildLibvterm)
-endif()
-
 if(USE_BUNDLED_LIBUV)
   include(BuildLibuv)
-endif()
-
-if(USE_BUNDLED_MSGPACK)
-  include(BuildMsgpack)
 endif()
 
 if(USE_BUNDLED_LUAJIT)

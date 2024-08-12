@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <uv.h>
 
 #include "auto/config.h"
@@ -21,7 +20,6 @@
 #include "nvim/channel.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand_defs.h"
-#include "nvim/cmdhist.h"
 #include "nvim/cursor.h"
 #include "nvim/edit.h"
 #include "nvim/errors.h"
@@ -64,9 +62,7 @@
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
-#include "nvim/os/fileio.h"
 #include "nvim/os/fs.h"
-#include "nvim/os/fs_defs.h"
 #include "nvim/os/lang.h"
 #include "nvim/os/os.h"
 #include "nvim/os/os_defs.h"
@@ -79,7 +75,6 @@
 #include "nvim/regexp_defs.h"
 #include "nvim/runtime.h"
 #include "nvim/runtime_defs.h"
-#include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/tag.h"
 #include "nvim/types_defs.h"
@@ -99,7 +94,6 @@ static const char e_cannot_index_special_variable[]
   = N_("E909: Cannot index a special variable");
 static const char *e_nowhitespace
   = N_("E274: No white space allowed before parenthesis");
-static const char *e_write2 = N_("E80: Error while writing: %s");
 static const char e_cannot_index_a_funcref[]
   = N_("E695: Cannot index a Funcref");
 static const char e_variable_nested_too_deep_for_making_copy[]
@@ -4788,19 +4782,6 @@ bool garbage_collect(bool testing)
   FOR_ALL_BUFFERS(buf) {
     // buffer-local variables
     ABORTING(set_ref_in_item)(&buf->b_bufvar.di_tv, copyID, NULL, NULL);
-    // buffer marks (ShaDa additional data)
-    ABORTING(set_ref_in_fmark)(buf->b_last_cursor, copyID);
-    ABORTING(set_ref_in_fmark)(buf->b_last_insert, copyID);
-    ABORTING(set_ref_in_fmark)(buf->b_last_change, copyID);
-    for (size_t i = 0; i < NMARKS; i++) {
-      ABORTING(set_ref_in_fmark)(buf->b_namedm[i], copyID);
-    }
-    // buffer change list (ShaDa additional data)
-    for (int i = 0; i < buf->b_changelistlen; i++) {
-      ABORTING(set_ref_in_fmark)(buf->b_changelist[i], copyID);
-    }
-    // buffer ShaDa additional data
-    ABORTING(set_ref_dict)(buf->additional_data, copyID);
 
     // buffer callback functions
     ABORTING(set_ref_in_callback)(&buf->b_prompt_callback, copyID, NULL, NULL);
@@ -4823,10 +4804,6 @@ bool garbage_collect(bool testing)
   FOR_ALL_TAB_WINDOWS(tp, wp) {
     // window-local variables
     ABORTING(set_ref_in_item)(&wp->w_winvar.di_tv, copyID, NULL, NULL);
-    // window jump list (ShaDa additional data)
-    for (int i = 0; i < wp->w_jumplistlen; i++) {
-      ABORTING(set_ref_in_fmark)(wp->w_jumplist[i].fmark, copyID);
-    }
   }
   // window-local variables in autocmd windows
   for (int i = 0; i < AUCMD_WIN_COUNT; i++) {
@@ -4843,9 +4820,6 @@ bool garbage_collect(bool testing)
       char name = NUL;
       bool is_unnamed = false;
       reg_iter = op_global_reg_iter(reg_iter, &name, &reg, &is_unnamed);
-      if (name != NUL) {
-        ABORTING(set_ref_dict)(reg.additional_data, copyID);
-      }
     } while (reg_iter != NULL);
   }
 
@@ -4856,9 +4830,6 @@ bool garbage_collect(bool testing)
       xfmark_T fm;
       char name = NUL;
       mark_iter = mark_global_iter(mark_iter, &name, &fm);
-      if (name != NUL) {
-        ABORTING(set_ref_dict)(fm.fmark.additional_data, copyID);
-      }
     } while (mark_iter != NULL);
   }
 
@@ -4899,36 +4870,6 @@ bool garbage_collect(bool testing)
 
   // v: vars
   ABORTING(set_ref_in_ht)(&vimvarht, copyID, NULL);
-
-  // history items (ShaDa additional elements)
-  if (p_hi) {
-    for (int i = 0; i < HIST_COUNT; i++) {
-      const void *iter = NULL;
-      do {
-        histentry_T hist;
-        iter = hist_iter(iter, (uint8_t)i, false, &hist);
-        if (hist.hisstr != NULL) {
-          ABORTING(set_ref_list)(hist.additional_elements, copyID);
-        }
-      } while (iter != NULL);
-    }
-  }
-
-  // previously used search/substitute patterns (ShaDa additional data)
-  {
-    SearchPattern pat;
-    get_search_pattern(&pat);
-    ABORTING(set_ref_dict)(pat.additional_data, copyID);
-    get_substitute_pattern(&pat);
-    ABORTING(set_ref_dict)(pat.additional_data, copyID);
-  }
-
-  // previously used replacement string
-  {
-    SubReplacementString sub;
-    sub_get_replacement(&sub);
-    ABORTING(set_ref_list)(sub.additional_elements, copyID);
-  }
 
   ABORTING(set_ref_in_quickfix)(copyID);
 
@@ -5209,52 +5150,6 @@ bool set_ref_in_item(typval_T *tv, int copyID, ht_stack_T **ht_stack, list_stack
     break;
   }
   return abort;
-}
-
-/// Mark all lists and dicts referenced in given mark
-///
-/// @return  true if setting references failed somehow.
-static inline bool set_ref_in_fmark(fmark_T fm, int copyID)
-  FUNC_ATTR_WARN_UNUSED_RESULT
-{
-  if (fm.additional_data != NULL
-      && fm.additional_data->dv_copyID != copyID) {
-    fm.additional_data->dv_copyID = copyID;
-    return set_ref_in_ht(&fm.additional_data->dv_hashtab, copyID, NULL);
-  }
-  return false;
-}
-
-/// Mark all lists and dicts referenced in given list and the list itself
-///
-/// @return  true if setting references failed somehow.
-static inline bool set_ref_list(list_T *list, int copyID)
-  FUNC_ATTR_WARN_UNUSED_RESULT
-{
-  if (list != NULL) {
-    typval_T tv = (typval_T) {
-      .v_type = VAR_LIST,
-      .vval = { .v_list = list }
-    };
-    return set_ref_in_item(&tv, copyID, NULL, NULL);
-  }
-  return false;
-}
-
-/// Mark all lists and dicts referenced in given dict and the dict itself
-///
-/// @return  true if setting references failed somehow.
-static inline bool set_ref_dict(dict_T *dict, int copyID)
-  FUNC_ATTR_WARN_UNUSED_RESULT
-{
-  if (dict != NULL) {
-    typval_T tv = (typval_T) {
-      .v_type = VAR_DICT,
-      .vval = { .v_dict = dict }
-    };
-    return set_ref_in_item(&tv, copyID, NULL, NULL);
-  }
-  return false;
 }
 
 /// Get the key for #{key: val} into "tv" and advance "arg".
@@ -6367,149 +6262,6 @@ void timer_stop_all(void)
 void timer_teardown(void)
 {
   timer_stop_all();
-}
-
-/// Write "list" of strings to file "fd".
-///
-/// @param  fp  File to write to.
-/// @param[in]  list  List to write.
-/// @param[in]  binary  Whether to write in binary mode.
-///
-/// @return true in case of success, false otherwise.
-bool write_list(FileDescriptor *const fp, const list_T *const list, const bool binary)
-  FUNC_ATTR_NONNULL_ARG(1)
-{
-  int error = 0;
-  TV_LIST_ITER_CONST(list, li, {
-    const char *const s = tv_get_string_chk(TV_LIST_ITEM_TV(li));
-    if (s == NULL) {
-      return false;
-    }
-    const char *hunk_start = s;
-    for (const char *p = hunk_start;; p++) {
-      if (*p == NUL || *p == NL) {
-        if (p != hunk_start) {
-          const ptrdiff_t written = file_write(fp, hunk_start,
-                                               (size_t)(p - hunk_start));
-          if (written < 0) {
-            error = (int)written;
-            goto write_list_error;
-          }
-        }
-        if (*p == NUL) {
-          break;
-        } else {
-          hunk_start = p + 1;
-          const ptrdiff_t written = file_write(fp, (char[]){ NUL }, 1);
-          if (written < 0) {
-            error = (int)written;
-            break;
-          }
-        }
-      }
-    }
-    if (!binary || TV_LIST_ITEM_NEXT(list, li) != NULL) {
-      const ptrdiff_t written = file_write(fp, "\n", 1);
-      if (written < 0) {
-        error = (int)written;
-        goto write_list_error;
-      }
-    }
-  });
-  if ((error = file_flush(fp)) != 0) {
-    goto write_list_error;
-  }
-  return true;
-write_list_error:
-  semsg(_(e_write2), os_strerror(error));
-  return false;
-}
-
-/// Write a blob to file with descriptor `fp`.
-///
-/// @param[in]  fp  File to write to.
-/// @param[in]  blob  Blob to write.
-///
-/// @return true on success, or false on failure.
-bool write_blob(FileDescriptor *const fp, const blob_T *const blob)
-  FUNC_ATTR_NONNULL_ARG(1)
-{
-  int error = 0;
-  const int len = tv_blob_len(blob);
-  if (len > 0) {
-    const ptrdiff_t written = file_write(fp, blob->bv_ga.ga_data, (size_t)len);
-    if (written < (ptrdiff_t)len) {
-      error = (int)written;
-      goto write_blob_error;
-    }
-  }
-  error = file_flush(fp);
-  if (error != 0) {
-    goto write_blob_error;
-  }
-  return true;
-write_blob_error:
-  semsg(_(e_write2), os_strerror(error));
-  return false;
-}
-
-/// Read blob from file "fd".
-/// Caller has allocated a blob in "rettv".
-///
-/// @param[in]  fd  File to read from.
-/// @param[in,out]  rettv  Blob to write to.
-/// @param[in]  offset  Read the file from the specified offset.
-/// @param[in]  size  Read the specified size, or -1 if no limit.
-///
-/// @return  OK on success, or FAIL on failure.
-int read_blob(FILE *const fd, typval_T *rettv, off_T offset, off_T size_arg)
-  FUNC_ATTR_NONNULL_ALL
-{
-  blob_T *const blob = rettv->vval.v_blob;
-  FileInfo file_info;
-  if (!os_fileinfo_fd(fileno(fd), &file_info)) {
-    return FAIL;  // can't read the file, error
-  }
-
-  int whence;
-  off_T size = size_arg;
-  const off_T file_size = (off_T)os_fileinfo_size(&file_info);
-  if (offset >= 0) {
-    // The size defaults to the whole file.  If a size is given it is
-    // limited to not go past the end of the file.
-    if (size == -1 || (size > file_size - offset && !S_ISCHR(file_info.stat.st_mode))) {
-      // size may become negative, checked below
-      size = (off_T)os_fileinfo_size(&file_info) - offset;
-    }
-    whence = SEEK_SET;
-  } else {
-    // limit the offset to not go before the start of the file
-    if (-offset > file_size && !S_ISCHR(file_info.stat.st_mode)) {
-      offset = -file_size;
-    }
-    // Size defaults to reading until the end of the file.
-    if (size == -1 || size > -offset) {
-      size = -offset;
-    }
-    whence = SEEK_END;
-  }
-  if (size <= 0) {
-    return OK;
-  }
-  if (offset != 0 && vim_fseek(fd, offset, whence) != 0) {
-    return OK;
-  }
-
-  ga_grow(&blob->bv_ga, (int)size);
-  blob->bv_ga.ga_len = (int)size;
-  if (fread(blob->bv_ga.ga_data, 1, (size_t)blob->bv_ga.ga_len, fd)
-      < (size_t)blob->bv_ga.ga_len) {
-    // An empty blob is returned on error.
-    tv_blob_free(rettv->vval.v_blob);
-    rettv->vval.v_blob = NULL;
-    return FAIL;
-  }
-  return OK;
 }
 
 /// Saves a typval_T as a string.
