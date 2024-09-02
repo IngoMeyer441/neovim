@@ -4,7 +4,7 @@ local Screen = require('test.functional.ui.screen')
 
 local assert_alive = n.assert_alive
 local clear, feed = n.clear, n.feed
-local eval, eq, neq = n.eval, t.eq, t.neq
+local eval, eq, neq, ok = n.eval, t.eq, t.neq, t.ok
 local feed_command, source, expect = n.feed_command, n.source, n.expect
 local fn = n.fn
 local command = n.command
@@ -327,7 +327,7 @@ describe('completion', function()
     end
   end)
 
-  describe('refresh:always', function()
+  describe('with refresh:always and noselect', function()
     before_each(function()
       source([[
         function! TestCompletion(findstart, base) abort
@@ -458,6 +458,67 @@ describe('completion', function()
 
         June
         June]])
+    end)
+
+    it('Enter does not select original text', function()
+      feed('iJ<C-x><C-u>')
+      poke_eventloop()
+      feed('u')
+      poke_eventloop()
+      feed('<CR>')
+      expect([[
+        Ju
+        ]])
+      feed('J<C-x><C-u>')
+      poke_eventloop()
+      feed('<CR>')
+      expect([[
+        Ju
+        J
+        ]])
+    end)
+  end)
+
+  describe('with noselect but not refresh:always', function()
+    before_each(function()
+      source([[
+        function! TestCompletion(findstart, base) abort
+          if a:findstart
+            let line = getline('.')
+            let start = col('.') - 1
+            while start > 0 && line[start - 1] =~ '\a'
+              let start -= 1
+            endwhile
+            return start
+          else
+            let ret = []
+            for m in split("January February March April May June July August September October November December")
+              if m =~ a:base  " match by regex
+                call add(ret, m)
+              endif
+            endfor
+            return {'words':ret}
+          endif
+        endfunction
+
+        set completeopt=menuone,noselect
+        set completefunc=TestCompletion
+      ]])
+    end)
+
+    it('Enter selects original text after adding leader', function()
+      feed('iJ<C-x><C-u>')
+      poke_eventloop()
+      feed('u')
+      poke_eventloop()
+      feed('<CR>')
+      expect('Ju')
+      feed('<Esc>')
+      poke_eventloop()
+      -- The behavior should be the same when completion has been interrupted,
+      -- which can happen interactively if the completion function is slow.
+      feed('SJ<C-x><C-u>u<CR>')
+      expect('Ju')
     end)
   end)
 
@@ -884,6 +945,12 @@ describe('completion', function()
     eq('BS', fn.getcompletion('set termpastefilter=', 'cmdline')[2])
     eq('SpecialKey', fn.getcompletion('set winhighlight=', 'cmdline')[1])
     eq('SpecialKey', fn.getcompletion('set winhighlight=NonText:', 'cmdline')[1])
+  end)
+
+  it('cmdline completion for -complete does not contain spaces', function()
+    for _, str in ipairs(fn.getcompletion('command -complete=', 'cmdline')) do
+      ok(not str:find(' '), 'string without spaces', str)
+    end
   end)
 
   describe('from the commandline window', function()

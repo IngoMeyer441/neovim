@@ -837,7 +837,10 @@ static void normal_get_additional_char(NormalState *s)
       while ((s->c = vpeekc()) > 0
              && (s->c >= 0x100 || MB_BYTE2LEN(vpeekc()) > 1)) {
         s->c = plain_vgetc();
-        if (!utf_iscomposing(s->c)) {
+        // TODO(bfredl): only allowing up to two composing chars is cringe af.
+        // Could reuse/abuse schar_T to at least allow us to input anything we are able
+        // to display and use the stateful utf8proc algorithm like utf_composinglike
+        if (!utf_iscomposing_legacy(s->c)) {
           vungetc(s->c);                   // it wasn't, put it back
           break;
         } else if (s->ca.ncharC1 == 0) {
@@ -5631,6 +5634,7 @@ static void nv_g_cmd(cmdarg_T *cap)
 
   // "go": goto byte count from start of buffer
   case 'o':
+    oap->inclusive = false;
     goto_byte(cap->count0);
     break;
 

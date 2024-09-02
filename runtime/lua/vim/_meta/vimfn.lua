@@ -1593,7 +1593,7 @@ function vim.fn.eventhandler() end
 --- On MS-Windows the ".exe", ".bat", etc. can optionally be
 --- included.  Then the extensions in $PATHEXT are tried.  Thus if
 --- "foo.exe" does not exist, "foo.exe.bat" can be found.  If
---- $PATHEXT is not set then ".exe;.com;.bat;.cmd" is used.  A dot
+--- $PATHEXT is not set then ".com;.exe;.bat;.cmd" is used.  A dot
 --- by itself can be used in $PATHEXT to try using the name
 --- without an extension.  When 'shell' looks like a Unix shell,
 --- then the name is also tried without adding an extension.
@@ -2861,7 +2861,7 @@ function vim.fn.getcharpos(expr) end
 ---   nnoremap <expr> , getcharsearch().forward ? ',' : ';'
 --- <Also see |setcharsearch()|.
 ---
---- @return table[]
+--- @return table
 function vim.fn.getcharsearch() end
 
 --- Get a single character from the user or input stream as a
@@ -5262,6 +5262,7 @@ function vim.fn.map(expr1, expr2) end
 ---   "lhsrawalt" The {lhs} of the mapping as raw bytes, alternate
 ---         form, only present when it differs from "lhsraw"
 ---   "rhs"       The {rhs} of the mapping as typed.
+---   "callback" Lua function, if RHS was defined as such.
 ---   "silent"   1 for a |:map-silent| mapping, else 0.
 ---   "noremap"  1 if the {rhs} of the mapping is not remappable.
 ---   "script"   1 if mapping was defined with <script>.

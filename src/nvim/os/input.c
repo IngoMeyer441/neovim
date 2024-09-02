@@ -514,7 +514,7 @@ static void process_ctrl_c(void)
 
   size_t available = input_available();
   ssize_t i;
-  for (i = (ssize_t)available - 1; i >= 0; i--) {
+  for (i = (ssize_t)available - 1; i >= 0; i--) {  // Reverse-search input for Ctrl_C.
     uint8_t c = (uint8_t)input_read_pos[i];
     if (c == Ctrl_C
         || (c == 'C' && i >= 3
@@ -564,7 +564,7 @@ static void read_error_exit(void)
   if (silent_mode) {  // Normal way to exit for "nvim -es".
     getout(0);
   }
-  preserve_exit(_("Vim: Error reading input, exiting...\n"));
+  preserve_exit(_("Nvim: Error reading input, exiting...\n"));
 }
 
 static bool pending_events(MultiQueue *events)

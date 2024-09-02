@@ -176,7 +176,7 @@ function M.lint(buf, opts)
     parser:parse()
     parser:for_each_tree(function(tree, ltree)
       if ltree:lang() == 'query' then
-        for _, match, _ in query:iter_matches(tree:root(), buf, 0, -1, { all = true }) do
+        for _, match, _ in query:iter_matches(tree:root(), buf, 0, -1) do
           local lang_context = {
             lang = lang,
             parser_info = parser_info,
@@ -241,7 +241,7 @@ function M.omnifunc(findstart, base)
     end
   end
   for _, s in pairs(parser_info.symbols) do
-    local text = s[2] and s[1] or '"' .. s[1]:gsub([[\]], [[\\]]) .. '"' ---@type string
+    local text = s[2] and s[1] or string.format('%q', s[1]):gsub('\n', 'n') ---@type string
     if text:find(base, 1, true) then
       table.insert(items, text)
     end

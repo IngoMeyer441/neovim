@@ -2066,7 +2066,7 @@ M.funcs = {
       On MS-Windows the ".exe", ".bat", etc. can optionally be
       included.  Then the extensions in $PATHEXT are tried.  Thus if
       "foo.exe" does not exist, "foo.exe.bat" can be found.  If
-      $PATHEXT is not set then ".exe;.com;.bat;.cmd" is used.  A dot
+      $PATHEXT is not set then ".com;.exe;.bat;.cmd" is used.  A dot
       by itself can be used in $PATHEXT to try using the name
       without an extension.  When 'shell' looks like a Unix shell,
       then the name is also tried without adding an extension.
@@ -3564,7 +3564,7 @@ M.funcs = {
     ]=],
     name = 'getcharsearch',
     params = {},
-    returns = 'table[]',
+    returns = 'table',
     signature = 'getcharsearch()',
   },
   getcharstr = {
@@ -6442,6 +6442,7 @@ M.funcs = {
         "lhsrawalt" The {lhs} of the mapping as raw bytes, alternate
       	      form, only present when it differs from "lhsraw"
         "rhs"	     The {rhs} of the mapping as typed.
+        "callback" Lua function, if RHS was defined as such.
         "silent"   1 for a |:map-silent| mapping, else 0.
         "noremap"  1 if the {rhs} of the mapping is not remappable.
         "script"   1 if mapping was defined with <script>.

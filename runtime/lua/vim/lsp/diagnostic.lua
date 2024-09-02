@@ -110,6 +110,14 @@ local function diagnostic_lsp_to_vim(diagnostics, bufnr, client_id)
   return vim.tbl_map(function(diagnostic)
     local start = diagnostic.range.start
     local _end = diagnostic.range['end']
+    local message = diagnostic.message
+    if type(message) ~= 'string' then
+      vim.notify_once(
+        string.format('Unsupported Markup message from LSP client %d', client_id),
+        vim.lsp.log_levels.ERROR
+      )
+      message = diagnostic.message.value
+    end
     --- @type vim.Diagnostic
     return {
       lnum = start.line,
@@ -117,7 +125,7 @@ local function diagnostic_lsp_to_vim(diagnostics, bufnr, client_id)
       end_lnum = _end.line,
       end_col = line_byte_from_position(buf_lines, _end.line, _end.character, offset_encoding),
       severity = severity_lsp_to_vim(diagnostic.severity),
-      message = diagnostic.message,
+      message = message,
       source = diagnostic.source,
       code = diagnostic.code,
       _tags = tags_lsp_to_vim(diagnostic, client_id),
@@ -145,9 +153,10 @@ local function tags_vim_to_lsp(diagnostic)
   return tags
 end
 
+--- Converts the input `vim.Diagnostic`s to LSP diagnostics.
 --- @param diagnostics vim.Diagnostic[]
 --- @return lsp.Diagnostic[]
-local function diagnostic_vim_to_lsp(diagnostics)
+function M.from(diagnostics)
   ---@param diagnostic vim.Diagnostic
   ---@return lsp.Diagnostic
   return vim.tbl_map(function(diagnostic)
@@ -377,7 +386,7 @@ function M.get_line_diagnostics(bufnr, line_nr, opts, client_id)
 
   diag_opts.lnum = line_nr or (api.nvim_win_get_cursor(0)[1] - 1)
 
-  return diagnostic_vim_to_lsp(vim.diagnostic.get(bufnr, diag_opts))
+  return M.from(vim.diagnostic.get(bufnr, diag_opts))
 end
 
 --- Clear diagnostics from pull based clients

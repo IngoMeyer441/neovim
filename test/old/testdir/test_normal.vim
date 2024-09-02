@@ -3897,9 +3897,9 @@ func Test_normal_count_after_operator()
   bw!
 endfunc
 
-func Test_normal_gj_on_extra_wide_char()
+func Test_normal_gj_on_6_cell_wide_unprintable_char()
   new | 25vsp
-  let text='1 foooooooo ar e  ins‍zwe1 foooooooo ins‍zwei' .
+  let text='1 foooooooo ar e  ins​zwe1 foooooooo ins​zwei' .
          \ ' i drei vier fünf sechs sieben acht un zehn elf zwöfl' .
          \ ' dreizehn v ierzehn fünfzehn'
   put =text
@@ -4289,6 +4289,19 @@ func Test_scroll_longline_no_loop()
   setl smoothscroll number showbreak=> scrolloff=2
   call setline(1, repeat(['Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'], 3))
   exe "normal! \<C-E>"
+  bwipe!
+endfunc
+
+" Test for go command
+func Test_normal_go()
+  new
+  call setline(1, ['one two three four'])
+  call cursor(1, 5)
+  norm! dvgo
+  call assert_equal('wo three four', getline(1))
+  norm! ...
+  call assert_equal('three four', getline(1))
+
   bwipe!
 endfunc
 " vim: shiftwidth=2 sts=2 expandtab nofoldenable
