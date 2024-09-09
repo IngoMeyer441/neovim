@@ -891,7 +891,17 @@ int get_breakindent_win(win_T *wp, char *line)
           if (wp->w_briopt_list > 0) {
             prev_list += wp->w_briopt_list;
           } else {
-            prev_indent = (int)(*regmatch.endp - *regmatch.startp);
+            char *ptr = *regmatch.startp;
+            char *end_ptr = *regmatch.endp;
+            int indent = 0;
+            // Compute the width of the matched text.
+            // Use win_chartabsize() so that TAB size is correct,
+            // while wrapping is ignored.
+            while (ptr < end_ptr) {
+              indent += win_chartabsize(wp, ptr, indent);
+              MB_PTR_ADV(ptr);
+            }
+            prev_indent = indent;
           }
         }
         vim_regfree(regmatch.regprog);
@@ -1407,7 +1417,7 @@ void fixthisline(IndentGetter get_the_indent)
     return;
   }
 
-  change_indent(INDENT_SET, amount, false, 0, true);
+  change_indent(INDENT_SET, amount, false, true);
   if (linewhite(curwin->w_cursor.lnum)) {
     did_ai = true;  // delete the indent if the line stays empty
   }

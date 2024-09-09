@@ -33,6 +33,7 @@ local create_server_definition = t_lsp.create_server_definition
 local fake_lsp_code = t_lsp.fake_lsp_code
 local fake_lsp_logfile = t_lsp.fake_lsp_logfile
 local test_rpc_server = t_lsp.test_rpc_server
+local create_tcp_echo_server = t_lsp.create_tcp_echo_server
 
 local function get_buf_option(name, bufnr)
   bufnr = bufnr or 'BUFFER'
@@ -800,8 +801,7 @@ describe('LSP', function()
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'start' then
             local tmpfile_old = tmpname()
-            local tmpfile_new = tmpname()
-            os.remove(tmpfile_new)
+            local tmpfile_new = tmpname(false)
             exec_lua(function(oldname, newname)
               _G.BUFFER = vim.api.nvim_get_current_buf()
               vim.api.nvim_buf_set_name(_G.BUFFER, oldname)
@@ -2370,8 +2370,7 @@ describe('LSP', function()
     end)
 
     it('Supports file creation with CreateFile payload', function()
-      local tmpfile = tmpname()
-      os.remove(tmpfile) -- Should not exist, only interested in a tmpname
+      local tmpfile = tmpname(false)
       local uri = exec_lua('return vim.uri_from_fname(...)', tmpfile)
       local edit = {
         documentChanges = {
@@ -2388,9 +2387,7 @@ describe('LSP', function()
     it(
       'Supports file creation in folder that needs to be created with CreateFile payload',
       function()
-        local tmpfile = tmpname()
-        os.remove(tmpfile) -- Should not exist, only interested in a tmpname
-        tmpfile = tmpfile .. '/dummy/x/'
+        local tmpfile = tmpname(false) .. '/dummy/x/'
         local uri = exec_lua('return vim.uri_from_fname(...)', tmpfile)
         local edit = {
           documentChanges = {
@@ -2468,8 +2465,7 @@ describe('LSP', function()
     end)
 
     it('DeleteFile fails if file does not exist and ignoreIfNotExists is false', function()
-      local tmpfile = tmpname()
-      os.remove(tmpfile)
+      local tmpfile = tmpname(false)
       local uri = exec_lua('return vim.uri_from_fname(...)', tmpfile)
       local edit = {
         documentChanges = {
@@ -2493,8 +2489,7 @@ describe('LSP', function()
     it('Can rename an existing file', function()
       local old = tmpname()
       write_file(old, 'Test content')
-      local new = tmpname()
-      os.remove(new) -- only reserve the name, file must not exist for the test scenario
+      local new = tmpname(false)
       local lines = exec_lua(function(old0, new0)
         local old_bufnr = vim.fn.bufadd(old0)
         vim.fn.bufload(old_bufnr)
@@ -2514,10 +2509,8 @@ describe('LSP', function()
 
     it('Can rename a directory', function()
       -- only reserve the name, file must not exist for the test scenario
-      local old_dir = tmpname()
-      local new_dir = tmpname()
-      os.remove(old_dir)
-      os.remove(new_dir)
+      local old_dir = tmpname(false)
+      local new_dir = tmpname(false)
 
       n.mkdir_p(old_dir)
 
@@ -2542,10 +2535,8 @@ describe('LSP', function()
     end)
 
     it('Does not touch buffers that do not match path prefix', function()
-      local old = tmpname()
-      local new = tmpname()
-      os.remove(old)
-      os.remove(new)
+      local old = tmpname(false)
+      local new = tmpname(false)
       n.mkdir_p(old)
 
       eq(
@@ -2604,8 +2595,7 @@ describe('LSP', function()
     it('Maintains undo information for loaded buffer', function()
       local old = tmpname()
       write_file(old, 'line')
-      local new = tmpname()
-      os.remove(new)
+      local new = tmpname(false)
 
       local undo_kept = exec_lua(function(old0, new0)
         vim.opt.undofile = true
@@ -2629,8 +2619,7 @@ describe('LSP', function()
     it('Maintains undo information for unloaded buffer', function()
       local old = tmpname()
       write_file(old, 'line')
-      local new = tmpname()
-      os.remove(new)
+      local new = tmpname(false)
 
       local undo_kept = exec_lua(function(old0, new0)
         vim.opt.undofile = true
@@ -2651,8 +2640,7 @@ describe('LSP', function()
     it('Does not rename file when it conflicts with a buffer without file', function()
       local old = tmpname()
       write_file(old, 'Old File')
-      local new = tmpname()
-      os.remove(new)
+      local new = tmpname(false)
 
       local lines = exec_lua(function(old0, new0)
         local old_buf = vim.fn.bufadd(old0)
@@ -2685,7 +2673,7 @@ describe('LSP', function()
 
   describe('lsp.util.locations_to_items', function()
     it('Convert Location[] to items', function()
-      local expected = {
+      local expected_template = {
         {
           filename = '/fake/uri',
           lnum = 1,
@@ -2693,20 +2681,11 @@ describe('LSP', function()
           col = 3,
           end_col = 4,
           text = 'testing',
-          user_data = {
-            uri = 'file:///fake/uri',
-            range = {
-              start = { line = 0, character = 2 },
-              ['end'] = { line = 1, character = 3 },
-            },
-          },
+          user_data = {},
         },
       }
-      local actual = exec_lua(function()
-        local bufnr = vim.uri_to_bufnr('file:///fake/uri')
-        local lines = { 'testing', '123' }
-        vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
-        local locations = {
+      local test_params = {
+        {
           {
             uri = 'file:///fake/uri',
             range = {
@@ -2714,10 +2693,29 @@ describe('LSP', function()
               ['end'] = { line = 1, character = 3 },
             },
           },
-        }
-        return vim.lsp.util.locations_to_items(locations, 'utf-16')
-      end)
-      eq(expected, actual)
+        },
+        {
+          {
+            uri = 'file:///fake/uri',
+            range = {
+              start = { line = 0, character = 2 },
+              -- LSP spec: if character > line length, default to the line length.
+              ['end'] = { line = 1, character = 10000 },
+            },
+          },
+        },
+      }
+      for _, params in ipairs(test_params) do
+        local actual = exec_lua(function(params0)
+          local bufnr = vim.uri_to_bufnr('file:///fake/uri')
+          local lines = { 'testing', '123' }
+          vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
+          return vim.lsp.util.locations_to_items(params0, 'utf-16')
+        end, params)
+        local expected = vim.deepcopy(expected_template)
+        expected[1].user_data = params[1]
+        eq(expected, actual)
+      end
     end)
 
     it('Convert LocationLink[] to items', function()
@@ -3609,21 +3607,21 @@ describe('LSP', function()
             range = {
               ['end'] = {
                 character = 8,
-                line = 9,
+                line = 3,
               },
               start = {
                 character = 6,
-                line = 9,
+                line = 3,
               },
             },
             selectionRange = {
               ['end'] = {
                 character = 8,
-                line = 9,
+                line = 3,
               },
               start = {
                 character = 6,
-                line = 9,
+                line = 3,
               },
             },
             uri = 'file:///home/jiangyinzuo/hello.cpp',
@@ -3653,21 +3651,21 @@ describe('LSP', function()
             range = {
               ['end'] = {
                 character = 8,
-                line = 8,
+                line = 2,
               },
               start = {
                 character = 6,
-                line = 8,
+                line = 2,
               },
             },
             selectionRange = {
               ['end'] = {
                 character = 8,
-                line = 8,
+                line = 2,
               },
               start = {
                 character = 6,
-                line = 8,
+                line = 2,
               },
             },
             uri = 'file:///home/jiangyinzuo/hello.cpp',
@@ -3681,7 +3679,15 @@ describe('LSP', function()
         })
         local client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
         local handler = require 'vim.lsp.handlers'['typeHierarchy/subtypes']
-        handler(nil, clangd_response, { client_id = client_id, bufnr = 1 })
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+          'class B : public A{};',
+          'class C : public B{};',
+          'class D1 : public C{};',
+          'class D2 : public C{};',
+          'class E : public D1, D2 {};',
+        })
+        handler(nil, clangd_response, { client_id = client_id, bufnr = bufnr })
         return vim.fn.getqflist()
       end)
 
@@ -3691,7 +3697,7 @@ describe('LSP', function()
           col = 7,
           end_col = 0,
           end_lnum = 0,
-          lnum = 10,
+          lnum = 4,
           module = '',
           nr = 0,
           pattern = '',
@@ -3705,7 +3711,7 @@ describe('LSP', function()
           col = 7,
           end_col = 0,
           end_lnum = 0,
-          lnum = 9,
+          lnum = 3,
           module = '',
           nr = 0,
           pattern = '',
@@ -3765,7 +3771,15 @@ describe('LSP', function()
         })
         local client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
         local handler = require 'vim.lsp.handlers'['typeHierarchy/subtypes']
-        handler(nil, jdtls_response, { client_id = client_id, bufnr = 1 })
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+          'package mylist;',
+          '',
+          'public class MyList {',
+          ' static class Inner extends MyList{}',
+          '~}',
+        })
+        handler(nil, jdtls_response, { client_id = client_id, bufnr = bufnr })
         return vim.fn.getqflist()
       end)
 
@@ -3842,21 +3856,21 @@ describe('LSP', function()
             range = {
               ['end'] = {
                 character = 8,
-                line = 9,
+                line = 3,
               },
               start = {
                 character = 6,
-                line = 9,
+                line = 3,
               },
             },
             selectionRange = {
               ['end'] = {
                 character = 8,
-                line = 9,
+                line = 3,
               },
               start = {
                 character = 6,
-                line = 9,
+                line = 3,
               },
             },
             uri = 'file:///home/jiangyinzuo/hello.cpp',
@@ -3886,21 +3900,21 @@ describe('LSP', function()
             range = {
               ['end'] = {
                 character = 8,
-                line = 8,
+                line = 2,
               },
               start = {
                 character = 6,
-                line = 8,
+                line = 2,
               },
             },
             selectionRange = {
               ['end'] = {
                 character = 8,
-                line = 8,
+                line = 2,
               },
               start = {
                 character = 6,
-                line = 8,
+                line = 2,
               },
             },
             uri = 'file:///home/jiangyinzuo/hello.cpp',
@@ -3914,7 +3928,16 @@ describe('LSP', function()
         })
         local client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
         local handler = require 'vim.lsp.handlers'['typeHierarchy/supertypes']
-        handler(nil, clangd_response, { client_id = client_id, bufnr = 1 })
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+          'class B : public A{};',
+          'class C : public B{};',
+          'class D1 : public C{};',
+          'class D2 : public C{};',
+          'class E : public D1, D2 {};',
+        })
+
+        handler(nil, clangd_response, { client_id = client_id, bufnr = bufnr })
         return vim.fn.getqflist()
       end)
 
@@ -3924,7 +3947,7 @@ describe('LSP', function()
           col = 7,
           end_col = 0,
           end_lnum = 0,
-          lnum = 10,
+          lnum = 4,
           module = '',
           nr = 0,
           pattern = '',
@@ -3938,7 +3961,7 @@ describe('LSP', function()
           col = 7,
           end_col = 0,
           end_lnum = 0,
-          lnum = 9,
+          lnum = 3,
           module = '',
           nr = 0,
           pattern = '',
@@ -3998,7 +4021,15 @@ describe('LSP', function()
         })
         local client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
         local handler = require 'vim.lsp.handlers'['typeHierarchy/supertypes']
-        handler(nil, jdtls_response, { client_id = client_id, bufnr = 1 })
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+          'package mylist;',
+          '',
+          'public class MyList {',
+          ' static class Inner extends MyList{}',
+          '~}',
+        })
+        handler(nil, jdtls_response, { client_id = client_id, bufnr = bufnr })
         return vim.fn.getqflist()
       end)
 
@@ -4994,26 +5025,33 @@ describe('LSP', function()
   end)
 
   describe('cmd', function()
-    it('can connect to lsp server via rpc.connect', function()
+    it('connects to lsp server via rpc.connect using ip address', function()
+      exec_lua(create_tcp_echo_server)
       local result = exec_lua(function()
-        local uv = vim.uv
-        local server = assert(uv.new_tcp())
-        local init = nil
-        server:bind('127.0.0.1', 0)
-        server:listen(127, function(err)
-          assert(not err, err)
-          local socket = assert(uv.new_tcp())
-          server:accept(socket)
-          socket:read_start(require('vim.lsp.rpc').create_read_loop(function(body)
-            init = body
-            socket:close()
-          end))
-        end)
-        local port = server:getsockname().port
+        local server, port, last_message = _G._create_tcp_server('127.0.0.1')
         vim.lsp.start({ name = 'dummy', cmd = vim.lsp.rpc.connect('127.0.0.1', port) })
         vim.wait(1000, function()
-          return init ~= nil
+          return last_message() ~= nil
         end)
+        local init = last_message()
+        assert(init, 'server must receive `initialize` request')
+        server:close()
+        server:shutdown()
+        return vim.json.decode(init)
+      end)
+      eq('initialize', result.method)
+    end)
+
+    it('connects to lsp server via rpc.connect using hostname', function()
+      skip(is_os('bsd'), 'issue with host resolution in ci')
+      exec_lua(create_tcp_echo_server)
+      local result = exec_lua(function()
+        local server, port, last_message = _G._create_tcp_server('::1')
+        vim.lsp.start({ name = 'dummy', cmd = vim.lsp.rpc.connect('localhost', port) })
+        vim.wait(1000, function()
+          return last_message() ~= nil
+        end)
+        local init = last_message()
         assert(init, 'server must receive `initialize` request')
         server:close()
         server:shutdown()
@@ -5023,13 +5061,7 @@ describe('LSP', function()
     end)
 
     it('can connect to lsp server via pipe or domain_socket', function()
-      local tmpfile --- @type string
-      if is_os('win') then
-        tmpfile = '\\\\.\\\\pipe\\pipe.test'
-      else
-        tmpfile = tmpname()
-        os.remove(tmpfile)
-      end
+      local tmpfile = is_os('win') and '\\\\.\\\\pipe\\pipe.test' or tmpname(false)
       local result = exec_lua(function(SOCK)
         local uv = vim.uv
         local server = assert(uv.new_pipe(false))
@@ -5135,9 +5167,7 @@ describe('LSP', function()
 
   describe('#dynamic vim.lsp._dynamic', function()
     it('supports dynamic registration', function()
-      ---@type string
-      local root_dir = tmpname()
-      os.remove(root_dir)
+      local root_dir = tmpname(false)
       mkdir(root_dir)
       local tmpfile = root_dir .. '/dynamic.foo'
       local file = io.open(tmpfile, 'w')
@@ -5264,8 +5294,7 @@ describe('LSP', function()
             )
           end
 
-          local root_dir = tmpname()
-          os.remove(root_dir)
+          local root_dir = tmpname(false)
           mkdir(root_dir)
 
           exec_lua(create_server_definition)

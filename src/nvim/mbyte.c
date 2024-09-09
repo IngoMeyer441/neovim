@@ -523,12 +523,14 @@ int utf_ptr2cells(const char *p_in)
 }
 
 /// Convert a UTF-8 byte sequence to a character number.
-/// Doesn't handle ascii! only multibyte and illegal sequences.
+/// Doesn't handle ascii! only multibyte and illegal sequences. ASCII (including NUL)
+/// are treated like illegal sequences.
 ///
 /// @param[in]  p      String to convert.
 /// @param[in]  len    Length of the character in bytes, 0 or 1 if illegal.
 ///
-/// @return Unicode codepoint. A negative value when the sequence is illegal.
+/// @return Unicode codepoint. A negative value when the sequence is illegal (or
+///         ASCII, including NUL).
 int32_t utf_ptr2CharInfo_impl(uint8_t const *p, uintptr_t const len)
   FUNC_ATTR_PURE FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT
 {
@@ -1339,13 +1341,22 @@ int utf_class_tab(const int c, const uint64_t *const chartab)
 
 bool utf_ambiguous_width(const char *p)
 {
-  int c = utf_ptr2char(p);
-  if (c < 0x80) {
+  // be quick if there is nothing to print or ASCII-only
+  if (p[0] == NUL || p[1] == NUL) {
     return false;
   }
 
-  const utf8proc_property_t *prop = utf8proc_get_property(c);
-  return prop->ambiguous_width || prop_is_emojilike(prop);
+  CharInfo info = utf_ptr2CharInfo(p);
+  if (info.value >= 0x80) {
+    const utf8proc_property_t *prop = utf8proc_get_property(info.value);
+    if (prop->ambiguous_width || prop_is_emojilike(prop)) {
+      return true;
+    }
+  }
+
+  // check if second sequence is 0xFE0F VS-16 which can turn things into emoji,
+  // safe with NUL (no second sequence)
+  return memcmp(p + info.len, "\xef\xb8\x8f", 3) == 0;
 }
 
 // Return the folded-case equivalent of "a", which is a UCS-4 character.  Uses
@@ -1771,15 +1782,15 @@ int utf_head_off(const char *base_in, const char *p_in)
     start--;
   }
 
-  uint8_t cur_len = utf8len_tab[*start];
-  int32_t cur_code = utf_ptr2CharInfo_impl(start, (uintptr_t)cur_len);
-  if (cur_code < 0) {
+  const uint8_t last_len = utf8len_tab[*start];
+  int32_t cur_code = utf_ptr2CharInfo_impl(start, (uintptr_t)last_len);
+  if (cur_code < 0 || p - start >= last_len) {
     return 0;  // p must be part of an illegal sequence
   }
-  const uint8_t * const safe_end = start + cur_len;
+  const uint8_t * const safe_end = start + last_len;
 
   int cur_bc = utf8proc_get_property(cur_code)->boundclass;
-  if (always_break(cur_bc)) {
+  if (always_break(cur_bc) || start == base) {
     return (int)(p - start);
   }
 
@@ -1787,18 +1798,23 @@ int utf_head_off(const char *base_in, const char *p_in)
   const uint8_t *cur_pos = start;
   const uint8_t *const p_start = start;
 
-  if (start == base) {
-    return (int)(p - start);
-  }
+  while (true) {
+    if (start[-1] == NUL) {
+      break;
+    }
 
-  start--;
-  while (*start >= 0x80) {  // stop on ascii, we are done
+    start--;
+    if (*start < 0x80) {  // stop on ascii, we are done
+      break;
+    }
+
     while (start > base && (*start & 0xc0) == 0x80 && (cur_pos - start) < 6) {
       start--;
     }
 
-    int32_t prev_code = utf_ptr2CharInfo_impl(start, (uintptr_t)utf8len_tab[*start]);
-    if (prev_code < 0) {
+    int prev_len = utf8len_tab[*start];
+    int32_t prev_code = utf_ptr2CharInfo_impl(start, (uintptr_t)prev_len);
+    if (prev_code < 0 || prev_len < cur_pos - start) {
       start = cur_pos;  // start at valid sequence after invalid bytes
       break;
     }
@@ -1813,12 +1829,10 @@ int utf_head_off(const char *base_in, const char *p_in)
     cur_pos = start;
     cur_bc = prev_bc;
     cur_code = prev_code;
-
-    start--;
   }
 
   // hot path: we are already on the first codepoint of a sequence
-  if (start == p_start) {
+  if (start == p_start && last_len > p - start) {
     return (int)(p - start);
   }
 
@@ -2911,17 +2925,17 @@ void f_setcellwidths(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     emsg(_(e_listreq));
     return;
   }
+
   const list_T *const l = argvars[0].vval.v_list;
-  if (tv_list_len(l) == 0) {
+  cw_interval_T *table = NULL;
+  const size_t table_size = (size_t)tv_list_len(l);
+  if (table_size == 0) {
     // Clearing the table.
-    xfree(cw_table);
-    cw_table = NULL;
-    cw_table_size = 0;
-    return;
+    goto update;
   }
 
   // Note: use list_T instead of listitem_T so that TV_LIST_ITEM_NEXT can be used properly below.
-  const list_T **ptrs = xmalloc(sizeof(const list_T *) * (size_t)tv_list_len(l));
+  const list_T **ptrs = xmalloc(sizeof(const list_T *) * table_size);
 
   // Check that all entries are a list with three numbers, the range is
   // valid and the cell width is valid.
@@ -2973,12 +2987,12 @@ void f_setcellwidths(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   });
 
   // Sort the list on the first number.
-  qsort((void *)ptrs, (size_t)tv_list_len(l), sizeof(const list_T *), tv_nr_compare);
+  qsort((void *)ptrs, table_size, sizeof(const list_T *), tv_nr_compare);
 
-  cw_interval_T *table = xmalloc(sizeof(cw_interval_T) * (size_t)tv_list_len(l));
+  table = xmalloc(sizeof(cw_interval_T) * table_size);
 
   // Store the items in the new table.
-  for (item = 0; item < tv_list_len(l); item++) {
+  for (item = 0; (size_t)item < table_size; item++) {
     const list_T *const li_l = ptrs[item];
     const listitem_T *lili = tv_list_first(li_l);
     const varnumber_T n1 = TV_LIST_ITEM_TV(lili)->vval.v_number;
@@ -2997,10 +3011,12 @@ void f_setcellwidths(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   xfree((void *)ptrs);
 
+update:
+  ;
   cw_interval_T *const cw_table_save = cw_table;
   const size_t cw_table_size_save = cw_table_size;
   cw_table = table;
-  cw_table_size = (size_t)tv_list_len(l);
+  cw_table_size = table_size;
 
   // Check that the new value does not conflict with 'listchars' or
   // 'fillchars'.

@@ -1059,7 +1059,7 @@ describe('lua stdlib', function()
       local a = { a = {[2] = 3} }
       local b = { a = {[3] = 3} }
       local c = vim.tbl_deep_extend("force", a, b)
-      return vim.deep_equal(c, {a = {[3] = 3}})
+      return vim.deep_equal(c, {a = {[2] = 3, [3] = 3}})
     ]]))
 
     eq(
@@ -1071,34 +1071,28 @@ describe('lua stdlib', function()
     ]])
     )
 
-    matches(
-      'invalid "behavior": nil',
-      pcall_err(
-        exec_lua,
-        [[
-        return vim.tbl_deep_extend()
-      ]]
-      )
-    )
+    ok(exec_lua([[
+      local a = { sub = { 'a', 'b' } }
+      local b = { sub = { 'b', 'c' } }
+      local c = vim.tbl_deep_extend('force', a, b)
+      return vim.deep_equal(c, { sub = { 'b', 'c' } })
+    ]]))
+
+    matches('invalid "behavior": nil', pcall_err(exec_lua, [[return vim.tbl_deep_extend()]]))
 
     matches(
       'wrong number of arguments %(given 1, expected at least 3%)',
-      pcall_err(
-        exec_lua,
-        [[
-        return vim.tbl_deep_extend("keep")
-      ]]
-      )
+      pcall_err(exec_lua, [[return vim.tbl_deep_extend("keep")]])
     )
 
     matches(
       'wrong number of arguments %(given 2, expected at least 3%)',
-      pcall_err(
-        exec_lua,
-        [[
-        return vim.tbl_deep_extend("keep", {})
-      ]]
-      )
+      pcall_err(exec_lua, [[return vim.tbl_deep_extend("keep", {})]])
+    )
+
+    matches(
+      'after the second argument%: expected table, got number',
+      pcall_err(exec_lua, [[return vim.tbl_deep_extend("keep", {}, 42)]])
     )
   end)
 
