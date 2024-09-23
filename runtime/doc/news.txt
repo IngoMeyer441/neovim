@@ -18,6 +18,10 @@ BREAKING CHANGES IN HEAD                                    *news-breaking-dev*
 The following changes to UNRELEASED features were made during the development
 cycle (Nvim HEAD, the "master" branch).
 
+OPTIONS
+
+• 'jumpoptions' flag "unload" has been renamed to "clean".
+
 ==============================================================================
 BREAKING CHANGES                                                *news-breaking*
 
@@ -148,7 +152,7 @@ LSP
 
 LUA
 
-• TODO
+• |vim.fs.rm()| can delete files and directories.
 
 OPTIONS
 
@@ -189,12 +193,18 @@ TREESITTER
 
 TUI
 
+• The builtin UI declares info |nvim_set_client_info()| on its channel. See
+  |startup-tui|. To see the current UI info, try this: >
+    :lua =vim.api.nvim_get_chan_info(vim.api.nvim_list_uis()[1].chan)
 • |log| messages written by the builtin UI client (TUI, |--remote-ui|) are
   now prefixed with "ui" instead of "?".
 
 UI
 
-• TODO
+• |vim.ui.open()| (by default bound to |gx|) accepts an `opt.cmd` parameter
+  which controls the tool used to open the given path or URL. If you want to
+  globally set this, you can override vim.ui.open using the same approach
+  described at |vim.paste()|.
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
