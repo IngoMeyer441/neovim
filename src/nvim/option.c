@@ -246,7 +246,7 @@ static void set_init_default_backupskip(void)
       // note: the value (and therefore plen) may already include a path separator
       size_t itemsize = plen + (has_trailing_path_sep ? 0 : 1) + 2;
       char *item = xmalloc(itemsize);
-      // add a preceeding comma as a separator after the first item
+      // add a preceding comma as a separator after the first item
       size_t itemseplen = (ga.ga_len == 0) ? 0 : 1;
 
       size_t itemlen = (size_t)vim_snprintf(item, itemsize, "%s%s*", p,
@@ -6438,30 +6438,29 @@ int get_sidescrolloff_value(win_T *wp)
   return (int)(wp->w_p_siso < 0 ? p_siso : wp->w_p_siso);
 }
 
-Dictionary get_vimoption(String name, int scope, buf_T *buf, win_T *win, Arena *arena, Error *err)
+Dict get_vimoption(String name, int scope, buf_T *buf, win_T *win, Arena *arena, Error *err)
 {
   OptIndex opt_idx = find_option_len(name.data, name.size);
   VALIDATE_S(opt_idx != kOptInvalid, "option (not found)", name.data, {
-    return (Dictionary)ARRAY_DICT_INIT;
+    return (Dict)ARRAY_DICT_INIT;
   });
 
   return vimoption2dict(&options[opt_idx], scope, buf, win, arena);
 }
 
-Dictionary get_all_vimoptions(Arena *arena)
+Dict get_all_vimoptions(Arena *arena)
 {
-  Dictionary retval = arena_dict(arena, kOptIndexCount);
+  Dict retval = arena_dict(arena, kOptIndexCount);
   for (OptIndex opt_idx = 0; opt_idx < kOptIndexCount; opt_idx++) {
-    Dictionary opt_dict = vimoption2dict(&options[opt_idx], OPT_GLOBAL, curbuf, curwin, arena);
-    PUT_C(retval, options[opt_idx].fullname, DICTIONARY_OBJ(opt_dict));
+    Dict opt_dict = vimoption2dict(&options[opt_idx], OPT_GLOBAL, curbuf, curwin, arena);
+    PUT_C(retval, options[opt_idx].fullname, DICT_OBJ(opt_dict));
   }
   return retval;
 }
 
-static Dictionary vimoption2dict(vimoption_T *opt, int req_scope, buf_T *buf, win_T *win,
-                                 Arena *arena)
+static Dict vimoption2dict(vimoption_T *opt, int req_scope, buf_T *buf, win_T *win, Arena *arena)
 {
-  Dictionary dict = arena_dict(arena, 13);
+  Dict dict = arena_dict(arena, 13);
 
   PUT_C(dict, "name", CSTR_AS_OBJ(opt->fullname));
   PUT_C(dict, "shortname", CSTR_AS_OBJ(opt->shortname));

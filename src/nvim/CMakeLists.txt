@@ -49,7 +49,7 @@ if(ENABLE_LIBINTL)
 endif()
 
 if(ENABLE_WASMTIME)
-  find_package(Wasmtime 24.0.0 EXACT REQUIRED)
+  find_package(Wasmtime 25.0.1 EXACT REQUIRED)
   target_link_libraries(main_lib INTERFACE wasmtime)
   target_compile_definitions(nvim_bin PRIVATE HAVE_WASMTIME)
 endif()
@@ -161,7 +161,6 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
   # https://github.com/neovim/neovim/issues/25295
   target_link_options(nvim_bin PRIVATE "-Wl,-export_dynamic")
   # Apple Clang 16's new deduplication pass leads to lock-up on start
-  # TODO(clason): verify that problem remains after release or remove
   target_link_options(nvim_bin PRIVATE "-Wl,-no_deduplicate")
 elseif(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
   target_link_libraries(main_lib INTERFACE pthread c++abi)

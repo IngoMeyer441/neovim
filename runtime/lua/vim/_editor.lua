@@ -208,8 +208,10 @@ vim.inspect = vim.inspect
 do
   local tdots, tick, got_line1, undo_started, trailing_nl = 0, 0, false, false, false
 
-  --- Paste handler, invoked by |nvim_paste()| when a conforming UI
-  --- (such as the |TUI|) pastes text into the editor.
+  --- Paste handler, invoked by |nvim_paste()|.
+  ---
+  --- Note: This is provided only as a "hook", don't call it directly; call |nvim_paste()| instead,
+  --- which arranges redo (dot-repeat) and invokes `vim.paste`.
   ---
   --- Example: To remove ANSI color codes when pasting:
   ---
@@ -220,7 +222,7 @@ do
   ---       -- Scrub ANSI color codes from paste input.
   ---       lines[i] = line:gsub('\27%[[0-9;mK]+', '')
   ---     end
-  ---     overridden(lines, phase)
+  ---     return overridden(lines, phase)
   ---   end
   --- end)(vim.paste)
   --- ```
