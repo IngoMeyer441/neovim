@@ -731,11 +731,12 @@ vim.go.cd = vim.go.cdpath
 --- The key used in Command-line Mode to open the command-line window.
 --- Only non-printable keys are allowed.
 --- The key can be specified as a single character, but it is difficult to
---- type.  The preferred way is to use the <> notation.  Examples:
+--- type.  The preferred way is to use `key-notation` (e.g. <Up>, <C-F>) or
+--- a letter preceded with a caret (e.g. `^F` is CTRL-F).  Examples:
 ---
 --- ```vim
---- 	exe "set cedit=\\<C-Y>"
---- 	exe "set cedit=\\<Esc>"
+--- 	set cedit=^Y
+--- 	set cedit=<Esc>
 --- ```
 --- `Nvi` also has this option, but it only uses the first character.
 --- See `cmdwin`.
@@ -1053,6 +1054,19 @@ vim.o.completefunc = ""
 vim.o.cfu = vim.o.completefunc
 vim.bo.completefunc = vim.o.completefunc
 vim.bo.cfu = vim.bo.completefunc
+
+--- A comma-separated list of `complete-items` that controls the alignment
+--- and display order of items in the popup menu during Insert mode
+--- completion. The supported values are abbr, kind, and menu. These
+--- options allow to customize how the completion items are shown in the
+--- popup menu.  Note: must always contain those three values in any
+--- order.
+---
+--- @type string
+vim.o.completeitemalign = "abbr,kind,menu"
+vim.o.cia = vim.o.completeitemalign
+vim.go.completeitemalign = vim.o.completeitemalign
+vim.go.cia = vim.go.completeitemalign
 
 --- A comma-separated list of options for Insert mode completion
 --- `ins-completion`.  The supported values are:
@@ -2204,7 +2218,7 @@ vim.go.fic = vim.go.fileignorecase
 --- ```
 --- `FileType` `filetypes`
 --- When a dot appears in the value then this separates two filetype
---- names.  Example: >c
+--- names, it should therefore not be used for a filetype.  Example: >c
 --- 	/* vim: set filetype=c.doxygen : */
 --- ```
 --- This will use the "c" filetype first, then the "doxygen" filetype.
@@ -2212,7 +2226,7 @@ vim.go.fic = vim.go.fileignorecase
 --- one dot may appear.
 --- This option is not copied to another buffer, independent of the 's' or
 --- 'S' flag in 'cpoptions'.
---- Only normal file name characters can be used, `/\*?[|<>` are illegal.
+--- Only alphanumeric characters, '-' and '_' can be used.
 ---
 --- @type string
 vim.o.filetype = ""
@@ -3590,7 +3604,7 @@ vim.go.jop = vim.go.jumpoptions
 --- Setting this option to a valid keymap name has the side effect of
 --- setting 'iminsert' to one, so that the keymap becomes effective.
 --- 'imsearch' is also set to one, unless it was -1
---- Only normal file name characters can be used, `/\*?[|<>` are illegal.
+--- Only alphanumeric characters, '.', '-' and '_' can be used.
 ---
 --- @type string
 vim.o.keymap = ""
@@ -6403,7 +6417,8 @@ vim.go.spr = vim.go.splitright
 --- non-blank of the line.  When off the cursor is kept in the same column
 --- (if possible).  This applies to the commands:
 --- - CTRL-D, CTRL-U, CTRL-B, CTRL-F, "G", "H", "M", "L", "gg"
---- - "d", "<<" and ">>" with a linewise operator
+--- - "d", "<<", "==" and ">>" with a linewise operator
+---   (`operator-resulting-pos`)
 --- - "%" with a count
 --- - buffer changing commands (CTRL-^, :bnext, :bNext, etc.)
 --- - Ex commands that only have a line number, e.g., ":25" or ":+".
@@ -6860,7 +6875,7 @@ vim.bo.smc = vim.bo.synmaxcol
 --- Syntax autocommand event is triggered with the value as argument.
 --- This option is not copied to another buffer, independent of the 's' or
 --- 'S' flag in 'cpoptions'.
---- Only normal file name characters can be used, `/\*?[|<>` are illegal.
+--- Only alphanumeric characters, '.', '-' and '_' can be used.
 ---
 --- @type string
 vim.o.syntax = ""
@@ -7684,9 +7699,14 @@ vim.go.ww = vim.go.whichwrap
 --- Some keys will not work, such as CTRL-C, <CR> and Enter.
 --- <Esc> can be used, but hitting it twice in a row will still exit
 --- command-line as a failsafe measure.
---- Although 'wc' is a number option, you can set it to a special key:
+--- Although 'wc' is a number option, it can be specified as a number, a
+--- single character, a `key-notation` (e.g. <Up>, <C-F>) or a letter
+--- preceded with a caret (e.g. `^F` is CTRL-F):
 ---
 --- ```vim
+--- 	:set wc=27
+--- 	:set wc=X
+--- 	:set wc=^I
 --- 	set wc=<Tab>
 --- ```
 ---
