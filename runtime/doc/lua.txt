@@ -1464,12 +1464,9 @@ Option:remove({value})                                      *vim.opt:remove()*
       • {value}  (`string`) Value to remove
 
 vim.bo[{bufnr}]                                                       *vim.bo*
-    Get or set buffer-scoped |options| for the buffer with number {bufnr}. If
-    {bufnr} is omitted then the current buffer is used. Invalid {bufnr} or key
-    is an error.
-
-    Note: this is equivalent to `:setlocal` for |global-local| options and
-    `:set` otherwise.
+    Get or set buffer-scoped |options| for the buffer with number {bufnr}.
+    Like `:setlocal`. If {bufnr} is omitted then the current buffer is used.
+    Invalid {bufnr} or key is an error.
 
     Example: >lua
         local bufnr = vim.api.nvim_get_current_buf()
@@ -1681,21 +1678,29 @@ vim.on_key({fn}, {ns_id})                                       *vim.on_key()*
 
     Note: ~
       • {fn} will be removed on error.
+      • {fn} won't be invoked recursively, i.e. if {fn} itself consumes input,
+        it won't be invoked for those keys.
       • {fn} will not be cleared by |nvim_buf_clear_namespace()|
 
     Parameters: ~
-      • {fn}     (`fun(key: string, typed: string)?`) Function invoked on
-                 every key press. |i_CTRL-V| {key} is the key after mappings
-                 have been applied, and {typed} is the key(s) before mappings
-                 are applied, which may be empty if {key} is produced by
-                 non-typed keys. When {fn} is nil and {ns_id} is specified,
-                 the callback associated with namespace {ns_id} is removed.
+      • {fn}     (`fun(key: string, typed: string)?`) Function invoked for
+                 every input key, after mappings have been applied but before
+                 further processing. Arguments {key} and {typed} are raw
+                 keycodes, where {key} is the key after mappings are applied,
+                 and {typed} is the key(s) before mappings are applied.
+                 {typed} may be empty if {key} is produced by non-typed key(s)
+                 or by the same typed key(s) that produced a previous {key}.
+                 When {fn} is `nil` and {ns_id} is specified, the callback
+                 associated with namespace {ns_id} is removed.
       • {ns_id}  (`integer?`) Namespace ID. If nil or 0, generates and returns
                  a new |nvim_create_namespace()| id.
 
     Return: ~
         (`integer`) Namespace id associated with {fn}. Or count of all
         callbacks if on_key() is called without arguments.
+
+    See also: ~
+      • |keytrans()|
 
 vim.paste({lines}, {phase})                                      *vim.paste()*
     Paste handler, invoked by |nvim_paste()|.
@@ -3652,10 +3657,10 @@ within a single line.
 
                                                           *regex:match_line()*
 regex:match_line({bufnr}, {line_idx}, {start}, {end_})
-    Match line {line_idx} (zero-based) in buffer {bufnr}. If {start} and {end}
-    are supplied, match only this byte index range. Otherwise see
-    |regex:match_str()|. If {start} is used, then the returned byte indices
-    will be relative {start}.
+    Matches line at `line_idx` (zero-based) in buffer `bufnr`. Match is
+    restricted to byte index range `start` and `end_` if given, otherwise see
+    |regex:match_str()|. Returned byte indices are relative to `start` if
+    given.
 
     Parameters: ~
       • {bufnr}     (`integer`)
@@ -3663,19 +3668,28 @@ regex:match_line({bufnr}, {line_idx}, {start}, {end_})
       • {start}     (`integer?`)
       • {end_}      (`integer?`)
 
+    Return (multiple): ~
+        (`integer?`) match start (byte index) relative to `start`, or `nil` if
+        no match
+        (`integer?`) match end (byte index) relative to `start`, or `nil` if
+        no match
+
 regex:match_str({str})                                     *regex:match_str()*
-    Match the string against the regex. If the string should match the regex
-    precisely, surround the regex with `^` and `$`. If there was a match, the
-    byte indices for the beginning and end of the match are returned. When
-    there is no match, `nil` is returned. Because any integer is "truthy",
-    `regex:match_str()` can be directly used as a condition in an
-    if-statement.
+    Matches string `str` against this regex. To match the string precisely,
+    surround the regex with "^" and "$". Returns the byte indices for the
+    start and end of the match, or `nil` if there is no match. Because any
+    integer is "truthy", `regex:match_str()` can be directly used as a
+    condition in an if-statement.
 
     Parameters: ~
       • {str}  (`string`)
 
+    Return (multiple): ~
+        (`integer?`) match start (byte index), or `nil` if no match
+        (`integer?`) match end (byte index), or `nil` if no match
+
 vim.regex({re})                                                  *vim.regex()*
-    Parse the Vim regex {re} and return a regex object. Regexes are "magic"
+    Parses the Vim regex `re` and returns a regex object. Regexes are "magic"
     and case-sensitive by default, regardless of 'magic' and 'ignorecase'.
     They can be controlled with flags, see |/magic| and |/ignorecase|.
 

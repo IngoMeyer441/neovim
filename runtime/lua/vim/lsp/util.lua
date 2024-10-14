@@ -296,6 +296,9 @@ local function get_lines(bufnr, rows)
   end
 
   local filename = api.nvim_buf_get_name(bufnr)
+  if vim.fn.isdirectory(filename) ~= 0 then
+    return {}
+  end
 
   -- get the data from the file
   local fd = uv.fs_open(filename, 'r', 438)
@@ -1653,6 +1656,7 @@ function M.open_floating_preview(contents, syntax, opts)
   vim.wo[floating_winnr].foldenable = false -- Disable folding.
   vim.wo[floating_winnr].wrap = opts.wrap -- Soft wrapping.
   vim.wo[floating_winnr].breakindent = true -- Slightly better list presentation.
+  vim.wo[floating_winnr].smoothscroll = true -- Scroll by screen-line instead of buffer-line.
 
   vim.bo[floating_bufnr].modifiable = false
   vim.bo[floating_bufnr].bufhidden = 'wipe'

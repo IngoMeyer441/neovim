@@ -1538,6 +1538,13 @@ void simplify_filename(char *filename)
     } while (vim_ispathsep(*p));
   }
   char *start = p;        // remember start after "c:/" or "/" or "///"
+#ifdef UNIX
+  // Posix says that "//path" is unchanged but "///path" is "/path".
+  if (start > filename + 2) {
+    STRMOVE(filename + 1, p);
+    start = p = filename + 1;
+  }
+#endif
 
   do {
     // At this point "p" is pointing to the char following a single "/"
@@ -1827,7 +1834,7 @@ char *fix_fname(const char *fname)
 
   fname = xstrdup(fname);
 
-# ifdef USE_FNAME_CASE
+# ifdef CASE_INSENSITIVE_FILENAME
   path_fix_case((char *)fname);  // set correct case for file name
 # endif
 
