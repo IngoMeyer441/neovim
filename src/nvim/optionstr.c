@@ -72,8 +72,9 @@ static char *(p_ambw_values[]) = { "single", "double", NULL };
 static char *(p_bg_values[]) = { "light", "dark", NULL };
 static char *(p_bkc_values[]) = { "yes", "auto", "no", "breaksymlink", "breakhardlink", NULL };
 static char *(p_bo_values[]) = { "all", "backspace", "cursor", "complete", "copy", "ctrlg", "error",
-                                 "esc", "ex", "hangul", "lang", "mess", "showmatch", "operator",
-                                 "register", "shell", "spell", "wildmode", NULL };
+                                 "esc", "ex", "hangul", "insertmode", "lang", "mess", "showmatch",
+                                 "operator", "register", "shell", "spell", "term", "wildmode",
+                                 NULL };
 // Note: Keep this in sync with briopt_check()
 static char *(p_briopt_values[]) = { "shift:", "min:", "sbr", "list:", "column:", NULL };
 // Note: Keep this in sync with diffopt_changed()
@@ -2118,7 +2119,7 @@ const char *did_set_spellfile(optset_T *args)
   if ((!valid_spellfile(*varp))) {
     return e_invarg;
   }
-  return did_set_spell_option(true);
+  return did_set_spell_option();
 }
 
 /// The 'spelllang' option is changed.
@@ -2131,7 +2132,7 @@ const char *did_set_spelllang(optset_T *args)
   if (!valid_spelllang(*varp)) {
     return e_invarg;
   }
-  return did_set_spell_option(false);
+  return did_set_spell_option();
 }
 
 /// The 'spelloptions' option is changed.

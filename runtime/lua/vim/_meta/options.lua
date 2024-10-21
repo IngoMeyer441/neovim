@@ -289,12 +289,13 @@ vim.go.bk = vim.go.backup
 --- useful for example in source trees where all the files are symbolic or
 --- hard links and any changes should stay in the local source tree, not
 --- be propagated back to the original source.
---- 						*crontab*
+--- 							*crontab*
 --- One situation where "no" and "auto" will cause problems: A program
 --- that opens a file, invokes Vim to edit that file, and then tests if
 --- the open file was changed (through the file descriptor) will check the
 --- backup file instead of the newly created file.  "crontab -e" is an
---- example.
+--- example, as are several `file-watcher` daemons like inotify.  In that
+--- case you probably want to switch this option.
 ---
 --- When a copy is made, the original file is truncated and then filled
 --- with the new text.  This means that protection bits, owner and
@@ -429,6 +430,7 @@ vim.go.bsk = vim.go.backupskip
 --- separated list of items. For each item that is present, the bell
 --- will be silenced. This is most useful to specify specific events in
 --- insert mode to be silenced.
+--- You can also make it flash by using 'visualbell'.
 ---
 --- item	    meaning when present	~
 --- all	    All events.
@@ -452,6 +454,7 @@ vim.go.bsk = vim.go.backupskip
 --- register    Unknown register after <C-R> in `Insert-mode`.
 --- shell	    Bell from shell output `:!`.
 --- spell	    Error happened on spell suggest.
+--- term	    Bell from `:terminal` output.
 --- wildmode    More matches in `cmdline-completion` available
 --- 	    (depends on the 'wildmode' setting).
 ---
@@ -6695,7 +6698,7 @@ vim.wo.stc = vim.wo.statuscolumn
 --- Emulate standard status line with 'ruler' set
 ---
 --- ```vim
----   set statusline=%<%f\ %h%m%r%=%-14.(%l,%c%V%)\ %P
+---   set statusline=%<%f\ %h%w%m%r%=%-14.(%l,%c%V%)\ %P
 --- ```
 --- Similar, but add ASCII value of char under the cursor (like "ga")
 ---
@@ -7309,7 +7312,9 @@ vim.go.titleold = vim.o.titleold
 --- window.  This happens only when the 'title' option is on.
 ---
 --- When this option contains printf-style '%' items, they will be
---- expanded according to the rules used for 'statusline'.
+--- expanded according to the rules used for 'statusline'.  If it contains
+--- an invalid '%' format, the value is used as-is and no error or warning
+--- will be given when the value is set.
 --- This option cannot be set in a modeline when 'modelineexpr' is off.
 ---
 --- Example:

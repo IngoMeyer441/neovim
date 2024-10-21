@@ -443,7 +443,7 @@ function STHighlighter:on_win(topline, botline)
         vim.api.nvim_buf_set_extmark(self.bufnr, state.namespace, token.line, token.start_col, {
           hl_group = hl_group,
           end_col = token.end_col,
-          priority = vim.highlight.priorities.semantic_tokens + delta,
+          priority = vim.hl.priorities.semantic_tokens + delta,
           strict = false,
         })
       end
@@ -565,10 +565,8 @@ local M = {}
 ---  - debounce (integer, default: 200): Debounce token requests
 ---        to the server by the given number in milliseconds
 function M.start(bufnr, client_id, opts)
-  vim.validate({
-    bufnr = { bufnr, 'n', false },
-    client_id = { client_id, 'n', false },
-  })
+  vim.validate('bufnr', bufnr, 'number')
+  vim.validate('client_id', client_id, 'number')
 
   if bufnr == 0 then
     bufnr = api.nvim_get_current_buf()
@@ -622,10 +620,8 @@ end
 ---@param bufnr (integer) Buffer number, or `0` for current buffer
 ---@param client_id (integer) The ID of the |vim.lsp.Client|
 function M.stop(bufnr, client_id)
-  vim.validate({
-    bufnr = { bufnr, 'n', false },
-    client_id = { client_id, 'n', false },
-  })
+  vim.validate('bufnr', bufnr, 'number')
+  vim.validate('client_id', client_id, 'number')
 
   if bufnr == 0 then
     bufnr = api.nvim_get_current_buf()
@@ -708,9 +704,7 @@ end
 ---@param bufnr (integer|nil) filter by buffer. All buffers if nil, current
 ---       buffer if 0
 function M.force_refresh(bufnr)
-  vim.validate({
-    bufnr = { bufnr, 'n', true },
-  })
+  vim.validate('bufnr', bufnr, 'number', true)
 
   local buffers = bufnr == nil and vim.tbl_keys(STHighlighter.active)
     or bufnr == 0 and { api.nvim_get_current_buf() }
@@ -729,7 +723,7 @@ end
 --- @inlinedoc
 ---
 --- Priority for the applied extmark.
---- (Default: `vim.highlight.priorities.semantic_tokens + 3`)
+--- (Default: `vim.hl.priorities.semantic_tokens + 3`)
 --- @field priority? integer
 
 --- Highlight a semantic token.
@@ -758,7 +752,7 @@ function M.highlight_token(token, bufnr, client_id, hl_group, opts)
   end
 
   opts = opts or {}
-  local priority = opts.priority or vim.highlight.priorities.semantic_tokens + 3
+  local priority = opts.priority or vim.hl.priorities.semantic_tokens + 3
 
   vim.api.nvim_buf_set_extmark(bufnr, state.namespace, token.line, token.start_col, {
     hl_group = hl_group,
