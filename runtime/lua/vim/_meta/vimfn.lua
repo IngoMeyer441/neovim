@@ -221,16 +221,16 @@ function vim.fn.assert_beeps(cmd) end
 --- @return 0|1
 function vim.fn.assert_equal(expected, actual, msg) end
 
---- When the files {fname-one} and {fname-two} do not contain
+--- When the files {fname_one} and {fname_two} do not contain
 --- exactly the same text an error message is added to |v:errors|.
 --- Also see |assert-return|.
---- When {fname-one} or {fname-two} does not exist the error will
+--- When {fname_one} or {fname_two} does not exist the error will
 --- mention that.
 ---
---- @param fname-one string
---- @param fname-two string
+--- @param fname_one string
+--- @param fname_two string
 --- @return 0|1
-function vim.fn.assert_equalfile(fname-one, fname-two) end
+function vim.fn.assert_equalfile(fname_one, fname_two) end
 
 --- When v:exception does not contain the string {error} an error
 --- message is added to |v:errors|.  Also see |assert-return|.
@@ -5192,7 +5192,7 @@ function vim.fn.log(expr) end
 function vim.fn.log10(expr) end
 
 --- {expr1} must be a |List|, |String|, |Blob| or |Dictionary|.
---- When {expr1} is a |List|| or |Dictionary|, replace each
+--- When {expr1} is a |List| or |Dictionary|, replace each
 --- item in {expr1} with the result of evaluating {expr2}.
 --- For a |Blob| each byte is replaced.
 --- For a |String|, each character, including composing

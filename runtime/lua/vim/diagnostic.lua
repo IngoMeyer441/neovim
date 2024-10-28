@@ -71,9 +71,9 @@ local M = {}
 --- (default: `false`)
 --- @field update_in_insert? boolean
 ---
---- Sort diagnostics by severity. This affects the order in which signs and
---- virtual text are displayed. When true, higher severities are displayed
---- before lower severities (e.g. ERROR is displayed before WARN).
+--- Sort diagnostics by severity. This affects the order in which signs,
+--- virtual text, and highlights are displayed. When true, higher severities are
+--- displayed before lower severities (e.g. ERROR is displayed before WARN).
 --- Options:
 ---   - {reverse}? (boolean) Reverse sort order
 --- (default: `false`)
@@ -478,7 +478,7 @@ end
 --- @return vim.Diagnostic[]
 local function reformat_diagnostics(format, diagnostics)
   vim.validate('format', format, 'function')
-  vim.validate({ diagnostics = { diagnostics, vim.islist, 'a list of diagnostics' } })
+  vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
 
   local formatted = vim.deepcopy(diagnostics, true)
   for _, diagnostic in ipairs(formatted) do
@@ -655,6 +655,28 @@ local function save_extmarks(namespace, bufnr)
   end
   diagnostic_cache_extmarks[bufnr][namespace] =
     api.nvim_buf_get_extmarks(bufnr, namespace, 0, -1, { details = true })
+end
+
+--- Create a function that converts a diagnostic severity to an extmark priority.
+--- @param priority integer Base priority
+--- @param opts vim.diagnostic.OptsResolved
+--- @return fun(severity: vim.diagnostic.Severity): integer
+local function severity_to_extmark_priority(priority, opts)
+  if opts.severity_sort then
+    if type(opts.severity_sort) == 'table' and opts.severity_sort.reverse then
+      return function(severity)
+        return priority + (severity - vim.diagnostic.severity.ERROR)
+      end
+    end
+
+    return function(severity)
+      return priority + (vim.diagnostic.severity.HINT - severity)
+    end
+  end
+
+  return function()
+    return priority
+  end
 end
 
 --- @type table<string,true>
@@ -1056,7 +1078,7 @@ end
 function M.set(namespace, bufnr, diagnostics, opts)
   vim.validate('namespace', namespace, 'number')
   vim.validate('bufnr', bufnr, 'number')
-  vim.validate({ diagnostics = { diagnostics, vim.islist, 'a list of diagnostics' } })
+  vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
   vim.validate('opts', opts, 'table', true)
 
   bufnr = get_bufnr(bufnr)
@@ -1336,7 +1358,7 @@ M.handlers.signs = {
   show = function(namespace, bufnr, diagnostics, opts)
     vim.validate('namespace', namespace, 'number')
     vim.validate('bufnr', bufnr, 'number')
-    vim.validate({ diagnostics = { diagnostics, vim.islist, 'a list of diagnostics' } })
+    vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
     vim.validate('opts', opts, 'table', true)
 
     bufnr = get_bufnr(bufnr)
@@ -1352,22 +1374,7 @@ M.handlers.signs = {
 
     -- 10 is the default sign priority when none is explicitly specified
     local priority = opts.signs and opts.signs.priority or 10
-    local get_priority --- @type function
-    if opts.severity_sort then
-      if type(opts.severity_sort) == 'table' and opts.severity_sort.reverse then
-        get_priority = function(severity)
-          return priority + (severity - vim.diagnostic.severity.ERROR)
-        end
-      else
-        get_priority = function(severity)
-          return priority + (vim.diagnostic.severity.HINT - severity)
-        end
-      end
-    else
-      get_priority = function()
-        return priority
-      end
-    end
+    local get_priority = severity_to_extmark_priority(priority, opts)
 
     local ns = M.get_namespace(namespace)
     if not ns.user_data.sign_ns then
@@ -1457,7 +1464,7 @@ M.handlers.underline = {
   show = function(namespace, bufnr, diagnostics, opts)
     vim.validate('namespace', namespace, 'number')
     vim.validate('bufnr', bufnr, 'number')
-    vim.validate({ diagnostics = { diagnostics, vim.islist, 'a list of diagnostics' } })
+    vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
     vim.validate('opts', opts, 'table', true)
 
     bufnr = get_bufnr(bufnr)
@@ -1478,6 +1485,8 @@ M.handlers.underline = {
     end
 
     local underline_ns = ns.user_data.underline_ns
+    local get_priority = severity_to_extmark_priority(vim.hl.priorities.diagnostics, opts)
+
     for _, diagnostic in ipairs(diagnostics) do
       --- @type string?
       local higroup = underline_highlight_map[assert(diagnostic.severity)]
@@ -1504,7 +1513,7 @@ M.handlers.underline = {
         higroup,
         { diagnostic.lnum, diagnostic.col },
         { diagnostic.end_lnum, diagnostic.end_col },
-        { priority = vim.hl.priorities.diagnostics }
+        { priority = get_priority(diagnostic.severity) }
       )
     end
     save_extmarks(underline_ns, bufnr)
@@ -1524,7 +1533,7 @@ M.handlers.virtual_text = {
   show = function(namespace, bufnr, diagnostics, opts)
     vim.validate('namespace', namespace, 'number')
     vim.validate('bufnr', bufnr, 'number')
-    vim.validate({ diagnostics = { diagnostics, vim.islist, 'a list of diagnostics' } })
+    vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
     vim.validate('opts', opts, 'table', true)
 
     bufnr = get_bufnr(bufnr)
@@ -1709,15 +1718,7 @@ end
 function M.show(namespace, bufnr, diagnostics, opts)
   vim.validate('namespace', namespace, 'number', true)
   vim.validate('bufnr', bufnr, 'number', true)
-  vim.validate({
-    diagnostics = {
-      diagnostics,
-      function(v)
-        return v == nil or vim.islist(v)
-      end,
-      'a list of diagnostics',
-    },
-  })
+  vim.validate('diagnostics', diagnostics, vim.islist, true, 'a list of diagnostics')
   vim.validate('opts', opts, 'table', true)
 
   if not bufnr or not namespace then
@@ -1869,13 +1870,7 @@ function M.open_float(opts, ...)
   local highlights = {} --- @type table[]
   local header = if_nil(opts.header, 'Diagnostics:')
   if header then
-    vim.validate({
-      header = {
-        header,
-        { 'string', 'table' },
-        "'string' or 'table'",
-      },
-    })
+    vim.validate('header', header, { 'string', 'table' }, "'string' or 'table'")
     if type(header) == 'table' then
       -- Don't insert any lines for an empty string
       if string.len(if_nil(header[1], '')) > 0 then
@@ -1903,13 +1898,12 @@ function M.open_float(opts, ...)
 
   local prefix, prefix_hl_group --- @type string?, string?
   if prefix_opt then
-    vim.validate({
-      prefix = {
-        prefix_opt,
-        { 'string', 'table', 'function' },
-        "'string' or 'table' or 'function'",
-      },
-    })
+    vim.validate(
+      'prefix',
+      prefix_opt,
+      { 'string', 'table', 'function' },
+      "'string' or 'table' or 'function'"
+    )
     if type(prefix_opt) == 'string' then
       prefix, prefix_hl_group = prefix_opt, 'NormalFloat'
     elseif type(prefix_opt) == 'table' then
@@ -1923,13 +1917,12 @@ function M.open_float(opts, ...)
 
   local suffix, suffix_hl_group --- @type string?, string?
   if suffix_opt then
-    vim.validate({
-      suffix = {
-        suffix_opt,
-        { 'string', 'table', 'function' },
-        "'string' or 'table' or 'function'",
-      },
-    })
+    vim.validate(
+      'suffix',
+      suffix_opt,
+      { 'string', 'table', 'function' },
+      "'string' or 'table' or 'function'"
+    )
     if type(suffix_opt) == 'string' then
       suffix, suffix_hl_group = suffix_opt, 'NormalFloat'
     elseif type(suffix_opt) == 'table' then
@@ -2239,7 +2232,7 @@ local errlist_type_map = {
 ---@param diagnostics vim.Diagnostic[]
 ---@return table[] : Quickfix list items |setqflist-what|
 function M.toqflist(diagnostics)
-  vim.validate({ diagnostics = { diagnostics, vim.islist, 'a list of diagnostics' } })
+  vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
 
   local list = {} --- @type table[]
   for _, v in ipairs(diagnostics) do

@@ -315,7 +315,7 @@ local function adjust_start_col(lnum, line, items, encoding)
     end
   end
   if min_start_char then
-    return lsp.util._str_byteindex_enc(line, min_start_char, encoding)
+    return vim.str_byteindex(line, encoding, min_start_char, false)
   else
     return nil
   end
@@ -548,15 +548,7 @@ local function on_complete_done()
 
     local command = completion_item.command
     if command then
-      client:_exec_cmd(command, { bufnr = bufnr }, nil, function()
-        vim.lsp.log.warn(
-          string.format(
-            'Language server `%s` does not support command `%s`. This command may require a client extension.',
-            client.name,
-            command.command
-          )
-        )
-      end)
+      client:exec_cmd(command, { bufnr = bufnr })
     end
   end
 

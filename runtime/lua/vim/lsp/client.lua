@@ -349,24 +349,22 @@ end
 --- @param config vim.lsp.ClientConfig
 local function validate_config(config)
   validate('config', config, 'table')
-  validate({
-    handlers = { config.handlers, 't', true },
-    capabilities = { config.capabilities, 't', true },
-    cmd_cwd = { config.cmd_cwd, optional_validator(is_dir), 'directory' },
-    cmd_env = { config.cmd_env, 't', true },
-    detached = { config.detached, 'b', true },
-    name = { config.name, 's', true },
-    on_error = { config.on_error, 'f', true },
-    on_exit = { config.on_exit, { 'f', 't' }, true },
-    on_init = { config.on_init, { 'f', 't' }, true },
-    on_attach = { config.on_attach, { 'f', 't' }, true },
-    settings = { config.settings, 't', true },
-    commands = { config.commands, 't', true },
-    before_init = { config.before_init, { 'f', 't' }, true },
-    offset_encoding = { config.offset_encoding, 's', true },
-    flags = { config.flags, 't', true },
-    get_language_id = { config.get_language_id, 'f', true },
-  })
+  validate('handlers', config.handlers, 'table', true)
+  validate('capabilities', config.capabilities, 'table', true)
+  validate('cmd_cwd', config.cmd_cwd, optional_validator(is_dir), 'directory')
+  validate('cmd_env', config.cmd_env, 'table', true)
+  validate('detached', config.detached, 'boolean', true)
+  validate('name', config.name, 'string', true)
+  validate('on_error', config.on_error, 'function', true)
+  validate('on_exit', config.on_exit, { 'function', 'table' }, true)
+  validate('on_init', config.on_init, { 'function', 'table' }, true)
+  validate('on_attach', config.on_attach, { 'function', 'table' }, true)
+  validate('settings', config.settings, 'table', true)
+  validate('commands', config.commands, 'table', true)
+  validate('before_init', config.before_init, { 'function', 'table' }, true)
+  validate('offset_encoding', config.offset_encoding, 'string', true)
+  validate('flags', config.flags, 'table', true)
+  validate('get_language_id', config.get_language_id, 'function', true)
 
   assert(
     (
@@ -861,10 +859,9 @@ end
 --- or via workspace/executeCommand (if supported by the server)
 ---
 --- @param command lsp.Command
---- @param context? {bufnr: integer}
+--- @param context? {bufnr?: integer}
 --- @param handler? lsp.Handler only called if a server command
---- @param on_unsupported? function handler invoked when the command is not supported by the client.
-function Client:_exec_cmd(command, context, handler, on_unsupported)
+function Client:exec_cmd(command, context, handler)
   context = vim.deepcopy(context or {}, true) --[[@as lsp.HandlerContext]]
   context.bufnr = context.bufnr or api.nvim_get_current_buf()
   context.client_id = self.id
@@ -877,25 +874,23 @@ function Client:_exec_cmd(command, context, handler, on_unsupported)
 
   local command_provider = self.server_capabilities.executeCommandProvider
   local commands = type(command_provider) == 'table' and command_provider.commands or {}
+
   if not vim.list_contains(commands, cmdname) then
-    if on_unsupported then
-      on_unsupported()
-    else
-      vim.notify_once(
-        string.format(
-          'Language server `%s` does not support command `%s`. This command may require a client extension.',
-          self.name,
-          cmdname
-        ),
-        vim.log.levels.WARN
-      )
-    end
+    vim.notify_once(
+      string.format(
+        'Language server `%s` does not support command `%s`. This command may require a client extension.',
+        self.name,
+        cmdname
+      ),
+      vim.log.levels.WARN
+    )
     return
   end
   -- Not using command directly to exclude extra properties,
   -- see https://github.com/python-lsp/python-lsp-server/issues/146
+  --- @type lsp.ExecuteCommandParams
   local params = {
-    command = command.command,
+    command = cmdname,
     arguments = command.arguments,
   }
   self.request(ms.workspace_executeCommand, params, handler, context.bufnr)

@@ -22,6 +22,7 @@ API
 LUA
 - vim.region()		Use |getregionpos()| instead.
 - *vim.highlight*	Renamed to |vim.hl|.
+- vim.validate(opts: table) Use form 1. See |vim.validate()|.
 
 DIAGNOSTICS
 - *vim.diagnostic.goto_next()*	Use |vim.diagnostic.jump()| with `{count=1, float=true}` instead.
@@ -43,7 +44,10 @@ TREESITTER
   return the descendant itself.
 
 LSP
-• *vim.lsp.util.jump_to_location*
+• *vim.lsp.util.jump_to_location*	Use |vim.lsp.util.show_document()| with
+  `{focus=true}` instead.
+• *vim.lsp.buf.execute_command*		Use |Client:exec_cmd()| instead.
+• *vim.lsp.buf.completion*		Use |vim.lsp.completion.trigger()| instead.
 
 ------------------------------------------------------------------------------
 DEPRECATED IN 0.10					*deprecated-0.10*

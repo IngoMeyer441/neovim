@@ -1,7 +1,10 @@
 " Test for options
 
+source shared.vim
 source check.vim
 source view_util.vim
+
+scriptencoding utf-8
 
 func Test_whichwrap()
   set whichwrap=b,s
@@ -1024,15 +1027,6 @@ func Test_set_all_one_column()
   call assert_equal(sort(copy(options)), options)
 endfunc
 
-func Test_set_values()
-  " opt_test.vim is generated from ../optiondefs.h using gen_opt_test.vim
-  if filereadable('opt_test.vim')
-    source opt_test.vim
-  else
-    throw 'Skipped: opt_test.vim does not exist'
-  endif
-endfunc
-
 func Test_renderoptions()
   throw 'skipped: Nvim does not support renderoptions'
   " Only do this for Windows Vista and later, fails on Windows XP and earlier.
@@ -1392,7 +1386,8 @@ func Test_local_scrolloff()
   call assert_equal(5, &so)
   wincmd w
   call assert_equal(3, &so)
-  setlocal so<
+  "setlocal so<
+  set so<
   call assert_equal(5, &so)
   setglob so=8
   call assert_equal(8, &so)
@@ -1409,7 +1404,8 @@ func Test_local_scrolloff()
   call assert_equal(7, &siso)
   wincmd w
   call assert_equal(3, &siso)
-  setlocal siso<
+  "setlocal siso<
+  set siso<
   call assert_equal(7, &siso)
   setglob siso=4
   call assert_equal(4, &siso)
@@ -1601,17 +1597,17 @@ func Test_set_number_global_local_option()
   call assert_equal(12, &l:scrolloff)
   call assert_equal(12, &scrolloff)
 
-  " :set {option}< set the effective value of {option} to its global value.
-  set scrolloff<
-  " Nvim: local value is removed
-  " call assert_equal(10, &l:scrolloff)
-  call assert_equal(-1, &l:scrolloff)
+  " :setlocal {option}< set the effective value of {option} to its global value.
+  "set scrolloff<
+  setlocal scrolloff<
+  call assert_equal(10, &l:scrolloff)
   call assert_equal(10, &scrolloff)
 
-  " :setlocal {option}< removes the local value, so that the global value will be used.
+  " :set {option}< removes the local value, so that the global value will be used.
   setglobal scrolloff=15
   setlocal scrolloff=18
-  setlocal scrolloff<
+  "setlocal scrolloff<
+  set scrolloff<
   call assert_equal(-1, &l:scrolloff)
   call assert_equal(15, &scrolloff)
 
@@ -1626,17 +1622,17 @@ func Test_set_boolean_global_local_option()
   call assert_equal(0, &l:autoread)
   call assert_equal(0, &autoread)
 
-  " :set {option}< set the effective value of {option} to its global value.
-  set autoread<
-  " Nvim: local value is removed
-  " call assert_equal(1, &l:autoread)
-  call assert_equal(-1, &l:autoread)
+  " :setlocal {option}< set the effective value of {option} to its global value.
+  "set autoread<
+  setlocal autoread<
+  call assert_equal(1, &l:autoread)
   call assert_equal(1, &autoread)
 
-  " :setlocal {option}< removes the local value, so that the global value will be used.
+  " :set {option}< removes the local value, so that the global value will be used.
   setglobal noautoread
   setlocal autoread
-  setlocal autoread<
+  "setlocal autoread<
+  set autoread<
   call assert_equal(-1, &l:autoread)
   call assert_equal(0, &autoread)
 

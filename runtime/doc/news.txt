@@ -55,6 +55,8 @@ DIAGNOSTICS
 
 • |vim.diagnostic.config()| accepts a "jump" table to specify defaults for
   |vim.diagnostic.jump()|.
+• The "underline" diagnostics handler sorts diagnostics by severity when using
+  the "severity_sort" option.
 
 EDITOR
 
@@ -86,6 +88,8 @@ LSP
   |vim.lsp.buf.type_definition()| and |vim.lsp.buf.implementation()| now
   support merging the results of multiple clients but no longer trigger the
   global handlers from `vim.lsp.handlers`
+• |vim.lsp.buf.typehierarchy()| now passes the correct params for each
+  client request.
 
 
 LUA
@@ -102,6 +106,10 @@ OPTIONS
   changes according to related options. It takes care of alignment, 'number',
   'relativenumber' and 'signcolumn' set to "number". The now redundant `%r` item
   is no longer treated specially for 'statuscolumn'.
+• `:set {option}<` removes the local value for all |global-local| options instead
+  of just string |global-local| options.
+• `:setlocal {option}<` copies the global value to the local value for number
+  and boolean |global-local| options instead of removing the local value.
 
 PLUGINS
 
@@ -200,6 +208,10 @@ LSP
 LUA
 
 • |vim.fs.rm()| can delete files and directories.
+• |vim.validate()| now has a new signature which uses less tables,
+  is more peformant and easier to read.
+• |vim.str_byteindex()| and |vim.str_utfindex()| gained overload signatures
+  supporting two new parameters, `encoding` and `strict_indexing`.
 
 OPTIONS
 
