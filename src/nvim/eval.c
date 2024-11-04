@@ -460,6 +460,8 @@ void eval_init(void)
   set_vim_var_nr(VV_SEARCHFORWARD, 1);
   set_vim_var_nr(VV_HLSEARCH, 1);
   set_vim_var_nr(VV_COUNT1, 1);
+  set_vim_var_special(VV_EXITING, kSpecialVarNull);
+
   set_vim_var_nr(VV_TYPE_NUMBER, VAR_TYPE_NUMBER);
   set_vim_var_nr(VV_TYPE_STRING, VAR_TYPE_STRING);
   set_vim_var_nr(VV_TYPE_FUNC,   VAR_TYPE_FUNC);
@@ -475,7 +477,6 @@ void eval_init(void)
   set_vim_var_nr(VV_NUMBERMAX, VARNUMBER_MAX);
   set_vim_var_nr(VV_NUMBERMIN, VARNUMBER_MIN);
   set_vim_var_nr(VV_NUMBERSIZE, sizeof(varnumber_T) * 8);
-  set_vim_var_special(VV_EXITING, kSpecialVarNull);
   set_vim_var_nr(VV_MAXCOL, MAXCOL);
 
   set_vim_var_nr(VV_ECHOSPACE,    sc_col - 1);
@@ -2631,7 +2632,7 @@ static int may_call_simple_func(const char *arg, typval_T *rettv)
 
 /// Handle zero level expression with optimization for a simple function call.
 /// Same arguments and return value as eval0().
-static int eval0_simple_funccal(char *arg, typval_T *rettv, exarg_T *eap, evalarg_T *const evalarg)
+int eval0_simple_funccal(char *arg, typval_T *rettv, exarg_T *eap, evalarg_T *const evalarg)
 {
   int r = may_call_simple_func(arg, rettv);
 
@@ -4790,6 +4791,7 @@ bool garbage_collect(bool testing)
     ABORTING(set_ref_in_callback)(&buf->b_ofu_cb, copyID, NULL, NULL);
     ABORTING(set_ref_in_callback)(&buf->b_tsrfu_cb, copyID, NULL, NULL);
     ABORTING(set_ref_in_callback)(&buf->b_tfu_cb, copyID, NULL, NULL);
+    ABORTING(set_ref_in_callback)(&buf->b_ffu_cb, copyID, NULL, NULL);
   }
 
   // 'completefunc', 'omnifunc' and 'thesaurusfunc' callbacks
@@ -4800,6 +4802,9 @@ bool garbage_collect(bool testing)
 
   // 'tagfunc' callback
   ABORTING(set_ref_in_tagfunc)(copyID);
+
+  // 'findfunc' callback
+  ABORTING(set_ref_in_findfunc)(copyID);
 
   FOR_ALL_TAB_WINDOWS(tp, wp) {
     // window-local variables

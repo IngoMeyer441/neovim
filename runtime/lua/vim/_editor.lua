@@ -651,7 +651,7 @@ do
   end
 end
 
-local on_key_cbs = {} --- @type table<integer,function>
+local on_key_cbs = {} --- @type table<integer,[function, table]>
 
 --- Adds Lua function {fn} with namespace id {ns_id} as a listener to every,
 --- yes every, input key.
@@ -664,60 +664,74 @@ local on_key_cbs = {} --- @type table<integer,function>
 ---           it won't be invoked for those keys.
 ---@note {fn} will not be cleared by |nvim_buf_clear_namespace()|
 ---
----@param fn fun(key: string, typed: string)? Function invoked for every input key,
+---@param fn nil|fun(key: string, typed: string): string? Function invoked for every input key,
 ---          after mappings have been applied but before further processing. Arguments
 ---          {key} and {typed} are raw keycodes, where {key} is the key after mappings
 ---          are applied, and {typed} is the key(s) before mappings are applied.
 ---          {typed} may be empty if {key} is produced by non-typed key(s) or by the
 ---          same typed key(s) that produced a previous {key}.
----          When {fn} is `nil` and {ns_id} is specified, the callback associated with
----          namespace {ns_id} is removed.
+---          If {fn} returns an empty string, {key} is discarded/ignored.
+---          When {fn} is `nil`, the callback associated with namespace {ns_id} is removed.
 ---@param ns_id integer? Namespace ID. If nil or 0, generates and returns a
 ---                      new |nvim_create_namespace()| id.
+---@param opts table? Optional parameters
 ---
 ---@see |keytrans()|
 ---
 ---@return integer Namespace id associated with {fn}. Or count of all callbacks
 ---if on_key() is called without arguments.
-function vim.on_key(fn, ns_id)
+function vim.on_key(fn, ns_id, opts)
   if fn == nil and ns_id == nil then
     return vim.tbl_count(on_key_cbs)
   end
 
   vim.validate('fn', fn, 'callable', true)
   vim.validate('ns_id', ns_id, 'number', true)
+  vim.validate('opts', opts, 'table', true)
+  opts = opts or {}
 
   if ns_id == nil or ns_id == 0 then
     ns_id = vim.api.nvim_create_namespace('')
   end
 
-  on_key_cbs[ns_id] = fn
+  on_key_cbs[ns_id] = fn and { fn, opts }
   return ns_id
 end
 
 --- Executes the on_key callbacks.
 ---@private
 function vim._on_key(buf, typed_buf)
-  local failed_ns_ids = {}
-  local failed_messages = {}
+  local failed = {} ---@type [integer, string][]
+  local discard = false
   for k, v in pairs(on_key_cbs) do
-    local ok, err_msg = pcall(v, buf, typed_buf)
+    local fn = v[1]
+    local ok, rv = xpcall(function()
+      return fn(buf, typed_buf)
+    end, debug.traceback)
+    if ok and rv ~= nil then
+      if type(rv) == 'string' and #rv == 0 then
+        discard = true
+        -- break   -- Without break deliver to all callbacks even when it eventually discards.
+        -- "break" does not make sense unless callbacks are sorted by ???.
+      else
+        ok = false
+        rv = 'return string must be empty'
+      end
+    end
     if not ok then
       vim.on_key(nil, k)
-      table.insert(failed_ns_ids, k)
-      table.insert(failed_messages, err_msg)
+      table.insert(failed, { k, rv })
     end
   end
 
-  if failed_ns_ids[1] then
-    error(
-      string.format(
-        "Error executing 'on_key' with ns_ids '%s'\n    Messages: %s",
-        table.concat(failed_ns_ids, ', '),
-        table.concat(failed_messages, '\n')
-      )
-    )
+  if #failed > 0 then
+    local errmsg = ''
+    for _, v in ipairs(failed) do
+      errmsg = errmsg .. string.format('\nWith ns_id %d: %s', v[1], v[2])
+    end
+    error(errmsg)
   end
+  return discard
 end
 
 --- Convert UTF-32, UTF-16 or UTF-8 {index} to byte index.

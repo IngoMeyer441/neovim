@@ -28,6 +28,7 @@ local rmdir = n.rmdir
 local write_file = t.write_file
 local poke_eventloop = n.poke_eventloop
 local assert_alive = n.assert_alive
+local expect = n.expect
 
 describe('lua stdlib', function()
   before_each(clear)
@@ -3311,10 +3312,17 @@ describe('lua stdlib', function()
       eq('inext lines<ESC>', exec_lua [[return table.concat(keys, '')]])
     end)
 
-    it('skips any function that caused an error', function()
+    it('skips any function that caused an error and shows stacktrace', function()
       insert([[hello world]])
 
       exec_lua [[
+        local function ErrF2()
+          error("Dumb Error")
+        end
+        local function ErrF1()
+          ErrF2()
+        end
+
         keys = {}
 
         return vim.on_key(function(buf)
@@ -3325,7 +3333,7 @@ describe('lua stdlib', function()
           table.insert(keys, buf)
 
           if buf == 'l' then
-            error("Dumb Error")
+            ErrF1()
           end
         end)
       ]]
@@ -3335,6 +3343,19 @@ describe('lua stdlib', function()
 
       -- Only the first letter gets added. After that we remove the callback
       eq('inext l', exec_lua [[ return table.concat(keys, '') ]])
+
+      local errmsg = api.nvim_get_vvar('errmsg')
+      matches(
+        [[
+^Error executing vim%.on%_key%(%) callbacks:.*
+With ns%_id %d+: .*: Dumb Error
+stack traceback:
+.*: in function 'error'
+.*: in function 'ErrF2'
+.*: in function 'ErrF1'
+.*]],
+        errmsg
+      )
     end)
 
     it('argument 1 is keys after mapping, argument 2 is typed keys', function()
@@ -3415,6 +3436,71 @@ describe('lua stdlib', function()
         {1:~                                                           }|*8
                                                                     |
       ]])
+    end)
+
+    it('can discard input', function()
+      clear()
+      -- discard every other normal 'x' command
+      exec_lua [[
+        n_key = 0
+
+        vim.on_key(function(buf, typed_buf)
+          if typed_buf == 'x' then
+            n_key = n_key + 1
+          end
+          return (n_key % 2 == 0) and "" or nil
+        end)
+      ]]
+
+      api.nvim_buf_set_lines(0, 0, -1, true, { '54321' })
+
+      feed('x')
+      expect('4321')
+      feed('x')
+      expect('4321')
+      feed('x')
+      expect('321')
+      feed('x')
+      expect('321')
+    end)
+
+    it('callback invalid return', function()
+      clear()
+      -- second key produces an error which removes the callback
+      exec_lua [[
+        n_call = 0
+
+        vim.on_key(function(buf, typed_buf)
+          if typed_buf == 'x' then
+            n_call = n_call + 1
+          end
+          return n_call >= 2 and '!' or nil
+        end)
+      ]]
+
+      api.nvim_buf_set_lines(0, 0, -1, true, { '54321' })
+
+      local function cleanup_msg(msg)
+        return msg:gsub('^Error .*\nWith ns%_id %d+: ', '')
+      end
+
+      feed('x')
+      eq(1, exec_lua [[ return n_call ]])
+
+      eq(1, exec_lua [[ return vim.on_key(nil, nil) ]])
+
+      eq('', cleanup_msg(eval('v:errmsg')))
+      feed('x')
+      eq(2, exec_lua [[ return n_call ]])
+      eq('return string must be empty', cleanup_msg(eval('v:errmsg')))
+      command('let v:errmsg = ""')
+
+      eq(0, exec_lua [[ return vim.on_key(nil, nil) ]])
+
+      feed('x')
+      eq(2, exec_lua [[ return n_call ]])
+      expect('21')
+      eq('', cleanup_msg(eval('v:errmsg')))
     end)
   end)
 

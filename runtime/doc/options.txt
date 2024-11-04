@@ -370,10 +370,11 @@ Note: In the future more global options can be made |global-local|.  Using
 ":setlocal" on a global option might work differently then.
 
 						*option-value-function*
-Some options ('completefunc', 'omnifunc', 'operatorfunc', 'quickfixtextfunc',
-'tagfunc' and 'thesaurusfunc') are set to a function name or a function
-reference or a lambda function.  When using a lambda it will be converted to
-the name, e.g. "<lambda>123".  Examples:
+Some options ('completefunc', 'findfunc', 'omnifunc', 'operatorfunc',
+'quickfixtextfunc', 'tagfunc' and 'thesaurusfunc') are set to a function name
+or a function reference or a lambda function.  When using a lambda it will be
+converted to the name, e.g. "<lambda>123".
+Examples:
 >
 	set opfunc=MyOpFunc
 	set opfunc=function('MyOpFunc')
@@ -2597,6 +2598,55 @@ A jump table for the options with a short description can be found at |Q_op|.
 	  diff		DiffDelete		|hl-DiffDelete|
 	  eob		EndOfBuffer		|hl-EndOfBuffer|
 	  lastline	NonText			|hl-NonText|
+
+					*'findfunc'* *'ffu'* *E1514*
+'findfunc' 'ffu'	string	(default "")
+			global or local to buffer |global-local|
+	Function that is called to obtain the filename(s) for the |:find|
+	command.  When this option is empty, the internal |file-searching|
+	mechanism is used.
+
+	The value can be the name of a function, a |lambda| or a |Funcref|.
+	See |option-value-function| for more information.
+
+	The function is called with two arguments.  The first argument is a
+	|String| and is the |:find| command argument.  The second argument is
+	a |Boolean| and is set to |v:true| when the function is called to get
+	a List of command-line completion matches for the |:find| command.
+	The function should return a List of strings.
+
+	The function is called only once per |:find| command invocation.
+	The function can process all the directories specified in 'path'.
+
+	If a match is found, the function should return a |List| containing
+	one or more file names.  If a match is not found, the function
+	should return an empty List.
+
+	If any errors are encountered during the function invocation, an
+	empty List is used as the return value.
+
+	It is not allowed to change text or jump to another window while
+	executing the 'findfunc' |textlock|.
+
+	This option cannot be set from a |modeline| or in the |sandbox|, for
+	security reasons.
+
+	Examples:
+	>vim
+	    " Use glob()
+	    func FindFuncGlob(cmdarg, cmdcomplete)
+		let pat = a:cmdcomplete ? $'{a:cmdarg}*' : a:cmdarg
+		return glob(pat, v:false, v:true)
+	    endfunc
+	    set findfunc=FindFuncGlob
+
+	    " Use the 'git ls-files' output
+	    func FindGitFiles(cmdarg, cmdcomplete)
+		let fnames = systemlist('git ls-files')
+		return fnames->filter('v:val =~? a:cmdarg')
+	    endfunc
+	    set findfunc=FindGitFiles
+<
 
 		*'fixendofline'* *'fixeol'* *'nofixendofline'* *'nofixeol'*
 'fixendofline' 'fixeol'	boolean	(default on)
@@ -5130,7 +5180,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 							*shell-powershell*
 	To use PowerShell: >vim
 		let &shell = executable('pwsh') ? 'pwsh' : 'powershell'
-		let &shellcmdflag = '-NoLogo -ExecutionPolicy RemoteSigned -Command [Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();$PSDefaultParameterValues[''Out-File:Encoding'']=''utf8'';Remove-Alias -Force -ErrorAction SilentlyContinue tee;'
+		let &shellcmdflag = '-NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -Command [Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();$PSDefaultParameterValues[''Out-File:Encoding'']=''utf8'';$PSStyle.OutputRendering=''plaintext'';Remove-Alias -Force -ErrorAction SilentlyContinue tee;'
 		let &shellredir = '2>&1 | %%{ "$_" } | Out-File %s; exit $LastExitCode'
 		let &shellpipe  = '2>&1 | %%{ "$_" } | tee %s; exit $LastExitCode'
 		set shellquote= shellxquote=

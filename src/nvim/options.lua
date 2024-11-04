@@ -2906,6 +2906,66 @@ return {
       varname = 'p_fcs',
     },
     {
+      abbreviation = 'ffu',
+      cb = 'did_set_findfunc',
+      defaults = { if_true = '' },
+      desc = [=[
+        Function that is called to obtain the filename(s) for the |:find|
+        command.  When this option is empty, the internal |file-searching|
+        mechanism is used.
+
+        The value can be the name of a function, a |lambda| or a |Funcref|.
+        See |option-value-function| for more information.
+
+        The function is called with two arguments.  The first argument is a
+        |String| and is the |:find| command argument.  The second argument is
+        a |Boolean| and is set to |v:true| when the function is called to get
+        a List of command-line completion matches for the |:find| command.
+        The function should return a List of strings.
+
+        The function is called only once per |:find| command invocation.
+        The function can process all the directories specified in 'path'.
+
+        If a match is found, the function should return a |List| containing
+        one or more file names.  If a match is not found, the function
+        should return an empty List.
+
+        If any errors are encountered during the function invocation, an
+        empty List is used as the return value.
+
+        It is not allowed to change text or jump to another window while
+        executing the 'findfunc' |textlock|.
+
+        This option cannot be set from a |modeline| or in the |sandbox|, for
+        security reasons.
+
+        Examples:
+        >vim
+            " Use glob()
+            func FindFuncGlob(cmdarg, cmdcomplete)
+        	let pat = a:cmdcomplete ? $'{a:cmdarg}*' : a:cmdarg
+        	return glob(pat, v:false, v:true)
+            endfunc
+            set findfunc=FindFuncGlob
+
+            " Use the 'git ls-files' output
+            func FindGitFiles(cmdarg, cmdcomplete)
+        	let fnames = systemlist('git ls-files')
+        	return fnames->filter('v:val =~? a:cmdarg')
+            endfunc
+            set findfunc=FindGitFiles
+        <
+      ]=],
+      full_name = 'findfunc',
+      func = true,
+      scope = { 'global', 'buffer' },
+      secure = true,
+      short_desc = N_('function called for :find'),
+      tags = { 'E1514' },
+      type = 'string',
+      varname = 'p_ffu',
+    },
+    {
       abbreviation = 'fixeol',
       cb = 'did_set_eof_eol_fixeol_bomb',
       defaults = { if_true = true },
@@ -7052,7 +7112,7 @@ return {
         						*shell-powershell*
         To use PowerShell: >vim
         	let &shell = executable('pwsh') ? 'pwsh' : 'powershell'
-        	let &shellcmdflag = '-NoLogo -ExecutionPolicy RemoteSigned -Command [Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();$PSDefaultParameterValues[''Out-File:Encoding'']=''utf8'';Remove-Alias -Force -ErrorAction SilentlyContinue tee;'
+        	let &shellcmdflag = '-NoLogo -NonInteractive -ExecutionPolicy RemoteSigned -Command [Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();$PSDefaultParameterValues[''Out-File:Encoding'']=''utf8'';$PSStyle.OutputRendering=''plaintext'';Remove-Alias -Force -ErrorAction SilentlyContinue tee;'
         	let &shellredir = '2>&1 | %%{ "$_" } | Out-File %s; exit $LastExitCode'
         	let &shellpipe  = '2>&1 | %%{ "$_" } | tee %s; exit $LastExitCode'
         	set shellquote= shellxquote=
