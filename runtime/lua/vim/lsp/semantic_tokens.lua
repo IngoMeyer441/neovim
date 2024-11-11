@@ -380,6 +380,37 @@ function STHighlighter:process_response(response, client, version)
   api.nvim__redraw({ buf = self.bufnr, valid = true })
 end
 
+--- @param bufnr integer
+--- @param ns integer
+--- @param token STTokenRange
+--- @param hl_group string
+--- @param priority integer
+local function set_mark(bufnr, ns, token, hl_group, priority)
+  vim.api.nvim_buf_set_extmark(bufnr, ns, token.line, token.start_col, {
+    hl_group = hl_group,
+    end_col = token.end_col,
+    priority = priority,
+    strict = false,
+  })
+end
+
+--- @param lnum integer
+--- @param foldend integer?
+--- @return boolean, integer?
+local function check_fold(lnum, foldend)
+  if foldend and lnum <= foldend then
+    return true, foldend
+  end
+
+  local folded = vim.fn.foldclosed(lnum)
+
+  if folded == -1 then
+    return false, nil
+  end
+
+  return folded ~= lnum, vim.fn.foldclosedend(lnum)
+end
+
 --- on_win handler for the decoration provider (see |nvim_set_decoration_provider|)
 ---
 --- If there is a current result for the buffer and the version matches the
@@ -433,13 +464,14 @@ function STHighlighter:on_win(topline, botline)
       -- finishes, clangd sends a refresh request which lets the client
       -- re-synchronize the tokens.
 
-      local set_mark = function(token, hl_group, delta)
-        vim.api.nvim_buf_set_extmark(self.bufnr, state.namespace, token.line, token.start_col, {
-          hl_group = hl_group,
-          end_col = token.end_col,
-          priority = vim.hl.priorities.semantic_tokens + delta,
-          strict = false,
-        })
+      local function set_mark0(token, hl_group, delta)
+        set_mark(
+          self.bufnr,
+          state.namespace,
+          token,
+          hl_group,
+          vim.hl.priorities.semantic_tokens + delta
+        )
       end
 
       local ft = vim.bo[self.bufnr].filetype
@@ -447,13 +479,19 @@ function STHighlighter:on_win(topline, botline)
       local first = lower_bound(highlights, topline, 1, #highlights + 1)
       local last = upper_bound(highlights, botline, first, #highlights + 1) - 1
 
+      --- @type boolean?, integer?
+      local is_folded, foldend
+
       for i = first, last do
         local token = highlights[i]
-        if not token.marked then
-          set_mark(token, string.format('@lsp.type.%s.%s', token.type, ft), 0)
-          for modifier, _ in pairs(token.modifiers) do
-            set_mark(token, string.format('@lsp.mod.%s.%s', modifier, ft), 1)
-            set_mark(token, string.format('@lsp.typemod.%s.%s.%s', token.type, modifier, ft), 2)
+
+        is_folded, foldend = check_fold(token.line + 1, foldend)
+
+        if not is_folded and not token.marked then
+          set_mark0(token, string.format('@lsp.type.%s.%s', token.type, ft), 0)
+          for modifier in pairs(token.modifiers) do
+            set_mark0(token, string.format('@lsp.mod.%s.%s', modifier, ft), 1)
+            set_mark0(token, string.format('@lsp.typemod.%s.%s.%s', token.type, modifier, ft), 2)
           end
           token.marked = true
 
@@ -745,15 +783,9 @@ function M.highlight_token(token, bufnr, client_id, hl_group, opts)
     return
   end
 
-  opts = opts or {}
-  local priority = opts.priority or vim.hl.priorities.semantic_tokens + 3
+  local priority = opts and opts.priority or vim.hl.priorities.semantic_tokens + 3
 
-  vim.api.nvim_buf_set_extmark(bufnr, state.namespace, token.line, token.start_col, {
-    hl_group = hl_group,
-    end_col = token.end_col,
-    priority = priority,
-    strict = false,
-  })
+  set_mark(bufnr, state.namespace, token, hl_group, priority)
 end
 
 --- |lsp-handler| for the method `workspace/semanticTokens/refresh`

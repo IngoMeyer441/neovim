@@ -84,7 +84,7 @@ static char *(p_dip_values[]) = { "filler", "context:", "iblank", "icase",
                                   "indent-heuristic", "linematch:", "algorithm:", NULL };
 static char *(p_dip_algorithm_values[]) = { "myers", "minimal", "patience", "histogram", NULL };
 static char *(p_nf_values[]) = { "bin", "octal", "hex", "alpha", "unsigned", "blank", NULL };
-static char *(p_ff_values[]) = { FF_UNIX, FF_DOS, FF_MAC, NULL };
+static char *(p_ff_values[]) = { "unix", "dos", "mac", NULL };
 static char *(p_cb_values[]) = { "unnamed", "unnamedplus", NULL };
 static char *(p_cmp_values[]) = { "internal", "keepascii", NULL };
 // Note: Keep this in sync with fill_culopt_flags()
@@ -892,10 +892,11 @@ int expand_set_chars_option(optexpand_T *args, int *numMatches, char ***matches)
 }
 
 /// The 'cinoptions' option is changed.
-const char *did_set_cinoptions(optset_T *args FUNC_ATTR_UNUSED)
+const char *did_set_cinoptions(optset_T *args)
 {
+  buf_T *buf = (buf_T *)args->os_buf;
   // TODO(vim): recognize errors
-  parse_cino(curbuf);
+  parse_cino(buf);
 
   return NULL;
 }
