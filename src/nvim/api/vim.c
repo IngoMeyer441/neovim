@@ -594,10 +594,12 @@ ArrayOf(String) nvim_get_runtime_file(String name, Boolean all, Arena *arena, Er
   kvi_init(cookie.rv);
 
   int flags = DIP_DIRFILE | (all ? DIP_ALL : 0);
+  TryState tstate;
 
-  TRY_WRAP(err, {
-    do_in_runtimepath((name.size ? name.data : ""), flags, find_runtime_cb, &cookie);
-  });
+  try_enter(&tstate);
+  do_in_runtimepath((name.size ? name.data : ""), flags, find_runtime_cb, &cookie);
+  vim_ignored = try_leave(&tstate, err);
+
   return arena_take_arraybuilder(arena, &cookie.rv);
 }
 
@@ -777,8 +779,8 @@ void nvim_set_vvar(String name, Object value, Error *err)
 /// Echo a message.
 ///
 /// @param chunks  A list of `[text, hl_group]` arrays, each representing a
-///                text chunk with specified highlight. `hl_group` element
-///                can be omitted for no highlight.
+///                text chunk with specified highlight group name or ID.
+///                `hl_group` element can be omitted for no highlight.
 /// @param history  if true, add to |message-history|.
 /// @param opts  Optional parameters.
 ///          - verbose: Message is printed as a result of 'verbose' option.
@@ -796,7 +798,7 @@ void nvim_echo(Array chunks, Boolean history, Dict(echo_opts) *opts, Error *err)
     verbose_enter();
   }
 
-  msg_multiattr(hl_msg, history ? "echomsg" : "echo", history);
+  msg_multihl(hl_msg, history ? "echomsg" : "echo", history);
 
   if (opts->verbose) {
     verbose_leave();
@@ -1002,10 +1004,10 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
   buf_copy_options(buf, BCO_ENTER | BCO_NOHELP);
 
   if (scratch) {
-    set_option_direct_for(kOptBufhidden, STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL, 0, kOptReqBuf,
-                          buf);
-    set_option_direct_for(kOptBuftype, STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL, 0, kOptReqBuf,
-                          buf);
+    set_option_direct_for(kOptBufhidden, STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL, 0,
+                          kOptScopeBuf, buf);
+    set_option_direct_for(kOptBuftype, STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL, 0,
+                          kOptScopeBuf, buf);
     assert(buf->b_ml.ml_mfp->mf_fd < 0);  // ml_open() should not have opened swapfile already
     buf->b_p_swf = false;
     buf->b_p_ml = false;
@@ -2161,11 +2163,11 @@ Dict nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Arena *arena,
     if (num_id) {
       stc_hl_id = num_id;
     } else if (statuscol.use_cul) {
-      stc_hl_id = HLF_CLN + 1;
+      stc_hl_id = HLF_CLN;
     } else if (wp->w_p_rnu) {
-      stc_hl_id = (lnum < wp->w_cursor.lnum ? HLF_LNA : HLF_LNB) + 1;
+      stc_hl_id = (lnum < wp->w_cursor.lnum ? HLF_LNA : HLF_LNB);
     } else {
-      stc_hl_id = HLF_N + 1;
+      stc_hl_id = HLF_N;
     }
 
     set_vim_var_nr(VV_LNUM, lnum);
@@ -2394,13 +2396,13 @@ void nvim__redraw(Dict(redraw) *opts, Error *err)
       last = rbuf->b_ml.ml_line_count;
     }
     redraw_buf_range_later(rbuf, first, last);
+    opts->flush = HAS_KEY(opts, redraw, flush) ? opts->flush : true;
   }
 
-  bool flush = opts->flush;
   if (opts->tabline) {
     // Flush later in case tabline was just hidden or shown for the first time.
     if (redraw_tabline && firstwin->w_lines_valid == 0) {
-      flush = true;
+      opts->flush = true;
     } else {
       draw_tabline();
     }
@@ -2414,23 +2416,23 @@ void nvim__redraw(Dict(redraw) *opts, Error *err)
     if (win == NULL) {
       FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
         if (buf == NULL || wp->w_buffer == buf) {
-          redraw_status(wp, opts, &flush);
+          redraw_status(wp, opts, &opts->flush);
         }
       }
     } else {
-      redraw_status(win, opts, &flush);
+      redraw_status(win, opts, &opts->flush);
     }
   }
 
   win_T *cwin = win ? win : curwin;
   // Allow moving cursor to recently opened window and make sure it is drawn #28868.
   if (opts->cursor && (!cwin->w_grid.target || !cwin->w_grid.target->valid)) {
-    flush = true;
+    opts->flush = true;
   }
 
   // Redraw pending screen updates when explicitly requested or when determined
   // that it is necessary to properly draw other requested components.
-  if (flush && !cmdpreview) {
+  if (opts->flush && !cmdpreview) {
     update_screen();
   }
 

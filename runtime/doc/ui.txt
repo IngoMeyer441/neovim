@@ -796,6 +796,7 @@ must handle.
 		"echomsg"	|:echomsg| message
 		"echoerr"	|:echoerr| message
 		"lua_error"	Error in |:lua| code
+		"lua_print"	|print()| from |:lua| code
 		"rpc_error"	Error response from |rpcrequest()|
 		"return_prompt"	|press-enter| prompt after a multiple messages
 		"quickfix"	Quickfix navigation message
@@ -805,10 +806,11 @@ must handle.
 	    kinds as the empty kind.
 
 	content
-	    Array of `[attr_id, text_chunk]` tuples, building up the message
-	    text of chunks of different highlights. No extra spacing should be
-	    added between chunks, the `text_chunk` by itself contains any
-	    necessary whitespace. Messages can contain line breaks "\n".
+	    Array of `[attr_id, text_chunk, hl_id]` tuples, building up the
+	    message text of chunks of different highlights. No extra spacing
+	    should be added between chunks, the `text_chunk` by itself
+	    contains any necessary whitespace. Messages can contain line
+	    breaks "\n".
 
 	replace_last
 	    Decides how multiple messages should be displayed:

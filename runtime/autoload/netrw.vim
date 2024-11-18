@@ -34,6 +34,8 @@
 "   2024 Oct 31 by Vim Project: fix E874 when browsing remote dir (#15964)
 "   2024 Nov 07 by Vim Project: use keeppatterns to prevent polluting the search history
 "   2024 Nov 07 by Vim Project: fix a few issues with netrw tree listing (#15996)
+"   2024 Nov 10 by Vim Project: directory symlink not resolved in tree view (#16020)
+"   2024 Nov 14 by Vim Project: small fixes to netrw#BrowseX (#16056)
 "   }}}
 " Former Maintainer:	Charles E Campbell
 " GetLatestVimScripts: 1075 1 :AutoInstall: netrw.vim
@@ -4580,6 +4582,12 @@ fun! s:NetrwBrowseChgDir(islocal,newdir,cursor,...)
   if a:cursor && exists("w:netrw_liststyle") && w:netrw_liststyle == s:TREELIST && exists("w:netrw_treetop")
    " dirname is the path to the word under the cursor
    let dirname = s:NetrwTreePath(w:netrw_treetop)
+   " newdir resolves to a directory and points to a directory in dirname
+   " /tmp/test/folder_symlink/ -> /tmp/test/original_folder/
+   if a:islocal && fnamemodify(dirname, ':t') == newdir && isdirectory(resolve(dirname)) && resolve(dirname) == resolve(newdir)
+    let dirname = fnamemodify(resolve(dirname), ':p:h:h')
+    let newdir = fnamemodify(resolve(newdir), ':t')
+   endif
    " Remove trailing "/"
    let dirname = substitute(dirname, "/$", "", "")
 
@@ -4992,7 +5000,7 @@ if has('unix')
     let args = a:args
     exe 'silent !' ..
       \ ((args =~? '\v<\f+\.(exe|com|bat|cmd)>') ?
-      \ 'cmd.exe /c start "" /b ' .. args :
+      \ 'cmd.exe /c start /b ' .. args :
       \ 'nohup ' .. args .. ' ' .. s:redir() .. ' &')
       \ | redraw!
   endfun
@@ -5071,10 +5079,7 @@ endif
 "              given filename; typically this means given their extension.
 "              0=local, 1=remote
 fun! netrw#BrowseX(fname,remote)
-  if a:remote == 0 && isdirectory(a:fname)
-   " if its really just a local directory, then do a "gf" instead
-   exe "e ".a:fname
-  elseif a:remote == 1 && a:fname !~ '^https\=:' && a:fname =~ '/$'
+  if a:remote == 1 && a:fname !~ '^https\=:' && a:fname =~ '/$'
    " remote directory, not a webpage access, looks like an attempt to do a directory listing
    norm! gf
   endif

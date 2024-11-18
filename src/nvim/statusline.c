@@ -582,9 +582,11 @@ void win_redr_ruler(win_T *wp)
 
   if (ui_has(kUIMessages) && !part_of_status) {
     MAXSIZE_TEMP_ARRAY(content, 1);
-    MAXSIZE_TEMP_ARRAY(chunk, 2);
+    MAXSIZE_TEMP_ARRAY(chunk, 3);
     ADD_C(chunk, INTEGER_OBJ(attr));
     ADD_C(chunk, CSTR_AS_OBJ(buffer));
+    ADD_C(chunk, INTEGER_OBJ(HLF_MSG));
+    assert(attr == HL_ATTR(HLF_MSG));
     ADD_C(content, ARRAY_OBJ(chunk));
     ui_call_msg_ruler(content);
     did_show_ext_ruler = true;
@@ -758,7 +760,9 @@ void draw_tabline(void)
       bool modified = false;
 
       for (wincount = 0; wp != NULL; wp = wp->w_next, wincount++) {
-        if (bufIsChanged(wp->w_buffer)) {
+        if (!wp->w_config.focusable) {
+          wincount--;
+        } else if (bufIsChanged(wp->w_buffer)) {
           modified = true;
         }
       }
@@ -1630,7 +1634,7 @@ stcsign:
         schar_T fold_buf[9];
         fill_foldcolumn(wp, stcp->foldinfo, (linenr_T)get_vim_var_nr(VV_LNUM),
                         0, fdc, NULL, fold_buf);
-        stl_items[curitem].minwid = -((stcp->use_cul ? HLF_CLF : HLF_FC) + 1);
+        stl_items[curitem].minwid = -(stcp->use_cul ? HLF_CLF : HLF_FC);
         size_t buflen = 0;
         // TODO(bfredl): this is very backwards. we must support schar_T
         // being used directly in 'statuscolumn'
@@ -1651,7 +1655,7 @@ stcsign:
             buf_tmp[signlen++] = ' ';
             buf_tmp[signlen++] = ' ';
             buf_tmp[signlen] = NUL;
-            stl_items[curitem].minwid = -((stcp->use_cul ? HLF_CLS : HLF_SC) + 1);
+            stl_items[curitem].minwid = -(stcp->use_cul ? HLF_CLS : HLF_SC);
           }
         }
         stl_items[curitem++].type = Highlight;

@@ -6755,8 +6755,8 @@ void win_comp_scroll(win_T *wp)
 
   if (wp->w_p_scr != old_w_p_scr) {
     // Used by "verbose set scroll".
-    wp->w_p_script_ctx[WV_SCROLL].script_ctx.sc_sid = SID_WINLAYOUT;
-    wp->w_p_script_ctx[WV_SCROLL].script_ctx.sc_lnum = 0;
+    wp->w_p_script_ctx[kWinOptScroll].script_ctx.sc_sid = SID_WINLAYOUT;
+    wp->w_p_script_ctx[kWinOptScroll].script_ctx.sc_lnum = 0;
   }
 }
 
@@ -6814,11 +6814,13 @@ void command_height(void)
       // Recompute window positions.
       win_comp_pos();
 
-      // clear the lines added to cmdline
-      if (full_screen) {
-        grid_clear(&default_grid, cmdline_row, Rows, 0, Columns, 0);
+      if (!need_wait_return) {
+        // clear the lines added to cmdline
+        if (full_screen) {
+          grid_clear(&default_grid, cmdline_row, Rows, 0, Columns, 0);
+        }
+        msg_row = cmdline_row;
       }
-      msg_row = cmdline_row;
       redraw_cmdline = true;
       return;
     }

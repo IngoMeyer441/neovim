@@ -35,7 +35,6 @@ describe('default', function()
         args = { '+autocmd! nvim_popupmenu', '+aunmenu PopUp' },
       }
       local screen = Screen.new(40, 8)
-      screen:attach()
       n.insert([[
         1 line 1
         2 https://example.com
@@ -58,7 +57,6 @@ describe('default', function()
     it('right-click on URL shows "Open in web browser"', function()
       n.clear()
       local screen = Screen.new(40, 8)
-      screen:attach()
       n.insert([[
         1 line 1
         2 https://example.com
@@ -100,7 +98,6 @@ describe('default', function()
       it('do not show a full stack trace #30625', function()
         n.clear({ args_rm = { '--cmd' } })
         local screen = Screen.new(40, 8)
-        screen:attach()
         screen:set_default_attr_ids({
           [1] = { foreground = Screen.colors.NvimDarkGray4 },
           [2] = {
@@ -175,6 +172,30 @@ describe('default', function()
 
           first line]])
         end)
+
+        it('supports dot repetition', function()
+          n.clear({ args_rm = { '--cmd' } })
+          n.insert([[first line]])
+          n.feed('[<Space>')
+          n.feed('.')
+          n.expect([[
+
+
+          first line]])
+        end)
+
+        it('supports dot repetition and a count', function()
+          n.clear({ args_rm = { '--cmd' } })
+          n.insert([[first line]])
+          n.feed('[<Space>')
+          n.feed('3.')
+          n.expect([[
+
+
+
+
+          first line]])
+        end)
       end)
 
       describe(']<Space>', function()
@@ -195,6 +216,29 @@ describe('default', function()
           first line
 
 
+
+
+          ]])
+        end)
+
+        it('supports dot repetition', function()
+          n.clear({ args_rm = { '--cmd' } })
+          n.insert([[first line]])
+          n.feed(']<Space>')
+          n.feed('.')
+          n.expect([[
+          first line
+
+          ]])
+        end)
+
+        it('supports dot repetition and a count', function()
+          n.clear({ args_rm = { '--cmd' } })
+          n.insert([[first line]])
+          n.feed(']<Space>')
+          n.feed('2.')
+          n.expect([[
+          first line
 
 
           ]])

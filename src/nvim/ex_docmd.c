@@ -5501,12 +5501,14 @@ static void ex_tabs(exarg_T *eap)
 
     msg_putchar('\n');
     vim_snprintf(IObuff, IOSIZE, _("Tab page %d"), tabcount++);
-    msg_outtrans(IObuff, HL_ATTR(HLF_T));
+    msg_outtrans(IObuff, HLF_T, false);
     os_breakcheck();
 
     FOR_ALL_WINDOWS_IN_TAB(wp, tp) {
       if (got_int) {
         break;
+      } else if (!wp->w_config.focusable) {
+        continue;
       }
 
       msg_putchar('\n');
@@ -5519,7 +5521,7 @@ static void ex_tabs(exarg_T *eap)
       } else {
         home_replace(wp->w_buffer, wp->w_buffer->b_fname, IObuff, IOSIZE, true);
       }
-      msg_outtrans(IObuff, 0);
+      msg_outtrans(IObuff, 0, false);
       os_breakcheck();
     }
   }
@@ -7776,7 +7778,7 @@ void verify_command(char *cmd)
   if (strcmp("smile", cmd) != 0) {
     return;  // acceptable non-existing command
   }
-  int a = HL_ATTR(HLF_E);
+  int a = HLF_E;
   msg(" #xxn`          #xnxx`        ,+x@##@Mz;`        .xxx"
       "xxxxxxnz+,      znnnnnnnnnnnnnnnn.", a);
   msg(" n###z          x####`      :x##########W+`      ,###"

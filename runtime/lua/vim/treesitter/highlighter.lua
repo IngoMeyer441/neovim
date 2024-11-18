@@ -93,9 +93,6 @@ function TSHighlighter.new(tree, opts)
   opts = opts or {} ---@type { queries: table<string,string> }
   self.tree = tree
   tree:register_cbs({
-    on_bytes = function(...)
-      self:on_bytes(...)
-    end,
     on_detach = function()
       self:on_detach()
     end,
@@ -215,13 +212,6 @@ function TSHighlighter:for_each_highlight_state(fn)
 end
 
 ---@package
----@param start_row integer
----@param new_end integer
-function TSHighlighter:on_bytes(_, _, start_row, _, _, _, _, _, new_end)
-  api.nvim__redraw({ buf = self.bufnr, range = { start_row, start_row + new_end + 1 } })
-end
-
----@package
 function TSHighlighter:on_detach()
   self:destroy()
 end
@@ -229,8 +219,8 @@ end
 ---@package
 ---@param changes Range6[]
 function TSHighlighter:on_changedtree(changes)
-  for _, ch in ipairs(changes) do
-    api.nvim__redraw({ buf = self.bufnr, range = { ch[1], ch[4] + 1 } })
+  for i, ch in ipairs(changes) do
+    api.nvim__redraw({ buf = self.bufnr, range = { ch[1], ch[4] + 1 }, flush = i == #changes })
   end
 end
 

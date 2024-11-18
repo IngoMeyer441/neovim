@@ -13,30 +13,12 @@ local eq = t.eq
 local is_os = t.is_os
 local api = n.api
 
-local function new_screen(opt)
-  local screen = Screen.new(25, 5)
-  screen:attach(opt)
-  screen:set_default_attr_ids({
-    [1] = { bold = true, foreground = Screen.colors.Blue1 },
-    [2] = { reverse = true },
-    [3] = { bold = true, reverse = true },
-    [4] = { foreground = Screen.colors.Grey100, background = Screen.colors.Red },
-    [5] = { bold = true, foreground = Screen.colors.SeaGreen4 },
-    [6] = { foreground = Screen.colors.Magenta },
-    [7] = { bold = true, foreground = Screen.colors.Brown },
-    [8] = { foreground = Screen.colors.Black, background = Screen.colors.LightGrey },
-    [9] = { bold = true },
-    [10] = { background = Screen.colors.Yellow1 },
-  })
-  return screen
-end
-
 local function test_cmdline(linegrid)
   local screen
 
   before_each(function()
     clear()
-    screen = new_screen({ rgb = true, ext_cmdline = true, ext_linegrid = linegrid })
+    screen = Screen.new(25, 5, { rgb = true, ext_cmdline = true, ext_linegrid = linegrid })
   end)
 
   it('works', function()
@@ -189,7 +171,7 @@ local function test_cmdline(linegrid)
       },
       {
         firstc = '=',
-        content = { { '1', 6 }, { '+', 7 }, { '2', 6 } },
+        content = { { '1', 26 }, { '+', 15 }, { '2', 26 } },
         pos = 3,
       },
     }
@@ -503,29 +485,24 @@ local function test_cmdline(linegrid)
       map <f5>  :let x = input({'prompt':'>','highlight':'RainBowParens'})<cr>
       "map <f5>  :let x = input({'prompt':'>'})<cr>
     ]])
-    screen:set_default_attr_ids({
-      RBP1 = { background = Screen.colors.Red },
-      RBP2 = { background = Screen.colors.Yellow },
-      EOB = { bold = true, foreground = Screen.colors.Blue1 },
-    })
     feed('<f5>(a(b)a)')
     screen:expect {
       grid = [[
       ^                         |
-      {EOB:~                        }|*3
+      {1:~                        }|*3
                                |
     ]],
       cmdline = {
         {
           prompt = '>',
           content = {
-            { '(', 'RBP1' },
+            { '(', 30 },
             { 'a' },
-            { '(', 'RBP2' },
+            { '(', 10 },
             { 'b' },
-            { ')', 'RBP2' },
+            { ')', 10 },
             { 'a' },
-            { ')', 'RBP1' },
+            { ')', 30 },
           },
           pos = 7,
         },
@@ -865,7 +842,7 @@ describe('cmdline redraw', function()
   local screen
   before_each(function()
     clear()
-    screen = new_screen({ rgb = true })
+    screen = Screen.new(25, 5, { rgb = true })
   end)
 
   it('with timer', function()
@@ -929,17 +906,17 @@ describe('cmdline redraw', function()
                                               |
       {1:~                                       }|*3
       {2:[No Name]                               }|
-      {1::}^a{8:bc}                                    |
+      {1::}^a{17:bc}                                    |
       {1:~                                       }|*2
       {3:[Command Line]                          }|
-      {9:-- VISUAL --}                            |
+      {5:-- VISUAL --}                            |
     ]])
     feed('<C-C>')
     screen:expect([[
                                               |
       {1:~                                       }|*3
       {2:[No Name]                               }|
-      {1::}a{8:bc}                                    |
+      {1::}a{17:bc}                                    |
       {1:~                                       }|*2
       {3:[Command Line]                          }|
       :^abc                                    |
@@ -1030,7 +1007,7 @@ describe('statusline is redrawn on entering cmdline', function()
 
   before_each(function()
     clear()
-    screen = new_screen()
+    screen = Screen.new(25, 5)
     command('set laststatus=2')
   end)
 
@@ -1093,61 +1070,61 @@ describe('statusline is redrawn on entering cmdline', function()
     feed(':echoerr doesnotexist<cr>')
     screen:expect {
       grid = [[
-      {9:c1                                 }|
+      {5:c1                                 }|
                                          |
       {3:c1                                 }|
                                          |
       {1:~                                  }|*5
       {3:                                   }|
-      {4:E121: Undefined variable: doesnotex}|
-      {4:ist}                                |
-      {5:Press ENTER or type command to cont}|
-      {5:inue}^                               |
+      {9:E121: Undefined variable: doesnotex}|
+      {9:ist}                                |
+      {6:Press ENTER or type command to cont}|
+      {6:inue}^                               |
     ]],
     }
     feed(':echoerr doesnotexist<cr>')
     screen:expect {
       grid = [[
-      {9:c2                                 }|
+      {5:c2                                 }|
                                          |
       {3:c2                                 }|
                                          |
       {1:~                                  }|*2
       {3:                                   }|
-      {4:E121: Undefined variable: doesnotex}|
-      {4:ist}                                |
-      {5:Press ENTER or type command to cont}|
-      {4:E121: Undefined variable: doesnotex}|
-      {4:ist}                                |
-      {5:Press ENTER or type command to cont}|
-      {5:inue}^                               |
+      {9:E121: Undefined variable: doesnotex}|
+      {9:ist}                                |
+      {6:Press ENTER or type command to cont}|
+      {9:E121: Undefined variable: doesnotex}|
+      {9:ist}                                |
+      {6:Press ENTER or type command to cont}|
+      {6:inue}^                               |
     ]],
     }
 
     feed(':echoerr doesnotexist<cr>')
     screen:expect {
       grid = [[
-      {9:c3                                 }|
+      {5:c3                                 }|
                                          |
       {3:c3                                 }|
       {3:                                   }|
-      {4:E121: Undefined variable: doesnotex}|
-      {4:ist}                                |
-      {5:Press ENTER or type command to cont}|
-      {4:E121: Undefined variable: doesnotex}|
-      {4:ist}                                |
-      {5:Press ENTER or type command to cont}|
-      {4:E121: Undefined variable: doesnotex}|
-      {4:ist}                                |
-      {5:Press ENTER or type command to cont}|
-      {5:inue}^                               |
+      {9:E121: Undefined variable: doesnotex}|
+      {9:ist}                                |
+      {6:Press ENTER or type command to cont}|
+      {9:E121: Undefined variable: doesnotex}|
+      {9:ist}                                |
+      {6:Press ENTER or type command to cont}|
+      {9:E121: Undefined variable: doesnotex}|
+      {9:ist}                                |
+      {6:Press ENTER or type command to cont}|
+      {6:inue}^                               |
     ]],
     }
 
     feed('<cr>')
     screen:expect {
       grid = [[
-      {9:n3                                 }|
+      {5:n3                                 }|
       ^                                   |
       {3:n3                                 }|
                                          |
@@ -1202,12 +1179,6 @@ end)
 it('tabline is not redrawn in Ex mode #24122', function()
   clear()
   local screen = Screen.new(60, 5)
-  screen:set_default_attr_ids({
-    [0] = { bold = true, foreground = Screen.colors.Blue }, -- NonText
-    [1] = { bold = true, reverse = true }, -- MsgSeparator
-    [2] = { reverse = true }, -- TabLineFill
-  })
-  screen:attach()
 
   exec([[
     set showtabline=2
@@ -1224,7 +1195,7 @@ it('tabline is not redrawn in Ex mode #24122', function()
     grid = [[
     {2:foo                                                         }|
                                                                 |
-    {1:                                                            }|
+    {3:                                                            }|
     Entering Ex mode.  Type "visual" to go to Normal mode.      |
     :^                                                           |
   ]],
@@ -1233,7 +1204,7 @@ it('tabline is not redrawn in Ex mode #24122', function()
   feed('echo 1<CR>')
   screen:expect {
     grid = [[
-    {1:                                                            }|
+    {3:                                                            }|
     Entering Ex mode.  Type "visual" to go to Normal mode.      |
     :echo 1                                                     |
     1                                                           |
@@ -1247,7 +1218,6 @@ describe('cmdline height', function()
 
   it('does not crash resized screen #14263', function()
     local screen = Screen.new(25, 10)
-    screen:attach()
     command('set cmdheight=9999')
     screen:try_resize(25, 5)
     assert_alive()
@@ -1268,7 +1238,6 @@ describe('cmdheight=0', function()
   before_each(function()
     clear()
     screen = Screen.new(25, 5)
-    screen:attach()
   end)
 
   it('with redrawdebug=invalid resize -1', function()
@@ -1535,7 +1504,7 @@ describe('cmdheight=0', function()
 
   it('with silent! at startup', function()
     clear { args = { '-c', 'set cmdheight=0', '-c', 'autocmd VimEnter * silent! call Foo()' } }
-    screen:attach()
+    screen = Screen.new(25, 5)
     -- doesn't crash while not displaying silent! error message
     screen:expect {
       grid = [[
@@ -1547,7 +1516,7 @@ describe('cmdheight=0', function()
 
   it('with multigrid', function()
     clear { args = { '--cmd', 'set cmdheight=0' } }
-    screen:attach { ext_multigrid = true }
+    screen = Screen.new(25, 5, { ext_multigrid = true })
     api.nvim_buf_set_lines(0, 0, -1, true, { 'p' })
     screen:expect {
       grid = [[
@@ -1710,7 +1679,7 @@ describe('cmdheight=0', function()
 
   it('can be resized with external messages', function()
     clear()
-    screen = new_screen({ rgb = true, ext_messages = true })
+    screen = Screen.new(25, 5, { rgb = true, ext_messages = true })
     command('set laststatus=2 mouse=a')
     command('resize -1')
     screen:expect([[
