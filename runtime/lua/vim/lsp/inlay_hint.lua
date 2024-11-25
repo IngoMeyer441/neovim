@@ -65,7 +65,7 @@ function M.on_inlayhint(err, result, ctx)
   if num_unprocessed == 0 then
     client_hints[client_id] = {}
     bufstate.version = ctx.version
-    api.nvim__redraw({ buf = bufnr, valid = true })
+    api.nvim__redraw({ buf = bufnr, valid = true, flush = false })
     return
   end
 
@@ -81,7 +81,7 @@ function M.on_inlayhint(err, result, ctx)
 
   client_hints[client_id] = new_lnum_hints
   bufstate.version = ctx.version
-  api.nvim__redraw({ buf = bufnr, valid = true })
+  api.nvim__redraw({ buf = bufnr, valid = true, flush = false })
 end
 
 --- |lsp-handler| for the method `workspace/inlayHint/refresh`
@@ -122,12 +122,12 @@ end
 --- local hint = vim.lsp.inlay_hint.get({ bufnr = 0 })[1] -- 0 for current buffer
 ---
 --- local client = vim.lsp.get_client_by_id(hint.client_id)
---- local resp = client.request_sync('inlayHint/resolve', hint.inlay_hint, 100, 0)
+--- local resp = client:request_sync('inlayHint/resolve', hint.inlay_hint, 100, 0)
 --- local resolved_hint = assert(resp and resp.result, resp.err)
 --- vim.lsp.util.apply_text_edits(resolved_hint.textEdits, 0, client.encoding)
 ---
 --- location = resolved_hint.label[1].location
---- client.request('textDocument/hover', {
+--- client:request('textDocument/hover', {
 ---   textDocument = { uri = location.uri },
 ---   position = location.range.start,
 --- })
@@ -215,7 +215,7 @@ local function clear(bufnr)
     end
   end
   api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
-  api.nvim__redraw({ buf = bufnr, valid = true })
+  api.nvim__redraw({ buf = bufnr, valid = true, flush = false })
 end
 
 --- Disable inlay hints for a buffer

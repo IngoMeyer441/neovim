@@ -232,7 +232,7 @@ describe('LSP', function()
           -- client is a dummy object which will queue up commands to be run
           -- once the server initializes. It can't accept lua callbacks or
           -- other types that may be unserializable for now.
-          client.stop()
+          client:stop()
         end,
         -- If the program timed out, then code will be nil.
         on_exit = function(code, signal)
@@ -254,8 +254,8 @@ describe('LSP', function()
       test_rpc_server {
         test_name = 'basic_init',
         on_init = function(client)
-          client.notify('test')
-          client.stop()
+          client:notify('test')
+          client:stop()
         end,
         on_exit = function(code, signal)
           eq(101, code, 'exit code') -- See fake-lsp-server.lua
@@ -275,7 +275,7 @@ describe('LSP', function()
       test_rpc_server({
         test_name = 'basic_init_did_change_configuration',
         on_init = function(client, _)
-          client.stop()
+          client:stop()
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -333,9 +333,9 @@ describe('LSP', function()
         test_name = 'basic_init',
         on_init = function(client)
           eq(0, client.server_capabilities().textDocumentSync.change)
-          client.request('shutdown')
-          client.notify('exit')
-          client.stop()
+          client:request('shutdown')
+          client:notify('exit')
+          client:stop()
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -377,7 +377,7 @@ describe('LSP', function()
         end,
         on_init = function(_client)
           client = _client
-          client.notify('finish')
+          client:notify('finish')
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -395,7 +395,7 @@ describe('LSP', function()
                 return vim.lsp.buf_is_attached(_G.BUFFER, _G.TEST_RPC_CLIENT_ID)
               end)
             )
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -430,7 +430,7 @@ describe('LSP', function()
               return vim.lsp.buf_attach_client(_G.BUFFER, _G.TEST_RPC_CLIENT_ID)
             end)
           )
-          client.notify('finish')
+          client:notify('finish')
         end,
         on_handler = function(_, _, ctx)
           if ctx.method == 'finish' then
@@ -439,7 +439,7 @@ describe('LSP', function()
               return vim.lsp.buf_detach_client(_G.BUFFER, _G.TEST_RPC_CLIENT_ID)
             end)
             eq('basic_init', api.nvim_get_var('lsp_detached'))
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -466,13 +466,20 @@ describe('LSP', function()
               true,
               exec_lua(function()
                 local keymap --- @type table<string,any>
+                local called = false
+                local origin = vim.lsp.buf.hover
+                vim.lsp.buf.hover = function()
+                  called = true
+                end
                 vim._with({ buf = _G.BUFFER }, function()
                   keymap = vim.fn.maparg('K', 'n', false, true)
                 end)
-                return keymap.callback == vim.lsp.buf.hover
+                keymap.callback()
+                vim.lsp.buf.hover = origin
+                return called
               end)
             )
-            client.stop()
+            client:stop()
           end
         end,
         on_exit = function(_, _)
@@ -480,13 +487,13 @@ describe('LSP', function()
           eq('', get_buf_option('omnifunc'))
           eq('', get_buf_option('formatexpr'))
           eq(
-            '',
+            true,
             exec_lua(function()
               local keymap --- @type string
               vim._with({ buf = _G.BUFFER }, function()
                 keymap = vim.fn.maparg('K', 'n', false, false)
               end)
-              return keymap
+              return keymap:match('<Lua %d+: .+/runtime/lua/vim/lsp%.lua:%d+>') ~= nil
             end)
           )
         end,
@@ -524,7 +531,7 @@ describe('LSP', function()
             eq('v:lua.vim.lsp.tagfunc', get_buf_option('tagfunc', BUFFER_1))
             eq('v:lua.vim.lsp.omnifunc', get_buf_option('omnifunc', BUFFER_2))
             eq('v:lua.vim.lsp.formatexpr()', get_buf_option('formatexpr', BUFFER_2))
-            client.stop()
+            client:stop()
           end
         end,
         on_exit = function(_, _)
@@ -554,7 +561,7 @@ describe('LSP', function()
             eq('tfu', get_buf_option('tagfunc'))
             eq('ofu', get_buf_option('omnifunc'))
             eq('fex', get_buf_option('formatexpr'))
-            client.stop()
+            client:stop()
           end
         end,
         on_exit = function(_, _)
@@ -711,10 +718,10 @@ describe('LSP', function()
               ctx.method,
               result
             )
-            client.notify('workspace/configuration', server_result)
+            client:notify('workspace/configuration', server_result)
           end
           if ctx.method == 'shutdown' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -756,7 +763,7 @@ describe('LSP', function()
       test_rpc_server {
         test_name = 'basic_check_capabilities',
         on_init = function(client)
-          client.stop()
+          client:stop()
           local full_kind = exec_lua(function()
             return require 'vim.lsp.protocol'.TextDocumentSyncKind.Full
           end)
@@ -798,7 +805,7 @@ describe('LSP', function()
               vim.api.nvim_exec_autocmds('BufWritePost', { buffer = _G.BUFFER, modeline = false })
             end)
           else
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -898,7 +905,7 @@ describe('LSP', function()
               end)
             end)
           else
-            client.stop()
+            client:stop()
           end
         end,
       })
@@ -929,20 +936,20 @@ describe('LSP', function()
               vim.api.nvim_exec_autocmds('BufWritePost', { buffer = _G.BUFFER, modeline = false })
             end)
           else
-            client.stop()
+            client:stop()
           end
         end,
       }
     end)
 
-    it('client.supports_methods() should validate capabilities', function()
+    it('client:supports_methods() should validate capabilities', function()
       local expected_handlers = {
         { NIL, {}, { method = 'shutdown', client_id = 1 } },
       }
       test_rpc_server {
         test_name = 'capabilities_for_client_supports_method',
         on_init = function(client)
-          client.stop()
+          client:stop()
           local expected_sync_capabilities = {
             change = 1,
             openClose = true,
@@ -958,11 +965,11 @@ describe('LSP', function()
           eq(true, client.server_capabilities().codeLensProvider.resolveProvider)
 
           -- known methods for resolved capabilities
-          eq(true, client.supports_method('textDocument/hover'))
-          eq(false, client.supports_method('textDocument/definition'))
+          eq(true, client:supports_method('textDocument/hover'))
+          eq(false, client:supports_method('textDocument/definition'))
 
           -- unknown methods are assumed to be supported.
-          eq(true, client.supports_method('unknown-method'))
+          eq(true, client:supports_method('unknown-method'))
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -989,7 +996,7 @@ describe('LSP', function()
           end)
         end,
         on_init = function(client)
-          client.stop()
+          client:stop()
           exec_lua(function()
             vim.lsp.buf.type_definition()
           end)
@@ -1018,7 +1025,7 @@ describe('LSP', function()
             end)
           end,
           on_init = function(client)
-            client.stop()
+            client:stop()
             exec_lua(function()
               vim.lsp.buf.type_definition()
             end)
@@ -1042,7 +1049,7 @@ describe('LSP', function()
       test_rpc_server {
         test_name = 'check_forward_request_cancelled',
         on_init = function(_client)
-          _client.request('error_code_test')
+          _client:request('error_code_test')
           client = _client
         end,
         on_exit = function(code, signal)
@@ -1053,7 +1060,7 @@ describe('LSP', function()
         on_handler = function(err, _, ctx)
           eq(table.remove(expected_handlers), { err, {}, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1072,7 +1079,7 @@ describe('LSP', function()
       test_rpc_server {
         test_name = 'check_forward_content_modified',
         on_init = function(_client)
-          _client.request('error_code_test')
+          _client:request('error_code_test')
           client = _client
         end,
         on_exit = function(code, signal)
@@ -1084,10 +1091,10 @@ describe('LSP', function()
           eq(table.remove(expected_handlers), { err, _, ctx }, 'expected handler')
           -- if ctx.method == 'error_code_test' then client.notify("finish") end
           if ctx.method ~= 'finish' then
-            client.notify('finish')
+            client:notify('finish')
           end
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1103,13 +1110,13 @@ describe('LSP', function()
         test_name = 'check_pending_request_tracked',
         on_init = function(_client)
           client = _client
-          client.request('slow_request')
+          client:request('slow_request')
           local request = exec_lua(function()
             return _G.TEST_RPC_CLIENT.requests[2]
           end)
           eq('slow_request', request.method)
           eq('pending', request.type)
-          client.notify('release')
+          client:notify('release')
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -1123,10 +1130,10 @@ describe('LSP', function()
               return _G.TEST_RPC_CLIENT.requests[2]
             end)
             eq(nil, request)
-            client.notify('finish')
+            client:notify('finish')
           end
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1141,14 +1148,14 @@ describe('LSP', function()
         test_name = 'check_cancel_request_tracked',
         on_init = function(_client)
           client = _client
-          client.request('slow_request')
-          client.cancel_request(2)
+          client:request('slow_request')
+          client:cancel_request(2)
           local request = exec_lua(function()
             return _G.TEST_RPC_CLIENT.requests[2]
           end)
           eq('slow_request', request.method)
           eq('cancel', request.type)
-          client.notify('release')
+          client:notify('release')
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -1162,7 +1169,7 @@ describe('LSP', function()
           end)
           eq(nil, request)
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1178,19 +1185,19 @@ describe('LSP', function()
         test_name = 'check_tracked_requests_cleared',
         on_init = function(_client)
           client = _client
-          client.request('slow_request')
+          client:request('slow_request')
           local request = exec_lua(function()
             return _G.TEST_RPC_CLIENT.requests[2]
           end)
           eq('slow_request', request.method)
           eq('pending', request.type)
-          client.cancel_request(2)
+          client:cancel_request(2)
           request = exec_lua(function()
             return _G.TEST_RPC_CLIENT.requests[2]
           end)
           eq('slow_request', request.method)
           eq('cancel', request.type)
-          client.notify('release')
+          client:notify('release')
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -1204,10 +1211,10 @@ describe('LSP', function()
               return _G.TEST_RPC_CLIENT.requests[2]
             end)
             eq(nil, request)
-            client.notify('finish')
+            client:notify('finish')
           end
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1225,11 +1232,11 @@ describe('LSP', function()
           command('let g:requests = 0')
           command('autocmd LspRequest * let g:requests+=1')
           client = _client
-          client.request('slow_request')
+          client:request('slow_request')
           eq(1, eval('g:requests'))
-          client.cancel_request(2)
+          client:cancel_request(2)
           eq(2, eval('g:requests'))
-          client.notify('release')
+          client:notify('release')
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -1240,10 +1247,10 @@ describe('LSP', function()
         on_handler = function(err, _, ctx)
           eq(table.remove(expected_handlers), { err, {}, ctx }, 'expected handler')
           if ctx.method == 'slow_request' then
-            client.notify('finish')
+            client:notify('finish')
           end
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1277,7 +1284,7 @@ describe('LSP', function()
           end)
           eq(full_kind, client.server_capabilities().textDocumentSync.change)
           eq(true, client.server_capabilities().textDocumentSync.openClose)
-          client.notify('finish')
+          client:notify('finish')
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -1286,7 +1293,7 @@ describe('LSP', function()
         on_handler = function(err, result, ctx)
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1333,11 +1340,11 @@ describe('LSP', function()
         end,
         on_handler = function(err, result, ctx)
           if ctx.method == 'start' then
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1378,11 +1385,11 @@ describe('LSP', function()
         end,
         on_handler = function(err, result, ctx)
           if ctx.method == 'start' then
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1428,11 +1435,11 @@ describe('LSP', function()
                 'boop',
               })
             end)
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1479,11 +1486,11 @@ describe('LSP', function()
                 'boop',
               })
             end)
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1529,7 +1536,7 @@ describe('LSP', function()
         end,
         on_init = function(_client)
           client = _client
-          eq(true, client.supports_method('textDocument/inlayHint'))
+          eq(true, client:supports_method('textDocument/inlayHint'))
           exec_lua(function()
             assert(vim.lsp.buf_attach_client(_G.BUFFER, _G.TEST_RPC_CLIENT_ID))
           end)
@@ -1545,11 +1552,11 @@ describe('LSP', function()
             end)
           end
           if ctx.method == 'textDocument/inlayHint' then
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1598,11 +1605,11 @@ describe('LSP', function()
                 '123boop',
               })
             end)
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1652,11 +1659,11 @@ describe('LSP', function()
                 '123boop',
               })
             end)
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1699,11 +1706,11 @@ describe('LSP', function()
         on_handler = function(err, result, ctx)
           if ctx.method == 'start' then
             n.command('normal! 1Go')
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1752,11 +1759,11 @@ describe('LSP', function()
                 'boop',
               })
             end)
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1806,11 +1813,11 @@ describe('LSP', function()
               })
               vim.api.nvim_command(_G.BUFFER .. 'bwipeout')
             end)
-            client.notify('finish')
+            client:notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -1830,7 +1837,7 @@ describe('LSP', function()
         on_setup = function() end,
         on_init = function(_client)
           client = _client
-          client.stop(true)
+          client:stop(true)
         end,
         on_exit = function(code, signal)
           eq(0, code, 'exit code')
@@ -1882,7 +1889,7 @@ describe('LSP', function()
         on_handler = function(err, result, ctx)
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
           if ctx.method == 'finish' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -2348,7 +2355,7 @@ describe('LSP', function()
       test_rpc_server {
         test_name = 'basic_init',
         on_init = function(client, _)
-          client.stop()
+          client:stop()
         end,
         -- If the program timed out, then code will be nil.
         on_exit = function(code, signal)
@@ -3499,7 +3506,7 @@ describe('LSP', function()
         }
         return vim.lsp.util.convert_signature_help_to_markdown_lines(signature_help, 'zig', { '(' })
       end)
-      -- Note that although the higlight positions below are 0-indexed, the 2nd parameter
+      -- Note that although the highlight positions below are 0-indexed, the 2nd parameter
       -- corresponds to the 3rd line because the first line is the ``` from the
       -- Markdown block.
       local expected = { 3, 4, 3, 11 }
@@ -4284,7 +4291,7 @@ describe('LSP', function()
                   end)
                 )
               end
-              client.stop()
+              client:stop()
             end
           end,
         }
@@ -4331,7 +4338,7 @@ describe('LSP', function()
                 return type(vim.lsp.commands['dummy2'])
               end)
             )
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -4372,7 +4379,7 @@ describe('LSP', function()
               vim.lsp.buf.code_action()
             end)
           elseif ctx.method == 'shutdown' then
-            client.stop()
+            client:stop()
           end
         end,
       })
@@ -4447,7 +4454,7 @@ describe('LSP', function()
                 return type(vim.lsp.commands['executed_type_annotate'])
               end)
             )
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -4564,7 +4571,7 @@ describe('LSP', function()
             end)
             eq({ command = 'Dummy', title = 'Lens1' }, cmd)
           elseif ctx.method == 'shutdown' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -4653,7 +4660,7 @@ describe('LSP', function()
             end)
             eq({ command = 'Dummy', title = 'Lens2' }, response)
           elseif ctx.method == 'shutdown' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -4762,7 +4769,7 @@ describe('LSP', function()
             return notify_msg
           end)
           eq('[LSP] Format request failed, no matching language servers.', notify_msg)
-          client.stop()
+          client:stop()
         end,
       }
     end)
@@ -4795,7 +4802,7 @@ describe('LSP', function()
             end)
             eq(nil, notify_msg)
           elseif ctx.method == 'shutdown' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -4836,7 +4843,7 @@ describe('LSP', function()
             end)
             eq(nil, notify_msg)
           elseif ctx.method == 'shutdown' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -4883,7 +4890,7 @@ describe('LSP', function()
             end)
             eq(nil, notify_msg)
           elseif ctx.method == 'shutdown' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -4930,7 +4937,7 @@ describe('LSP', function()
             end)
             eq({ handler_called = true }, result)
           elseif ctx.method == 'shutdown' then
-            client.stop()
+            client:stop()
           end
         end,
       }
@@ -5477,7 +5484,7 @@ describe('LSP', function()
           result[#result + 1] = {
             method = method,
             fname = fname,
-            supported = client.supports_method(method, { bufnr = bufnr }),
+            supported = client:supports_method(method, { bufnr = bufnr }),
           }
         end
 

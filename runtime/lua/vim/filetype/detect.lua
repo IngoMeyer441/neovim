@@ -181,6 +181,16 @@ function M.changelog(_, bufnr)
 end
 
 --- @type vim.filetype.mapfn
+function M.cl(_, bufnr)
+  local lines = table.concat(getlines(bufnr, 1, 4))
+  if lines:match('/%*') then
+    return 'opencl'
+  else
+    return 'lisp'
+  end
+end
+
+--- @type vim.filetype.mapfn
 function M.class(_, bufnr)
   -- Check if not a Java class (starts with '\xca\xfe\xba\xbe')
   if not getline(bufnr, 1):find('^\202\254\186\190') then
@@ -227,7 +237,8 @@ end
 --- Debian Control
 --- @type vim.filetype.mapfn
 function M.control(_, bufnr)
-  if getline(bufnr, 1):find('^Source:') then
+  local line1 = getline(bufnr, 1)
+  if line1 and findany(line1, { '^Source:', '^Package:' }) then
     return 'debcontrol'
   end
 end
