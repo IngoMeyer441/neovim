@@ -561,10 +561,18 @@ static bool is_first_match(const compl_T *const match)
   return match == compl_first_match;
 }
 
-static void do_autocmd_completedone(int c)
+static void do_autocmd_completedone(int c, int mode, char *word)
 {
   save_v_event_T save_v_event;
   dict_T *v_event = get_v_event(&save_v_event);
+
+  mode = mode & ~CTRL_X_WANT_IDENT;
+  char *mode_str = NULL;
+  if (ctrl_x_mode_names[mode]) {
+    mode_str = ctrl_x_mode_names[mode];
+  }
+  tv_dict_add_str(v_event, S_LEN("complete_word"), word != NULL ? word : "");
+  tv_dict_add_str(v_event, S_LEN("complete_type"), mode_str != NULL ? mode_str : "");
 
   tv_dict_add_str(v_event, S_LEN("reason"), (c == Ctrl_Y ? "accept" : "cancel"));
   tv_dict_set_keys_readonly(v_event);
@@ -943,14 +951,14 @@ static void ins_compl_longest_match(compl_T *match)
     compl_leader = xstrdup(match->cp_str);
 
     bool had_match = (curwin->w_cursor.col > compl_col);
-    ins_compl_delete();
+    ins_compl_delete(false);
     ins_bytes(compl_leader + get_compl_len());
     ins_redraw(false);
 
     // When the match isn't there (to avoid matching itself) remove it
     // again after redrawing.
     if (!had_match) {
-      ins_compl_delete();
+      ins_compl_delete(false);
     }
     compl_used_match = false;
 
@@ -977,14 +985,14 @@ static void ins_compl_longest_match(compl_T *match)
     // Leader was shortened, need to change the inserted text.
     *p = NUL;
     bool had_match = (curwin->w_cursor.col > compl_col);
-    ins_compl_delete();
+    ins_compl_delete(false);
     ins_bytes(compl_leader + get_compl_len());
     ins_redraw(false);
 
     // When the match isn't there (to avoid matching itself) remove it
     // again after redrawing.
     if (!had_match) {
-      ins_compl_delete();
+      ins_compl_delete(false);
     }
   }
 
@@ -1803,7 +1811,7 @@ static bool ins_compl_need_restart(void)
 static void ins_compl_new_leader(void)
 {
   ins_compl_del_pum();
-  ins_compl_delete();
+  ins_compl_delete(true);
   ins_bytes(compl_leader + get_compl_len());
   compl_used_match = false;
 
@@ -2114,19 +2122,21 @@ static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
     }
   }
 
+  char *word = NULL;
   // If the popup menu is displayed pressing CTRL-Y means accepting
   // the selection without inserting anything.  When
   // compl_enter_selects is set the Enter key does the same.
   if ((c == Ctrl_Y || (compl_enter_selects
                        && (c == CAR || c == K_KENTER || c == NL)))
       && pum_visible()) {
+    word = xstrdup(compl_shown_match->cp_str);
     retval = true;
   }
 
   // CTRL-E means completion is Ended, go back to the typed text.
   // but only do this, if the Popup is still visible
   if (c == Ctrl_E) {
-    ins_compl_delete();
+    ins_compl_delete(false);
     char *p = NULL;
     if (compl_leader != NULL) {
       p = compl_leader;
@@ -2177,7 +2187,8 @@ static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
   }
   // Trigger the CompleteDone event to give scripts a chance to act
   // upon the end of completion.
-  do_autocmd_completedone(c);
+  do_autocmd_completedone(c, prev_mode, word);
+  xfree(word);
 
   return retval;
 }
@@ -2266,7 +2277,7 @@ bool ins_compl_prep(int c)
   } else if (ctrl_x_mode == CTRL_X_LOCAL_MSG) {
     // Trigger the CompleteDone event to give scripts a chance to act
     // upon the (possibly failed) completion.
-    do_autocmd_completedone(c);
+    do_autocmd_completedone(c, ctrl_x_mode, NULL);
   }
 
   may_trigger_modechanged();
@@ -3598,11 +3609,24 @@ static void ins_compl_update_shown_match(void)
 }
 
 /// Delete the old text being completed.
-void ins_compl_delete(void)
+void ins_compl_delete(bool new_leader)
 {
+  // Avoid deleting text that will be reinserted when changing leader. This
+  // allows marks present on the original text to shrink/grow appropriately.
+  int orig_col = 0;
+  if (new_leader) {
+    char *orig = compl_orig_text;
+    char *leader = ins_compl_leader();
+    while (*orig != NUL && utf_ptr2char(orig) == utf_ptr2char(leader)) {
+      leader += utf_ptr2len(leader);
+      orig += utf_ptr2len(orig);
+    }
+    orig_col = (int)(orig - compl_orig_text);
+  }
+
   // In insert mode: Delete the typed part.
   // In replace mode: Put the old characters back, if any.
-  int col = compl_col + (compl_status_adding() ? compl_length : 0);
+  int col = compl_col + (compl_status_adding() ? compl_length : orig_col);
   if ((int)curwin->w_cursor.col > col) {
     if (stop_arrow() == FAIL) {
       return;
@@ -3846,7 +3870,7 @@ static int ins_compl_next(bool allow_get_expansion, int count, bool insert_match
   if (allow_get_expansion && insert_match
       && (!compl_get_longest || compl_used_match)) {
     // Delete old text to be replaced
-    ins_compl_delete();
+    ins_compl_delete(false);
   }
 
   // When finding the longest common text we stick at the original text,
@@ -3899,7 +3923,7 @@ static int ins_compl_next(bool allow_get_expansion, int count, bool insert_match
 
     // Delete old text to be replaced, since we're still searching and
     // don't want to match ourselves!
-    ins_compl_delete();
+    ins_compl_delete(false);
   }
 
   // Enter will select a match when the match wasn't inserted and the popup

@@ -2997,7 +2997,7 @@ getbufline({buf}, {lnum} [, {end}])                               *getbufline()*
                 Parameters: ~
                   • {buf} (`integer|string`)
                   • {lnum} (`integer`)
-                  • {end_} (`integer?`)
+                  • {end} (`integer?`)
 
                 Return: ~
                   (`any`)
@@ -3635,7 +3635,7 @@ getline({lnum} [, {end}])                                            *getline()*
 
                 Parameters: ~
                   • {lnum} (`integer|string`)
-                  • {end_} (`nil|false?`)
+                  • {end} (`nil|false?`)
 
                 Return: ~
                   (`string`)
@@ -5443,7 +5443,7 @@ jobwait({jobs} [, {timeout}])                                        *jobwait()*
                   • {timeout} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`integer[]`)
 
 join({list} [, {sep}])                                                  *join()*
 		Join the items in {list} together into one String.
@@ -6292,7 +6292,7 @@ matchbufline({buf}, {pat}, {lnum}, {end}, [, {dict}])           *matchbufline()*
                   • {buf} (`string|integer`)
                   • {pat} (`string`)
                   • {lnum} (`string|integer`)
-                  • {end_} (`string|integer`)
+                  • {end} (`string|integer`)
                   • {dict} (`table?`)
 
                 Return: ~
@@ -7786,7 +7786,7 @@ reltime({start}, {end})
 
                 Parameters: ~
                   • {start} (`any?`)
-                  • {end_} (`any?`)
+                  • {end} (`any?`)
 
                 Return: ~
                   (`any`)
@@ -7847,7 +7847,7 @@ remove({list}, {idx}, {end})
                 Parameters: ~
                   • {list} (`any[]`)
                   • {idx} (`integer`)
-                  • {end_} (`integer?`)
+                  • {end} (`integer?`)
 
                 Return: ~
                   (`any`)
@@ -7869,7 +7869,7 @@ remove({blob}, {idx}, {end})
                 Parameters: ~
                   • {blob} (`any`)
                   • {idx} (`integer`)
-                  • {end_} (`integer?`)
+                  • {end} (`integer?`)
 
                 Return: ~
                   (`any`)
@@ -7986,7 +7986,7 @@ rpcnotify({channel}, {event} [, {args}...])                        *rpcnotify()*
                 Parameters: ~
                   • {channel} (`integer`)
                   • {event} (`string`)
-                  • {args} (`any?`)
+                  • {...} (`any`)
 
                 Return: ~
                   (`any`)
@@ -8001,7 +8001,7 @@ rpcrequest({channel}, {method} [, {args}...])                     *rpcrequest()*
                 Parameters: ~
                   • {channel} (`integer`)
                   • {method} (`string`)
-                  • {args} (`any?`)
+                  • {...} (`any`)
 
                 Return: ~
                   (`any`)
@@ -8500,7 +8500,7 @@ searchpair({start}, {middle}, {end} [, {flags} [, {skip} [, {stopline} [, {timeo
                 Parameters: ~
                   • {start} (`string`)
                   • {middle} (`string`)
-                  • {end_} (`string`)
+                  • {end} (`string`)
                   • {flags} (`string?`)
                   • {skip} (`string|function?`)
                   • {stopline} (`integer?`)
@@ -8524,7 +8524,7 @@ searchpairpos({start}, {middle}, {end} [, {flags} [, {skip} [, {stopline} [, {ti
                 Parameters: ~
                   • {start} (`string`)
                   • {middle} (`string`)
-                  • {end_} (`string`)
+                  • {end} (`string`)
                   • {flags} (`string?`)
                   • {skip} (`string|function?`)
                   • {stopline} (`integer?`)
@@ -9840,7 +9840,7 @@ slice({expr}, {start} [, {end}])                                       *slice()*
                 Parameters: ~
                   • {expr} (`any`)
                   • {start} (`integer`)
-                  • {end_} (`integer?`)
+                  • {end} (`integer?`)
 
                 Return: ~
                   (`any`)
@@ -10234,6 +10234,7 @@ str2list({string} [, {utf8}])                                       *str2list()*
 		and exists only for backwards-compatibility.
 		With UTF-8 composing characters are handled properly: >vim
 			echo str2list("á")		" returns [97, 769]
+<
 
                 Parameters: ~
                   • {string} (`string`)
@@ -11991,7 +11992,7 @@ winlayout([{tabnr}])                                               *winlayout()*
                   • {tabnr} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`any[]`)
 
 winline()                                                            *winline()*
 		The result is a Number, which is the screen line of the cursor

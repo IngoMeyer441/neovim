@@ -1530,9 +1530,9 @@ return {
         	    a match from the menu. Only works in combination with
         	    "menu" or "menuone". No effect if "longest" is present.
 
-           noselect Do not select a match in the menu, force the user to
-        	    select one from the menu. Only works in combination with
-        	    "menu" or "menuone".
+           noselect Same as "noinsert", except that no menu item is
+        	    pre-selected. If both "noinsert" and "noselect" are present,
+        	    "noselect" has precedence.
 
            fuzzy    Enable |fuzzy-matching| for completion candidates. This
         	    allows for more flexible and intuitive matching, where
@@ -4094,7 +4094,7 @@ return {
       desc = [=[
         A history of ":" commands, and a history of previous search patterns
         is remembered.  This option decides how many entries may be stored in
-        each of these histories (see |cmdline-editing| and 'msghistory' for
+        each of these histories (see |cmdline-editing| and 'messagesopt' for
         the number of messages to remember).
         The maximum value is 10000.
       ]=],
@@ -5449,6 +5449,41 @@ return {
       varname = 'p_mis',
     },
     {
+      abbreviation = 'mopt',
+      cb = 'did_set_messagesopt',
+      defaults = { if_true = 'hit-enter,history:500' },
+      values = { 'hit-enter', 'wait:', 'history:' },
+      flags = true,
+      deny_duplicates = true,
+      desc = [=[
+        Option settings for outputting messages.  It can consist of the
+        following items.  Items must be separated by a comma.
+
+        hit-enter	Use a |hit-enter| prompt when the message is longer than
+        		'cmdheight' size.
+
+        wait:{n}	Instead of using a |hit-enter| prompt, simply wait for
+        		{n} milliseconds so that the user has a chance to read
+        		the message.  The maximum value of {n} is 10000.  Use
+        		0 to disable the wait (but then the user may miss an
+        		important message).
+        		This item is ignored when "hit-enter" is present, but
+        		required when "hit-enter" is not present.
+
+        history:{n}	Determines how many entries are remembered in the
+        		|:messages| history.  The maximum value is 10000.
+        		Setting it to zero clears the message history.
+        		This item must always be present.
+      ]=],
+      expand_cb = 'expand_set_messagesopt',
+      full_name = 'messagesopt',
+      list = 'onecommacolon',
+      scope = { 'global' },
+      short_desc = N_('options for outputting messages'),
+      type = 'string',
+      varname = 'p_mopt',
+    },
+    {
       abbreviation = 'msm',
       cb = 'did_set_mkspellmem',
       defaults = { if_true = '460000,2000,500' },
@@ -5891,21 +5926,6 @@ return {
       short_desc = N_('max time between mouse double-click'),
       type = 'number',
       varname = 'p_mouset',
-    },
-    {
-      abbreviation = 'mhi',
-      cb = 'did_set_msghistory',
-      defaults = { if_true = 500 },
-      desc = [=[
-        Determines how many entries are remembered in the |:messages| history.
-        The maximum value is 10000.
-        Setting it to zero clears the message history.
-      ]=],
-      full_name = 'msghistory',
-      scope = { 'global' },
-      short_desc = N_('how many messages are remembered'),
-      type = 'number',
-      varname = 'p_mhi',
     },
     {
       abbreviation = 'nf',

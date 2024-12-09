@@ -1559,9 +1559,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 		    a match from the menu. Only works in combination with
 		    "menu" or "menuone". No effect if "longest" is present.
 
-	   noselect Do not select a match in the menu, force the user to
-		    select one from the menu. Only works in combination with
-		    "menu" or "menuone".
+	   noselect Same as "noinsert", except that no menu item is
+		    pre-selected. If both "noinsert" and "noselect" are present,
+		    "noselect" has precedence.
 
 	   fuzzy    Enable |fuzzy-matching| for completion candidates. This
 		    allows for more flexible and intuitive matching, where
@@ -3197,7 +3197,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 	A history of ":" commands, and a history of previous search patterns
 	is remembered.  This option decides how many entries may be stored in
-	each of these histories (see |cmdline-editing| and 'msghistory' for
+	each of these histories (see |cmdline-editing| and 'messagesopt' for
 	the number of messages to remember).
 	The maximum value is 10000.
 
@@ -4045,6 +4045,28 @@ A jump table for the options with a short description can be found at |Q_op|.
 	generated from a list of items, e.g., the Buffers menu.  Changing this
 	option has no direct effect, the menu must be refreshed first.
 
+						*'messagesopt'* *'mopt'*
+'messagesopt' 'mopt'	string	(default "hit-enter,history:500")
+			global
+	Option settings for outputting messages.  It can consist of the
+	following items.  Items must be separated by a comma.
+
+	hit-enter	Use a |hit-enter| prompt when the message is longer than
+			'cmdheight' size.
+
+	wait:{n}	Instead of using a |hit-enter| prompt, simply wait for
+			{n} milliseconds so that the user has a chance to read
+			the message.  The maximum value of {n} is 10000.  Use
+			0 to disable the wait (but then the user may miss an
+			important message).
+			This item is ignored when "hit-enter" is present, but
+			required when "hit-enter" is not present.
+
+	history:{n}	Determines how many entries are remembered in the
+			|:messages| history.  The maximum value is 10000.
+			Setting it to zero clears the message history.
+			This item must always be present.
+
 						*'mkspellmem'* *'msm'*
 'mkspellmem' 'msm'	string	(default "460000,2000,500")
 			global
@@ -4289,13 +4311,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 	Defines the maximum time in msec between two mouse clicks for the
 	second click to be recognized as a multi click.
-
-						*'msghistory'* *'mhi'*
-'msghistory' 'mhi'	number	(default 500)
-			global
-	Determines how many entries are remembered in the |:messages| history.
-	The maximum value is 10000.
-	Setting it to zero clears the message history.
 
 						*'nrformats'* *'nf'*
 'nrformats' 'nf'	string	(default "bin,hex")

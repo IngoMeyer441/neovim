@@ -2,6 +2,8 @@ local api, if_nil = vim.api, vim.F.if_nil
 
 local M = {}
 
+local _qf_id = nil
+
 --- [diagnostic-structure]()
 ---
 --- Diagnostics use the same indexing as the rest of the Nvim API (i.e. 0-based
@@ -571,13 +573,6 @@ local underline_highlight_map = make_highlight_map('Underline')
 local floating_highlight_map = make_highlight_map('Floating')
 local sign_highlight_map = make_highlight_map('Sign')
 
-local function get_bufnr(bufnr)
-  if not bufnr or bufnr == 0 then
-    return api.nvim_get_current_buf()
-  end
-  return bufnr
-end
-
 --- @param diagnostics vim.Diagnostic[]
 --- @return table<integer,vim.Diagnostic[]>
 local function diagnostic_lines(diagnostics)
@@ -640,7 +635,7 @@ end
 --- @param namespace integer
 --- @param bufnr? integer
 local function save_extmarks(namespace, bufnr)
-  bufnr = get_bufnr(bufnr)
+  bufnr = vim._resolve_bufnr(bufnr)
   if not diagnostic_attached_buffers[bufnr] then
     api.nvim_buf_attach(bufnr, false, {
       on_lines = function(_, _, _, _, _, last)
@@ -812,7 +807,7 @@ local function get_diagnostics(bufnr, opts, clamp)
       end
     end
   elseif namespace == nil then
-    bufnr = get_bufnr(bufnr)
+    bufnr = vim._resolve_bufnr(bufnr)
     for iter_namespace in pairs(diagnostic_cache[bufnr]) do
       add_all_diags(bufnr, diagnostic_cache[bufnr][iter_namespace])
     end
@@ -823,7 +818,7 @@ local function get_diagnostics(bufnr, opts, clamp)
       end
     end
   else
-    bufnr = get_bufnr(bufnr)
+    bufnr = vim._resolve_bufnr(bufnr)
     for _, iter_namespace in ipairs(namespace) do
       add_all_diags(bufnr, diagnostic_cache[bufnr][iter_namespace] or {})
     end
@@ -848,9 +843,26 @@ local function set_list(loclist, opts)
   local diagnostics = get_diagnostics(bufnr, opts --[[@as vim.diagnostic.GetOpts]], false)
   local items = M.toqflist(diagnostics)
   if loclist then
-    vim.fn.setloclist(winnr, {}, ' ', { title = title, items = items })
+    vim.fn.setloclist(winnr, {}, 'u', { title = title, items = items })
   else
-    vim.fn.setqflist({}, ' ', { title = title, items = items })
+    -- Check if the diagnostics quickfix list no longer exists.
+    if _qf_id and vim.fn.getqflist({ id = _qf_id }).id == 0 then
+      _qf_id = nil
+    end
+
+    -- If we already have a diagnostics quickfix, update it rather than creating a new one.
+    -- This avoids polluting the finite set of quickfix lists, and preserves the currently selected
+    -- entry.
+    vim.fn.setqflist({}, _qf_id and 'u' or ' ', {
+      title = title,
+      items = items,
+      id = _qf_id,
+    })
+
+    -- Get the id of the newly created quickfix list.
+    if _qf_id == nil then
+      _qf_id = vim.fn.getqflist({ id = 0 }).id
+    end
   end
   if open then
     api.nvim_command(loclist and 'lwindow' or 'botright cwindow')
@@ -1081,7 +1093,7 @@ function M.set(namespace, bufnr, diagnostics, opts)
   vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
   vim.validate('opts', opts, 'table', true)
 
-  bufnr = get_bufnr(bufnr)
+  bufnr = vim._resolve_bufnr(bufnr)
 
   if vim.tbl_isempty(diagnostics) then
     diagnostic_cache[bufnr][namespace] = nil
@@ -1361,7 +1373,7 @@ M.handlers.signs = {
     vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
     vim.validate('opts', opts, 'table', true)
 
-    bufnr = get_bufnr(bufnr)
+    bufnr = vim._resolve_bufnr(bufnr)
     opts = opts or {}
 
     if not api.nvim_buf_is_loaded(bufnr) then
@@ -1467,7 +1479,7 @@ M.handlers.underline = {
     vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
     vim.validate('opts', opts, 'table', true)
 
-    bufnr = get_bufnr(bufnr)
+    bufnr = vim._resolve_bufnr(bufnr)
     opts = opts or {}
 
     if not vim.api.nvim_buf_is_loaded(bufnr) then
@@ -1531,7 +1543,7 @@ M.handlers.virtual_text = {
     vim.validate('diagnostics', diagnostics, vim.islist, 'a list of diagnostics')
     vim.validate('opts', opts, 'table', true)
 
-    bufnr = get_bufnr(bufnr)
+    bufnr = vim._resolve_bufnr(bufnr)
     opts = opts or {}
 
     if not vim.api.nvim_buf_is_loaded(bufnr) then
@@ -1656,7 +1668,7 @@ function M.hide(namespace, bufnr)
   vim.validate('namespace', namespace, 'number', true)
   vim.validate('bufnr', bufnr, 'number', true)
 
-  local buffers = bufnr and { get_bufnr(bufnr) } or vim.tbl_keys(diagnostic_cache)
+  local buffers = bufnr and { vim._resolve_bufnr(bufnr) } or vim.tbl_keys(diagnostic_cache)
   for _, iter_bufnr in ipairs(buffers) do
     local namespaces = namespace and { namespace } or vim.tbl_keys(diagnostic_cache[iter_bufnr])
     for _, iter_namespace in ipairs(namespaces) do
@@ -1683,7 +1695,7 @@ function M.is_enabled(filter)
     return vim.tbl_isempty(diagnostic_disabled) and not diagnostic_disabled[1]
   end
 
-  local bufnr = get_bufnr(filter.bufnr)
+  local bufnr = vim._resolve_bufnr(filter.bufnr)
   if type(diagnostic_disabled[bufnr]) == 'table' then
     return not diagnostic_disabled[bufnr][filter.ns_id]
   end
@@ -1724,7 +1736,7 @@ function M.show(namespace, bufnr, diagnostics, opts)
       end
     else
       -- namespace is nil
-      bufnr = get_bufnr(bufnr)
+      bufnr = vim._resolve_bufnr(bufnr)
       for iter_namespace in pairs(diagnostic_cache[bufnr]) do
         M.show(iter_namespace, bufnr, nil, opts)
       end
@@ -1791,7 +1803,7 @@ function M.open_float(opts, ...)
   end
 
   opts = opts or {}
-  bufnr = get_bufnr(bufnr or opts.bufnr)
+  bufnr = vim._resolve_bufnr(bufnr or opts.bufnr)
 
   do
     -- Resolve options with user settings from vim.diagnostic.config
@@ -1994,7 +2006,7 @@ function M.reset(namespace, bufnr)
   vim.validate('namespace', namespace, 'number', true)
   vim.validate('bufnr', bufnr, 'number', true)
 
-  local buffers = bufnr and { get_bufnr(bufnr) } or vim.tbl_keys(diagnostic_cache)
+  local buffers = bufnr and { vim._resolve_bufnr(bufnr) } or vim.tbl_keys(diagnostic_cache)
   for _, iter_bufnr in ipairs(buffers) do
     local namespaces = namespace and { namespace } or vim.tbl_keys(diagnostic_cache[iter_bufnr])
     for _, iter_namespace in ipairs(namespaces) do
@@ -2132,7 +2144,7 @@ function M.enable(enable, filter)
       ns.disabled = not enable
     end
   else
-    bufnr = get_bufnr(bufnr)
+    bufnr = vim._resolve_bufnr(bufnr)
     if not ns_id then
       diagnostic_disabled[bufnr] = (not enable) and true or nil
     else

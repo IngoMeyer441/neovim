@@ -534,7 +534,8 @@ gO			Show a filetype-specific, navigable "outline" of the
 			current buffer. For example, in a |help| buffer this
 			shows the table of contents.
 
-			Currently works in |help| and |:Man| buffers.
+			Works in |help| and |:Man| buffers, or any buffer with
+			an active |LSP| client (|lsp-defaults|).
 
 [N]gs							*gs* *:sl* *:sleep*
 :[N]sl[eep] [N][m]	Do nothing for [N] seconds, or [N] milliseconds if [m]
@@ -551,8 +552,7 @@ gO			Show a filetype-specific, navigable "outline" of the
 			Queued messages are processed during the sleep.
 
 							*:sl!* *:sleep!*
-:[N]sl[eep]! [N][m]	Same as above. Unlike Vim, it does not hide the
-			cursor. |vim-differences|
+:[N]sl[eep]! [N][m]	Same as above, but hide the cursor.
 
 ==============================================================================
 2. Using Vim like less or more					*less*
