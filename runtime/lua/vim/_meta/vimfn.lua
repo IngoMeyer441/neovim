@@ -1147,8 +1147,9 @@ function vim.fn.confirm(msg, choices, default, type) end
 --- A |Dictionary| is copied in a similar way as a |List|.
 --- Also see |deepcopy()|.
 ---
---- @param expr any
---- @return any
+--- @generic T
+--- @param expr T
+--- @return T
 function vim.fn.copy(expr) end
 
 --- Return the cosine of {expr}, measured in radians, as a |Float|.
@@ -1228,7 +1229,7 @@ function vim.fn.ctxpush(types) end
 ---
 --- @param context table
 --- @param index? integer
---- @return any
+--- @return integer
 function vim.fn.ctxset(context, index) end
 
 --- Returns the size of the |context-stack|.
@@ -1308,9 +1309,10 @@ function vim.fn.debugbreak(pid) end
 --- {noref} set to 1 will fail.
 --- Also see |copy()|.
 ---
---- @param expr any
+--- @generic T
+--- @param expr T
 --- @param noref? boolean
---- @return any
+--- @return T
 function vim.fn.deepcopy(expr, noref) end
 
 --- Without {flags} or with {flags} empty: Deletes the file by the
@@ -1421,7 +1423,7 @@ function vim.fn.dictwatcherdel(dict, pattern, callback) end
 --- editing another buffer to set 'filetype' and load a syntax
 --- file.
 ---
---- @return any
+--- @return integer
 function vim.fn.did_filetype() end
 
 --- Returns the number of filler lines above line {lnum}.
@@ -1433,7 +1435,7 @@ function vim.fn.did_filetype() end
 --- Returns 0 if the current window is not in diff mode.
 ---
 --- @param lnum integer
---- @return any
+--- @return integer
 function vim.fn.diff_filler(lnum) end
 
 --- Returns the highlight ID for diff mode at line {lnum} column
@@ -1468,7 +1470,7 @@ function vim.fn.diff_hlID(lnum, col) end
 --- <
 ---
 --- @param chars string
---- @return any
+--- @return string
 function vim.fn.digraph_get(chars) end
 
 --- Return a list of digraphs.  If the {listall} argument is given
@@ -1486,7 +1488,7 @@ function vim.fn.digraph_get(chars) end
 --- <
 ---
 --- @param listall? boolean
---- @return any
+--- @return string[][]
 function vim.fn.digraph_getlist(listall) end
 
 --- Add digraph {chars} to the list.  {chars} must be a string
@@ -1538,7 +1540,7 @@ function vim.fn.digraph_setlist(digraphlist) end
 --- - A |Blob| is empty when its length is zero.
 ---
 --- @param expr any
---- @return any
+--- @return integer
 function vim.fn.empty(expr) end
 
 --- Return all of environment variables as dictionary. You can
@@ -1561,7 +1563,7 @@ function vim.fn.environ() end
 ---
 --- @param string string
 --- @param chars string
---- @return any
+--- @return string
 function vim.fn.escape(string, chars) end
 
 --- Evaluate {string} and return the result.  Especially useful to
@@ -2368,7 +2370,7 @@ function vim.fn.foldtextresult(lnum) end
 ---
 --- @param expr1 string|table
 --- @param expr2 string|function
---- @return any
+--- @return string|table
 function vim.fn.foreach(expr1, expr2) end
 
 --- Get the full command name from a short abbreviated command
@@ -2675,7 +2677,7 @@ function vim.fn.getbufinfo(dict) end
 --- @param buf integer|string
 --- @param lnum integer
 --- @param end_? integer
---- @return any
+--- @return string[]
 function vim.fn.getbufline(buf, lnum, end_) end
 
 --- Just like `getbufline()` but only get one line and return it
@@ -2943,7 +2945,7 @@ function vim.fn.getcmdprompt() end
 --- Also see |getcmdpos()|, |setcmdpos()|, |getcmdline()| and
 --- |setcmdline()|.
 ---
---- @return any
+--- @return integer
 function vim.fn.getcmdscreenpos() end
 
 --- Return the current command-line type. Possible return values
@@ -3869,7 +3871,7 @@ function vim.fn.gettagstack(winnr) end
 --- strings.
 ---
 --- @param text string
---- @return any
+--- @return string
 function vim.fn.gettext(text) end
 
 --- Returns information about windows as a |List| with Dictionaries.
@@ -4020,7 +4022,7 @@ function vim.fn.glob(expr, nosuf, list, alllinks) end
 --- a backslash usually means a path separator.
 ---
 --- @param string string
---- @return any
+--- @return string
 function vim.fn.glob2regpat(string) end
 
 --- Perform glob() for String {expr} on all directories in {path}
@@ -4354,7 +4356,7 @@ function vim.fn.hostname() end
 --- @param string string
 --- @param from string
 --- @param to string
---- @return any
+--- @return string
 function vim.fn.iconv(string, from, to) end
 
 --- Returns a |String| which is a unique identifier of the
@@ -4374,7 +4376,7 @@ function vim.fn.iconv(string, from, to) end
 --- reuse identifiers of the garbage-collected ones.
 ---
 --- @param expr any
---- @return any
+--- @return string
 function vim.fn.id(expr) end
 
 --- The result is a Number, which is indent of line {lnum} in the
@@ -4418,7 +4420,7 @@ function vim.fn.indent(lnum) end
 --- @param expr any
 --- @param start? integer
 --- @param ic? boolean
---- @return any
+--- @return integer
 function vim.fn.index(object, expr, start, ic) end
 
 --- Returns the index of an item in {object} where {expr} is
@@ -4462,14 +4464,14 @@ function vim.fn.index(object, expr, start, ic) end
 --- @param object any
 --- @param expr any
 --- @param opts? table
---- @return any
+--- @return integer
 function vim.fn.indexof(object, expr, opts) end
 
 ---
 --- @param prompt string
 --- @param text? string
 --- @param completion? string
---- @return any
+--- @return string
 function vim.fn.input(prompt, text, completion) end
 
 --- The result is a String, which is whatever the user typed on
@@ -4583,7 +4585,7 @@ function vim.fn.input(prompt, text, completion) end
 --- <
 ---
 --- @param opts table
---- @return any
+--- @return string
 function vim.fn.input(opts) end
 
 --- @deprecated
@@ -4618,7 +4620,7 @@ function vim.fn.inputlist(textlist) end
 --- called.  Calling it more often is harmless though.
 --- Returns TRUE when there is nothing to restore, FALSE otherwise.
 ---
---- @return any
+--- @return integer
 function vim.fn.inputrestore() end
 
 --- Preserve typeahead (also from mappings) and clear it, so that
@@ -4628,7 +4630,7 @@ function vim.fn.inputrestore() end
 --- many inputrestore() calls.
 --- Returns TRUE when out of memory, FALSE otherwise.
 ---
---- @return any
+--- @return integer
 function vim.fn.inputsave() end
 
 --- This function acts much like the |input()| function with but
@@ -4643,7 +4645,7 @@ function vim.fn.inputsave() end
 ---
 --- @param prompt string
 --- @param text? string
---- @return any
+--- @return string
 function vim.fn.inputsecret(prompt, text) end
 
 --- When {object} is a |List| or a |Blob| insert {item} at the start
@@ -4689,8 +4691,8 @@ function vim.fn.interrupt() end
 ---   let bits = invert(bits)
 --- <
 ---
---- @param expr number
---- @return any
+--- @param expr integer
+--- @return integer
 function vim.fn.invert(expr) end
 
 --- The result is a Number, which is |TRUE| when {path} is an
@@ -4769,7 +4771,7 @@ function vim.fn.isnan(expr) end
 --- cases, items() returns a List with the index and the value at
 --- the index.
 ---
---- @param dict any
+--- @param dict table
 --- @return any
 function vim.fn.items(dict) end
 
@@ -4890,7 +4892,7 @@ function vim.fn.jobsend(...) end
 ---
 --- @param cmd string|string[]
 --- @param opts? table
---- @return any
+--- @return integer
 function vim.fn.jobstart(cmd, opts) end
 
 --- Stop |job-id| {id} by sending SIGTERM to the job process. If
@@ -4903,7 +4905,7 @@ function vim.fn.jobstart(cmd, opts) end
 --- exited or stopped.
 ---
 --- @param id integer
---- @return any
+--- @return integer
 function vim.fn.jobstop(id) end
 
 --- Waits for jobs and their |on_exit| handlers to complete.
@@ -4943,7 +4945,7 @@ function vim.fn.jobwait(jobs, timeout) end
 ---
 --- @param list any[]
 --- @param sep? string
---- @return any
+--- @return string
 function vim.fn.join(list, sep) end
 
 --- Convert {expr} from JSON object.  Accepts |readfile()|-style
@@ -4976,14 +4978,14 @@ function vim.fn.json_decode(expr) end
 --- |Blob|s are converted to arrays of the individual bytes.
 ---
 --- @param expr any
---- @return any
+--- @return string
 function vim.fn.json_encode(expr) end
 
 --- Return a |List| with all the keys of {dict}.  The |List| is in
 --- arbitrary order.  Also see |items()| and |values()|.
 ---
 --- @param dict table
---- @return any
+--- @return string[]
 function vim.fn.keys(dict) end
 
 --- Turn the internal byte representation of keys into a form that
@@ -4993,7 +4995,7 @@ function vim.fn.keys(dict) end
 --- <  <C-Home>
 ---
 --- @param string string
---- @return any
+--- @return string
 function vim.fn.keytrans(string) end
 
 --- @deprecated
@@ -5012,8 +5014,8 @@ function vim.fn.last_buffer_nr() end
 --- |Dictionary| is returned.
 --- Otherwise an error is given and returns zero.
 ---
---- @param expr any
---- @return any
+--- @param expr any[]
+--- @return integer
 function vim.fn.len(expr) end
 
 --- Call function {funcname} in the run-time library {libname}
@@ -5124,7 +5126,7 @@ function vim.fn.line2byte(lnum) end
 --- When {lnum} is invalid, -1 is returned.
 ---
 --- @param lnum integer
---- @return any
+--- @return integer
 function vim.fn.lispindent(lnum) end
 
 --- Return a Blob concatenating all the number values in {list}.
@@ -5137,7 +5139,7 @@ function vim.fn.lispindent(lnum) end
 --- |blob2list()| does the opposite.
 ---
 --- @param list any[]
---- @return any
+--- @return string
 function vim.fn.list2blob(list) end
 
 --- Convert each number in {list} to a character string can
@@ -5157,13 +5159,13 @@ function vim.fn.list2blob(list) end
 ---
 --- @param list any[]
 --- @param utf8? boolean
---- @return any
+--- @return string
 function vim.fn.list2str(list, utf8) end
 
 --- Return the current time, measured as seconds since 1st Jan
 --- 1970.  See also |strftime()|, |strptime()| and |getftime()|.
 ---
---- @return any
+--- @return integer
 function vim.fn.localtime() end
 
 --- Return the natural logarithm (base e) of {expr} as a |Float|.
@@ -5177,7 +5179,7 @@ function vim.fn.localtime() end
 --- <  5.0
 ---
 --- @param expr number
---- @return any
+--- @return number
 function vim.fn.log(expr) end
 
 --- Return the logarithm of Float {expr} to base 10 as a |Float|.
@@ -5190,7 +5192,7 @@ function vim.fn.log(expr) end
 --- <  -2.0
 ---
 --- @param expr number
---- @return any
+--- @return number
 function vim.fn.log10(expr) end
 
 --- {expr1} must be a |List|, |String|, |Blob| or |Dictionary|.
@@ -5952,7 +5954,7 @@ function vim.fn.matchstrpos(expr, pat, start, count) end
 --- an error.  An empty |List| or |Dictionary| results in zero.
 ---
 --- @param expr any
---- @return any
+--- @return number
 function vim.fn.max(expr) end
 
 --- Returns a |List| of |Dictionaries| describing |menus| (defined
@@ -6090,7 +6092,7 @@ function vim.fn.menu_info(name, mode) end
 --- an error.  An empty |List| or |Dictionary| results in zero.
 ---
 --- @param expr any
---- @return any
+--- @return number
 function vim.fn.min(expr) end
 
 --- Create directory {name}.
@@ -6135,7 +6137,7 @@ function vim.fn.min(expr) end
 --- @param name string
 --- @param flags? string
 --- @param prot? string
---- @return any
+--- @return integer
 function vim.fn.mkdir(name, flags, prot) end
 
 --- Return a string that indicates the current mode.
@@ -6298,7 +6300,7 @@ function vim.fn.msgpackparse(data) end
 --- See also |prevnonblank()|.
 ---
 --- @param lnum integer
---- @return any
+--- @return integer
 function vim.fn.nextnonblank(lnum) end
 
 --- Return a string with a single character, which has the number
@@ -6317,7 +6319,7 @@ function vim.fn.nextnonblank(lnum) end
 ---
 --- @param expr integer
 --- @param utf8? boolean
---- @return any
+--- @return string
 function vim.fn.nr2char(expr, utf8) end
 
 --- Bitwise OR on the two arguments.  The arguments are converted
@@ -6351,7 +6353,7 @@ vim.fn['or'] = function(expr, expr1) end
 ---
 --- @param path string
 --- @param len? integer
---- @return any
+--- @return string
 function vim.fn.pathshorten(path, len) end
 
 --- Evaluate |perl| expression {expr} and return its result
@@ -6385,7 +6387,7 @@ function vim.fn.perleval(expr) end
 ---
 --- @param x number
 --- @param y number
---- @return any
+--- @return number
 function vim.fn.pow(x, y) end
 
 --- Return the line number of the first line at or above {lnum}
@@ -6397,7 +6399,7 @@ function vim.fn.pow(x, y) end
 --- Also see |nextnonblank()|.
 ---
 --- @param lnum integer
---- @return any
+--- @return integer
 function vim.fn.prevnonblank(lnum) end
 
 --- Return a String with {fmt}, where "%" items are replaced by
@@ -7016,10 +7018,11 @@ function vim.fn.readfile(fname, type, max) end
 ---   echo reduce('xyz', { acc, val -> acc .. ',' .. val })
 --- <
 ---
+--- @generic T
 --- @param object any
---- @param func function
+--- @param func fun(accumulator: T, current: any): any
 --- @param initial? any
---- @return any
+--- @return T
 function vim.fn.reduce(object, func, initial) end
 
 --- Returns the single letter name of the register being executed.
@@ -7172,7 +7175,7 @@ function vim.fn.remove(dict, key) end
 ---
 --- @param from string
 --- @param to string
---- @return any
+--- @return integer
 function vim.fn.rename(from, to) end
 
 --- Repeat {expr} {count} times and return the concatenated
@@ -7202,7 +7205,7 @@ vim.fn['repeat'] = function(expr, count) end
 --- path name) and also keeps a trailing path separator.
 ---
 --- @param filename string
---- @return any
+--- @return string
 function vim.fn.resolve(filename) end
 
 --- Reverse the order of items in {object}.  {object} can be a
@@ -7215,8 +7218,9 @@ function vim.fn.resolve(filename) end
 ---   let revlist = reverse(copy(mylist))
 --- <
 ---
---- @param object any
---- @return any
+--- @generic T
+--- @param object T[]
+--- @return T[]
 function vim.fn.reverse(object) end
 
 --- Round off {expr} to the nearest integral value and return it
@@ -7233,7 +7237,7 @@ function vim.fn.reverse(object) end
 --- <  -5.0
 ---
 --- @param expr number
---- @return any
+--- @return number
 function vim.fn.round(expr) end
 
 --- Sends {event} to {channel} via |RPC| and returns immediately.
@@ -7245,7 +7249,7 @@ function vim.fn.round(expr) end
 --- @param channel integer
 --- @param event string
 --- @param ... any
---- @return any
+--- @return integer
 function vim.fn.rpcnotify(channel, event, ...) end
 
 --- Sends a request to {channel} to invoke {method} via
@@ -7302,7 +7306,7 @@ function vim.fn.rubyeval(expr) end
 ---
 --- @param row integer
 --- @param col integer
---- @return any
+--- @return integer
 function vim.fn.screenattr(row, col) end
 
 --- The result is a Number, which is the character at position
@@ -7316,7 +7320,7 @@ function vim.fn.screenattr(row, col) end
 ---
 --- @param row integer
 --- @param col integer
---- @return any
+--- @return integer
 function vim.fn.screenchar(row, col) end
 
 --- The result is a |List| of Numbers.  The first number is the same
@@ -7327,7 +7331,7 @@ function vim.fn.screenchar(row, col) end
 ---
 --- @param row integer
 --- @param col integer
---- @return any
+--- @return integer[]
 function vim.fn.screenchars(row, col) end
 
 --- The result is a Number, which is the current screen column of
@@ -7344,7 +7348,7 @@ function vim.fn.screenchars(row, col) end
 ---   noremap GG <Cmd>echom screencol()<CR>
 --- <
 ---
---- @return any
+--- @return integer[]
 function vim.fn.screencol() end
 
 --- The result is a Dict with the screen position of the text
@@ -7383,7 +7387,7 @@ function vim.fn.screenpos(winid, lnum, col) end
 ---
 --- Note: Same restrictions as with |screencol()|.
 ---
---- @return any
+--- @return integer
 function vim.fn.screenrow() end
 
 --- The result is a String that contains the base character and
@@ -7395,7 +7399,7 @@ function vim.fn.screenrow() end
 ---
 --- @param row integer
 --- @param col integer
---- @return any
+--- @return string
 function vim.fn.screenstring(row, col) end
 
 --- Search for regexp pattern {pattern}.  The search starts at the
@@ -7800,7 +7804,7 @@ function vim.fn.searchpos(pattern, flags, stopline, timeout, skip) end
 ---   echo serverlist()
 --- <
 ---
---- @return any
+--- @return string[]
 function vim.fn.serverlist() end
 
 --- Opens a socket or named pipe at {address} and listens for
@@ -7837,7 +7841,7 @@ function vim.fn.serverlist() end
 --- <
 ---
 --- @param address? string
---- @return any
+--- @return string
 function vim.fn.serverstart(address) end
 
 --- Closes the pipe or socket at {address}.
@@ -7846,7 +7850,7 @@ function vim.fn.serverstart(address) end
 --- address in |serverlist()|.
 ---
 --- @param address string
---- @return any
+--- @return integer
 function vim.fn.serverstop(address) end
 
 --- Set line {lnum} to {text} in buffer {buf}.  This works like
@@ -7876,7 +7880,7 @@ function vim.fn.serverstop(address) end
 --- @param buf integer|string
 --- @param lnum integer
 --- @param text string|string[]
---- @return any
+--- @return integer
 function vim.fn.setbufline(buf, lnum, text) end
 
 --- Set option or local variable {varname} in buffer {buf} to
@@ -7981,7 +7985,7 @@ function vim.fn.setcharsearch(dict) end
 ---
 --- @param str string
 --- @param pos? integer
---- @return any
+--- @return integer
 function vim.fn.setcmdline(str, pos) end
 
 --- Set the cursor position in the command line to byte position
@@ -8291,7 +8295,7 @@ function vim.fn.setpos(expr, list) end
 --- @param list vim.quickfix.entry[]
 --- @param action? string
 --- @param what? vim.fn.setqflist.what
---- @return any
+--- @return integer
 function vim.fn.setqflist(list, action, what) end
 
 --- Set the register {regname} to {value}.
@@ -8444,7 +8448,7 @@ function vim.fn.setwinvar(nr, varname, val) end
 --- checksum of {string}.
 ---
 --- @param string string
---- @return any
+--- @return string
 function vim.fn.sha256(string) end
 
 --- Escape {string} for use as a shell command argument.
@@ -8480,7 +8484,7 @@ function vim.fn.sha256(string) end
 ---
 --- @param string string
 --- @param special? boolean
---- @return any
+--- @return string
 function vim.fn.shellescape(string, special) end
 
 --- Returns the effective value of 'shiftwidth'. This is the
@@ -8932,7 +8936,7 @@ function vim.fn.sign_unplacelist(list) end
 --- links before simplifying the path name, use |resolve()|.
 ---
 --- @param filename string
---- @return any
+--- @return string
 function vim.fn.simplify(filename) end
 
 --- Return the sine of {expr}, measured in radians, as a |Float|.
@@ -8945,7 +8949,7 @@ function vim.fn.simplify(filename) end
 --- <  0.763301
 ---
 --- @param expr number
---- @return any
+--- @return number
 function vim.fn.sin(expr) end
 
 --- Return the hyperbolic sine of {expr} as a |Float| in the range
@@ -9079,10 +9083,11 @@ function vim.fn.sockconnect(mode, address, opts) end
 ---   eval mylist->sort({i1, i2 -> i1 - i2})
 --- <
 ---
---- @param list any
+--- @generic T
+--- @param list T[]
 --- @param how? string|function
 --- @param dict? any
---- @return any
+--- @return T[]
 function vim.fn.sort(list, how, dict) end
 
 --- Return the sound-folded equivalent of {word}.  Uses the first
@@ -9093,7 +9098,7 @@ function vim.fn.sort(list, how, dict) end
 --- the method can be quite slow.
 ---
 --- @param word string
---- @return any
+--- @return string
 function vim.fn.soundfold(word) end
 
 --- Without argument: The result is the badly spelled word under
@@ -9146,7 +9151,7 @@ function vim.fn.spellbadword(sentence) end
 --- @param word string
 --- @param max? integer
 --- @param capital? boolean
---- @return any
+--- @return string[]
 function vim.fn.spellsuggest(word, max, capital) end
 
 --- Make a |List| out of {string}.  When {pattern} is omitted or
@@ -9176,7 +9181,7 @@ function vim.fn.spellsuggest(word, max, capital) end
 --- @param string string
 --- @param pattern? string
 --- @param keepempty? boolean
---- @return any
+--- @return string[]
 function vim.fn.split(string, pattern, keepempty) end
 
 --- Return the non-negative square root of Float {expr} as a
@@ -10179,7 +10184,7 @@ function vim.fn.tempname() end
 ---
 --- @param cmd string|string[]
 --- @param opts? table
---- @return any
+--- @return integer
 function vim.fn.termopen(cmd, opts) end
 
 --- Return a list with information about timers.
@@ -10579,7 +10584,7 @@ function vim.fn.virtcol(expr, list, winid) end
 --- @param winid integer
 --- @param lnum integer
 --- @param col integer
---- @return any
+--- @return integer
 function vim.fn.virtcol2col(winid, lnum, col) end
 
 --- The result is a String, which describes the last Visual mode
@@ -10600,7 +10605,7 @@ function vim.fn.virtcol2col(winid, lnum, col) end
 --- the old value is returned.  See |non-zero-arg|.
 ---
 --- @param expr? boolean
---- @return any
+--- @return string
 function vim.fn.visualmode(expr) end
 
 --- Waits until {condition} evaluates to |TRUE|, where {condition}
@@ -10717,7 +10722,7 @@ function vim.fn.win_id2tabwin(expr) end
 --- Return 0 if the window cannot be found in the current tabpage.
 ---
 --- @param expr integer
---- @return any
+--- @return integer
 function vim.fn.win_id2win(expr) end
 
 --- Move window {nr}'s vertical separator (i.e., the right border)
@@ -10915,7 +10920,7 @@ function vim.fn.winline() end
 --- <
 ---
 --- @param arg? string|integer
---- @return any
+--- @return integer
 function vim.fn.winnr(arg) end
 
 --- Returns a sequence of |:resize| commands that should restore
@@ -10928,7 +10933,7 @@ function vim.fn.winnr(arg) end
 ---   exe cmd
 --- <
 ---
---- @return any
+--- @return string
 function vim.fn.winrestcmd() end
 
 --- Uses the |Dictionary| returned by |winsaveview()| to restore
@@ -10993,7 +10998,7 @@ function vim.fn.winsaveview() end
 --- option.
 ---
 --- @param nr integer
---- @return any
+--- @return integer
 function vim.fn.winwidth(nr) end
 
 --- The result is a dictionary of byte/chars/word statistics for
@@ -11078,7 +11083,7 @@ function vim.fn.writefile(object, fname, flags) end
 ---   let bits = xor(bits, 0x80)
 --- <
 ---
---- @param expr number
---- @param expr1 number
---- @return any
+--- @param expr integer
+--- @param expr1 integer
+--- @return integer
 function vim.fn.xor(expr, expr1) end
