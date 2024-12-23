@@ -272,12 +272,12 @@ function vim.api.nvim_buf_attach(buffer, send_buffer, opts) end
 --- This temporarily switches current buffer to "buffer".
 --- If the current window already shows "buffer", the window is not switched.
 --- If a window inside the current tabpage (including a float) already shows the
---- buffer, then one of these windows will be set as current window temporarily.
+--- buffer, then one of those windows will be set as current window temporarily.
 --- Otherwise a temporary scratch window (called the "autocmd window" for
 --- historical reasons) will be used.
 ---
 --- This is useful e.g. to call Vimscript functions that only work with the
---- current buffer/window currently, like `termopen()`.
+--- current buffer/window currently, like `jobstart(…, {'term': v:true})`.
 ---
 --- @param buffer integer Buffer handle, or 0 for current buffer
 --- @param fun function Function to call inside the buffer (currently Lua callable
@@ -885,10 +885,8 @@ function vim.api.nvim_cmd(cmd, opts) end
 ---
 --- On execution error: fails with Vimscript error, updates v:errmsg.
 ---
---- Prefer using `nvim_cmd()` or `nvim_exec2()` over this. To evaluate multiple lines of Vim script
---- or an Ex command directly, use `nvim_exec2()`. To construct an Ex command using a structured
---- format and then execute it, use `nvim_cmd()`. To modify an Ex command before evaluating it, use
---- `nvim_parse_cmd()` in conjunction with `nvim_cmd()`.
+--- Prefer `nvim_cmd()` or `nvim_exec2()` instead. To modify an Ex command in a structured way
+--- before executing it, modify the result of `nvim_parse_cmd()` then pass it to `nvim_cmd()`.
 ---
 --- @param command string Ex command string
 function vim.api.nvim_command(command) end
@@ -2136,8 +2134,8 @@ function vim.api.nvim_set_current_win(window) end
 ---   ```
 ---     ["start", tick]
 ---   ```
---- - on_buf: called for each buffer being redrawn (before
----   window callbacks)
+--- - on_buf: called for each buffer being redrawn (once per edit,
+---   before window callbacks)
 ---   ```
 ---     ["buf", bufnr, tick]
 ---   ```

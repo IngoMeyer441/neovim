@@ -47,9 +47,11 @@ describe('ui/ext_messages', function()
       line ^1                   |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { '\ntest\n[O]k: ', 6, 11 } },
+          content = { { '\ntest\n[O]k: ', 6, 10 } },
+          history = false,
           kind = 'confirm',
         },
       },
@@ -75,31 +77,31 @@ describe('ui/ext_messages', function()
       line ^2                   |
       {1:~                        }|*3
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { '\ntest\n[O]k: ', 6, 11 } },
+          content = { { '\ntest\n[O]k: ', 6, 10 } },
+          history = false,
           kind = 'confirm',
         },
       },
     }
     feed('<cr><cr>')
     screen:expect {
-      grid = [[
-      line 1                   |
-      line ^2                   |
-      {1:~                        }|*3
-    ]],
       messages = {
         {
-          content = { { '\ntest\n[O]k: ', 6, 11 } },
+          content = { { '\ntest\n[O]k: ', 6, 10 } },
+          history = false,
           kind = 'confirm',
         },
         {
           content = { { '1' } },
+          history = false,
           kind = 'echo',
         },
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -114,9 +116,11 @@ describe('ui/ext_messages', function()
       l{10:i}ne ^2                   |
       {1:~                        }|*3
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'replace with X (y/n/a/q/l/^E/^Y)?', 6, 19 } },
+          content = { { 'replace with X (y/n/a/q/l/^E/^Y)?', 6, 18 } },
+          history = true,
           kind = 'confirm_sub',
         },
       },
@@ -135,7 +139,8 @@ describe('ui/ext_messages', function()
       ]],
       messages = {
         {
-          content = { { 'W10: Warning: Changing a readonly file', 19, 27 } },
+          content = { { 'W10: Warning: Changing a readonly file', 19, 26 } },
+          history = true,
           kind = 'wmsg',
         },
       },
@@ -149,9 +154,11 @@ describe('ui/ext_messages', function()
       line 2                   |
       {1:~                        }|*3
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'search hit BOTTOM, continuing at TOP', 19, 27 } },
+          content = { { 'search hit BOTTOM, continuing at TOP', 19, 26 } },
+          history = true,
           kind = 'wmsg',
         },
       },
@@ -160,22 +167,21 @@ describe('ui/ext_messages', function()
     -- kind=emsg after :throw
     feed(':throw "foo"<cr>')
     screen:expect {
-      grid = [[
-      l^ine 1                   |
-      line 2                   |
-      {1:~                        }|*3
-    ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'Error detected while processing :', 9, 7 } },
+          content = { { 'Error detected while processing :', 9, 6 } },
+          history = true,
           kind = 'emsg',
         },
         {
-          content = { { 'E605: Exception not caught: foo', 9, 7 } },
+          content = { { 'E605: Exception not caught: foo', 9, 6 } },
+          history = true,
           kind = 'emsg',
         },
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -191,9 +197,11 @@ describe('ui/ext_messages', function()
       ^line 2                   |
       {1:~                        }|*3
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
           content = { { '(2 of 2): line2' } },
+          history = true,
           kind = 'quickfix',
         },
       },
@@ -207,39 +215,85 @@ describe('ui/ext_messages', function()
         line 2                   |
         {1:~                        }|*3
       ]],
-      messages = { {
-        content = { { '?line ' } },
-        kind = 'search_cmd',
-      } },
+      cmdline = { { abort = false } },
+      messages = {
+        {
+          content = { { '?line ' } },
+          history = false,
+          kind = 'search_cmd',
+        },
+      },
     })
 
     -- highlight
-    feed(':hi ErrorMsg<cr>')
+    feed(':filter character highlight<CR>')
     screen:expect({
-      grid = [[
-        ^line 1                   |
-        line 2                   |
-        {1:~                        }|*3
-      ]],
+      cmdline = { { abort = false } },
       messages = {
         {
           content = {
-            { '\nErrorMsg      ' },
-            { 'xxx', 9, 7 },
+            { '\n@character     ' },
+            { 'xxx', 26, 150 },
             { ' ' },
-            { 'ctermfg=', 18, 6 },
-            { '15 ' },
-            { 'ctermbg=', 18, 6 },
-            { '1 ' },
-            { 'guifg=', 18, 6 },
-            { 'White ' },
-            { 'guibg=', 18, 6 },
-            { 'Red' },
+            { 'links to', 18, 5 },
+            { ' Character\n@character.special ' },
+            { 'xxx', 16, 151 },
+            { ' ' },
+            { 'links to', 18, 5 },
+            { ' SpecialChar' },
           },
+          history = false,
           kind = 'list_cmd',
         },
       },
     })
+
+    -- undo
+    feed('uu')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = {
+        {
+          content = { { 'Already at oldest change' } },
+          history = true,
+          kind = 'undo',
+        },
+      },
+    })
+
+    feed('<C-r><C-r><C-r>')
+    screen:expect({
+      grid = [[
+        line 1                   |
+        line^                     |
+        {1:~                        }|*3
+      ]],
+      messages = {
+        {
+          content = { { 'Already at newest change' } },
+          history = true,
+          kind = 'undo',
+        },
+      },
+    })
+
+    -- kind=completion
+    command('set noshowmode')
+    feed('i<C-n>')
+    screen:expect({
+      messages = {
+        {
+          content = { { 'The only match' } },
+          history = false,
+          kind = 'completion',
+        },
+      },
+    })
+    feed('<Esc>')
+    command('set showmode')
   end)
 
   it(':echoerr', function()
@@ -249,10 +303,14 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      messages = { {
-        content = { { 'raa', 9, 7 } },
-        kind = 'echoerr',
-      } },
+      cmdline = { { abort = false } },
+      messages = {
+        {
+          content = { { 'raa', 9, 6 } },
+          history = true,
+          kind = 'echoerr',
+        },
+      },
     }
 
     -- cmdline in a later input cycle clears error message
@@ -275,17 +333,21 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'bork', 9, 7 } },
+          content = { { 'bork', 9, 6 } },
+          history = true,
           kind = 'echoerr',
         },
         {
-          content = { { 'fail', 9, 7 } },
+          content = { { 'fail', 9, 6 } },
+          history = true,
           kind = 'echoerr',
         },
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -297,21 +359,26 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'bork', 9, 7 } },
+          content = { { 'bork', 9, 6 } },
+          history = true,
           kind = 'echoerr',
         },
         {
-          content = { { 'fail', 9, 7 } },
+          content = { { 'fail', 9, 6 } },
+          history = true,
           kind = 'echoerr',
         },
         {
-          content = { { 'extrafail', 9, 7 } },
+          content = { { 'extrafail', 9, 6 } },
+          history = true,
           kind = 'echoerr',
         },
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -332,13 +399,17 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      messages = { {
-        content = { { 'problem', 9, 7 } },
-        kind = 'echoerr',
-      } },
+      messages = {
+        {
+          content = { { 'problem', 9, 6 } },
+          history = true,
+          kind = 'echoerr',
+        },
+      },
       cmdline = {
         {
           prompt = 'foo> ',
+          hl_id = 0,
           content = { { '' } },
           pos = 0,
         },
@@ -351,6 +422,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
     }
     eq('solution', eval('x'))
 
@@ -360,16 +432,18 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       msg_history = {
-        { kind = 'echoerr', content = { { 'raa', 9, 7 } } },
-        { kind = 'echoerr', content = { { 'bork', 9, 7 } } },
-        { kind = 'echoerr', content = { { 'fail', 9, 7 } } },
-        { kind = 'echoerr', content = { { 'extrafail', 9, 7 } } },
-        { kind = 'echoerr', content = { { 'problem', 9, 7 } } },
+        { kind = 'echoerr', content = { { 'raa', 9, 6 } } },
+        { kind = 'echoerr', content = { { 'bork', 9, 6 } } },
+        { kind = 'echoerr', content = { { 'fail', 9, 6 } } },
+        { kind = 'echoerr', content = { { 'extrafail', 9, 6 } } },
+        { kind = 'echoerr', content = { { 'problem', 9, 6 } } },
       },
       messages = {
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -392,9 +466,11 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'bork\nfail', 9, 7 } },
+          content = { { 'bork\nfail', 9, 6 } },
+          history = true,
           kind = 'echoerr',
         },
       },
@@ -406,15 +482,17 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
       msg_history = {
         {
-          content = { { 'bork\nfail', 9, 7 } },
+          content = { { 'bork\nfail', 9, 6 } },
           kind = 'echoerr',
         },
       },
@@ -432,8 +510,9 @@ describe('ui/ext_messages', function()
       {10:line} 2                   |
       {1:~                        }|*3
     ]],
+      cmdline = { { abort = false } },
       messages = {
-        { content = { { '/line      W [1/2]' } }, kind = 'search_count' },
+        { content = { { '/line      W [1/2]' } }, kind = 'search_count', history = false },
       },
     }
 
@@ -445,7 +524,7 @@ describe('ui/ext_messages', function()
       {1:~                        }|*3
     ]],
       messages = {
-        { content = { { '/line        [2/2]' } }, kind = 'search_count' },
+        { content = { { '/line        [2/2]' } }, kind = 'search_count', history = false },
       },
     }
   end)
@@ -458,11 +537,13 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
-        { content = { { 'x                     #1' } }, kind = 'list_cmd' },
-        { content = { { 'y                     #2' } }, kind = 'list_cmd' },
+        { content = { { 'x                     #1' } }, kind = 'list_cmd', history = false },
+        { content = { { 'y                     #2' } }, kind = 'list_cmd', history = false },
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -477,7 +558,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      showmode = { { '-- INSERT --', 5, 12 } },
+      showmode = { { '-- INSERT --', 5, 11 } },
     }
 
     feed('alphpabet<cr>alphanum<cr>')
@@ -488,7 +569,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*2
     ]],
-      showmode = { { '-- INSERT --', 5, 12 } },
+      showmode = { { '-- INSERT --', 5, 11 } },
     }
 
     feed('<c-x>')
@@ -499,7 +580,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*2
     ]],
-      showmode = { { '-- ^X mode (^]^D^E^F^I^K^L^N^O^Ps^U^V^Y)', 5, 12 } },
+      showmode = { { '-- ^X mode (^]^D^E^F^I^K^L^N^O^Ps^U^V^Y)', 5, 11 } },
     }
 
     feed('<c-p>')
@@ -515,7 +596,7 @@ describe('ui/ext_messages', function()
         items = { { 'alphpabet', '', '', '' }, { 'alphanum', '', '', '' } },
         pos = 1,
       },
-      showmode = { { '-- Keyword Local completion (^N^P) ', 5, 12 }, { 'match 1 of 2', 6, 19 } },
+      showmode = { { '-- Keyword Local completion (^N^P) ', 5, 11 }, { 'match 1 of 2', 6, 18 } },
     }
 
     -- echomsg and showmode don't overwrite each other, this is the same
@@ -533,11 +614,14 @@ describe('ui/ext_messages', function()
         items = { { 'alphpabet', '', '', '' }, { 'alphanum', '', '', '' } },
         pos = 1,
       },
-      messages = { {
-        content = { { 'stuff' } },
-        kind = 'echomsg',
-      } },
-      showmode = { { '-- Keyword Local completion (^N^P) ', 5, 12 }, { 'match 1 of 2', 6, 19 } },
+      messages = {
+        {
+          content = { { 'stuff' } },
+          history = true,
+          kind = 'echomsg',
+        },
+      },
+      showmode = { { '-- Keyword Local completion (^N^P) ', 5, 11 }, { 'match 1 of 2', 6, 18 } },
     }
 
     feed('<c-p>')
@@ -553,11 +637,14 @@ describe('ui/ext_messages', function()
         items = { { 'alphpabet', '', '', '' }, { 'alphanum', '', '', '' } },
         pos = 0,
       },
-      messages = { {
-        content = { { 'stuff' } },
-        kind = 'echomsg',
-      } },
-      showmode = { { '-- Keyword Local completion (^N^P) ', 5, 12 }, { 'match 2 of 2', 6, 19 } },
+      messages = {
+        {
+          content = { { 'stuff' } },
+          history = true,
+          kind = 'echomsg',
+        },
+      },
+      showmode = { { '-- Keyword Local completion (^N^P) ', 5, 11 }, { 'match 2 of 2', 6, 18 } },
     }
 
     feed('<esc>:messages<cr>')
@@ -568,13 +655,15 @@ describe('ui/ext_messages', function()
       alphpabe^t                |
       {1:~                        }|*2
     ]],
+      cmdline = { { abort = false } },
       msg_history = { {
         content = { { 'stuff' } },
         kind = 'echomsg',
       } },
       messages = {
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -588,7 +677,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      showmode = { { 'recording @q', 5, 12 } },
+      showmode = { { 'recording @q', 5, 11 } },
     }
 
     feed('i')
@@ -597,7 +686,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      showmode = { { '-- INSERT --recording @q', 5, 12 } },
+      showmode = { { '-- INSERT --recording @q', 5, 11 } },
     }
 
     feed('<esc>')
@@ -606,7 +695,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      showmode = { { 'recording @q', 5, 12 } },
+      showmode = { { 'recording @q', 5, 11 } },
     }
 
     feed('q')
@@ -625,7 +714,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      showmode = { { 'recording @q', 5, 12 } },
+      showmode = { { 'recording @q', 5, 11 } },
       mode = 'normal',
     }
 
@@ -635,7 +724,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      showmode = { { 'recording @q', 5, 12 } },
+      showmode = { { 'recording @q', 5, 11 } },
       mode = 'insert',
     }
 
@@ -645,7 +734,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      showmode = { { 'recording @q', 5, 12 } },
+      showmode = { { 'recording @q', 5, 11 } },
       mode = 'normal',
     }
 
@@ -667,7 +756,7 @@ describe('ui/ext_messages', function()
         ^                         |
         {1:~                        }|*4
       ]],
-      ruler = { { '0,0-1   All', 9, 62 } },
+      ruler = { { '0,0-1   All', 9, 61 } },
     })
     command('hi clear MsgArea')
     feed('i')
@@ -676,7 +765,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      showmode = { { '-- INSERT --', 5, 12 } },
+      showmode = { { '-- INSERT --', 5, 11 } },
       ruler = { { '0,1     All' } },
     }
     feed('abcde<cr>12345<esc>')
@@ -714,7 +803,7 @@ describe('ui/ext_messages', function()
         {17:123}45                    |
         {1:~                        }|*3
       ]],
-      showmode = { { '-- VISUAL BLOCK --', 5, 12 } },
+      showmode = { { '-- VISUAL BLOCK --', 5, 11 } },
       showcmd = { { '2x3' } },
       ruler = { { '1,3     All' } },
     })
@@ -766,10 +855,14 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      messages = { {
-        content = { { 'howdy' } },
-        kind = 'echomsg',
-      } },
+      cmdline = { { abort = false } },
+      messages = {
+        {
+          content = { { 'howdy' } },
+          history = true,
+          kind = 'echomsg',
+        },
+      },
     }
 
     -- always test a message without kind. If this one gets promoted to a
@@ -783,6 +876,7 @@ describe('ui/ext_messages', function()
       messages = {
         {
           content = { { 'Type  :qa  and press <Enter> to exit Nvim' } },
+          history = true,
           kind = '',
         },
       },
@@ -794,10 +888,14 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      messages = { {
-        content = { { 'bork', 9, 7 } },
-        kind = 'echoerr',
-      } },
+      cmdline = { { abort = false } },
+      messages = {
+        {
+          content = { { 'bork', 9, 6 } },
+          history = true,
+          kind = 'echoerr',
+        },
+      },
     }
 
     feed(':echo "xyz"<cr>')
@@ -806,10 +904,14 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
-      messages = { {
-        content = { { 'xyz' } },
-        kind = 'echo',
-      } },
+      cmdline = { { abort = false } },
+      messages = {
+        {
+          content = { { 'xyz' } },
+          history = false,
+          kind = 'echo',
+        },
+      },
     }
 
     feed(':call nosuchfunction()<cr>')
@@ -818,9 +920,11 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'E117: Unknown function: nosuchfunction', 9, 7 } },
+          content = { { 'E117: Unknown function: nosuchfunction', 9, 6 } },
+          history = true,
           kind = 'emsg',
         },
       },
@@ -832,15 +936,17 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       msg_history = {
         { kind = 'echomsg', content = { { 'howdy' } } },
         { kind = '', content = { { 'Type  :qa  and press <Enter> to exit Nvim' } } },
-        { kind = 'echoerr', content = { { 'bork', 9, 7 } } },
-        { kind = 'emsg', content = { { 'E117: Unknown function: nosuchfunction', 9, 7 } } },
+        { kind = 'echoerr', content = { { 'bork', 9, 6 } } },
+        { kind = 'emsg', content = { { 'E117: Unknown function: nosuchfunction', 9, 6 } } },
       },
       messages = {
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -865,11 +971,14 @@ describe('ui/ext_messages', function()
     }
 
     feed('<cr>')
-    screen:expect([[
-      ^                         |
-      {1:~                        }|*3
-                               |
-    ]])
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*3
+                                 |
+      ]],
+      cmdline = { { abort = false } },
+    })
     eq(1, eval('&cmdheight'))
 
     feed(':set cmdheight=0')
@@ -888,10 +997,15 @@ describe('ui/ext_messages', function()
       },
     }
     feed('<cr>')
-    screen:expect([[
-      ^                         |
-      {1:~                        }|*4
-    ]])
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      cmdline = { {
+        abort = false,
+      } },
+    })
     eq(0, eval('&cmdheight'))
   end)
 
@@ -902,6 +1016,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
           content = {
@@ -913,9 +1028,10 @@ stack traceback:
 	[C]: in function 'error'
 	[string ":lua"]:1: in main chunk]],
               9,
-              7,
+              6,
             },
           },
+          history = true,
           kind = 'lua_error',
         },
       },
@@ -930,11 +1046,13 @@ stack traceback:
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
           content = {
-            { "Error invoking 'test_method' on channel 1:\ncomplete\nerror\n\nmessage", 9, 7 },
+            { "Error invoking 'test_method' on channel 1:\ncomplete\nerror\n\nmessage", 9, 6 },
           },
+          history = true,
           kind = 'rpc_error',
         },
       },
@@ -954,6 +1072,7 @@ stack traceback:
     feed(':map<cr>')
 
     screen:expect {
+      cmdline = { { abort = false } },
       messages = {
         {
           content = {
@@ -961,6 +1080,7 @@ stack traceback:
             { '*', 18, 1 },
             { ' k' },
           },
+          history = false,
           kind = 'list_cmd',
         },
       },
@@ -981,6 +1101,7 @@ stack traceback:
       messages = {
         {
           content = { { 'wildmenu  wildmode' } },
+          history = false,
           kind = 'wildlist',
         },
       },
@@ -1008,10 +1129,12 @@ stack traceback:
       messages = {
         {
           content = { { 'Change "helllo" to:\n 1 "Hello"\n 2 "Hallo"\n 3 "Hullo"\n' } },
+          history = false,
           kind = 'list_cmd',
         },
         {
           content = { { 'Type number and <Enter> or click with the mouse (q or empty cancels): ' } },
+          history = false,
           kind = 'number_prompt',
         },
       },
@@ -1027,14 +1150,17 @@ stack traceback:
       messages = {
         {
           content = { { 'Change "helllo" to:\n 1 "Hello"\n 2 "Hallo"\n 3 "Hullo"\n' } },
+          history = false,
           kind = 'list_cmd',
         },
         {
           content = { { 'Type number and <Enter> or click with the mouse (q or empty cancels): ' } },
+          history = false,
           kind = 'number_prompt',
         },
         {
           content = { { '1' } },
+          history = false,
           kind = '',
         },
       },
@@ -1062,7 +1188,8 @@ stack traceback:
     ]],
       messages = {
         {
-          content = { { 'wow, ', 10, 9 }, { 'such\n\nvery ', 9, 7 }, { 'color', 8, 13 } },
+          content = { { 'wow, ', 10, 8 }, { 'such\n\nvery ', 9, 6 }, { 'color', 8, 12 } },
+          history = true,
           kind = 'echomsg',
         },
       },
@@ -1074,8 +1201,13 @@ stack traceback:
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
-        { content = { { '\n  1 %a   "[No Name]"                    line 1' } }, kind = 'list_cmd' },
+        {
+          content = { { '\n  1 %a   "[No Name]"                    line 1' } },
+          kind = 'list_cmd',
+          history = false,
+        },
       },
     }
 
@@ -1085,15 +1217,17 @@ stack traceback:
       ^                         |
       {1:~                        }|*4
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
       msg_history = {
         {
-          content = { { 'wow, ', 10, 9 }, { 'such\n\nvery ', 9, 7 }, { 'color', 8, 13 } },
+          content = { { 'wow, ', 10, 8 }, { 'such\n\nvery ', 9, 6 }, { 'color', 8, 12 } },
           kind = 'echomsg',
         },
       },
@@ -1112,7 +1246,11 @@ stack traceback:
     command('write ' .. fname)
     screen:expect({
       messages = {
-        { content = { { string.format('"%s" [New] 0L, 0B written', fname) } }, kind = 'bufwrite' },
+        {
+          content = { { string.format('"%s" [New] 0L, 0B written', fname) } },
+          kind = 'bufwrite',
+          history = true,
+        },
       },
     })
   end)
@@ -1139,6 +1277,7 @@ stack traceback:
       messages = {
         {
           content = { { 'foo\nbar\nbaz' } },
+          history = true,
           kind = 'lua_print',
         },
       },
@@ -1152,6 +1291,7 @@ stack traceback:
       messages = {
         {
           content = { { '{\n  foo = "bar"\n}' } },
+          history = true,
           kind = 'lua_print',
         },
       },
@@ -1753,7 +1893,7 @@ describe('ui/ext_messages', function()
       {1:~                }type  :help iccf{18:<Enter>}       for information {1:                 }|
       {1:~                                                                               }|*5
     ]]
-    local showmode = { { '-- INSERT --', 5, 12 } }
+    local showmode = { { '-- INSERT --', 5, 11 } }
     screen:expect(introscreen)
 
     -- <c-l> (same as :mode) does _not_ clear intro message
@@ -1826,9 +1966,11 @@ describe('ui/ext_messages', function()
                        type  :help iccf{18:<Enter>}       for information                  |
                                                                                       |*5
     ]],
+      cmdline = { { abort = false } },
       messages = {
         {
-          content = { { 'Press ENTER or type command to continue', 6, 19 } },
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
@@ -1908,8 +2050,9 @@ describe('ui/ext_messages', function()
       {1:~                                                                               }|*10
       {3:[No Name]                                                                       }|
     ]],
+      cmdline = { { abort = false } },
       messages = {
-        { content = { { '  cmdheight=0' } }, kind = 'list_cmd' },
+        { content = { { '  cmdheight=0' } }, kind = 'list_cmd', history = false },
       },
     })
 
@@ -1924,8 +2067,9 @@ describe('ui/ext_messages', function()
       {1:~                                                                               }|*9
       {3:[No Name]                                                                       }|
     ]],
+      cmdline = { { abort = false } },
       messages = {
-        { content = { { '  laststatus=3' } }, kind = 'list_cmd' },
+        { content = { { '  laststatus=3' } }, kind = 'list_cmd', history = false },
       },
     })
 
@@ -1944,8 +2088,9 @@ describe('ui/ext_messages', function()
       {1:~                                                                               }|*10
       {3:[No Name]                                                                       }|
     ]],
+      cmdline = { { abort = false } },
       messages = {
-        { content = { { '  cmdheight=0' } }, kind = 'list_cmd' },
+        { content = { { '  cmdheight=0' } }, kind = 'list_cmd', history = false },
       },
     })
   end)
@@ -2049,7 +2194,7 @@ describe('ui/msg_puts_printf', function()
     )
 
     cmd = cmd .. '"' .. nvim_prog .. '" -u NONE -i NONE -Es -V1'
-    command([[call termopen(']] .. cmd .. [[')]])
+    command([[call jobstart(']] .. cmd .. [[',{'term':v:true})]])
     screen:expect([[
     ^Exモードに入ります。ノー |
     マルモードに戻るには "vis|

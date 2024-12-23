@@ -594,11 +594,10 @@ ArrayOf(String) nvim_get_runtime_file(String name, Boolean all, Arena *arena, Er
   kvi_init(cookie.rv);
 
   int flags = DIP_DIRFILE | (all ? DIP_ALL : 0);
-  TryState tstate;
 
-  try_enter(&tstate);
-  do_in_runtimepath((name.size ? name.data : ""), flags, find_runtime_cb, &cookie);
-  vim_ignored = try_leave(&tstate, err);
+  TRY_WRAP(err, {
+    do_in_runtimepath((name.size ? name.data : ""), flags, find_runtime_cb, &cookie);
+  });
 
   return arena_take_arraybuilder(arena, &cookie.rv);
 }
@@ -668,16 +667,9 @@ void nvim_set_current_dir(String dir, Error *err)
   memcpy(string, dir.data, dir.size);
   string[dir.size] = NUL;
 
-  try_start();
-
-  if (!changedir_func(string, kCdScopeGlobal)) {
-    if (!try_end(err)) {
-      api_set_error(err, kErrorTypeException, "Failed to change directory");
-    }
-    return;
-  }
-
-  try_end(err);
+  TRY_WRAP(err, {
+    changedir_func(string, kCdScopeGlobal);
+  });
 }
 
 /// Gets the current line.
@@ -892,19 +884,9 @@ void nvim_set_current_buf(Buffer buffer, Error *err)
     return;
   }
 
-  if (curwin->w_p_wfb) {
-    api_set_error(err, kErrorTypeException, "%s", e_winfixbuf_cannot_go_to_buffer);
-    return;
-  }
-
-  try_start();
-  int result = do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD, buf->b_fnum, 0);
-  if (!try_end(err) && result == FAIL) {
-    api_set_error(err,
-                  kErrorTypeException,
-                  "Failed to switch to buffer %d",
-                  buffer);
-  }
+  TRY_WRAP(err, {
+    do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD, buf->b_fnum, 0);
+  });
 }
 
 /// Gets the current list of window handles.
@@ -951,14 +933,9 @@ void nvim_set_current_win(Window window, Error *err)
     return;
   }
 
-  try_start();
-  goto_tabpage_win(win_find_tabpage(win), win);
-  if (!try_end(err) && win != curwin) {
-    api_set_error(err,
-                  kErrorTypeException,
-                  "Failed to switch to window %d",
-                  window);
-  }
+  TRY_WRAP(err, {
+    goto_tabpage_win(win_find_tabpage(win), win);
+  });
 }
 
 /// Creates a new, empty, unnamed buffer.
@@ -973,68 +950,70 @@ void nvim_set_current_win(Window window, Error *err)
 Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
   FUNC_API_SINCE(6)
 {
-  try_start();
-  // Block autocommands for now so they don't mess with the buffer before we
-  // finish configuring it.
-  block_autocmds();
+  Buffer ret = 0;
 
-  buf_T *buf = buflist_new(NULL, NULL, 0,
-                           BLN_NOOPT | BLN_NEW | (listed ? BLN_LISTED : 0));
-  if (buf == NULL) {
+  TRY_WRAP(err, {
+    // Block autocommands for now so they don't mess with the buffer before we
+    // finish configuring it.
+    block_autocmds();
+
+    buf_T *buf = buflist_new(NULL, NULL, 0,
+                             BLN_NOOPT | BLN_NEW | (listed ? BLN_LISTED : 0));
+    if (buf == NULL) {
+      unblock_autocmds();
+      goto fail;
+    }
+
+    // Open the memline for the buffer. This will avoid spurious autocmds when
+    // a later nvim_buf_set_lines call would have needed to "open" the buffer.
+    if (ml_open(buf) == FAIL) {
+      unblock_autocmds();
+      goto fail;
+    }
+
+    // Set last_changedtick to avoid triggering a TextChanged autocommand right
+    // after it was added.
+    buf->b_last_changedtick = buf_get_changedtick(buf);
+    buf->b_last_changedtick_i = buf_get_changedtick(buf);
+    buf->b_last_changedtick_pum = buf_get_changedtick(buf);
+
+    // Only strictly needed for scratch, but could just as well be consistent
+    // and do this now. Buffer is created NOW, not when it later first happens
+    // to reach a window or aucmd_prepbuf() ..
+    buf_copy_options(buf, BCO_ENTER | BCO_NOHELP);
+
+    if (scratch) {
+      set_option_direct_for(kOptBufhidden, STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL, 0,
+                            kOptScopeBuf, buf);
+      set_option_direct_for(kOptBuftype, STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL, 0,
+                            kOptScopeBuf, buf);
+      assert(buf->b_ml.ml_mfp->mf_fd < 0);  // ml_open() should not have opened swapfile already
+      buf->b_p_swf = false;
+      buf->b_p_ml = false;
+    }
+
     unblock_autocmds();
-    goto fail;
-  }
 
-  // Open the memline for the buffer. This will avoid spurious autocmds when
-  // a later nvim_buf_set_lines call would have needed to "open" the buffer.
-  if (ml_open(buf) == FAIL) {
-    unblock_autocmds();
-    goto fail;
-  }
+    bufref_T bufref;
+    set_bufref(&bufref, buf);
+    if (apply_autocmds(EVENT_BUFNEW, NULL, NULL, false, buf)
+        && !bufref_valid(&bufref)) {
+      goto fail;
+    }
+    if (listed
+        && apply_autocmds(EVENT_BUFADD, NULL, NULL, false, buf)
+        && !bufref_valid(&bufref)) {
+      goto fail;
+    }
 
-  // Set last_changedtick to avoid triggering a TextChanged autocommand right
-  // after it was added.
-  buf->b_last_changedtick = buf_get_changedtick(buf);
-  buf->b_last_changedtick_i = buf_get_changedtick(buf);
-  buf->b_last_changedtick_pum = buf_get_changedtick(buf);
+    ret = buf->b_fnum;
+    fail:;
+  });
 
-  // Only strictly needed for scratch, but could just as well be consistent
-  // and do this now. Buffer is created NOW, not when it later first happens
-  // to reach a window or aucmd_prepbuf() ..
-  buf_copy_options(buf, BCO_ENTER | BCO_NOHELP);
-
-  if (scratch) {
-    set_option_direct_for(kOptBufhidden, STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL, 0,
-                          kOptScopeBuf, buf);
-    set_option_direct_for(kOptBuftype, STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL, 0,
-                          kOptScopeBuf, buf);
-    assert(buf->b_ml.ml_mfp->mf_fd < 0);  // ml_open() should not have opened swapfile already
-    buf->b_p_swf = false;
-    buf->b_p_ml = false;
-  }
-
-  unblock_autocmds();
-
-  bufref_T bufref;
-  set_bufref(&bufref, buf);
-  if (apply_autocmds(EVENT_BUFNEW, NULL, NULL, false, buf)
-      && !bufref_valid(&bufref)) {
-    goto fail;
-  }
-  if (listed
-      && apply_autocmds(EVENT_BUFADD, NULL, NULL, false, buf)
-      && !bufref_valid(&bufref)) {
-    goto fail;
-  }
-
-  try_end(err);
-  return buf->b_fnum;
-
-fail:
-  if (!try_end(err)) {
+  if (ret == 0 && !ERROR_SET(err)) {
     api_set_error(err, kErrorTypeException, "Failed to create buffer");
   }
-  return 0;
+  return ret;
 }
 
 /// Open a terminal instance in a buffer
@@ -1217,14 +1196,9 @@ void nvim_set_current_tabpage(Tabpage tabpage, Error *err)
     return;
   }
 
-  try_start();
-  goto_tabpage_tp(tp, true, true);
-  if (!try_end(err) && tp != curtab) {
-    api_set_error(err,
-                  kErrorTypeException,
-                  "Failed to switch to tabpage %d",
-                  tabpage);
-  }
+  TRY_WRAP(err, {
+    goto_tabpage_tp(tp, true, true);
+  });
 }
 
 /// Pastes at cursor (in any mode), and sets "redo" so dot (|.|) will repeat the input. UIs call

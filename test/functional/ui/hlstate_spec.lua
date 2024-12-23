@@ -224,10 +224,10 @@ describe('ext_hlstate detailed highlights', function()
       [6] = { { foreground = tonumber('0x40ffff'), fg_indexed = true }, { 5, 1 } },
       [7] = { {}, { { hi_name = 'MsgArea', ui_name = 'MsgArea', kind = 'ui' } } },
     })
-    command(("enew | call termopen(['%s'])"):format(testprg('tty-test')))
+    command(("enew | call jobstart(['%s'],{'term':v:true})"):format(testprg('tty-test')))
     screen:expect([[
       ^tty ready                               |
-      {1: }                                       |
+                                              |
                                               |*5
       {7:                                        }|
     ]])
@@ -242,7 +242,7 @@ describe('ext_hlstate detailed highlights', function()
       screen:expect([[
         ^tty ready                               |
         x {5:y z}                                   |
-        {1: }                                       |
+                                                |
                                                 |*4
         {7:                                        }|
       ]])
@@ -250,7 +250,7 @@ describe('ext_hlstate detailed highlights', function()
       screen:expect([[
         ^tty ready                               |
         x {2:y }{3:z}                                   |
-        {1: }                                       |
+                                                |
                                                 |*4
         {7:                                        }|
       ]])
@@ -268,7 +268,7 @@ describe('ext_hlstate detailed highlights', function()
     else
       screen:expect([[
         ^tty ready                               |
-        x {4:y}{2: }{3:z}                                   |
+        x {2:y }{3:z}                                   |
                                                 |*5
         {7:                                        }|
       ]])
