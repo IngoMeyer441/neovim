@@ -37,7 +37,6 @@
 #include "nvim/getchar.h"
 #include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
-#include "nvim/highlight.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
@@ -1721,6 +1720,12 @@ bool ins_compl_active(void)
   FUNC_ATTR_PURE
 {
   return compl_started;
+}
+
+/// Return true when wp is the actual completion window
+bool ins_compl_win_active(win_T *wp)
+{
+  return ins_compl_active() && !(wp->w_p_pvw || wp->w_float_is_info);
 }
 
 /// Selected one of the matches.  When false the match was edited or using the

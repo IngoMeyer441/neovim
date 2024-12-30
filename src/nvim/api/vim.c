@@ -20,6 +20,7 @@
 #include "nvim/api/vim.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
@@ -28,7 +29,6 @@
 #include "nvim/cursor.h"
 #include "nvim/decoration.h"
 #include "nvim/drawscreen.h"
-#include "nvim/edit.h"
 #include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
@@ -76,7 +76,6 @@
 #include "nvim/runtime.h"
 #include "nvim/sign_defs.h"
 #include "nvim/state.h"
-#include "nvim/state_defs.h"
 #include "nvim/statusline.h"
 #include "nvim/statusline_defs.h"
 #include "nvim/strings.h"
@@ -2375,13 +2374,23 @@ void nvim__redraw(Dict(redraw) *opts, Error *err)
              "%s", "Invalid 'range': Expected 2-tuple of Integers", {
       return;
     });
-    linenr_T first = (linenr_T)kv_A(opts->range, 0).data.integer + 1;
-    linenr_T last = (linenr_T)kv_A(opts->range, 1).data.integer;
+    int64_t begin_raw = kv_A(opts->range, 0).data.integer;
+    int64_t end_raw = kv_A(opts->range, 1).data.integer;
+
     buf_T *rbuf = win ? win->w_buffer : (buf ? buf : curbuf);
-    if (last == -1) {
-      last = rbuf->b_ml.ml_line_count;
+    linenr_T line_count = rbuf->b_ml.ml_line_count;
+
+    int begin = (int)MIN(begin_raw, line_count);
+    int end;
+    if (end_raw == -1) {
+      end = line_count;
+    } else {
+      end = (int)MIN(MAX(begin, end_raw), line_count);
     }
-    redraw_buf_range_later(rbuf, first, last);
+
+    if (begin < end) {
+      redraw_buf_range_later(rbuf, 1 + begin, end);
+    }
   }
 
   // Redraw later types require update_screen() so call implicitly unless set to false.
