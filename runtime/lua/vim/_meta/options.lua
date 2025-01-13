@@ -1087,8 +1087,8 @@ vim.go.cia = vim.go.completeitemalign
 --- 	    "menu" or "menuone". No effect if "longest" is present.
 ---
 ---    noselect Same as "noinsert", except that no menu item is
---- 	    pre-selected. If both "noinsert" and "noselect" are present,
---- 	    "noselect" has precedence.
+--- 	    pre-selected. If both "noinsert" and "noselect" are
+--- 	    present, "noselect" has precedence.
 ---
 ---    fuzzy    Enable `fuzzy-matching` for completion candidates. This
 --- 	    allows for more flexible and intuitive matching, where
@@ -4845,8 +4845,8 @@ vim.go.redrawdebug = vim.o.redrawdebug
 vim.go.rdb = vim.go.redrawdebug
 
 --- Time in milliseconds for redrawing the display.  Applies to
---- 'hlsearch', 'inccommand', `:match` highlighting and syntax
---- highlighting.
+--- 'hlsearch', 'inccommand', `:match` highlighting, syntax highlighting,
+--- and async `LanguageTree:parse()`.
 --- When redrawing takes more than this many milliseconds no further
 --- matches will be highlighted.
 --- For syntax highlighting the time applies per window.  When over the

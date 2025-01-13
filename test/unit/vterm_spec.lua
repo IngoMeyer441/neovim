@@ -61,7 +61,6 @@ local bit = require('bit')
 --- @field vterm_screen_enable_reflow function
 --- @field vterm_screen_get_attrs_extent function
 --- @field vterm_screen_get_cell function
---- @field vterm_screen_get_chars fun(any, any, any, any):any
 --- @field vterm_screen_get_text fun(any, any, any, any):any
 --- @field vterm_screen_is_eol fun(any, any):any
 --- @field vterm_screen_reset function
@@ -79,10 +78,17 @@ local bit = require('bit')
 --- @field vterm_state_set_selection_callbacks function
 --- @field vterm_state_set_unrecognised_fallbacks function
 local vterm = t.cimport(
-  './src/nvim/mbyte.h',
   './src/nvim/grid.h',
-  './src/vterm/vterm.h',
-  './src/vterm/vterm_internal.h',
+  './src/nvim/mbyte.h',
+  './src/nvim/vterm/encoding.h',
+  './src/nvim/vterm/keyboard.h',
+  './src/nvim/vterm/mouse.h',
+  './src/nvim/vterm/parser.h',
+  './src/nvim/vterm/pen.h',
+  './src/nvim/vterm/screen.h',
+  './src/nvim/vterm/state.h',
+  './src/nvim/vterm/vterm.h',
+  './src/nvim/vterm/vterm_internal.h',
   './test/unit/fixtures/vterm_test.h'
 )
 
@@ -1125,7 +1131,7 @@ putglyph 1f3f4,200d,2620,fe0f 2 0,4]])
     push('\x1b[0F', vt)
     cursor(0, 0, state)
 
-    -- Cursor Horizonal Absolute
+    -- Cursor Horizontal Absolute
     push('\n', vt)
     cursor(1, 0, state)
     push('\x1b[20G', vt)
@@ -3098,7 +3104,7 @@ putglyph 1f3f4,200d,2620,fe0f 2 0,4]])
       screen
     )
 
-    -- Outputing CJK doublewidth in 80th column should wraparound to next line and not crash"
+    -- Outputting CJK doublewidth in 80th column should wraparound to next line and not crash"
     reset(nil, screen)
     push('\x1b[80G\xEF\xBC\x90', vt)
     screen_cell(0, 79, '{} width=1 attrs={} fg=rgb(240,240,240) bg=rgb(0,0,0)', screen)

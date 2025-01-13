@@ -875,15 +875,16 @@ function M.make_floating_popup_options(width, height, opts)
 
   return {
     anchor = anchor,
+    row = row + (opts.offset_y or 0),
     col = col + (opts.offset_x or 0),
     height = height,
     focusable = opts.focusable,
-    relative = opts.relative == 'mouse' and 'mouse' or 'cursor',
-    row = row + (opts.offset_y or 0),
+    relative = (opts.relative == 'mouse' or opts.relative == 'editor') and opts.relative
+      or 'cursor',
     style = 'minimal',
     width = width,
     border = opts.border or default_border,
-    zindex = opts.zindex or 50,
+    zindex = opts.zindex or (api.nvim_win_get_config(0).zindex or 49) + 1,
     title = title,
     title_pos = title_pos,
   }
@@ -1494,7 +1495,7 @@ end
 --- @field title_pos? 'left'|'center'|'right'
 ---
 --- (default: `'cursor'`)
---- @field relative? 'mouse'|'cursor'
+--- @field relative? 'mouse'|'cursor'|'editor'
 ---
 --- - "auto": place window based on which side of the cursor has more lines
 --- - "above": place the window above the cursor unless there are not enough lines

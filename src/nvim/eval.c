@@ -270,6 +270,7 @@ static struct vimvar {
   VV(VV_COLLATE,          "collate",          VAR_STRING, VV_RO),
   VV(VV_EXITING,          "exiting",          VAR_NUMBER, VV_RO),
   VV(VV_MAXCOL,           "maxcol",           VAR_NUMBER, VV_RO),
+  VV(VV_STACKTRACE,       "stacktrace",       VAR_LIST, VV_RO),
   // Neovim
   VV(VV_STDERR,           "stderr",           VAR_NUMBER, VV_RO),
   VV(VV_MSGPACK_TYPES,    "msgpack_types",    VAR_DICT, VV_RO),
@@ -7967,8 +7968,7 @@ void ex_execute(exarg_T *eap)
     } else if (eap->cmdidx == CMD_echoerr) {
       // We don't want to abort following commands, restore did_emsg.
       int save_did_emsg = did_emsg;
-      msg_ext_set_kind("echoerr");
-      emsg_multiline(ga.ga_data, true);
+      emsg_multiline(ga.ga_data, "echoerr", HLF_E, true);
       if (!force_abort) {
         did_emsg = save_did_emsg;
       }

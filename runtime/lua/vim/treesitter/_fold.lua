@@ -19,14 +19,19 @@ local api = vim.api
 ---The range on which to evaluate foldexpr.
 ---When in insert mode, the evaluation is deferred to InsertLeave.
 ---@field foldupdate_range? Range2
+---
+---The treesitter parser associated with this buffer.
+---@field parser? vim.treesitter.LanguageTree
 local FoldInfo = {}
 FoldInfo.__index = FoldInfo
 
 ---@private
-function FoldInfo.new()
+---@param bufnr integer
+function FoldInfo.new(bufnr)
   return setmetatable({
     levels0 = {},
     levels = {},
+    parser = ts.get_parser(bufnr, nil, { error = false }),
   }, FoldInfo)
 end
 
@@ -64,14 +69,16 @@ end
 ---@param info TS.FoldInfo
 ---@param srow integer?
 ---@param erow integer? 0-indexed, exclusive
----@param parse_injections? boolean
-local function compute_folds_levels(bufnr, info, srow, erow, parse_injections)
+local function compute_folds_levels(bufnr, info, srow, erow)
   srow = srow or 0
   erow = erow or api.nvim_buf_line_count(bufnr)
 
-  local parser = assert(ts.get_parser(bufnr, nil, { error = false }))
+  local parser = info.parser
+  if not parser then
+    return
+  end
 
-  parser:parse(parse_injections and { srow, erow } or nil)
+  parser:parse()
 
   local enter_counts = {} ---@type table<integer, integer>
   local leave_counts = {} ---@type table<integer, integer>
@@ -347,13 +354,21 @@ function M.foldexpr(lnum)
   lnum = lnum or vim.v.lnum
   local bufnr = api.nvim_get_current_buf()
 
-  local parser = ts.get_parser(bufnr, nil, { error = false })
-  if not parser then
-    return '0'
-  end
-
   if not foldinfos[bufnr] then
-    foldinfos[bufnr] = FoldInfo.new()
+    foldinfos[bufnr] = FoldInfo.new(bufnr)
+    api.nvim_create_autocmd('BufUnload', {
+      buffer = bufnr,
+      once = true,
+      callback = function()
+        foldinfos[bufnr] = nil
+      end,
+    })
+
+    local parser = foldinfos[bufnr].parser
+    if not parser then
+      return '0'
+    end
+
     compute_folds_levels(bufnr, foldinfos[bufnr])
 
     parser:register_cbs({
@@ -383,7 +398,7 @@ api.nvim_create_autocmd('OptionSet', {
       or foldinfos[buf] and { buf }
       or {}
     for _, bufnr in ipairs(bufs) do
-      foldinfos[bufnr] = FoldInfo.new()
+      foldinfos[bufnr] = FoldInfo.new(bufnr)
       api.nvim_buf_call(bufnr, function()
         compute_folds_levels(bufnr, foldinfos[bufnr])
       end)

@@ -34,6 +34,12 @@ local matchregex = vim.filetype._matchregex
 -- can be detected from the first five lines of the file.
 --- @type vim.filetype.mapfn
 function M.asm(path, bufnr)
+  -- tiasm uses `* commment`
+  local lines = table.concat(getlines(bufnr, 1, 10), '\n')
+  if findany(lines, { '^%*', '\n%*', 'Texas Instruments Incorporated' }) then
+    return 'tiasm'
+  end
+
   local syntax = vim.b[bufnr].asmsyntax
   if not syntax or syntax == '' then
     syntax = M.asm_syntax(path, bufnr)
@@ -751,7 +757,7 @@ function M.html(_, bufnr)
     if
       matchregex(
         line,
-        [[@\(if\|for\|defer\|switch\)\|\*\(ngIf\|ngFor\|ngSwitch\|ngTemplateOutlet\)\|ng-template\|ng-content\|{{.*}}]]
+        [[@\(if\|for\|defer\|switch\)\|\*\(ngIf\|ngFor\|ngSwitch\|ngTemplateOutlet\)\|ng-template\|ng-content]]
       )
     then
       return 'htmlangular'
@@ -1422,6 +1428,15 @@ function M.sig(_, bufnr)
   elseif findany(line, { '^%s*%(%*', '^%s*signature%s+%a', '^%s*structure%s+%a' }) then
     return 'sml'
   end
+end
+
+--- @type vim.filetype.mapfn
+function M.sa(_, bufnr)
+  local lines = table.concat(getlines(bufnr, 1, 4), '\n')
+  if findany(lines, { '^;', '\n;' }) then
+    return 'tiasm'
+  end
+  return 'sather'
 end
 
 -- This function checks the first 25 lines of file extension "sc" to resolve

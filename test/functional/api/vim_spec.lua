@@ -781,18 +781,6 @@ describe('API', function()
     end)
   end)
 
-  describe('nvim_notify', function()
-    it('can notify a info message', function()
-      api.nvim_notify('hello world', 2, {})
-    end)
-
-    it('can be overridden', function()
-      command('lua vim.notify = function(...) return 42 end')
-      eq(42, api.nvim_exec_lua("return vim.notify('Hello world')", {}))
-      api.nvim_notify('hello world', 4, {})
-    end)
-  end)
-
   describe('nvim_input', function()
     it('Vimscript error: does NOT fail, updates v:errmsg', function()
       local status, _ = pcall(api.nvim_input, ':call bogus_fn()<CR>')
@@ -3679,6 +3667,30 @@ describe('API', function()
       command('set cmdheight=2') -- suppress Press ENTER
       async_meths.nvim_echo({ { 'msg\nmsg' }, { 'msg' } }, false, {})
       eq('', exec_capture('messages'))
+    end)
+
+    it('can print error message', function()
+      async_meths.nvim_echo({ { 'Error\nMessage' } }, false, { err = true })
+      screen:expect([[
+                                                |
+        {1:~                                       }|*3
+        {3:                                        }|
+        {9:Error}                                   |
+        {9:Message}                                 |
+        {6:Press ENTER or type command to continue}^ |
+      ]])
+      feed(':messages<CR>')
+      screen:expect([[
+        ^                                        |
+        {1:~                                       }|*6
+                                                |
+      ]])
+      async_meths.nvim_echo({ { 'Error' }, { 'Message', 'Special' } }, false, { err = true })
+      screen:expect([[
+        ^                                        |
+        {1:~                                       }|*6
+        {9:Error}{16:Message}                            |
+      ]])
     end)
   end)
 

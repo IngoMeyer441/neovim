@@ -32,7 +32,7 @@ Follow these steps to get LSP features:
     Example: >lua
       vim.lsp.config['luals'] = {
         -- Command and arguments to start the server.
-        cmd = { 'lua-language-server' }
+        cmd = { 'lua-language-server' },
 
         -- Filetypes to automatically attach to.
         filetypes = { 'lua' },
@@ -93,7 +93,7 @@ Given: >lua
           multilineTokenSupport = true,
         }
       }
-    }
+    },
     root_markers = { '.git' },
   })
 
@@ -878,7 +878,7 @@ foldexpr({lnum})                                          *vim.lsp.foldexpr()*
 
     To use, check for the "textDocument/foldingRange" capability in an
     |LspAttach| autocommand. Example: >lua
-        vim.api.nvim_create_autocommand('LspAttach', {
+        vim.api.nvim_create_autocmd('LspAttach', {
           callback = function(args)
             local client = vim.lsp.get_client_by_id(args.data.client_id)
             if client:supports_method('textDocument/foldingRange') then
@@ -2024,7 +2024,7 @@ Lua module: vim.lsp.util                                            *lsp-util*
       • {zindex}?        (`integer`) override `zindex`, defaults to 50
       • {title}?         (`string`)
       • {title_pos}?     (`'left'|'center'|'right'`)
-      • {relative}?      (`'mouse'|'cursor'`) (default: `'cursor'`)
+      • {relative}?      (`'mouse'|'cursor'|'editor'`) (default: `'cursor'`)
       • {anchor_bias}?   (`'auto'|'above'|'below'`, default: `'auto'`) -
                          "auto": place window based on which side of the
                          cursor has more lines
