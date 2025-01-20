@@ -953,6 +953,7 @@ theend:
   char *p = ccline.cmdbuff;
 
   if (ui_has(kUICmdline)) {
+    ccline.redraw_state = kCmdRedrawNone;
     ui_call_cmdline_hide(ccline.level, s->gotesc);
     msg_ext_clear_later();
   }

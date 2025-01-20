@@ -351,7 +351,7 @@ describe(':terminal buffer', function()
   end)
 
   it('TermRequest synchronization #27572', function()
-    command('autocmd! nvim_terminal TermRequest')
+    command('autocmd! nvim.terminal TermRequest')
     local term = exec_lua([[
       _G.input = {}
       local term = vim.api.nvim_open_term(0, {
@@ -624,6 +624,82 @@ describe('terminal input', function()
         {3:-- TERMINAL --}                                    |
       ]]):format(key))
     end
+  end)
+
+  -- TODO(bfredl): getcharstr() erases the distinction between <C-I> and <Tab>.
+  -- If it was enhanced or replaced this could get folded into the test above.
+  it('can send TAB/C-I and ESC/C-[ separately', function()
+    if
+      skip(
+        is_os('win'),
+        "The escape sequence to enable kitty keyboard mode doesn't work on Windows"
+      )
+    then
+      return
+    end
+    clear()
+    local screen = tt.setup_child_nvim({
+      '-u',
+      'NONE',
+      '-i',
+      'NONE',
+      '--cmd',
+      'colorscheme vim',
+      '--cmd',
+      'set notermguicolors',
+      '--cmd',
+      'noremap <Tab> <cmd>echo "Tab!"<cr>',
+      '--cmd',
+      'noremap <C-i> <cmd>echo "Ctrl-I!"<cr>',
+      '--cmd',
+      'noremap <Esc> <cmd>echo "Esc!"<cr>',
+      '--cmd',
+      'noremap <C-[> <cmd>echo "Ctrl-[!"<cr>',
+    })
+
+    screen:expect([[
+      ^                                                  |
+      {4:~                                                 }|*3
+      {5:[No Name]                       0,0-1          All}|
+                                                        |
+      {3:-- TERMINAL --}                                    |
+    ]])
+
+    feed('<tab>')
+    screen:expect([[
+      ^                                                  |
+      {4:~                                                 }|*3
+      {5:[No Name]                       0,0-1          All}|
+      Tab!                                              |
+      {3:-- TERMINAL --}                                    |
+    ]])
+
+    feed('<c-i>')
+    screen:expect([[
+      ^                                                  |
+      {4:~                                                 }|*3
+      {5:[No Name]                       0,0-1          All}|
+      Ctrl-I!                                           |
+      {3:-- TERMINAL --}                                    |
+    ]])
+
+    feed('<Esc>')
+    screen:expect([[
+      ^                                                  |
+      {4:~                                                 }|*3
+      {5:[No Name]                       0,0-1          All}|
+      Esc!                                              |
+      {3:-- TERMINAL --}                                    |
+    ]])
+
+    feed('<c-[>')
+    screen:expect([[
+      ^                                                  |
+      {4:~                                                 }|*3
+      {5:[No Name]                       0,0-1          All}|
+      Ctrl-[!                                           |
+      {3:-- TERMINAL --}                                    |
+    ]])
   end)
 end)
 

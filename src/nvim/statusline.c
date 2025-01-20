@@ -103,7 +103,8 @@ void win_redr_status(win_T *wp)
          || bufIsChanged(wp->w_buffer)
          || wp->w_buffer->b_p_ro)
         && plen < MAXPATHL - 1) {
-      *(p + plen++) = ' ';
+      *(p + plen++) = ' ';        // replace NUL with space
+      *(p + plen) = NUL;          // NUL terminate the string
     }
     if (bt_help(wp->w_buffer)) {
       plen += snprintf(p + plen, MAXPATHL - (size_t)plen, "%s", _("[Help]"));
@@ -771,8 +772,7 @@ void draw_tabline(void)
 
       if (modified || wincount > 1) {
         if (wincount > 1) {
-          vim_snprintf(NameBuff, MAXPATHL, "%d", wincount);
-          int len = (int)strlen(NameBuff);
+          int len = vim_snprintf(NameBuff, MAXPATHL, "%d", wincount);
           if (col + len >= Columns - 3) {
             break;
           }
@@ -797,7 +797,8 @@ void draw_tabline(void)
           len -= ptr2cells(p);
           MB_PTR_ADV(p);
         }
-        len = MIN(len, Columns - col - 1);
+        int n = Columns - col - 1;
+        len = MIN(len, n);
 
         grid_line_puts(col, p, -1, attr);
         col += len;
@@ -831,7 +832,8 @@ void draw_tabline(void)
 
     // Draw the 'showcmd' information if 'showcmdloc' == "tabline".
     if (p_sc && *p_sloc == 't') {
-      const int sc_width = MIN(10, (int)Columns - col - (tabcount > 1) * 3);
+      int n = Columns - col - (tabcount > 1) * 3;
+      const int sc_width = MIN(10, n);
 
       if (sc_width > 0) {
         grid_line_puts(Columns - sc_width - (tabcount > 1) * 2,
