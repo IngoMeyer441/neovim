@@ -832,7 +832,13 @@ TSNode:range({include_bytes})                                 *TSNode:range()*
     • end byte (if {include_bytes} is `true`)
 
     Parameters: ~
-      • {include_bytes}  (`boolean?`)
+      • {include_bytes}  (`false?`)
+
+    Return (multiple): ~
+        (`integer`)
+        (`integer`)
+        (`integer`)
+        (`integer`)
 
 TSNode:sexpr()                                                *TSNode:sexpr()*
     Get an S-expression representing the node as a string.
@@ -942,7 +948,7 @@ get_node_range({node_or_range})              *vim.treesitter.get_node_range()*
     Returns the node's range or an unpacked range table
 
     Parameters: ~
-      • {node_or_range}  (`TSNode|table`) Node or table of positions
+      • {node_or_range}  (`TSNode|Range4`) Node or table of positions
 
     Return (multiple): ~
         (`integer`) start_row
@@ -1181,7 +1187,7 @@ inspect({lang})                            *vim.treesitter.language.inspect()*
       • {lang}  (`string`) Language
 
     Return: ~
-        (`table`)
+        (`TSLangInfo`)
 
 register({lang}, {filetype})              *vim.treesitter.language.register()*
     Register a parser named {lang} to be used for {filetype}(s).
@@ -1502,6 +1508,9 @@ analysis on a tree should use a timer to throttle too frequent updates.
 LanguageTree:children()                              *LanguageTree:children()*
     Returns a map of language to child tree.
 
+    Return: ~
+        (`table<string,vim.treesitter.LanguageTree>`)
+
 LanguageTree:contains({range})                       *LanguageTree:contains()*
     Determines whether {range} is contained in the |LanguageTree|.
 
@@ -1566,6 +1575,9 @@ LanguageTree:is_valid({exclude_children})            *LanguageTree:is_valid()*
 LanguageTree:lang()                                      *LanguageTree:lang()*
     Gets the language of this tree node.
 
+    Return: ~
+        (`string`)
+
                                            *LanguageTree:language_for_range()*
 LanguageTree:language_for_range({range})
     Gets the appropriate language that contains {range}.
@@ -1613,6 +1625,12 @@ LanguageTree:node_for_range({range}, {opts})
 
     Return: ~
         (`TSNode?`)
+
+LanguageTree:parent()                                  *LanguageTree:parent()*
+    Returns the parent tree. `nil` for the root tree.
+
+    Return: ~
+        (`vim.treesitter.LanguageTree?`)
 
 LanguageTree:parse({range}, {on_parse})                 *LanguageTree:parse()*
     Recursively parse all regions in the language tree using
@@ -1673,6 +1691,9 @@ LanguageTree:register_cbs({cbs}, {recursive})
 
 LanguageTree:source()                                  *LanguageTree:source()*
     Returns the source content of the language tree (bufnr or string).
+
+    Return: ~
+        (`integer|string`)
 
                                                *LanguageTree:tree_for_range()*
 LanguageTree:tree_for_range({range}, {opts})
