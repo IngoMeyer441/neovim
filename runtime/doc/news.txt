@@ -309,6 +309,7 @@ LUA
 OPTIONS
 
 • 'completeopt' flag "fuzzy" enables |fuzzy-matching| during |ins-completion|.
+• 'completeopt' flag "preinsert" highlights text to be inserted.
 • 'messagesopt' configures |:messages| and |hit-enter| prompt.
 • 'tabclose' controls which tab page to focus when closing a tab page.
 
@@ -376,6 +377,8 @@ TREESITTER
   child that contains a given node as descendant.
 • |LanguageTree:parse()| optionally supports asynchronous invocation, which is
   activated by passing the `on_parse` callback parameter.
+• |vim.treesitter.query.set()| can now inherit and/or extend runtime file
+  queries in addition to overriding.
 
 TUI
 
@@ -406,6 +409,11 @@ UI
 • |ui-messages| content chunks now also contain the highlight group ID.
 • |:checkhealth| can display in a floating window, controlled by the
   |g:health| variable.
+
+VIMSCRIPT
+
+• |getchar()| and |getcharstr()| have optional {opts} |Dict| argument to control:
+  cursor behavior, return type, and whether to simplify the returned key.
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
