@@ -72,6 +72,7 @@ DEFAULTS
 
 • 'number', 'relativenumber', 'signcolumn', and 'foldcolumn' are disabled in
   |terminal| buffers. See |terminal-config| for an example of changing these defaults.
+• 'diffopt' default includes "linematch:40".
 
 DIAGNOSTICS
 
@@ -220,6 +221,8 @@ DEFAULTS
     on a URL.
   • Mouse |popup-menu| includes a "Go to definition" item when LSP is active
     in the buffer.
+  • Mouse |popup-menu| includes "Show Diagnostics", "Show All Diagnostics" and
+    "Configure Diagnostics" items when there are diagnostics in the buffer.
   • |]d-default| and |[d-default| accept a count.
   • |[D-default| and |]D-default| jump to the first and last diagnostic in the
     current buffer, respectively.
@@ -243,6 +246,8 @@ DIAGNOSTICS
   |vim.diagnostic.jump()|.
 • A "virtual_lines" diagnostic handler was added to render diagnostics using
   virtual lines below the respective code.
+• The "virtual_text" diagnostic handler accepts a `current_line` option to
+  only show virtual text at the cursor's line.
 
 EDITOR
 
@@ -379,6 +384,9 @@ TREESITTER
   activated by passing the `on_parse` callback parameter.
 • |vim.treesitter.query.set()| can now inherit and/or extend runtime file
   queries in addition to overriding.
+• |LanguageTree:is_valid()| now accepts a range parameter to narrow the scope
+  of the validity check.
+• |:InspectTree| now shows which nodes are missing.
 
 TUI
 
