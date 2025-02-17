@@ -75,9 +75,17 @@ int linetabsize_col(int startvcol, char *s)
 
 /// Return the number of cells line "lnum" of window "wp" will take on the
 /// screen, taking into account the size of a tab and inline virtual text.
+/// Doesn't count the size of 'listchars' "eol".
 int linetabsize(win_T *wp, linenr_T lnum)
 {
   return win_linetabsize(wp, lnum, ml_get_buf(wp->w_buffer, lnum), MAXCOL);
+}
+
+/// Like linetabsize(), but counts the size of 'listchars' "eol".
+int linetabsize_eol(win_T *wp, linenr_T lnum)
+{
+  return linetabsize(wp, lnum)
+         + ((wp->w_p_list && wp->w_p_lcs_chars.eol != NUL) ? 1 : 0);
 }
 
 static const uint32_t inline_filter[4] = {[kMTMetaInline] = kMTFilterSelect };
@@ -720,7 +728,7 @@ bool win_may_fill(win_T *wp)
 /// @return Number of filler lines above lnum
 int win_get_fill(win_T *wp, linenr_T lnum)
 {
-  int virt_lines = decor_virt_lines(wp, lnum - 1, lnum, NULL, true);
+  int virt_lines = decor_virt_lines(wp, lnum - 1, lnum, NULL, NULL, true);
 
   // be quick when there are no filler lines
   if (diffopt_filler()) {
@@ -920,7 +928,7 @@ int plines_m_win(win_T *wp, linenr_T first, linenr_T last, int max)
 /// Mainly used for calculating scrolling offsets.
 int plines_m_win_fill(win_T *wp, linenr_T first, linenr_T last)
 {
-  int count = last - first + 1 + decor_virt_lines(wp, first - 1, last, NULL, false);
+  int count = last - first + 1 + decor_virt_lines(wp, first - 1, last, NULL, NULL, false);
 
   if (diffopt_filler()) {
     for (int lnum = first; lnum <= last; lnum++) {

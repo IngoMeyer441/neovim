@@ -1208,8 +1208,8 @@ nvim_select_popupmenu_item({item}, {insert}, {finish}, {opts})
 
                                                       *nvim_set_client_info()*
 nvim_set_client_info({name}, {version}, {type}, {methods}, {attributes})
-    Self-identifies the client. Sets the `client` object returned by
-    |nvim_get_chan_info()|.
+    Self-identifies the client, and sets optional flags on the channel.
+    Defines the `client` object returned by |nvim_get_chan_info()|.
 
     Clients should call this just after connecting, to provide hints for
     debugging and orchestration. (Note: Something is better than nothing!
@@ -2649,8 +2649,8 @@ nvim_buf_set_extmark({buffer}, {ns_id}, {line}, {col}, {opts})
                     lines are placed below the buffer line containing the
                     mark.
                   • virt_lines_above: place virtual lines above instead.
-                  • virt_lines_leftcol: Place extmarks in the leftmost column
-                    of the window, bypassing sign and number columns.
+                  • virt_lines_leftcol: Place virtual lines in the leftmost
+                    column of the window, bypassing sign and number columns.
                   • ephemeral : for use with |nvim_set_decoration_provider()|
                     callbacks. The mark will only be used for the current
                     redraw cycle, and not be permantently stored in the

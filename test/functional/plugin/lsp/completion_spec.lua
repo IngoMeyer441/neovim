@@ -770,18 +770,24 @@ end)
 
 --- @param name string
 --- @param completion_result lsp.CompletionList
+--- @param opts? {trigger_chars?: string[], resolve_result?: lsp.CompletionItem}
 --- @return integer
-local function create_server(name, completion_result)
+local function create_server(name, completion_result, opts)
+  opts = opts or {}
   return exec_lua(function()
     local server = _G._create_server({
       capabilities = {
         completionProvider = {
-          triggerCharacters = { '.' },
+          triggerCharacters = opts.trigger_chars or { '.' },
+          resolveProvider = opts.resolve_result ~= nil,
         },
       },
       handlers = {
         ['textDocument/completion'] = function(_, _, callback)
           callback(nil, completion_result)
+        end,
+        ['completionItem/resolve'] = function(_, _, callback)
+          callback(nil, opts.resolve_result)
         end,
       },
     })
@@ -793,6 +799,7 @@ local function create_server(name, completion_result)
       cmd = server.cmd,
       on_attach = function(client, bufnr0)
         vim.lsp.completion.enable(true, client.id, bufnr0, {
+          autotrigger = opts.trigger_chars ~= nil,
           convert = function(item)
             return { abbr = item.label:gsub('%b()', '') }
           end,
@@ -957,6 +964,39 @@ describe('vim.lsp.completion: protocol', function()
     end)
   end)
 
+  it('insert char triggers clients matching trigger characters', function()
+    local results1 = {
+      isIncomplete = false,
+      items = {
+        {
+          label = 'hello',
+        },
+      },
+    }
+    create_server('dummy1', results1, { trigger_chars = { 'e' } })
+    local results2 = {
+      isIncomplete = false,
+      items = {
+        {
+          label = 'hallo',
+        },
+      },
+    }
+    create_server('dummy2', results2, { trigger_chars = { 'h' } })
+
+    feed('h')
+    exec_lua(function()
+      vim.v.char = 'h'
+      vim.cmd.startinsert()
+      vim.api.nvim_exec_autocmds('InsertCharPre', {})
+    end)
+
+    assert_matches(function(matches)
+      eq(1, #matches)
+      eq('hallo', matches[1].word)
+    end)
+  end)
+
   it('executes commands', function()
     local completion_list = {
       isIncomplete = false,
@@ -973,6 +1013,59 @@ describe('vim.lsp.completion: protocol', function()
     }
     local client_id = create_server('dummy', completion_list)
 
+    exec_lua(function()
+      _G.called = false
+      local client = assert(vim.lsp.get_client_by_id(client_id))
+      client.commands.dummy = function()
+        _G.called = true
+      end
+    end)
+
+    feed('ih')
+    trigger_at_pos({ 1, 1 })
+
+    local item = completion_list.items[1]
+    exec_lua(function()
+      vim.v.completed_item = {
+        user_data = {
+          nvim = {
+            lsp = {
+              client_id = client_id,
+              completion_item = item,
+            },
+          },
+        },
+      }
+    end)
+
+    feed('<C-x><C-o><C-y>')
+
+    assert_matches(function(matches)
+      eq(1, #matches)
+      eq('hello', matches[1].word)
+      eq(true, exec_lua('return _G.called'))
+    end)
+  end)
+
+  it('resolves and executes commands', function()
+    local completion_list = {
+      isIncomplete = false,
+      items = {
+        {
+          label = 'hello',
+        },
+      },
+    }
+    local client_id = create_server('dummy', completion_list, {
+      resolve_result = {
+        label = 'hello',
+        command = {
+          arguments = { '1', '0' },
+          command = 'dummy',
+          title = '',
+        },
+      },
+    })
     exec_lua(function()
       _G.called = false
       local client = assert(vim.lsp.get_client_by_id(client_id))
@@ -1075,6 +1168,44 @@ describe('vim.lsp.completion: integration', function()
       #'hello friends',
       exec_lua(function()
         return vim.api.nvim_win_get_cursor(0)[2]
+      end)
+    )
+  end)
+
+  it('#clear multiple-lines word', function()
+    local completion_list = {
+      isIncomplete = false,
+      items = {
+        {
+          label = 'then...end',
+          sortText = '0001',
+          insertText = 'then\n\t$0\nend',
+          kind = 15,
+          insertTextFormat = 2,
+        },
+      },
+    }
+    exec_lua(function()
+      vim.o.completeopt = 'menuone,noselect'
+    end)
+    create_server('dummy', completion_list)
+    feed('Sif true <C-X><C-O>')
+    retry(nil, nil, function()
+      eq(
+        1,
+        exec_lua(function()
+          return vim.fn.pumvisible()
+        end)
+      )
+    end)
+    feed('<C-n><C-y>')
+    eq(
+      { true, { 'if true then', '\t', 'end' } },
+      exec_lua(function()
+        return {
+          vim.snippet.active({ direction = 1 }),
+          vim.api.nvim_buf_get_lines(0, 0, -1, true),
+        }
       end)
     )
   end)

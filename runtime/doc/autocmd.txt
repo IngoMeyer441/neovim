@@ -1004,8 +1004,8 @@ TermClose			When a |terminal| job ends.
 				Sets these |v:event| keys:
 				    status
 							*TermRequest*
-TermRequest			When a |:terminal| child process emits an OSC
-				or DCS sequence. Sets |v:termrequest|. The
+TermRequest			When a |:terminal| child process emits an OSC,
+				DCS or APC sequence. Sets |v:termrequest|. The
 				|event-data| is the request string.
 							*TermResponse*
 TermResponse			When Nvim receives an OSC or DCS response from
@@ -1675,6 +1675,9 @@ See the $VIMRUNTIME/plugin/netrwPlugin.vim for examples.
 To disable autocommands for some time use the 'eventignore' option.  Note that
 this may cause unexpected behavior, make sure you restore 'eventignore'
 afterwards, using a |:try| block with |:finally|.
+
+To disable autocmds indefinitely in a specific window use the 'eventignorewin'
+option.  This can only be used to ignore window and buffer related events.
 
 							*:noautocmd* *:noa*
 To disable autocommands for just one command use the ":noautocmd" command
