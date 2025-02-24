@@ -3368,58 +3368,89 @@ describe('decorations: inline virtual text', function()
     command("set nowrap")
     api.nvim_buf_set_extmark(0, ns, 0, 2, { virt_text = { { string.rep('X', 55), 'Special' } }, virt_text_pos = 'inline' })
     feed('$')
-    screen:expect{grid=[[
+    screen:expect([[
       {10:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX}cdefgh^i|
       {1:~                                                 }|
                                                         |
-    ]]}
+    ]])
+    command('set list listchars+=precedes:!')
+    screen:expect([[
+      {1:!}{10:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX}cdefgh^i|
+      {1:~                                                 }|
+                                                        |
+    ]])
   end)
 
   it('draws correctly with no wrap and multibyte virtual text', function()
     insert('12345678')
     command('set nowrap')
     api.nvim_buf_set_extmark(0, ns, 0, 2, {
-      virt_text = { { 'αβ̳γ̲口=', 'Special' }, { '❤️', 'Special' } },
+      hl_mode = 'replace',
+      virt_text = { { 'α口β̳γ̲=', 'Special' }, { '❤️', 'Special' } },
       virt_text_pos = 'inline',
     })
     screen:expect([[
-      12{10:αβ̳γ̲口=❤️}34567^8                                  |
+      12{10:α口β̳γ̲=❤️}34567^8                                  |
       {1:~                                                 }|
                                                         |
     ]])
     feed('zl')
     screen:expect([[
-      2{10:αβ̳γ̲口=❤️}34567^8                                   |
+      2{10:α口β̳γ̲=❤️}34567^8                                   |
       {1:~                                                 }|
                                                         |
     ]])
     feed('zl')
     screen:expect([[
-      {10:αβ̳γ̲口=❤️}34567^8                                    |
+      {10:α口β̳γ̲=❤️}34567^8                                    |
       {1:~                                                 }|
                                                         |
     ]])
     feed('zl')
     screen:expect([[
-      {10:β̳γ̲口=❤️}34567^8                                     |
+      {10:口β̳γ̲=❤️}34567^8                                     |
+      {1:~                                                 }|
+                                                        |
+    ]])
+    feed('V')
+    screen:expect([[
+      {10:口β̳γ̲=❤️}{7:34567}^8                                     |
+      {1:~                                                 }|
+      {8:-- VISUAL LINE --}                                 |
+    ]])
+    command('set list listchars+=precedes:!')
+    screen:expect([[
+      {1:!<}{10:β̳γ̲=❤️}{7:34567}^8                                     |
+      {1:~                                                 }|
+      {8:-- VISUAL LINE --}                                 |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {1:!}{10:β̳γ̲=❤️}{7:34567}^8                                      |
+      {1:~                                                 }|
+      {8:-- VISUAL LINE --}                                 |
+    ]])
+    command('set nolist')
+    screen:expect([[
+      {1:<}{10:β̳γ̲=❤️}{7:34567}^8                                      |
+      {1:~                                                 }|
+      {8:-- VISUAL LINE --}                                 |
+    ]])
+    feed('<Esc>')
+    screen:expect([[
+      {1:<}{10:β̳γ̲=❤️}34567^8                                      |
       {1:~                                                 }|
                                                         |
     ]])
     feed('zl')
     screen:expect([[
-      {10:γ̲口=❤️}34567^8                                      |
+      {10:β̳γ̲=❤️}34567^8                                       |
       {1:~                                                 }|
                                                         |
     ]])
     feed('zl')
     screen:expect([[
-      {10:口=❤️}34567^8                                       |
-      {1:~                                                 }|
-                                                        |
-    ]])
-    feed('zl')
-    screen:expect([[
-      {10: =❤️}34567^8                                        |
+      {10:γ̲=❤️}34567^8                                        |
       {1:~                                                 }|
                                                         |
     ]])
@@ -3435,9 +3466,21 @@ describe('decorations: inline virtual text', function()
       {1:~                                                 }|
                                                         |
     ]])
+    command('set list')
+    screen:expect([[
+      {1:!<}34567^8                                          |
+      {1:~                                                 }|
+                                                        |
+    ]])
     feed('zl')
     screen:expect([[
-      {10: }34567^8                                           |
+      {1:!}34567^8                                           |
+      {1:~                                                 }|
+                                                        |
+    ]])
+    command('set nolist')
+    screen:expect([[
+      {1:<}34567^8                                           |
       {1:~                                                 }|
                                                         |
     ]])
@@ -4949,7 +4992,6 @@ if (h->n_buckets < new_n_buckets) { // expand
     ]]}
   end)
 
-
   it('works with hard TABs', function()
     insert(example_text2)
     feed 'gg'
@@ -5018,6 +5060,140 @@ if (h->n_buckets < new_n_buckets) { // expand
       {8:  8 }}                                             |
                                                         |
     ]]}
+  end)
+
+  it('scrolls horizontally with virt_lines_overflow = "scroll" #31000', function()
+    command('set nowrap signcolumn=yes')
+    insert('abcdefghijklmnopqrstuvwxyz')
+    api.nvim_buf_set_extmark(0, ns, 0, 0, {
+      virt_lines = {
+        { { '12α口β̳γ̲=', 'Special' }, { '❤️345678', 'Special' } },
+        { { '123\t45\t678', 'NonText' } },
+      },
+      virt_lines_overflow = 'scroll',
+    })
+    screen:expect([[
+      {7:  }abcdefghijklmnopqrstuvwxy^z                      |
+      {7:  }{16:12α口β̳γ̲=❤️345678}                                |
+      {7:  }{1:123     45      678}                             |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }bcdefghijklmnopqrstuvwxy^z                       |
+      {7:  }{16:2α口β̳γ̲=❤️345678}                                 |
+      {7:  }{1:23     45      678}                              |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }cdefghijklmnopqrstuvwxy^z                        |
+      {7:  }{16:α口β̳γ̲=❤️345678}                                  |
+      {7:  }{1:3     45      678}                               |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }defghijklmnopqrstuvwxy^z                         |
+      {7:  }{16:口β̳γ̲=❤️345678}                                   |
+      {7:  }{1:     45      678}                                |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }efghijklmnopqrstuvwxy^z                          |
+      {7:  }{16: β̳γ̲=❤️345678}                                    |
+      {7:  }{1:    45      678}                                 |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }fghijklmnopqrstuvwxy^z                           |
+      {7:  }{16:β̳γ̲=❤️345678}                                     |
+      {7:  }{1:   45      678}                                  |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }ghijklmnopqrstuvwxy^z                            |
+      {7:  }{16:γ̲=❤️345678}                                      |
+      {7:  }{1:  45      678}                                   |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }hijklmnopqrstuvwxy^z                             |
+      {7:  }{16:=❤️345678}                                       |
+      {7:  }{1: 45      678}                                    |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }ijklmnopqrstuvwxy^z                              |
+      {7:  }{16:❤️345678}                                        |
+      {7:  }{1:45      678}                                     |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }jklmnopqrstuvwxy^z                               |
+      {7:  }{16: 345678}                                         |
+      {7:  }{1:5      678}                                      |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }klmnopqrstuvwxy^z                                |
+      {7:  }{16:345678}                                          |
+      {7:  }{1:      678}                                       |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }lmnopqrstuvwxy^z                                 |
+      {7:  }{16:45678}                                           |
+      {7:  }{1:     678}                                        |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    feed('zl')
+    screen:expect([[
+      {7:  }mnopqrstuvwxy^z                                  |
+      {7:  }{16:5678}                                            |
+      {7:  }{1:    678}                                         |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+    api.nvim_buf_set_extmark(0, ns, 0, 1, {
+      virt_lines = { { { '123\t45\t67', 'NonText' } } },
+      virt_lines_leftcol = true,
+      virt_lines_overflow = 'trunc',
+    })
+    api.nvim_buf_set_extmark(0, ns, 0, 2, {
+      virt_lines = { { { '123\t45\t6', 'NonText' } } },
+      virt_lines_leftcol = false,
+      virt_lines_overflow = 'trunc',
+    })
+    screen:expect([[
+      {7:  }mnopqrstuvwxy^z                                  |
+      {7:  }{16:5678}                                            |
+      {7:  }{1:    678}                                         |
+      {1:123     45      67}                                |
+      {7:  }{1:123     45      6}                               |
+      {1:~                                                 }|*6
+                                                        |
+    ]])
   end)
 
   it('does not show twice if end_row or end_col is specified #18622', function()
