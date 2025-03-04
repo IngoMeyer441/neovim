@@ -1808,10 +1808,12 @@ int ins_compl_len(void)
   return compl_length;
 }
 
-/// Return true when preinsert is set otherwise FALSE.
+/// Return true when the 'completeopt' "preinsert" flag is in effect,
+/// otherwise return false.
 static bool ins_compl_has_preinsert(void)
 {
-  return (get_cot_flags() & (kOptCotFlagFuzzy|kOptCotFlagPreinsert)) == kOptCotFlagPreinsert;
+  return (get_cot_flags() & (kOptCotFlagFuzzy|kOptCotFlagPreinsert|kOptCotFlagMenuone))
+         == (kOptCotFlagPreinsert|kOptCotFlagMenuone);
 }
 
 /// Returns true if the pre-insert effect is valid and the cursor is within
@@ -3833,6 +3835,7 @@ static void ins_compl_expand_multiple(char *str)
 {
   char *start = str;
   char *curr = str;
+  int base_indent = get_indent();
   while (*curr != NUL) {
     if (*curr == '\n') {
       // Insert the text chunk before newline
@@ -3841,7 +3844,7 @@ static void ins_compl_expand_multiple(char *str)
       }
 
       // Handle newline
-      open_line(FORWARD, OPENLINE_KEEPTRAIL, false, NULL);
+      open_line(FORWARD, OPENLINE_KEEPTRAIL | OPENLINE_FORCE_INDENT, base_indent, NULL);
       start = curr + 1;
     }
     curr++;

@@ -1044,10 +1044,10 @@ vim.o.cfu = vim.o.completefunc
 vim.bo.completefunc = vim.o.completefunc
 vim.bo.cfu = vim.bo.completefunc
 
---- A comma-separated list of `complete-items` that controls the alignment
---- and display order of items in the popup menu during Insert mode
---- completion. The supported values are abbr, kind, and menu. These
---- options allow to customize how the completion items are shown in the
+--- A comma-separated list of strings that controls the alignment and
+--- display order of items in the popup menu during Insert mode
+--- completion.  The supported values are "abbr", "kind", and "menu".
+--- These values allow customizing how `complete-items` are shown in the
 --- popup menu.  Note: must always contain those three values in any
 --- order.
 ---
@@ -1060,36 +1060,6 @@ vim.go.cia = vim.go.completeitemalign
 --- A comma-separated list of options for Insert mode completion
 --- `ins-completion`.  The supported values are:
 ---
----    menu	    Use a popup menu to show the possible completions.  The
---- 	    menu is only shown when there is more than one match and
---- 	    sufficient colors are available.  `ins-completion-menu`
----
----    menuone  Use the popup menu also when there is only one match.
---- 	    Useful when there is additional information about the
---- 	    match, e.g., what file it comes from.
----
----    longest  Only insert the longest common text of the matches.  If
---- 	    the menu is displayed you can use CTRL-L to add more
---- 	    characters.  Whether case is ignored depends on the kind
---- 	    of completion.  For buffer text the 'ignorecase' option is
---- 	    used.
----
----    preview  Show extra information about the currently selected
---- 	    completion in the preview window.  Only works in
---- 	    combination with "menu" or "menuone".
----
----    popup    Show extra information about the currently selected
---- 	    completion in a popup window.  Only works in combination
---- 	    with "menu" or "menuone".  Overrides "preview".
----
----    noinsert Do not insert any text for a match until the user selects
---- 	    a match from the menu. Only works in combination with
---- 	    "menu" or "menuone". No effect if "longest" is present.
----
----    noselect Same as "noinsert", except that no menu item is
---- 	    pre-selected. If both "noinsert" and "noselect" are
---- 	    present, "noselect" has precedence.
----
 ---    fuzzy    Enable `fuzzy-matching` for completion candidates. This
 --- 	    allows for more flexible and intuitive matching, where
 --- 	    characters can be skipped and matches can be found even
@@ -1098,15 +1068,45 @@ vim.go.cia = vim.go.completeitemalign
 --- 	    list of alternatives, but not how the candidates are
 --- 	    collected (using different completion types).
 ---
+---    longest  Only insert the longest common text of the matches.  If
+--- 	    the menu is displayed you can use CTRL-L to add more
+--- 	    characters.  Whether case is ignored depends on the kind
+--- 	    of completion.  For buffer text the 'ignorecase' option is
+--- 	    used.
+---
+---    menu	    Use a popup menu to show the possible completions.  The
+--- 	    menu is only shown when there is more than one match and
+--- 	    sufficient colors are available.  `ins-completion-menu`
+---
+---    menuone  Use the popup menu also when there is only one match.
+--- 	    Useful when there is additional information about the
+--- 	    match, e.g., what file it comes from.
+---
+---    noinsert Do not insert any text for a match until the user selects
+--- 	    a match from the menu.  Only works in combination with
+--- 	    "menu" or "menuone". No effect if "longest" is present.
+---
+---    noselect Same as "noinsert", except that no menu item is
+--- 	    pre-selected.  If both "noinsert" and "noselect" are
+--- 	    present, "noselect" has precedence.
+---
 ---    nosort   Disable sorting of completion candidates based on fuzzy
---- 	    scores when "fuzzy" is enabled. Candidates will appear
+--- 	    scores when "fuzzy" is enabled.  Candidates will appear
 --- 	    in their original order.
+---
+---    popup    Show extra information about the currently selected
+--- 	    completion in a popup window.  Only works in combination
+--- 	    with "menu" or "menuone".  Overrides "preview".
 ---
 ---    preinsert
 --- 	    Preinsert the portion of the first candidate word that is
 --- 	    not part of the current completion leader and using the
---- 	    `hl-ComplMatchIns` highlight group. Does not work when
---- 	    "fuzzy" is also included.
+--- 	    `hl-ComplMatchIns` highlight group.  In order for it to
+--- 	    work, "fuzzy" must not be set and "menuone" must be set.
+---
+---    preview  Show extra information about the currently selected
+--- 	    completion in the preview window.  Only works in
+--- 	    combination with "menu" or "menuone".
 ---
 --- @type string
 vim.o.completeopt = "menu,preview"
@@ -4381,8 +4381,8 @@ vim.go.mousemodel = vim.o.mousemodel
 vim.go.mousem = vim.go.mousemodel
 
 --- When on, mouse move events are delivered to the input queue and are
---- available for mapping. The default, off, avoids the mouse movement
---- overhead except when needed.
+--- available for mapping `<MouseMove>`. The default, off, avoids the mouse
+--- movement overhead except when needed.
 --- Warning: Setting this option can make pending mappings to be aborted
 --- when the mouse is moved.
 ---
@@ -7691,7 +7691,10 @@ vim.go.wmnu = vim.go.wildmenu
 --- "lastused"	When completing buffer names and more than one buffer
 --- 		matches, sort buffers by time last used (other than
 --- 		the current buffer).
---- When there is only a single match, it is fully completed in all cases.
+--- "noselect"	Do not pre-select first menu item and start 'wildmenu'
+--- 		if it is enabled.
+--- When there is only a single match, it is fully completed in all cases
+--- except when "noselect" is present.
 ---
 --- Examples of useful colon-separated values:
 --- "longest:full"	Like "longest", but also start 'wildmenu' if it is
@@ -7729,7 +7732,17 @@ vim.go.wmnu = vim.go.wildmenu
 --- ```vim
 --- 	set wildmode=longest,list
 --- ```
---- Complete longest common string, then list alternatives.
+--- Complete longest common string, then list alternatives
+---
+--- ```vim
+--- 	set wildmode=noselect:full
+--- ```
+--- Display 'wildmenu' without completing, then each full match
+---
+--- ```vim
+--- 	set wildmode=noselect:lastused,full
+--- ```
+--- Same as above, but sort buffers by time last used.
 --- More info here: `cmdline-completion`.
 ---
 --- @type string

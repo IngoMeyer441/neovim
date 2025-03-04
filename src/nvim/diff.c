@@ -24,6 +24,7 @@
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
+#include "nvim/decoration.h"
 #include "nvim/diff.h"
 #include "nvim/drawscreen.h"
 #include "nvim/errors.h"
@@ -1621,7 +1622,23 @@ static void process_hunk(diff_T **dpp, diff_T **dprevp, int idx_orig, int idx_ne
       dp->df_count[idx_new] = (linenr_T)hunk->count_new - off;
     } else {
       // second overlap of new block with existing block
-      dp->df_count[idx_new] += (linenr_T)hunk->count_new;
+
+      // if this hunk has different orig/new counts, adjust
+      // the diff block size first. When we handled the first hunk we
+      // would have expanded it to fit, without knowing that this
+      // hunk exists
+      int orig_size_in_dp = MIN(hunk->count_orig,
+                                dp->df_lnum[idx_orig] +
+                                dp->df_count[idx_orig] - hunk->lnum_orig);
+      int size_diff = hunk->count_new - orig_size_in_dp;
+      dp->df_count[idx_new] += size_diff;
+
+      // grow existing block to include the overlap completely
+      off = hunk->lnum_new + hunk->count_new
+            - (dp->df_lnum[idx_new] + dp->df_count[idx_new]);
+      if (off > 0) {
+        dp->df_count[idx_new] += off;
+      }
       if ((dp->df_lnum[idx_new] + dp->df_count[idx_new] - 1)
           > curtab->tp_diffbuf[idx_new]->b_ml.ml_line_count) {
         dp->df_count[idx_new] = curtab->tp_diffbuf[idx_new]->b_ml.ml_line_count
@@ -1635,8 +1652,15 @@ static void process_hunk(diff_T **dpp, diff_T **dprevp, int idx_orig, int idx_ne
           - (dpl->df_lnum[idx_orig] + dpl->df_count[idx_orig]);
 
     if (off < 0) {
-      // new change ends in existing block, adjust the end
-      dp->df_count[idx_new] += -off;
+      // new change ends in existing block, adjust the end. We only
+      // need to do this once per block or we will over-adjust.
+      if (*notsetp || dp != dpl) {
+        // adjusting by 'off' here is only correct if
+        // there is not another hunk in this block. we
+        // adjust for this when we encounter a second
+        // overlap later.
+        dp->df_count[idx_new] += -off;
+      }
       if ((dp->df_lnum[idx_new] + dp->df_count[idx_new] - 1)
           > curtab->tp_diffbuf[idx_new]->b_ml.ml_line_count) {
         dp->df_count[idx_new] = curtab->tp_diffbuf[idx_new]->b_ml.ml_line_count
@@ -2107,7 +2131,7 @@ int diff_check_with_linestatus(win_T *wp, linenr_T lnum, int *linestatus)
   }
 
   // A closed fold never has filler lines.
-  if (hasFolding(wp, lnum, NULL, NULL)) {
+  if (hasFolding(wp, lnum, NULL, NULL) || decor_conceal_line(wp, lnum - 1, false)) {
     return 0;
   }
 
