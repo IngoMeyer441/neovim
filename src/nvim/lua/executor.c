@@ -125,7 +125,28 @@ lua_State *get_global_lstate(void)
   return global_lstate;
 }
 
-/// Convert lua error into a Vim error message
+/// Gets the Lua error at top of stack as a string, possibly modifying it in-place (but doesn't
+/// change stack height).
+///
+/// The returned string points to memory on the Lua stack. Use or duplicate it before using
+/// `lstate` again.
+///
+/// @param[out] len length of error (can be NULL)
+static const char *nlua_get_error(lua_State *lstate, size_t *len)
+{
+  if (luaL_getmetafield(lstate, -1, "__tostring")) {
+    if (lua_isfunction(lstate, -1) && luaL_callmeta(lstate, -2, "__tostring")) {
+      // call __tostring, convert the result and replace error with it
+      lua_replace(lstate, -3);
+    }
+    // pop __tostring.
+    lua_pop(lstate, 1);
+  }
+
+  return lua_tolstring(lstate, -1, len);
+}
+
+/// Converts a Lua error into a Vim error message.
 ///
 /// @param  lstate  Lua interpreter state.
 /// @param[in]  msg  Message base, must contain one `%.*s`.
@@ -133,22 +154,7 @@ void nlua_error(lua_State *const lstate, const char *const msg)
   FUNC_ATTR_NONNULL_ALL
 {
   size_t len;
-  const char *str = NULL;
-
-  if (luaL_getmetafield(lstate, -1, "__tostring")) {
-    if (lua_isfunction(lstate, -1) && luaL_callmeta(lstate, -2, "__tostring")) {
-      // call __tostring, convert the result and pop result.
-      str = lua_tolstring(lstate, -1, &len);
-      lua_pop(lstate, 1);
-    }
-    // pop __tostring.
-    lua_pop(lstate, 1);
-  }
-
-  if (!str) {
-    // defer to lua default conversion, this will render tables as [NULL].
-    str = lua_tolstring(lstate, -1, &len);
-  }
+  const char *str = nlua_get_error(lstate, &len);
 
   if (in_script) {
     fprintf(stderr, msg, (int)len, str);
@@ -218,7 +224,9 @@ static int nlua_fast_cfpcall(lua_State *lstate, int nargs, int nresult, int flag
       // consider out of memory errors unrecoverable, just like xmalloc()
       preserve_exit(e_outofmem);
     }
-    const char *error = lua_tostring(lstate, -1);
+
+    size_t len;
+    const char *error = nlua_get_error(lstate, &len);
 
     multiqueue_put(main_loop.events, nlua_luv_error_event,
                    error != NULL ? xstrdup(error) : NULL, (void *)(intptr_t)kCallback);
@@ -1659,13 +1667,13 @@ void ex_lua(exarg_T *const eap)
 
   // ":lua {code}", ":={expr}" or ":lua ={expr}"
   //
-  // When "=expr" is used transform it to "vim.print(expr)".
+  // When "=expr" is used transform it to "vim._print(true, expr)".
   if (eap->cmdidx == CMD_equal || code[0] == '=') {
     size_t off = (eap->cmdidx == CMD_equal) ? 0 : 1;
-    len += sizeof("vim.print()") - 1 - off;
+    len += sizeof("vim._print(true, )") - 1 - off;
     // `nlua_typval_exec` doesn't expect NUL-terminated string so `len` must end before NUL byte.
     char *code_buf = xmallocz(len);
-    vim_snprintf(code_buf, len + 1, "vim.print(%s)", code + off);
+    vim_snprintf(code_buf, len + 1, "vim._print(true, %s)", code + off);
     xfree(code);
     code = code_buf;
   }

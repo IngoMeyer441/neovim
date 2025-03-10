@@ -208,8 +208,9 @@ static void changed_lines_invalidate_win(win_T *wp, linenr_T lnum, colnr_T col, 
           wp->w_lines[i].wl_foldend += xtra;
           wp->w_lines[i].wl_lastlnum += xtra;
         }
-      } else if (wp->w_lines[i].wl_foldend >= lnum) {
-        // change somewhere inside this range of folded lines,
+      } else if (wp->w_lines[i].wl_foldend >= lnum
+                 || wp->w_lines[i].wl_lastlnum >= lnum) {
+        // change somewhere inside this range of folded or concealed lines,
         // may need to be redrawn
         wp->w_lines[i].wl_valid = false;
       }
@@ -1315,7 +1316,8 @@ bool open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
   // May do indenting after opening a new line.
   bool do_cindent = !p_paste && (curbuf->b_p_cin || *curbuf->b_p_inde != NUL)
                     && in_cinkeys(dir == FORWARD ? KEY_OPEN_FORW : KEY_OPEN_BACK,
-                                  ' ', linewhite(curwin->w_cursor.lnum));
+                                  ' ', linewhite(curwin->w_cursor.lnum))
+                    && !(flags & OPENLINE_FORCE_INDENT);
 
   // Find out if the current line starts with a comment leader.
   // This may then be inserted in front of the new line.

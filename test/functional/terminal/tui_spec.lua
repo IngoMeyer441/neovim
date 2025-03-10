@@ -215,7 +215,7 @@ describe('TUI', function()
       _G.termresponse = nil
       vim.api.nvim_create_autocmd('TermResponse', {
         once = true,
-        callback = function(ev) _G.termresponse = ev.data end,
+        callback = function(ev) _G.termresponse = ev.data.sequence end,
       })
     ]])
     feed_data('\027P0$r\027\\')
@@ -2199,7 +2199,7 @@ describe('TUI', function()
       vim.api.nvim_create_autocmd('TermRequest', {
         buffer = buf,
         callback = function(args)
-          local req = args.data
+          local req = args.data.sequence
           if not req then
             return
           end
@@ -2220,6 +2220,32 @@ describe('TUI', function()
     ]])
     retry(nil, 1000, function()
       eq({ { id = 0xE1EA0000, url = 'https://example.com' } }, exec_lua([[return _G.urls]]))
+    end)
+  end)
+
+  it('TermResponse works with vim.wait() from another autocommand #32706', function()
+    child_exec_lua([[
+      _G.termresponse = nil
+      vim.api.nvim_create_autocmd('TermResponse', {
+        callback = function(ev)
+          _G.sequence = ev.data.sequence
+          _G.v_termresponse = vim.v.termresponse
+        end,
+      })
+      vim.api.nvim_create_autocmd('InsertEnter', {
+        buffer = 0,
+        callback = function()
+          _G.result = vim.wait(3000, function()
+            local expected = '\027P1+r5463'
+            return _G.sequence == expected and _G.v_termresponse == expected
+          end)
+        end,
+      })
+    ]])
+    feed_data('i')
+    feed_data('\027P1+r5463\027\\')
+    retry(nil, 4000, function()
+      eq(true, child_exec_lua('return _G.result'))
     end)
   end)
 end)
@@ -3171,12 +3197,12 @@ describe('TUI', function()
     exec_lua([[
       vim.api.nvim_create_autocmd('TermRequest', {
         callback = function(args)
-          local req = args.data
-          local payload = req:match('^\027P%+q([%x;]+)$')
-          if payload then
+          local req = args.data.sequence
+          local sequence = req:match('^\027P%+q([%x;]+)$')
+          if sequence then
             local t = {}
-            for cap in vim.gsplit(payload, ';') do
-              local resp = string.format('\027P1+r%s\027\\', payload)
+            for cap in vim.gsplit(sequence, ';') do
+              local resp = string.format('\027P1+r%s\027\\', sequence)
               vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
               t[vim.text.hexdecode(cap)] = true
             end
@@ -3222,7 +3248,7 @@ describe('TUI', function()
     exec_lua([[
       vim.api.nvim_create_autocmd('TermRequest', {
         callback = function(args)
-          local req = args.data
+          local req = args.data.sequence
           vim.g.termrequest = req
           local xtgettcap = req:match('^\027P%+q([%x;]+)$')
           if xtgettcap then
@@ -3274,10 +3300,10 @@ describe('TUI', function()
     exec_lua([[
       vim.api.nvim_create_autocmd('TermRequest', {
         callback = function(args)
-          local req = args.data
-          local payload = req:match('^\027P%+q([%x;]+)$')
-          if payload and vim.text.hexdecode(payload) == 'Ms' then
-            local resp = string.format('\027P1+r%s=%s\027\\', payload, vim.text.hexencode('\027]52;;\027\\'))
+          local req = args.data.sequence
+          local sequence = req:match('^\027P%+q([%x;]+)$')
+          if sequence and vim.text.hexdecode(sequence) == 'Ms' then
+            local resp = string.format('\027P1+r%s=%s\027\\', sequence, vim.text.hexencode('\027]52;;\027\\'))
             vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
             return true
           end
@@ -3353,7 +3379,7 @@ describe('TUI bg color', function()
     exec_lua([[
       vim.api.nvim_create_autocmd('TermRequest', {
         callback = function(args)
-          local req = args.data
+          local req = args.data.sequence
           if req == '\027]11;?' then
             vim.g.oscrequest = true
             return true

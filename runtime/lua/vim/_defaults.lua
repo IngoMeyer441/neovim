@@ -515,8 +515,8 @@ do
       if channel == 0 then
         return
       end
-      local fg_request = args.data == '\027]10;?'
-      local bg_request = args.data == '\027]11;?'
+      local fg_request = args.data.sequence == '\027]10;?'
+      local bg_request = args.data.sequence == '\027]11;?'
       if fg_request or bg_request then
         -- WARN: This does not return the actual foreground/background color,
         -- but rather returns:
@@ -534,14 +534,59 @@ do
     end,
   })
 
+  local nvim_terminal_prompt_ns = vim.api.nvim_create_namespace('nvim.terminal.prompt')
+  vim.api.nvim_create_autocmd('TermRequest', {
+    group = nvim_terminal_augroup,
+    desc = 'Mark shell prompts indicated by OSC 133 sequences for navigation',
+    callback = function(args)
+      if string.match(args.data.sequence, '^\027]133;A') then
+        local lnum = args.data.cursor[1] ---@type integer
+        vim.api.nvim_buf_set_extmark(args.buf, nvim_terminal_prompt_ns, lnum - 1, 0, {})
+      end
+    end,
+  })
+
+  ---@param ns integer
+  ---@param buf integer
+  ---@param count integer
+  local function jump_to_prompt(ns, win, buf, count)
+    local row, col = unpack(vim.api.nvim_win_get_cursor(win))
+    local start = -1
+    local end_ ---@type 0|-1
+    if count > 0 then
+      start = row
+      end_ = -1
+    elseif count < 0 then
+      -- Subtract 2 because row is 1-based, but extmarks are 0-based
+      start = row - 2
+      end_ = 0
+    end
+
+    if start < 0 then
+      return
+    end
+
+    local extmarks = vim.api.nvim_buf_get_extmarks(
+      buf,
+      ns,
+      { start, col },
+      end_,
+      { limit = math.abs(count) }
+    )
+    if #extmarks > 0 then
+      local extmark = extmarks[math.min(#extmarks, math.abs(count))]
+      vim.api.nvim_win_set_cursor(win, { extmark[2] + 1, extmark[3] })
+    end
+  end
+
   vim.api.nvim_create_autocmd('TermOpen', {
     group = nvim_terminal_augroup,
     desc = 'Default settings for :terminal buffers',
-    callback = function()
-      vim.bo.modifiable = false
-      vim.bo.undolevels = -1
-      vim.bo.scrollback = vim.o.scrollback < 0 and 10000 or math.max(1, vim.o.scrollback)
-      vim.bo.textwidth = 0
+    callback = function(args)
+      vim.bo[args.buf].modifiable = false
+      vim.bo[args.buf].undolevels = -1
+      vim.bo[args.buf].scrollback = vim.o.scrollback < 0 and 10000 or math.max(1, vim.o.scrollback)
+      vim.bo[args.buf].textwidth = 0
       vim.wo[0][0].wrap = false
       vim.wo[0][0].list = false
       vim.wo[0][0].number = false
@@ -555,6 +600,13 @@ do
         winhl = winhl .. ','
       end
       vim.wo[0][0].winhighlight = winhl .. 'StatusLine:StatusLineTerm,StatusLineNC:StatusLineTermNC'
+
+      vim.keymap.set('n', '[[', function()
+        jump_to_prompt(nvim_terminal_prompt_ns, 0, args.buf, -vim.v.count1)
+      end, { buffer = args.buf, desc = 'Jump [count] shell prompts backward' })
+      vim.keymap.set('n', ']]', function()
+        jump_to_prompt(nvim_terminal_prompt_ns, 0, args.buf, vim.v.count1)
+      end, { buffer = args.buf, desc = 'Jump [count] shell prompts forward' })
     end,
   })
 
@@ -712,7 +764,7 @@ do
         nested = true,
         desc = "Update the value of 'background' automatically based on the terminal emulator's background color",
         callback = function(args)
-          local resp = args.data ---@type string
+          local resp = args.data.sequence ---@type string
           local r, g, b = parseosc11(resp)
           if r and g and b then
             local rr = parsecolor(r)
@@ -788,7 +840,7 @@ do
           group = group,
           nested = true,
           callback = function(args)
-            local resp = args.data ---@type string
+            local resp = args.data.sequence ---@type string
             local decrqss = resp:match('^\027P1%$r([%d;:]+)m$')
 
             if decrqss then
@@ -834,9 +886,7 @@ do
         -- terminal responds to the DECRQSS with the same SGR sequence that we
         -- sent then the terminal supports truecolor.
         local decrqss = '\027P$qm\027\\'
-        if os.getenv('TMUX') then
-          decrqss = string.format('\027Ptmux;%s\027\\', decrqss:gsub('\027', '\027\027'))
-        end
+
         -- Reset attributes first, as other code may have set attributes.
         io.stdout:write(string.format('\027[0m\027[48;2;%d;%d;%dm%s', r, g, b, decrqss))
 

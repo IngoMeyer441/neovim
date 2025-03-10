@@ -54,7 +54,7 @@ function M.build_pos_hash(strings)
   return len_pos_buckets, maxlen, worst_buck_size
 end
 
-function M.switcher(put, tab, maxlen, worst_buck_size)
+function M.switcher(put, tab, maxlen, worst_buck_size, icase)
   local neworder = {} --- @type string[]
   put '  switch (len) {\n'
   local bucky = worst_buck_size > 1
@@ -72,7 +72,11 @@ function M.switcher(put, tab, maxlen, worst_buck_size)
           local startidx = #neworder
           vim.list_extend(neworder, buck)
           local endidx = #neworder
-          put("      case '" .. c .. "': ")
+          if icase and c:upper() ~= c:lower() then
+            put(("      case '%s': case '%s': "):format(c:upper(), c:lower()))
+          else
+            put(("      case '%s': "):format(c))
+          end
           if len == 1 then
             put('return ' .. startidx .. ';\n')
           else
@@ -102,7 +106,9 @@ function M.switcher(put, tab, maxlen, worst_buck_size)
   return neworder
 end
 
-function M.hashy_hash(name, strings, access)
+--- @param icase? boolean generate a case-insensitive hash function.
+---                       `strings` must not have mixed case when using this.
+function M.hashy_hash(name, strings, access, icase)
   local stats = {}
   local put = function(str)
     table.insert(stats, str)
@@ -116,27 +122,27 @@ function M.hashy_hash(name, strings, access)
   else
     put('  int low = -1;\n')
   end
-  local neworder = M.switcher(put, len_pos_buckets, maxlen, worst_buck_size)
+  local neworder = M.switcher(put, len_pos_buckets, maxlen, worst_buck_size, icase)
   if maxlen == 1 then
     put([[
   return -1;
 ]])
   elseif worst_buck_size > 1 then
-    put([[
+    put(([[
   for (int i = low; i < high; i++) {
-    if (!memcmp(str, ]] .. access('i') .. [[, len)) {
+    if (!%s(str, %s, len)) {
       return i;
     }
   }
   return -1;
-]])
+]]):format(icase and 'vim_strnicmp_asc' or 'memcmp', access('i')))
   else
-    put([[
-  if (low < 0 || memcmp(str, ]] .. access('low') .. [[, len)) {
+    put(([[
+  if (low < 0 || %s(str, %s, len)) {
     return -1;
   }
   return low;
-]])
+]]):format(icase and 'vim_strnicmp_asc' or 'memcmp', access('low')))
   end
   put '}\n\n'
   return neworder, table.concat(stats)
