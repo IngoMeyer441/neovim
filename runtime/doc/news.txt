@@ -29,7 +29,8 @@ LSP
 • `vim.lsp.buf.document_symbol()` uses the |location-list| by default. Use
   `vim.lsp.buf.document_symbol({ loclist = false })` to use the |quickfix|
   list.
-
+• `vim.lsp.completion.trigger()` has been renamed to
+  |vim.lsp.completion.get()|.
 
 OPTIONS
 
@@ -69,12 +70,6 @@ BUILD
 • On Windows, only building with the UCRT runtime is supported.
 • Translations are turned off by default. Enable by building Nvim with the
   CMake flag `ENABLE_TRANSLATIONS=ON`.
-
-DEFAULTS
-
-• 'number', 'relativenumber', 'signcolumn', and 'foldcolumn' are disabled in
-  |terminal| buffers. See |terminal-config| for an example of changing these defaults.
-• 'diffopt' default includes "linematch:40".
 
 DIAGNOSTICS
 
@@ -247,6 +242,15 @@ DEFAULTS
   • |[[| and |]]| in Normal mode jump between shell prompts for shells which emit
     OSC 133 sequences ("shell integration" or "semantic prompts").
 
+• Options:
+  • 'diffopt' default includes "linematch:40".
+  • 'number', 'relativenumber', 'signcolumn', and 'foldcolumn' are disabled in
+    |terminal| buffers. |terminal-config| shows how to change these defaults.
+
+• Options:
+  • Lua |ftplugin| sets 'omnifunc' to "v:lua.vim.lua_omnifunc".
+  • Lua |ftplugin| sets 'foldexpr' to "v:lua.vim.treesitter.foldexpr()".
+
 • Snippet:
   • `<Tab>` in Insert and Select mode maps to `vim.snippet.jump({ direction = 1 })`
     when a snippet is active and jumpable forwards.
@@ -313,6 +317,8 @@ LSP
 • |vim.lsp.enable()| has been added to enable servers.
 • |vim.lsp.buf.code_action()| resolves the `command` property during the
   `codeAction/resolve` request.
+• The `textDocument/completion` request now includes the completion context in
+  its parameters.
 
 LUA
 
@@ -328,8 +334,8 @@ LUA
 • |vim.json.encode()| has an option to enable forward slash escaping
 • |vim.fs.abspath()| converts paths to absolute paths.
 • |vim.fs.relpath()| gets relative path compared to base path.
-• |vim.fs.dir()| and |vim.fs.find()| now follow symbolic links by default,
-  the behavior can be turn off using the new `follow` option.
+• |vim.fs.dir()| and |vim.fs.find()| can now follow symbolic links,
+  the behavior can be turn on using the new `follow` option.
 • |vim.text.indent()| indents/dedents text.
 
 OPTIONS
@@ -360,6 +366,7 @@ PERFORMANCE
   significantly improving |treesitter-highlight| performance.
 • Treesitter injection query iteration is now asynchronous, making edits in
   large buffers with combined injections much quicker.
+• 10x reduction in blocking time when attaching an LSP to a large buffer.
 
 PLUGINS
 
@@ -427,6 +434,12 @@ TREESITTER
   code block fence lines vertically.
 • |vim.treesitter.language.inspect()| shows additional information, including
   parser version for ABI 15 parsers.
+• |TSQuery:disable_pattern()| and |TSQuery:disable_capture()| to turn off
+  a specific pattern or capture in a query.
+• |vim.treesitter.get_captures_at_pos()| returns the `pattern_id` of the
+  pattern used to match each capture.
+• |Query:iter_captures()| now accepts an `opts` parameter, similar to
+  |Query:iter_matches()|.
 
 TUI
 
