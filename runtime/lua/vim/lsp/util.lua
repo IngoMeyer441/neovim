@@ -6,17 +6,6 @@ local uv = vim.uv
 
 local M = {}
 
-local default_border = {
-  { '', 'NormalFloat' },
-  { '', 'NormalFloat' },
-  { '', 'NormalFloat' },
-  { ' ', 'NormalFloat' },
-  { '', 'NormalFloat' },
-  { '', 'NormalFloat' },
-  { '', 'NormalFloat' },
-  { ' ', 'NormalFloat' },
-}
-
 --- @param border string|(string|[string,string])[]
 local function border_error(border)
   error(
@@ -43,7 +32,11 @@ local border_size = {
 --- @return integer height
 --- @return integer width
 local function get_border_size(opts)
-  local border = opts and opts.border or default_border
+  local border = opts and opts.border or vim.o.winborder
+
+  if border == '' then
+    border = 'none'
+  end
 
   if type(border) == 'string' then
     if not border_size[border] then
@@ -884,7 +877,7 @@ function M.make_floating_popup_options(width, height, opts)
       or 'cursor',
     style = 'minimal',
     width = width,
-    border = opts.border or default_border,
+    border = opts.border,
     zindex = opts.zindex or (api.nvim_win_get_config(0).zindex or 49) + 1,
     title = title,
     title_pos = title_pos,
@@ -1418,9 +1411,15 @@ function M._make_floating_popup_size(contents, opts)
   width = math.min(width, screen_width - border_width)
 
   -- Make sure that the width is large enough to fit the title.
-  if opts.title then
-    width = math.max(width, vim.fn.strdisplaywidth(opts.title))
+  local title_length = 0
+  local chunks = type(opts.title) == 'string' and { { opts.title } } or opts.title or {}
+  for _, chunk in
+    ipairs(chunks --[=[@as [string, string][]]=])
+  do
+    title_length = title_length + vim.fn.strdisplaywidth(chunk[1])
   end
+
+  width = math.max(width, title_length)
 
   if wrap_at then
     wrap_at = math.min(wrap_at, width)
@@ -1497,7 +1496,7 @@ end
 --- @field offset_y? integer
 --- @field border? string|(string|[string,string])[] override `border`
 --- @field zindex? integer override `zindex`, defaults to 50
---- @field title? string
+--- @field title? string|[string,string][]
 --- @field title_pos? 'left'|'center'|'right'
 ---
 --- (default: `'cursor'`)
