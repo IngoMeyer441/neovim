@@ -1044,6 +1044,31 @@ vim.o.cfu = vim.o.completefunc
 vim.bo.completefunc = vim.o.completefunc
 vim.bo.cfu = vim.bo.completefunc
 
+--- A comma-separated list of strings to enable fuzzy collection for
+--- specific `ins-completion` modes, affecting how matches are gathered
+--- during completion.  For specified modes, fuzzy matching is used to
+--- find completion candidates instead of the standard prefix-based
+--- matching.  This option can contain the following values:
+---
+--- keyword		keywords in the current file	`i_CTRL-X_CTRL-N`
+--- 		keywords with flags ".", "w",	`i_CTRL-N` `i_CTRL-P`
+--- 		"b", "u", "U" and "k{dict}" in 'complete'
+--- 		keywords in 'dictionary'	`i_CTRL-X_CTRL-K`
+---
+--- files		file names			`i_CTRL-X_CTRL-F`
+---
+--- whole_line	whole lines			`i_CTRL-X_CTRL-L`
+---
+--- When using the 'completeopt' "longest" option value, fuzzy collection
+--- can identify the longest common string among the best fuzzy matches
+--- and insert it automatically.
+---
+--- @type string
+vim.o.completefuzzycollect = ""
+vim.o.cfc = vim.o.completefuzzycollect
+vim.go.completefuzzycollect = vim.o.completefuzzycollect
+vim.go.cfc = vim.go.completefuzzycollect
+
 --- A comma-separated list of strings that controls the alignment and
 --- display order of items in the popup menu during Insert mode
 --- completion.  The supported values are "abbr", "kind", and "menu".
@@ -1063,10 +1088,12 @@ vim.go.cia = vim.go.completeitemalign
 ---    fuzzy    Enable `fuzzy-matching` for completion candidates. This
 --- 	    allows for more flexible and intuitive matching, where
 --- 	    characters can be skipped and matches can be found even
---- 	    if the exact sequence is not typed.  Only makes a
---- 	    difference how completion candidates are reduced from the
---- 	    list of alternatives, but not how the candidates are
---- 	    collected (using different completion types).
+--- 	    if the exact sequence is not typed.  Note: This option
+--- 	    does not affect the collection of candidate list, it only
+--- 	    controls how completion candidates are reduced from the
+--- 	    list of alternatives.  If you want to use `fuzzy-matching`
+--- 	    to gather more alternatives for your candidate list,
+--- 	    see `'completefuzzycollect'`.
 ---
 ---    longest  Only insert the longest common text of the matches.  If
 --- 	    the menu is displayed you can use CTRL-L to add more
@@ -1689,6 +1716,21 @@ vim.go.dex = vim.go.diffexpr
 --- 			Use the indent heuristic for the internal
 --- 			diff library.
 ---
+--- 	inline:{text}	Highlight inline differences within a change.
+--- 			See `view-diffs`.  Supported values are:
+---
+--- 			none    Do not perform inline highlighting.
+--- 			simple  Highlight from first different
+--- 				character to the last one in each
+--- 				line.  This is the default if no
+--- 				`inline:` value is set.
+--- 			char    Use internal diff to perform a
+--- 				character-wise diff and highlight the
+--- 				difference.
+--- 			word    Use internal diff to perform a
+--- 				`word`-wise diff and highlight the
+--- 				difference.
+---
 --- 	internal	Use the internal diff library.  This is
 --- 			ignored when 'diffexpr' is set.  *E960*
 --- 			When running out of memory when writing a
@@ -1739,7 +1781,7 @@ vim.go.dex = vim.go.diffexpr
 ---
 ---
 --- @type string
-vim.o.diffopt = "internal,filler,closeoff,linematch:40"
+vim.o.diffopt = "internal,filler,closeoff,inline:simple,linematch:40"
 vim.o.dip = vim.o.diffopt
 vim.go.diffopt = vim.o.diffopt
 vim.go.dip = vim.go.diffopt
@@ -4759,6 +4801,17 @@ vim.o.pumheight = 0
 vim.o.ph = vim.o.pumheight
 vim.go.pumheight = vim.o.pumheight
 vim.go.ph = vim.go.pumheight
+
+--- Maximum width for the popup menu (`ins-completion-menu`).  When zero,
+--- there is no maximum width limit, otherwise the popup menu will never be
+--- wider than this value.  Truncated text will be indicated by "..." at the
+--- end.  Takes precedence over 'pumwidth'.
+---
+--- @type integer
+vim.o.pummaxwidth = 0
+vim.o.pmw = vim.o.pummaxwidth
+vim.go.pummaxwidth = vim.o.pummaxwidth
+vim.go.pmw = vim.go.pummaxwidth
 
 --- Minimum width for the popup menu (`ins-completion-menu`).  If the
 --- cursor column + 'pumwidth' exceeds screen width, the popup menu is

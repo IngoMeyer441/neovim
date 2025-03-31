@@ -11,7 +11,7 @@ the providers and how to install them.
 						*E319*
 Use of a feature requiring a missing provider is an error: >
 
-    E319: No "foo" provider found. Run ":checkhealth provider"
+    E319: No "foo" provider found. Run ":checkhealth vim.provider"
 
 Run the |:checkhealth| command, and review the sections below.
 
@@ -35,7 +35,7 @@ if you already have it (some package managers install the module with Nvim
 itself).
 
 For Python 3 plugins:
-1. Make sure Python 3.4+ is available in your $PATH.
+1. Make sure Python 3.9+ is available in your $PATH.
 2. Install the module (try "python" if "python3" is missing): >bash
    python3 -m pip install --user --upgrade pynvim
 
@@ -277,6 +277,9 @@ To disable the automatic detection, set the "osc52" key of |g:termfeatures| to
 To force Nvim to always use the OSC 52 provider you can use the following
 |g:clipboard| definition: >lua
 
+    vim.g.clipboard = 'osc52'
+
+Which is equivalent to: >lua
     vim.g.clipboard = {
       name = 'OSC 52',
       copy = {

@@ -1723,12 +1723,12 @@ cycles for such a feature to become either integrated into the platform or
 withdrawn from this effort.  To cater for early adopters, there is optional
 support in Vim for syntax related preview features that are implemented.  You
 can request it by specifying a list of preview feature numbers as follows: >
-	:let g:java_syntax_previews = [455, 476]
+	:let g:java_syntax_previews = [488, 494]
 
 The supported JEP numbers are to be drawn from this table:
 	`430`: String Templates [JDK 21]
-	`455`: Primitive types in Patterns, instanceof, and switch
-	`476`: Module Import Declarations
+	`488`: Primitive types in Patterns, instanceof, and switch
+	`494`: Module Import Declarations
 
 Note that as soon as the particular preview feature will have been integrated
 into the Java platform, its entry will be removed from the table and related
@@ -3032,24 +3032,24 @@ cases pertain, then the first line of the file is examined (ex. looking for
 /bin/sh  /bin/ksh  /bin/bash).  If the first line specifies a shelltype, then
 that shelltype is used.  However some files (ex. .profile) are known to be
 shell files but the type is not apparent.  Furthermore, on many systems sh is
-symbolically linked to "bash" (Linux, Windows+cygwin) or "ksh" (Posix).
+symbolically linked to "bash" (Linux, Windows+cygwin) or "ksh" (POSIX).
 
 One may specify a global default by instantiating one of the following
 variables in your vimrc:
 
    ksh: >
 	let g:is_kornshell = 1
-<   posix:  (using this is nearly the same as setting g:is_kornshell to 1) >
+<   posix: (default) >
 	let g:is_posix     = 1
 <   bash: >
 	let g:is_bash	   = 1
-<   sh: (default) Bourne shell >
+<   dash: >
+	let g:is_dash	   = 1
+<   sh: Bourne shell >
 	let g:is_sh	   = 1
 
-<   (dash users should use posix)
-
 If there's no "#! ..." line, and the user hasn't availed themself of a default
-sh.vim syntax setting as just shown, then syntax/sh.vim will assume the Bourne
+sh.vim syntax setting as just shown, then syntax/sh.vim will assume the POSIX
 shell syntax.  No need to quote RFCs or market penetration statistics in error
 reports, please -- just select the default version of the sh your system uses
 and install the associated "let..." in your <.vimrc>.
@@ -5177,8 +5177,11 @@ DiffChange	Diff mode: Changed line. |diff.txt|
 DiffDelete	Diff mode: Deleted line. |diff.txt|
 							*hl-DiffText*
 DiffText	Diff mode: Changed text within a changed line. |diff.txt|
+							*hl-DiffTextAdd*
+DiffTextAdd	Diff mode: Added text within a changed line.  Linked to
+		|hl-DiffText| by default. |diff.txt|
 							*hl-EndOfBuffer*
-EndOfBuffer	Filler lines (~) after the end of the buffer.
+EndOfBuffer	Filler lines (~) after the last line in the buffer.
 		By default, this is highlighted like |hl-NonText|.
 							*hl-TermCursor*
 TermCursor	Cursor in a focused terminal.
