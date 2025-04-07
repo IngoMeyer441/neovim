@@ -104,7 +104,7 @@ The following new features were added.
 
 API
 
-• todo
+• |vim.hl.range()| now allows multiple timed highlights
 
 DEFAULTS
 
@@ -134,6 +134,9 @@ OPTIONS
 
 • 'completefuzzycollect' enables fuzzy collection of candidates for (some)
   |ins-completion| modes.
+• 'autowriteall' write all buffers upon receiving `SIGHUP`, `SIGQUIT` or `SIGTSTP`.
+• 'winborder' "bold" style.
+• |g:clipboard| accepts a string name to force any builtin clipboard tool.
 
 PERFORMANCE
 
@@ -172,7 +175,8 @@ CHANGED FEATURES                                                 *news-changed*
 
 These existing features changed their behavior.
 
-• todo
+• 'spellfile' location defaults to `stdpath("data").."/spell/"` instead of the
+  first writable directoy in 'runtimepath'.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
@@ -184,6 +188,6 @@ These deprecated features were removed.
 ==============================================================================
 DEPRECATIONS                                                *news-deprecations*
 
-See |deprecated-0.11|.
+See |deprecated-0.12|.
 
  vim:tw=78:ts=8:sw=2:et:ft=help:norl:

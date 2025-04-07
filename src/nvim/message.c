@@ -2521,6 +2521,14 @@ void msg_reset_scroll(void)
   msg_grid_scroll_discount = 0;
 }
 
+void msg_ui_refresh(void)
+{
+  if (ui_has(kUIMultigrid) && msg_grid.chars) {
+    ui_call_grid_resize(msg_grid.handle, msg_grid.cols, msg_grid.rows);
+    ui_ext_msg_set_pos(msg_grid_pos, msg_scrolled);
+  }
+}
+
 /// Increment "msg_scrolled".
 static void inc_msg_scrolled(void)
 {
@@ -3355,8 +3363,8 @@ void verbose_enter(void)
   }
   if (msg_ext_kind != verbose_kind) {
     pre_verbose_kind = msg_ext_kind;
-    msg_ext_set_kind("verbose");
   }
+  msg_ext_set_kind("verbose");
 }
 
 /// After giving verbose message.

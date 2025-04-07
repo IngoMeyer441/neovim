@@ -2286,7 +2286,10 @@ local options = {
         				difference.
         			word    Use internal diff to perform a
         				|word|-wise diff and highlight the
-        				difference.
+        				difference.  Non-alphanumeric
+        				multi-byte characters such as emoji
+        				and CJK characters are considered
+        				individual words.
 
         	internal	Use the internal diff library.  This is
         			ignored when 'diffexpr' is set.  *E960*
@@ -8158,11 +8161,10 @@ local options = {
         It may also be a comma-separated list of names.  A count before the
         |zg| and |zw| commands can be used to access each.  This allows using
         a personal word list file and a project word list file.
-        When a word is added while this option is empty Vim will set it for
-        you: Using the first directory in 'runtimepath' that is writable.  If
-        there is no "spell" directory yet it will be created.  For the file
-        name the first language name that appears in 'spelllang' is used,
-        ignoring the region.
+        When a word is added while this option is empty Nvim will use
+        (and auto-create) `stdpath('data')/spell/`. For the file name the
+        first language name that appears in 'spelllang' is used, ignoring the
+        region.
         The resulting ".spl" file will be used for spell checking, it does not
         have to appear in 'spelllang'.
         Normally one file is used for all regions, but you can add the region
@@ -10257,16 +10259,17 @@ local options = {
     },
     {
       defaults = { if_true = '' },
-      values = { '', 'double', 'single', 'shadow', 'rounded', 'solid', 'none' },
+      values = { '', 'double', 'single', 'shadow', 'rounded', 'solid', 'bold', 'none' },
       desc = [=[
         Defines the default border style of floating windows. The default value
         is empty, which is equivalent to "none". Valid values include:
+        - "bold": Bold line box.
+        - "double": Double-line box.
         - "none": No border.
-        - "single": A single line box.
-        - "double": A double line box.
         - "rounded": Like "single", but with rounded corners ("╭" etc.).
+        - "shadow": Drop shadow effect, by blending with the background.
+        - "single": Single-line box.
         - "solid": Adds padding by a single whitespace cell.
-        - "shadow": A drop shadow effect by blending with the background.
       ]=],
       full_name = 'winborder',
       scope = { 'global' },
