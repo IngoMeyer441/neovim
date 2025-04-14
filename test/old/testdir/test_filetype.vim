@@ -572,7 +572,6 @@ func s:GetFilenameChecks() abort
     \ 'opl': ['file.OPL', 'file.OPl', 'file.OpL', 'file.Opl', 'file.oPL', 'file.oPl', 'file.opL', 'file.opl'],
     \ 'ora': ['file.ora'],
     \ 'org': ['file.org', 'file.org_archive'],
-    \ 'pacmanlog': ['pacman.log'],
     \ 'pamconf': ['/etc/pam.conf', '/etc/pam.d/file', 'any/etc/pam.conf', 'any/etc/pam.d/file'],
     \ 'pamenv': ['/etc/security/pam_env.conf', '/home/user/.pam_environment', '.pam_environment', 'pam_env.conf'],
     \ 'pandoc': ['file.pandoc', 'file.pdk', 'file.pd', 'file.pdc'],
@@ -1630,20 +1629,36 @@ func Test_haredoc_file()
 endfunc
 
 func Test_help_file()
+  func! s:Check_help_with_iskeyword(fname)
+    exe 'split' a:fname
+    call assert_equal('help', &filetype)
+    bwipe!
+    set iskeyword+=:
+    exe 'split' a:fname
+    call assert_equal('help', &filetype)
+    bwipe!
+    set iskeyword&
+  endfunc
+
   set nomodeline
   filetype on
   call assert_true(mkdir('doc', 'pR'))
 
   call writefile(['some text', 'vim:ft=help:'], 'doc/help.txt', 'D')
-  split doc/help.txt
-  call assert_equal('help', &filetype)
-  bwipe!
+  call s:Check_help_with_iskeyword('doc/help.txt')
 
   call writefile(['some text', 'Copyright: |manual-copyright| vim:ft=help:'],
         \ 'doc/help1.txt', 'D')
-  split doc/help1.txt
-  call assert_equal('help', &filetype)
-  bwipe!
+  call s:Check_help_with_iskeyword('doc/help1.txt')
+
+  call writefile(['some text', 'vim:noet:ft=help:'], 'doc/help2.txt', 'D')
+  call s:Check_help_with_iskeyword('doc/help2.txt')
+
+  call writefile(['some text', 'vim: noet ft=help'], 'doc/help3.txt', 'D')
+  call s:Check_help_with_iskeyword('doc/help3.txt')
+
+  call writefile(['some text', 'vim: ft=help noet'], 'doc/help4.txt', 'D')
+  call s:Check_help_with_iskeyword('doc/help4.txt')
 
   call writefile(['some text'], 'doc/nothelp.txt', 'D')
   split doc/nothelp.txt
@@ -2793,6 +2808,7 @@ func Test_pro_file()
   call writefile(['x = findgen(100)/10'], 'Xfile.pro', 'D')
   split Xfile.pro
   call assert_equal('idlang', &filetype)
+  bwipe!
 
   filetype off
 endfunc
@@ -2826,6 +2842,7 @@ func Test_pl_file()
   call writefile(['%data = (1, 2, 3);'], 'Xfile.pl', 'D')
   split Xfile.pl
   call assert_equal('perl', &filetype)
+  bwipe!
 
   filetype off
 endfunc
@@ -2873,6 +2890,18 @@ func Test_org_file()
   call assert_equal('org', &filetype)
   bwipe!
 
+  filetype off
+endfunc
+
+" Filetypes detected from names of existing files
+func Test_pacmanlog()
+  filetype on
+  for fname in ['pacman.log', 'pacman.log.1', 'pacman.log-20250123']
+    call writefile(["[2025-01-23T01:23:45+0000] [PACMAN] Running 'pacman -S -y --config /etc/pacman.conf --'"], fname, 'D')
+    exe 'split ' .. fname
+    call assert_equal('pacmanlog', &filetype, 'for text: ' .. string(fname))
+    bwipe!
+  endfor
   filetype off
 endfunc
 

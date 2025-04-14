@@ -149,6 +149,8 @@ typedef struct {
 #define w_p_wfw w_onebuf_opt.wo_wfw    // 'winfixwidth'
   int wo_pvw;
 #define w_p_pvw w_onebuf_opt.wo_pvw    // 'previewwindow'
+  OptInt wo_lhi;
+#define w_p_lhi w_onebuf_opt.wo_lhi    // 'lhistory'
   int wo_rl;
 #define w_p_rl w_onebuf_opt.wo_rl      // 'rightleft'
   char *wo_rlc;
@@ -717,6 +719,11 @@ struct file_buffer {
 
   MarkTree b_marktree[1];
   Map(uint32_t, uint32_t) b_extmark_ns[1];         // extmark namespaces
+
+  // Store the line count as it was before appending or inserting lines.
+  // Used to determine a valid range before splicing marks, when the line
+  // count has already changed.
+  int b_prev_line_count;
 
   // array of channel_id:s which have asked to receive updates for this
   // buffer.

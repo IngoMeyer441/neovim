@@ -1730,7 +1730,6 @@ local filename = {
   ['.ondirrc'] = 'ondir',
   opam = 'opam',
   ['opam.locked'] = 'opam',
-  ['pacman.log'] = 'pacmanlog',
   ['/etc/pam.conf'] = 'pamconf',
   ['pam_env.conf'] = 'pamenv',
   ['.pam_environment'] = 'pamenv',
@@ -2429,8 +2428,26 @@ local pattern = {
     ['^%.?gtkrc'] = starsetf('gtkrc'),
     ['/doc/.*%.txt$'] = function(_, bufnr)
       local line = M._getline(bufnr, -1)
-      local ml = line:find('^vim:') or line:find('%svim:')
-      if ml and M._matchregex(line:sub(ml), [[\<\(ft\|filetype\)=help\>]]) then
+      if
+        M._findany(line, {
+          '^vim:ft=help[:%s]',
+          '^vim:ft=help$',
+          '^vim:filetype=help[:%s]',
+          '^vim:filetype=help$',
+          '^vim:.*[:%s]ft=help[:%s]',
+          '^vim:.*[:%s]ft=help$',
+          '^vim:.*[:%s]filetype=help[:%s]',
+          '^vim:.*[:%s]filetype=help$',
+          '%svim:ft=help[:%s]',
+          '%svim:ft=help$',
+          '%svim:filetype=help[:%s]',
+          '%svim:filetype=help$',
+          '%svim:.*[:%s]ft=help[:%s]',
+          '%svim:.*[:%s]ft=help$',
+          '%svim:.*[:%s]filetype=help[:%s]',
+          '%svim:.*[:%s]filetype=help$',
+        })
+      then
         return 'help'
       end
     end,
@@ -2462,6 +2479,9 @@ local pattern = {
     ['/octave/history$'] = 'octave',
     ['%.opam%.locked$'] = 'opam',
     ['%.opam%.template$'] = 'opam',
+    ['^pacman%.log'] = starsetf(function(path, bufnr)
+      return vim.uv.fs_stat(path) and 'pacmanlog' or nil
+    end),
     ['printcap'] = starsetf(function(path, bufnr)
       return require('vim.filetype.detect').printcap('print')
     end),
