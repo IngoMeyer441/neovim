@@ -1548,6 +1548,7 @@ local options = {
         'fuzzy',
         'nosort',
         'preinsert',
+        'nearest',
       },
       flags = true,
       deny_duplicates = true,
@@ -1578,6 +1579,12 @@ local options = {
            menuone  Use the popup menu also when there is only one match.
         	    Useful when there is additional information about the
         	    match, e.g., what file it comes from.
+
+           nearest  Matches are listed based on their proximity to the cursor
+        	    position, unlike the default behavior, which only
+        	    considers proximity for matches appearing below the
+        	    cursor.  This applies only to matches from the current
+        	    buffer.  No effect if "fuzzy" is present.
 
            noinsert Do not insert any text for a match until the user selects
         	    a match from the menu.  Only works in combination with
@@ -3030,8 +3037,8 @@ local options = {
       defaults = '',
       deny_duplicates = true,
       desc = [=[
-        Characters to fill the statuslines, vertical separators and special
-        lines in the window.
+        Characters to fill the statuslines, vertical separators, special
+        lines in the window and truncated text in the |ins-completion-menu|.
         It is a comma-separated list of items.  Each item has a name, a colon
         and the value of that item: |E1511|
 
@@ -3055,6 +3062,9 @@ local options = {
           msgsep	' '		message separator 'display'
           eob		'~'		empty lines at the end of a buffer
           lastline	'@'		'display' contains lastline/truncate
+          trunc		'>'		truncated text in the
+        				|ins-completion-menu|.
+          truncrl	'<'		same as "trunc' in 'rightleft' mode
 
         Any one that is omitted will fall back to the default.
 
@@ -3086,9 +3096,15 @@ local options = {
           vertright	WinSeparator		|hl-WinSeparator|
           verthoriz	WinSeparator		|hl-WinSeparator|
           fold		Folded			|hl-Folded|
+          foldopen	FoldColumn		|hl-FoldColumn|
+          foldclose	FoldColumn		|hl-FoldColumn|
+          foldsep	FoldColumn		|hl-FoldColumn|
           diff		DiffDelete		|hl-DiffDelete|
           eob		EndOfBuffer		|hl-EndOfBuffer|
           lastline	NonText			|hl-NonText|
+          trunc		one of the many Popup menu highlighting groups like
+        		|hl-PmenuSel|
+          truncrl	same as "trunc"
       ]=],
       expand_cb = 'expand_set_chars_option',
       full_name = 'fillchars',
@@ -4446,7 +4462,7 @@ local options = {
         <
         Also used for the |gf| command if an unmodified file name can't be
         found.  Allows doing "gf" on the name after an 'include' statement.
-        Also used for |<cfile>|.
+        Note: Not used for |<cfile>|.
 
         If the expression starts with s: or |<SID>|, then it is replaced with
         the script ID (|local-function|). Example: >vim
@@ -6472,8 +6488,10 @@ local options = {
       desc = [=[
         Maximum width for the popup menu (|ins-completion-menu|).  When zero,
         there is no maximum width limit, otherwise the popup menu will never be
-        wider than this value.  Truncated text will be indicated by "..." at the
-        end.  Takes precedence over 'pumwidth'.
+        wider than this value.  Truncated text will be indicated by "trunc"
+        value of 'fillchars' option.
+
+        This option takes precedence over 'pumwidth'.
       ]=],
       full_name = 'pummaxwidth',
       scope = { 'global' },
@@ -8200,7 +8218,7 @@ local options = {
         |zg| and |zw| commands can be used to access each.  This allows using
         a personal word list file and a project word list file.
         When a word is added while this option is empty Nvim will use
-        (and auto-create) `stdpath('data')/spell/`. For the file name the
+        (and auto-create) `stdpath('data')/site/spell/`. For the file name the
         first language name that appears in 'spelllang' is used, ignoring the
         region.
         The resulting ".spl" file will be used for spell checking, it does not
