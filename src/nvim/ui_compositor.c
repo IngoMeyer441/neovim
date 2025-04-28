@@ -333,6 +333,14 @@ ScreenGrid *ui_comp_get_grid_at_coord(int row, int col)
       return grid;
     }
   }
+
+  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+    ScreenGrid *grid = &wp->w_grid_alloc;
+    if (row >= grid->comp_row && row < grid->comp_row + grid->rows
+        && col >= grid->comp_col && col < grid->comp_col + grid->cols) {
+      return grid;
+    }
+  }
   return &default_grid;
 }
 
@@ -422,10 +430,12 @@ static void compose_line(Integer row, Integer startcol, Integer endcol, LineFlag
       for (int i = col - (int)startcol; i < until - startcol; i += width) {
         width = 1;
         // negative space
-        bool thru = linebuf[i] == schar_from_ascii(' ') && bg_line[i] != NUL;
+        bool thru = (linebuf[i] == schar_from_ascii(' ')
+                     || linebuf[i] == schar_from_char(L'\u2800')) && bg_line[i] != NUL;
         if (i + 1 < endcol - startcol && bg_line[i + 1] == NUL) {
           width = 2;
-          thru &= linebuf[i + 1] == schar_from_ascii(' ');
+          thru &= (linebuf[i + 1] == schar_from_ascii(' ')
+                   || linebuf[i + 1] == schar_from_char(L'\u2800'));
         }
         attrbuf[i] = (sattr_T)hl_blend_attrs(bg_attrs[i], attrbuf[i], &thru);
         if (width == 2) {

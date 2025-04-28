@@ -629,7 +629,7 @@ func s:GetFilenameChecks() abort
     \ 'pymanifest': ['MANIFEST.in'],
     \ 'pyret': ['file.arr'],
     \ 'pyrex': ['file.pyx', 'file.pxd', 'file.pxi', 'file.pyx+'],
-    \ 'python': ['file.py', 'file.pyw', '.pythonstartup', '.pythonrc', '.python_history', '.jline-jython.history', 'file.ptl', 'file.pyi', 'SConstruct'],
+    \ 'python': ['file.py', 'file.pyw', '.pythonstartup', '.pythonrc', '.python_history', '.jline-jython.history', 'file.ptl', 'file.pyi', 'SConstruct', 'file.ipy'],
     \ 'ql': ['file.ql', 'file.qll'],
     \ 'qml': ['file.qml', 'file.qbs'],
     \ 'qmldir': ['qmldir'],
@@ -2916,6 +2916,30 @@ func Test_map_file()
   bwipe!
 
   filetype off
+endfunc
+
+func Test_nroff_file()
+  filetype on
+
+  call writefile(['.TH VIM 1 "YYYY Mth DD"'], 'Xfile.1', 'D')
+  split Xfile.1
+  call assert_equal('nroff', &filetype)
+  bwipe!
+
+  call writefile(['.Dd $Mdocdate$', '.Dt "DETECTION TEST" "7"', '.Os'], 'Xfile.7', 'D')
+  split Xfile.7
+  call assert_equal('nroff', &filetype)
+  bwipe!
+
+  call writefile(['''\" t'], 'Xfile.3p', 'D')
+  split Xfile.3p
+  call assert_equal('nroff', &filetype)
+  bwipe!
+
+  call writefile(['. /etc/profile'], 'Xfile.1', 'D')
+  split Xfile.1
+  call assert_notequal('nroff', &filetype)
+  bwipe!
 endfunc
 
 func Test_org_file()

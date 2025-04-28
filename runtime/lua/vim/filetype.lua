@@ -835,6 +835,7 @@ local extension = {
   nix = 'nix',
   norg = 'norg',
   nqc = 'nqc',
+  ['0'] = detect.nroff,
   ['1'] = detect.nroff,
   ['2'] = detect.nroff,
   ['3'] = detect.nroff,
@@ -844,6 +845,23 @@ local extension = {
   ['7'] = detect.nroff,
   ['8'] = detect.nroff,
   ['9'] = detect.nroff,
+  ['0p'] = detect.nroff,
+  ['1p'] = detect.nroff,
+  ['3p'] = detect.nroff,
+  ['1x'] = detect.nroff,
+  ['2x'] = detect.nroff,
+  ['3x'] = detect.nroff,
+  ['4x'] = detect.nroff,
+  ['5x'] = detect.nroff,
+  ['6x'] = detect.nroff,
+  ['7x'] = detect.nroff,
+  ['8x'] = detect.nroff,
+  ['3am'] = detect.nroff,
+  ['3perl'] = detect.nroff,
+  ['3pm'] = detect.nroff,
+  ['3posix'] = detect.nroff,
+  ['3type'] = detect.nroff,
+  n = detect.nroff,
   roff = 'nroff',
   tmac = 'nroff',
   man = 'nroff',
@@ -985,6 +1003,7 @@ local extension = {
   py = 'python',
   pyi = 'python',
   ptl = 'python',
+  ipy = 'python',
   ql = 'ql',
   qll = 'ql',
   qml = 'qml',
@@ -2616,7 +2635,7 @@ end
 --- Filetype mappings can be added either by extension or by filename (either
 --- the "tail" or the full file path). The full file path is checked first,
 --- followed by the file name. If a match is not found using the filename, then
---- the filename is matched against the list of |lua-patterns| (sorted by priority)
+--- the filename is matched against the list of |lua-pattern|s (sorted by priority)
 --- until a match is found. Lastly, if pattern matching does not find a
 --- filetype, then the file extension is used.
 ---

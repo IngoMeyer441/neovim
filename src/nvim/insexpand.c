@@ -2334,9 +2334,10 @@ static bool set_ctrl_x_mode(const int c)
 static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
 {
   // Remove pre-inserted text when present.
-  if (ins_compl_preinsert_effect()) {
+  if (ins_compl_preinsert_effect() && ins_compl_win_active(curwin)) {
     ins_compl_delete(false);
   }
+
   // Get here when we have finished typing a sequence of ^N and
   // ^P or other completion characters in CTRL-X mode.  Free up
   // memory that was used, and make sure we can redo the insert.
@@ -2612,8 +2613,8 @@ static buf_T *ins_compl_next_buf(buf_T *buf, int flag)
     while (true) {
       // Move to next window (wrap to first window if at the end)
       wp = (wp->w_next != NULL) ? wp->w_next : firstwin;
-      // Break if we're back at start or found an unscanned buffer
-      if (wp == curwin || !wp->w_buffer->b_scanned) {
+      // Break if we're back at start or found an unscanned buffer (in a focusable window)
+      if (wp == curwin || (!wp->w_buffer->b_scanned && wp->w_config.focusable)) {
         break;
       }
     }
