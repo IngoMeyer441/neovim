@@ -3070,7 +3070,7 @@ local options = {
           lastline	'@'		'display' contains lastline/truncate
           trunc		'>'		truncated text in the
         				|ins-completion-menu|.
-          truncrl	'<'		same as "trunc' in 'rightleft' mode
+          truncrl	'<'		same as "trunc" in 'rightleft' mode
 
         Any one that is omitted will fall back to the default.
 
@@ -4633,6 +4633,33 @@ local options = {
       short_desc = N_('No description'),
       type = 'boolean',
       immutable = true,
+    },
+    {
+      abbreviation = 'ise',
+      cb = 'did_set_isexpand',
+      defaults = '',
+      deny_duplicates = true,
+      desc = [=[
+        Defines characters and patterns for completion in insert mode.  Used
+        by the |complete_match()| function to determine the starting position
+        for completion.  This is a comma-separated list of triggers.  Each
+        trigger can be:
+        - A single character like "." or "/"
+        - A sequence of characters like "->", "/*", or "/**"
+
+        Note: Use "\\," to add a literal comma as trigger character, see
+        |option-backslash|.
+
+        Examples: >vim
+            set isexpand=.,->,/*,\\,
+        <
+      ]=],
+      full_name = 'isexpand',
+      list = 'onecomma',
+      scope = { 'global', 'buf' },
+      short_desc = N_('Defines characters and patterns for completion in insert mode'),
+      type = 'string',
+      varname = 'p_ise',
     },
     {
       abbreviation = 'isf',
@@ -9155,7 +9182,8 @@ local options = {
       cb = 'did_set_tagfunc',
       defaults = '',
       desc = [=[
-        This option specifies a function to be used to perform tag searches.
+        This option specifies a function to be used to perform tag searches
+        (including |taglist()|).
         The function gets the tag pattern and should return a List of matching
         tags.  See |tag-function| for an explanation of how to write the
         function and an example.  The value can be the name of a function, a
@@ -10218,8 +10246,8 @@ local options = {
         <	First press: longest common substring
         Second press: list all matches >vim
         	set wildmode=noselect:full
-        <	Show 'wildmenu' without completing or selecting on first press
-        Cycle full matches on second press >vim
+        <	First press: show 'wildmenu' without completing or selecting
+        Second press: cycle full matches >vim
         	set wildmode=noselect:lastused,full
         <	Same as above, but buffer matches are sorted by time last used
         More info here: |cmdline-completion|.

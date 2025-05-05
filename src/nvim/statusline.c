@@ -101,7 +101,7 @@ void win_redr_status(win_T *wp)
       attr = win_hl_attr(wp, HLF_C);
       fillchar = wp->w_p_fcs_chars.vert;
     }
-    grid_line_start(&default_grid, W_ENDROW(wp));
+    grid_line_start(&default_gridview, W_ENDROW(wp));
     grid_line_put_schar(W_ENDCOL(wp), fillchar, attr);
     grid_line_flush();
   }
@@ -252,8 +252,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
     opt_scope = ((*wp->w_p_wbr != NUL) ? OPT_LOCAL : 0);
     row = -1;  // row zero is first row of text
     col = 0;
-    grid = &wp->w_grid;
-    grid_adjust(&grid, &row, &col);
+    grid = grid_adjust(&wp->w_grid, &row, &col);
 
     if (row < 0) {
       goto theend;
@@ -261,7 +260,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
 
     fillchar = wp->w_p_fcs_chars.wbr;
     attr = (wp == curwin) ? win_hl_attr(wp, HLF_WBR) : win_hl_attr(wp, HLF_WBRNC);
-    maxwidth = wp->w_width_inner;
+    maxwidth = wp->w_view_width;
     stl_clear_click_defs(wp->w_winbar_click_defs, wp->w_winbar_click_defs_size);
     wp->w_winbar_click_defs = stl_alloc_click_defs(wp->w_winbar_click_defs, maxwidth,
                                                    &wp->w_winbar_click_defs_size);
@@ -294,8 +293,8 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
       col = MAX(ru_col - (Columns - maxwidth), (maxwidth + 1) / 2);
       maxwidth -= col;
       if (!in_status_line) {
-        grid = &msg_grid_adj;
         row = Rows - 1;
+        grid = grid_adjust(&msg_grid_adj, &row, &col);
         maxwidth--;  // writing in last column may cause scrolling
         fillchar = schar_from_ascii(' ');
         attr = HL_ATTR(HLF_MSG);
@@ -334,9 +333,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
   int start_col = col;
 
   // Draw each snippet with the specified highlighting.
-  if (!draw_ruler) {
-    grid_line_start(grid, row);
-  }
+  screengrid_line_start(grid, row, 0);
 
   int curattr = attr;
   char *p = buf;
@@ -364,10 +361,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
 
   // fill up with "fillchar"
   grid_line_fill(col, maxcol, fillchar, curattr);
-
-  if (!draw_ruler) {
-    grid_line_flush();
-  }
+  grid_line_flush();
 
   // Fill the tab_page_click_defs, w_status_click_defs or w_winbar_click_defs array for clicking
   // in the tab page line, status line or window bar
@@ -400,14 +394,24 @@ void win_redr_winbar(win_T *wp)
   entered = false;
 }
 
-/// must be called after a grid_line_start() at the intended row
-void win_redr_ruler(win_T *wp)
+void redraw_ruler(void)
 {
-  bool is_stl_global = global_stl_height() > 0;
+  static int did_ruler_col = -1;
   static bool did_show_ext_ruler = false;
+  win_T *wp = curwin->w_status_height == 0 ? curwin : lastwin_nofloating();
+  bool is_stl_global = global_stl_height() > 0;
 
-  // If 'ruler' off, don't do anything
-  if (!p_ru) {
+  // Check if ruler should be drawn, clear if it was drawn before.
+  if (!p_ru || wp->w_status_height > 0 || is_stl_global || (p_ch == 0 && !ui_has(kUIMessages))) {
+    if (did_ruler_col > 0 && ui_has(kUIMessages)) {
+      ui_call_msg_ruler((Array)ARRAY_DICT_INIT);
+      did_show_ext_ruler = false;
+    } else if (did_ruler_col > 0) {
+      msg_col = did_ruler_col;
+      msg_row = Rows - 1;
+      msg_clr_eos();
+    }
+    did_ruler_col = -1;
     return;
   }
 
@@ -419,8 +423,7 @@ void win_redr_ruler(win_T *wp)
 
   // Don't draw the ruler while doing insert-completion, it might overwrite
   // the (long) mode message.
-  win_T *ruler_win = curwin->w_status_height == 0 ? curwin : lastwin_nofloating();
-  if (wp == ruler_win && ruler_win->w_status_height == 0 && !is_stl_global) {
+  if (wp->w_status_height == 0 && !is_stl_global) {
     if (edit_submode != NULL) {
       return;
     }
@@ -514,6 +517,7 @@ void win_redr_ruler(win_T *wp)
     ADD_C(content, ARRAY_OBJ(chunk));
     ui_call_msg_ruler(content);
     did_show_ext_ruler = true;
+    did_ruler_col = 1;
   } else {
     if (did_show_ext_ruler) {
       ui_call_msg_ruler((Array)ARRAY_DICT_INIT);
@@ -529,8 +533,11 @@ void win_redr_ruler(win_T *wp)
       }
     }
 
-    int w = grid_line_puts(off + this_ru_col, buffer, -1, attr);
-    grid_line_fill(off + this_ru_col + w, off + width, fillchar, attr);
+    grid_line_start(&msg_grid_adj, Rows - 1);
+    did_ruler_col = off + this_ru_col;
+    int w = grid_line_puts(did_ruler_col, buffer, -1, attr);
+    grid_line_fill(did_ruler_col + w, off + width, fillchar, attr);
+    grid_line_flush();
   }
 }
 
@@ -643,7 +650,7 @@ void draw_tabline(void)
     int col = 0;
     win_T *cwp;
     int wincount;
-    grid_line_start(&default_grid, 0);
+    grid_line_start(&default_gridview, 0);
     FOR_ALL_TABS(tp) {
       tabcount++;
     }

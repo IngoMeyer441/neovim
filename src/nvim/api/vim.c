@@ -80,7 +80,6 @@
 #include "nvim/state.h"
 #include "nvim/statusline.h"
 #include "nvim/statusline_defs.h"
-#include "nvim/strings.h"
 #include "nvim/terminal.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
@@ -974,7 +973,7 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
 /// By default (and currently the only option) the terminal will not be
 /// connected to an external process. Instead, input sent on the channel
 /// will be echoed directly by the terminal. This is useful to display
-/// ANSI terminal sequences returned as part of a rpc message, or similar.
+/// ANSI terminal sequences returned as part of an RPC message, or similar.
 ///
 /// Note: to directly initiate the terminal using the right size, display the
 /// buffer in a configured window before calling this. For instance, for a
@@ -996,7 +995,8 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
 /// end, { desc = 'Highlights ANSI termcodes in curbuf' })
 /// ```
 ///
-/// @param buffer the buffer to use (expected to be empty)
+/// @param buffer Buffer to use. Buffer contents (if any) will be written
+///               to the PTY.
 /// @param opts   Optional parameters.
 ///          - on_input: Lua callback for input sent, i e keypresses in terminal
 ///            mode. Note: keypresses are sent raw as they would be to the pty
@@ -1034,19 +1034,33 @@ Integer nvim_open_term(Buffer buffer, Dict(open_term) *opts, Error *err)
     .data = chan,
     // NB: overridden in terminal_check_size if a window is already
     // displaying the buffer
-    .width = (uint16_t)MAX(curwin->w_width_inner - win_col_off(curwin), 0),
-    .height = (uint16_t)curwin->w_height_inner,
+    .width = (uint16_t)MAX(curwin->w_view_width - win_col_off(curwin), 0),
+    .height = (uint16_t)curwin->w_view_height,
     .write_cb = term_write,
     .resize_cb = term_resize,
     .close_cb = term_close,
     .force_crlf = GET_BOOL_OR_TRUE(opts, open_term, force_crlf),
   };
+
+  // Read existing buffer contents (if any)
+  StringBuilder contents = KV_INITIAL_VALUE;
+  read_buffer_into(buf, 1, buf->b_ml.ml_line_count, &contents);
+
   channel_incref(chan);
   terminal_open(&chan->term, buf, topts);
   if (chan->term != NULL) {
     terminal_check_size(chan->term);
   }
   channel_decref(chan);
+
+  // Write buffer contents to channel. channel_send takes ownership of the
+  // buffer so we do not need to free it.
+  if (contents.size > 0) {
+    const char *error = NULL;
+    channel_send(chan->id, contents.items, contents.size, true, &error);
+    VALIDATE(!error, "%s", error, {});
+  }
+
   return (Integer)chan->id;
 }
 
@@ -2197,11 +2211,13 @@ static void redraw_status(win_T *wp, Dict(redraw) *opts, bool *flush)
     wp->w_nrwidth_line_count = 0;
     changed_window_setting(wp);
   }
+
+  int old_row_offset = wp->w_grid.row_offset;
   win_grid_alloc(wp);
 
   // Flush later in case winbar was just hidden or shown for the first time, or
   // statuscolumn is being drawn.
-  if (wp->w_lines_valid == 0) {
+  if (wp->w_lines_valid == 0 || wp->w_grid.row_offset != old_row_offset) {
     *flush = true;
   }
 

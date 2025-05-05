@@ -1264,6 +1264,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char *pat, size_t patlen
       // do not fill the msgbuf buffer, if cmd_silent is set, leave it
       // empty for the search_stat feature.
       if (!cmd_silent) {
+        ui_busy_start();
         msgbuf[0] = (char)dirc;
         if (utf_iscomposing_first(utf_ptr2char(p))) {
           // Use a space to draw the composing char on.
@@ -1310,6 +1311,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char *pat, size_t patlen
 
         gotocmdline(false);
         ui_flush();
+        ui_busy_stop();
         msg_nowait = true;  // don't wait for this message
       }
 
@@ -2363,7 +2365,7 @@ void showmatch(int c)
 
   bool col_visible = curwin->w_p_wrap
                      || (vcol >= curwin->w_leftcol
-                         && vcol < curwin->w_leftcol + curwin->w_width_inner);
+                         && vcol < curwin->w_leftcol + curwin->w_view_width);
   if (!col_visible) {
     return;
   }

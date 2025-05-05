@@ -872,15 +872,15 @@ describe('decoration_providers', function()
     ]])
     screen:expect([[
       {3:                                                                 }|
-      {9:Error in decoration provider "start" (ns=ns1):}                   |
-      {9:Error executing lua: [string "<nvim>"]:4: Foo}                    |
+      {9:Decoration provider "start" (ns=ns1):}                            |
+      {9:Lua: [string "<nvim>"]:4: Foo}                                    |
       {9:stack traceback:}                                                 |
       {9:        [C]: in function 'error'}                                 |
       {9:        [string "<nvim>"]:4: in function <[string "<nvim>"]:3>}   |
       {6:Press ENTER or type command to continue}^                          |
     ]])
     t.assert_log('Error in decoration provider "start" %(ns=ns1%):', testlog, 100)
-    t.assert_log('Error executing lua: %[string "<nvim>"%]:4: Foo', testlog, 100)
+    t.assert_log('Lua: %[string "<nvim>"%]:4: Foo', testlog, 100)
     n.check_close()
     os.remove(testlog)
   end)
@@ -2947,6 +2947,22 @@ describe('extmark decorations', function()
       {2:  3 }        colpos = colpos+1                     |
       {2:  4 }    end                                       |
       {2:  5 }end                                           |
+      {1:~                                                 }|*4
+                                                        |
+    ]])
+    -- Correct relativenumber for line below concealed line #33694
+    feed('4Gk')
+    screen:expect([[
+      {2:  2 }for _,item in ipairs(items) do                |
+      {2:3   }    if h^l_id_cell ~= nil then                 |
+      {2:  1 }        hl_id = hl_id_cell                    |
+      {2:  3 }    for _ = 1, (count or 1) do                |
+      {2:  4 }        local cell = line[colpos]             |
+      {2:  5 }        cell.text = text                      |
+      {2:  6 }        cell.hl_id = hl_id                    |
+      {2:  7 }        colpos = colpos+1                     |
+      {2:  8 }    end                                       |
+      {2:  9 }end                                           |
       {1:~                                                 }|*4
                                                         |
     ]])

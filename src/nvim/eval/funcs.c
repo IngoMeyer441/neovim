@@ -4019,8 +4019,8 @@ void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     overlapped = false;
     detach = false;
     stdin_mode = kChannelStdinPipe;
-    width = (uint16_t)MAX(0, curwin->w_width_inner - win_col_off(curwin));
-    height = (uint16_t)curwin->w_height_inner;
+    width = (uint16_t)MAX(0, curwin->w_view_width - win_col_off(curwin));
+    height = (uint16_t)curwin->w_view_height;
   }
 
   if (pty) {
@@ -6357,10 +6357,10 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       name = get_client_info(chan, "name");
     }
     if (name) {
-      semsg_multiline("rpc_error", "Error invoking '%s' on channel %" PRIu64 " (%s):\n%s",
+      semsg_multiline("rpc_error", "Invoking '%s' on channel %" PRIu64 " (%s):\n%s",
                       method, chan_id, name, err.msg);
     } else {
-      semsg_multiline("rpc_error", "Error invoking '%s' on channel %" PRIu64 ":\n%s",
+      semsg_multiline("rpc_error", "Invoking '%s' on channel %" PRIu64 ":\n%s",
                       method, chan_id, err.msg);
     }
 
