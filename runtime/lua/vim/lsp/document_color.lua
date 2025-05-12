@@ -231,7 +231,6 @@ local function buf_enable(bufnr)
   M._buf_refresh(bufnr)
 end
 
---- @nodoc
 --- @param bufnr integer
 --- @param client_id? integer
 function M._buf_refresh(bufnr, client_id)
@@ -303,7 +302,7 @@ api.nvim_create_autocmd('ColorScheme', {
 
     for _, bufnr in ipairs(api.nvim_list_bufs()) do
       buf_clear(bufnr)
-      if api.nvim_buf_is_loaded(bufnr) and bufstates[bufnr].enabled then
+      if api.nvim_buf_is_loaded(bufnr) and vim.tbl_get(bufstates, bufnr, 'enabled') then
         M._buf_refresh(bufnr)
       else
         reset_bufstate(bufnr, false)

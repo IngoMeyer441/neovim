@@ -463,7 +463,7 @@ describe('ui/ext_messages', function()
         {
           content = { { (':!%s\r\n[No write since last change]\n'):format(cmd) } },
           history = false,
-          kind = '',
+          kind = 'shell_cmd',
         },
         {
           content = { { ('stdout%s\n'):format(t.is_os('win') and '\r' or '') } },
@@ -517,6 +517,23 @@ describe('ui/ext_messages', function()
             { 'ChanInfo', 101, 23 },
             { '\n*foo' },
           },
+          history = false,
+          kind = 'list_cmd',
+        },
+      },
+    })
+
+    feed(':1,2p<CR>')
+    screen:expect({
+      grid = [[
+        line 1                   |
+        ^line                     |
+        {1:~                        }|*3
+      ]],
+      cmdline = { { abort = false } },
+      messages = {
+        {
+          content = { { 'line 1\nline ' } },
           history = false,
           kind = 'list_cmd',
         },
@@ -1621,7 +1638,7 @@ stack traceback:
         },
       },
     })
-    feed(':messages<CR>g<lt>')
+    feed('g<lt>')
     screen:expect({
       grid = [[
         ^                         |
@@ -1642,6 +1659,40 @@ stack traceback:
         {
           content = { { 'bar' } },
           kind = 'echo',
+        },
+      },
+    })
+    feed('Q')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = {
+        {
+          content = { { "E354: Invalid register name: '^@'", 9, 6 } },
+          history = true,
+          kind = 'emsg',
+        },
+      },
+    })
+    feed('g<lt>')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = {
+        {
+          content = { { 'Press ENTER or type command to continue', 6, 18 } },
+          history = false,
+          kind = 'return_prompt',
+        },
+      },
+      msg_history = {
+        {
+          content = { { "E354: Invalid register name: '^@'", 9, 6 } },
+          kind = 'emsg',
         },
       },
     })

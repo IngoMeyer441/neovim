@@ -47,12 +47,15 @@ function M.tab_check_wins()
         M.cmd.highlighter = vim.treesitter.highlighter.new(parser)
       elseif type == 'more' then
         -- Close more window with `q`, same as `checkhealth`
-        vim.keymap.set('n', 'q', '<C-w>c', { buffer = M.bufs.more })
+        api.nvim_buf_set_keymap(M.bufs.more, 'n', 'q', '<C-w>c', {})
       end
     end
 
     local setopt = false
-    if not api.nvim_win_is_valid(M.wins[M.tab][type]) then
+    if
+      not api.nvim_win_is_valid(M.wins[M.tab][type])
+      or not api.nvim_win_get_config(M.wins[M.tab][type]).zindex -- no longer floating
+    then
       local top = { vim.opt.fcs:get().horiz or o.ambw == 'single' and '─' or '-', 'WinSeparator' }
       local border = (type == 'more' or type == 'prompt') and { '', top, '', '', '', '', '', '' }
       local cfg = vim.tbl_deep_extend('force', wincfg, {
@@ -77,12 +80,15 @@ function M.tab_check_wins()
     end
 
     if setopt then
-      if type == 'box' and o.termguicolors then
-        vim.wo[M.wins[M.tab][type]].winblend = 30
-      end
-      vim.wo[M.wins[M.tab][type]].linebreak = false
-      vim.wo[M.wins[M.tab][type]].smoothscroll = true
-      vim.wo[M.wins[M.tab][type]].eventignorewin = 'all'
+      -- Fire a FileType autocommand with window context to let the user reconfigure local options.
+      api.nvim_win_call(M.wins[M.tab][type], function()
+        api.nvim_set_option_value('wrap', true, { scope = 'local' })
+        api.nvim_set_option_value('linebreak', false, { scope = 'local' })
+        api.nvim_set_option_value('smoothscroll', true, { scope = 'local' })
+        local ft = type == 'cmd' and 'cmdline' or ('msg' .. type)
+        api.nvim_set_option_value('filetype', ft, { scope = 'local' })
+        api.nvim_set_option_value('eventignorewin', 'all', { scope = 'local' })
+      end)
     end
   end
 end

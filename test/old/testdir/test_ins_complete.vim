@@ -2777,11 +2777,15 @@ func Test_complete_opt_fuzzy()
     autocmd CompleteChanged * :call OnPumChange()
   augroup END
 
+  let g:change = 0
   func Omni_test(findstart, base)
     if a:findstart
       return col(".")
     endif
-    return [#{word: "foo"}, #{word: "foobar"}, #{word: "fooBaz"}, #{word: "foobala"}, #{word: "你好吗"}, #{word: "我好"}]
+    if g:change == 0
+      return [#{word: "foo"}, #{word: "foobar"}, #{word: "fooBaz"}, #{word: "foobala"}, #{word: "你好吗"}, #{word: "我好"}]
+    endif
+    return [#{word: "for i = .."}, #{word: "bar"}, #{word: "foo"}, #{word: "for .. ipairs"}, #{word: "for .. pairs"}]
   endfunc
 
   new
@@ -2877,6 +2881,15 @@ func Test_complete_opt_fuzzy()
   " issue #15412
   call feedkeys("Salpha bravio charlie\<CR>alpha\<C-X>\<C-N>\<C-X>\<C-N>\<C-X>\<C-N>\<ESC>", 'tx')
   call assert_equal('alpha bravio charlie', getline('.'))
+
+  set cot=fuzzy,menu,noinsert
+  call feedkeys(":let g:change=1\<CR>")
+  call feedkeys("S\<C-X>\<C-O>for\<C-N>\<C-N>\<C-N>", 'tx')
+  call assert_equal('for', getline('.'))
+  call feedkeys("S\<C-X>\<C-O>for\<C-P>", 'tx')
+  call assert_equal('for', getline('.'))
+  call feedkeys("S\<C-X>\<C-O>for\<C-P>\<C-P>", 'tx')
+  call assert_equal('for .. ipairs', getline('.'))
 
   " clean up
   set omnifunc=
@@ -3482,6 +3495,93 @@ func Test_complete_append_selected_match_default()
 
   set completeopt&
   delfunc PrintMenuWords
+endfunc
+
+" Test normal mode (^N/^P/^X^N/^X^P) with smartcase when 1) matches are first
+" found and 2) matches are filtered (when a character is typed).
+func Test_smartcase_normal_mode()
+
+  func! PrintMenu()
+    let info = complete_info(["matches"])
+    call map(info.matches, {_, v -> v.word})
+    return info
+  endfunc
+
+  func! TestInner(key)
+    let pr = "\<c-r>=PrintMenu()\<cr>"
+
+    new
+    set completeopt=menuone,noselect ignorecase smartcase
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}{pr}"
+    call assert_equal('F{''matches'': [''Fast'', ''FAST'', ''False'',
+          \ ''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}a{pr}"
+    call assert_equal('Fa{''matches'': [''Fast'', ''False'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}a\<bs>{pr}"
+    call assert_equal('F{''matches'': [''Fast'', ''FAST'', ''False'',
+          \ ''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}ax{pr}"
+    call assert_equal('Fax{''matches'': []}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}ax\<bs>{pr}"
+    call assert_equal('Fa{''matches'': [''Fast'', ''False'']}', getline(1))
+
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}A{pr}"
+    call assert_equal('FA{''matches'': [''FAST'', ''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}A\<bs>{pr}"
+    call assert_equal('F{''matches'': [''Fast'', ''FAST'', ''False'',
+          \ ''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}AL{pr}"
+    call assert_equal('FAL{''matches'': [''FALSE'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}ALx{pr}"
+    call assert_equal('FALx{''matches'': []}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOF{a:key}ALx\<bs>{pr}"
+    call assert_equal('FAL{''matches'': [''FALSE'']}', getline(1))
+
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOf{a:key}{pr}"
+    call assert_equal('f{''matches'': [''Fast'', ''FAST'', ''False'', ''FALSE'',
+          \ ''fast'', ''false'']}', getline(1))
+    %d
+    call setline(1, ["Fast", "FAST", "False", "FALSE", "fast", "false"])
+    exe $"normal! ggOf{a:key}a{pr}"
+    call assert_equal('fa{''matches'': [''Fast'', ''FAST'', ''False'', ''FALSE'',
+          \ ''fast'', ''false'']}', getline(1))
+
+    %d
+    exe $"normal! ggOf{a:key}{pr}"
+    call assert_equal('f{''matches'': []}', getline(1))
+    exe $"normal! ggOf{a:key}a\<bs>{pr}"
+    call assert_equal('f{''matches'': []}', getline(1))
+    set ignorecase& smartcase& completeopt&
+    bw!
+  endfunc
+
+  call TestInner("\<c-n>")
+  call TestInner("\<c-p>")
+  call TestInner("\<c-x>\<c-n>")
+  call TestInner("\<c-x>\<c-p>")
+  delfunc PrintMenu
+  delfunc TestInner
 endfunc
 
 " Test 'nearest' flag of 'completeopt'

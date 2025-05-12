@@ -2076,9 +2076,9 @@ vim.bo.expandtab = vim.o.expandtab
 vim.bo.et = vim.bo.expandtab
 
 --- Enables project-local configuration. Nvim will execute any .nvim.lua,
---- .nvimrc, or .exrc file found in the `current-directory`, if the file is
---- in the `trust` list. Use `:trust` to manage trusted files. See also
---- `vim.secure.read()`.
+--- .nvimrc, or .exrc file found in the `current-directory` and all parent
+--- directories (ordered upwards), if the files are in the `trust` list.
+--- Use `:trust` to manage trusted files. See also `vim.secure.read()`.
 ---
 --- Compare 'exrc' to `editorconfig`:
 --- - 'exrc' can execute any code; editorconfig only specifies settings.
@@ -2363,9 +2363,8 @@ vim.bo.ft = vim.bo.filetype
 ---     set fillchars=stl:\ ,stlnc:\ ,vert:│,fold:·,diff:-
 --- ```
 ---
---- For the "stl", "stlnc", "foldopen", "foldclose" and "foldsep" items
---- single-byte and multibyte characters are supported.  But double-width
---- characters are not supported. `E1512`
+--- All items support single-byte and multibyte characters.  But
+--- double-width characters are not supported. `E1512`
 ---
 --- The highlighting used for these items:
 ---   item		highlight group ~
@@ -6084,9 +6083,11 @@ vim.wo.scl = vim.wo.signcolumn
 --- Override the 'ignorecase' option if the search pattern contains upper
 --- case characters.  Only used when the search pattern is typed and
 --- 'ignorecase' option is on.  Used for the commands "/", "?", "n", "N",
---- ":g" and ":s".  Not used for "*", "#", "gd", tag search, etc.  After
---- "*" and "#" you can make 'smartcase' used by doing a "/" command,
---- recalling the search pattern from history and hitting <Enter>.
+--- ":g" and ":s" and when filtering matches for the completion menu
+--- `compl-states`.
+--- Not used for "*", "#", "gd", tag search, etc.  After "*" and "#" you
+--- can make 'smartcase' used by doing a "/" command, recalling the search
+--- pattern from history and hitting <Enter>.
 ---
 --- @type boolean
 vim.o.smartcase = false
