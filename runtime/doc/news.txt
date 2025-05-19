@@ -126,7 +126,11 @@ DEFAULTS
 
 DIAGNOSTICS
 
-• todo
+• |vim.diagnostic.setloclist()| and |vim.diagnostic.setqflist()| now support a
+  `format` function to modify (or filter) diagnostics before being set in the
+  location/quickfix list.
+• |vim.diagnostic.get()| now accepts an `enabled` filter to only return
+  enabled or disabled diagnostics.
 
 EDITOR
 
@@ -163,6 +167,7 @@ OPTIONS
   |ins-completion| modes.
 • 'completeopt' flag "nearset" sorts completion results by distance to cursor.
 • 'diffopt' `inline:` configures diff highlighting for changes within a line.
+• 'grepformat' is now a |global-local| option.
 • 'pummaxwidth' sets maximum width for the completion popup menu.
 • 'winborder' "bold" style.
 • |g:clipboard| accepts a string name to force any builtin clipboard tool.
