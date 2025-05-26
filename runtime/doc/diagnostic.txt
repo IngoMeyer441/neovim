@@ -546,7 +546,8 @@ Lua module: vim.diagnostic                                    *diagnostic-api*
     Fields: ~
       • {bufnr}?          (`integer`, default: current buffer) Buffer number
                           to show diagnostics from.
-      • {namespace}?      (`integer`) Limit diagnostics to the given namespace
+      • {namespace}?      (`integer|integer[]`) Limit diagnostics to the given
+                          namespace(s).
       • {scope}?          (`'line'|'buffer'|'cursor'|'c'|'l'|'b'`, default:
                           `line`) Show diagnostics from the whole buffer
                           (`buffer"`, the current cursor line (`line`), or the
@@ -604,8 +605,8 @@ Lua module: vim.diagnostic                                    *diagnostic-api*
 *vim.diagnostic.Opts.Jump*
 
     Fields: ~
-      • {float}?     (`boolean|vim.diagnostic.Opts.Float`, default: false)
-                     Default value of the {float} parameter of
+      • {on_jump}?   (`fun(diagnostic:vim.Diagnostic?, bufnr:integer)`)
+                     Default value of the {on_jump} parameter of
                      |vim.diagnostic.jump()|.
       • {wrap}?      (`boolean`, default: true) Default value of the {wrap}
                      parameter of |vim.diagnostic.jump()|.
