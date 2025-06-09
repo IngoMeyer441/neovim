@@ -73,7 +73,7 @@ local validate = vim.validate
 --- Daemonize the server process so that it runs in a separate process group from Nvim.
 --- Nvim will shutdown the process on exit, but if Nvim fails to exit cleanly this could leave
 --- behind orphaned server processes.
---- (default: true)
+--- (default: `true`)
 --- @field detached? boolean
 ---
 --- A table with flags for the client. The current (experimental) flags are:
@@ -89,7 +89,8 @@ local validate = vim.validate
 --- the LSP spec.
 --- @field init_options? lsp.LSPObject
 ---
---- (default: client-id) Name in logs and user messages.
+--- Name in logs and user messages.
+--- (default: client-id)
 --- @field name? string
 ---
 --- Called "position encoding" in LSP spec. The encoding that the LSP server expects, used for
@@ -132,9 +133,10 @@ local validate = vim.validate
 --- supports workspace folders but none are configured. See `workspaceFolders` in LSP spec.
 --- @field workspace_folders? lsp.WorkspaceFolder[]
 ---
---- (default false) Server requires a workspace (no "single file" support). Note: Without
+--- Server requires a workspace (no "single file" support). Note: Without
 --- a workspace, cross-file features (navigation, hover) may or may not work depending on the
 --- language server, even if the server doesn't require a workspace.
+--- (default: `false`)
 --- @field workspace_required? boolean
 
 --- @class vim.lsp.Client.Progress: vim.Ringbuf<{token: integer|string, value: any}>
@@ -174,7 +176,7 @@ local validate = vim.validate
 --- @field name string
 ---
 --- See [vim.lsp.ClientConfig].
---- @field offset_encoding string
+--- @field offset_encoding 'utf-8'|'utf-16'|'utf-32'
 ---
 --- A ring buffer (|vim.ringbuf()|) containing progress messages
 --- sent by the server.
@@ -438,16 +440,16 @@ function Client.create(config)
   --- @type vim.lsp.rpc.Dispatchers
   local dispatchers = {
     notification = function(...)
-      return self:_notification(...)
+      self:_notification(...)
     end,
     server_request = function(...)
       return self:_server_request(...)
     end,
     on_error = function(...)
-      return self:_on_error(...)
+      self:_on_error(...)
     end,
     on_exit = function(...)
-      return self:_on_exit(...)
+      self:_on_exit(...)
     end,
   }
 
@@ -595,7 +597,7 @@ end
 
 --- @private
 --- @param id integer
---- @param req_type 'pending'|'complete'|'cancel'|
+--- @param req_type 'pending'|'complete'|'cancel'
 --- @param bufnr? integer (only required for req_type='pending')
 --- @param method? string (only required for req_type='pending')
 function Client:_process_request(id, req_type, bufnr, method)

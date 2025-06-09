@@ -69,7 +69,6 @@
 #include "nvim/message.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
-#include "nvim/msgpack_rpc/server.h"
 #include "nvim/normal.h"
 #include "nvim/normal_defs.h"
 #include "nvim/ops.h"
@@ -101,6 +100,7 @@
 #include "nvim/tag.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
+#include "nvim/ui_client.h"
 #include "nvim/undo.h"
 #include "nvim/undo_defs.h"
 #include "nvim/usercmd.h"
@@ -4828,16 +4828,23 @@ int before_quit_all(exarg_T *eap)
 }
 
 /// ":qall": try to quit all windows
-static void ex_quit_all(exarg_T *eap)
+/// ":restart": restart the Nvim server
+static void ex_quitall_or_restart(exarg_T *eap)
 {
   if (before_quit_all(eap) == FAIL) {
     return;
   }
   exiting = true;
-  if (eap->forceit || !check_changed_any(false, false)) {
+  Error err = ERROR_INIT;
+  if ((eap->forceit || !check_changed_any(false, false))
+      && (eap->cmdidx != CMD_restart || remote_ui_restart(current_ui, &err))) {
     getout(0);
   }
   not_exiting();
+  if (ERROR_SET(&err)) {
+    emsg(err.msg);  // UI disappeared already?
+    api_clear_error(&err);
+  }
 }
 
 /// ":close": close current window, unless it is the last one

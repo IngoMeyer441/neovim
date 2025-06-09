@@ -79,22 +79,19 @@ function SystemObj:_timeout(signal)
   self:kill(signal or SIG.TERM)
 end
 
--- Use max 32-bit signed int value to avoid overflow on 32-bit systems. #31633
-local MAX_TIMEOUT = 2 ^ 31 - 1
-
 --- @param timeout? integer
 --- @return vim.SystemCompleted
 function SystemObj:wait(timeout)
   local state = self._state
 
-  local done = vim.wait(timeout or state.timeout or MAX_TIMEOUT, function()
+  local done = vim.wait(timeout or state.timeout or vim._maxint, function()
     return state.result ~= nil
   end, nil, true)
 
   if not done then
     -- Send sigkill since this cannot be caught
     self:_timeout(SIG.KILL)
-    vim.wait(timeout or state.timeout or MAX_TIMEOUT, function()
+    vim.wait(timeout or state.timeout or vim._maxint, function()
       return state.result ~= nil
     end, nil, true)
   end
@@ -246,7 +243,13 @@ local function spawn(cmd, opts, on_exit, on_error)
   local handle, pid_or_err = uv.spawn(cmd, opts, on_exit)
   if not handle then
     on_error()
-    error(('%s: "%s"'):format(pid_or_err, cmd))
+    if opts.cwd and not uv.fs_stat(opts.cwd) then
+      error(("%s (cwd): '%s'"):format(pid_or_err, opts.cwd))
+    elseif vim.fn.executable(cmd) == 0 then
+      error(("%s (cmd): '%s'"):format(pid_or_err, cmd))
+    else
+      error(pid_or_err)
+    end
   end
   return handle, pid_or_err --[[@as integer]]
 end

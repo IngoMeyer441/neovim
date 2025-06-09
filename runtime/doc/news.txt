@@ -71,6 +71,8 @@ HIGHLIGHTS
 LSP
 
 • `root_markers` in |vim.lsp.Config| can now be ordered by priority.
+• The function set with |vim.lsp.log.set_format_func()| is now given all
+  arguments corresponding to a log entry instead of the individual arguments.
 
 LUA
 
@@ -111,6 +113,7 @@ API
   actually trusted.
 • Added |vim.lsp.is_enabled()| to check if a given LSP config has been enabled
   by |vim.lsp.enable()|.
+• |nvim_echo()| can set the |ui-messages| kind with which to emit the message.
 
 BUILD
 
@@ -137,6 +140,8 @@ EDITOR
 
 • |:iput| works like |:put| but adjusts indent.
 • |omnicompletion| in `help` buffer. |ft-help-omni|
+• Setting "'0" in 'shada' prevents storing the jumplist in the shada file.
+• 'shada' now correctly respects "/0" and "f0".
 
 EVENTS
 
@@ -146,14 +151,20 @@ EVENTS
 HIGHLIGHTS
 
 • |hl-DiffTextAdd| highlights added text within a changed line.
+• |hl-StderrMsg| |hl-StdoutMsg|
 
 LSP
 
 • |vim.lsp.ClientConfig| gained `workspace_required`.
+• You can control priority of |vim.lsp.Config| `root_markers`.
 • Support for `textDocument/documentColor`: |lsp-document_color|
   https://microsoft.github.io/language-server-protocol/specification/#textDocument_documentColor
 • The `textDocument/diagnostic` request now includes the previous id in its
   parameters.
+• |vim.lsp.enable()| start/stops clients as necessary. And detaches
+  non-applicable LSP clients.
+• |vim.lsp.is_enabled()| checks if a LSP config is enabled (without
+  "resolving" it).
 
 LUA
 
@@ -167,6 +178,11 @@ OPTIONS
 • 'chistory' and 'lhistory' set size of the |quickfix-stack|.
 • 'completefuzzycollect' enables fuzzy collection of candidates for (some)
   |ins-completion| modes.
+• 'complete' new flags:
+  • "F{func}"   complete using given function
+  • "F"         complete using 'completefunc'
+  • "o"         complete using 'omnifunc'
+• 'complete' allows limiting matches for sources using "{flag}^<limit>".
 • 'completeopt' flag "nearset" sorts completion results by distance to cursor.
 • 'diffopt' `inline:` configures diff highlighting for changes within a line.
 • 'grepformat' is now a |global-local| option.
@@ -206,6 +222,7 @@ TUI
 
 UI
 
+• |:restart| restarts Nvim and reattaches the current UI.
 • |:checkhealth| shows a summary in the header for every healthcheck.
 • |ui-multigrid| provides composition information and absolute coordinates.
 • `vim._extui` provides an experimental commandline and message UI intended to

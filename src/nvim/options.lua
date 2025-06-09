@@ -1412,7 +1412,7 @@ local options = {
       abbreviation = 'cpt',
       cb = 'did_set_complete',
       defaults = '.,w,b,u,t',
-      values = { '.', 'w', 'b', 'u', 'k', 'kspell', 's', 'i', 'd', ']', 't', 'U', 'f' },
+      values = { '.', 'w', 'b', 'u', 'k', 'kspell', 's', 'i', 'd', ']', 't', 'U', 'f', 'F', 'o' },
       deny_duplicates = true,
       desc = [=[
         This option specifies how keyword completion |ins-completion| works
@@ -1438,6 +1438,28 @@ local options = {
         ]	tag completion
         t	same as "]"
         f	scan the buffer names (as opposed to buffer contents)
+        F{func}	call the function {func}.  Multiple "F" flags may be specified.
+        	Refer to |complete-functions| for details on how the function
+        	is invoked and what it should return.  The value can be the
+        	name of a function or a |Funcref|.  For |Funcref| values,
+        	spaces must be escaped with a backslash ('\'), and commas with
+        	double backslashes ('\\') (see |option-backslash|).
+        	If the Dict returned by the {func} includes {"refresh": "always"},
+        	the function will be invoked again whenever the leading text
+        	changes.
+        	Completion matches are always inserted at the keyword
+        	boundary, regardless of the column returned by {func} when
+        	a:findstart is 1.  This ensures compatibility with other
+        	completion sources.
+        	To make further modifications to the inserted text, {func}
+        	can make use of |CompleteDonePre|.
+        	If generating matches is potentially slow, |complete_check()|
+        	should be used to avoid blocking and preserve editor
+        	responsiveness.
+        F	equivalent to using "F{func}", where the function is taken from
+        	the 'completefunc' option.
+        o	equivalent to using "F{func}", where the function is taken from
+        	the 'omnifunc' option.
 
         Unloaded buffers are not loaded, thus their autocmds |:autocmd| are
         not executed, this may lead to unexpected completions from some files
@@ -1447,6 +1469,13 @@ local options = {
         As you can see, CTRL-N and CTRL-P can be used to do any 'iskeyword'-
         based expansion (e.g., dictionary |i_CTRL-X_CTRL-K|, included patterns
         |i_CTRL-X_CTRL-I|, tags |i_CTRL-X_CTRL-]| and normal expansions).
+
+        An optional match limit can be specified for a completion source by
+        appending a caret ("^") followed by a {count} to the source flag.
+        For example: ".^9,w,u,t^5" limits matches from the current buffer
+        to 9 and from tags to 5.  Other sources remain unlimited.
+        Note: The match limit takes effect only during forward completion
+        (CTRL-N) and is ignored during backward completion (CTRL-P).
       ]=],
       full_name = 'complete',
       list = 'onecomma',
@@ -2699,6 +2728,9 @@ local options = {
         Otherwise this is a comma-separated list of event names.  Example: >vim
             set ei=WinEnter,WinLeave
         <
+        To ignore all but some events, a "-" prefix can be used: >vim
+            :set ei=all,-WinLeave
+        <
       ]=],
       expand_cb = 'expand_set_eventignore',
       full_name = 'eventignore',
@@ -3030,7 +3062,8 @@ local options = {
         one dot may appear.
         This option is not copied to another buffer, independent of the 's' or
         'S' flag in 'cpoptions'.
-        Only alphanumeric characters, '-' and '_' can be used.
+        Only alphanumeric characters, '-' and '_' can be used (and a '.' is
+        allowed as delimiter when combining different filetypes).
       ]=],
       full_name = 'filetype',
       noglob = true,
@@ -4314,7 +4347,8 @@ local options = {
       defaults = false,
       desc = [=[
         Ignore case in search patterns, |cmdline-completion|, when
-        searching in the tags file, and |expr-==|.
+        searching in the tags file, |expr-==| and for Insert-mode completion
+        |ins-completion|.
         Also see 'smartcase' and 'tagcase'.
         Can be overruled by using "\c" or "\C" in the pattern, see
         |/ignorecase|.
@@ -7180,9 +7214,14 @@ local options = {
         the end of line the line break still isn't included.
         When "exclusive" is used, cursor position in visual mode will be
         adjusted for inclusive motions |inclusive-motion-selection-exclusive|.
-        Note that when "exclusive" is used and selecting from the end
-        backwards, you cannot include the last character of a line, when
-        starting in Normal mode and 'virtualedit' empty.
+
+        Note:
+        - When "exclusive" is used and selecting from the end backwards, you
+          cannot include the last character of a line, when starting in Normal
+          mode and 'virtualedit' empty.
+        - when "exclusive" is used with a single character visual selection,
+          Vim will behave as if the 'selection' is inclusive (in other words,
+          you cannot visually select an empty region).
       ]=],
       full_name = 'selection',
       scope = { 'global' },
@@ -7755,10 +7794,10 @@ local options = {
       cb = 'did_set_shiftwidth_tabstop',
       defaults = 8,
       desc = [=[
-        Number of spaces to use for each step of (auto)indent.  Used for
-        |'cindent'|, |>>|, |<<|, etc.
-        When zero the 'tabstop' value will be used.  Use the |shiftwidth()|
-        function to get the effective shiftwidth value.
+        Number of columns that make up one level of (auto)indentation.  Used
+        by |'cindent'|, |<<|, |>>|, etc.
+        If set to 0, Vim uses the current 'tabstop' value.  Use |shiftwidth()|
+        to obtain the effective value in scripts.
       ]=],
       full_name = 'shiftwidth',
       scope = { 'buf' },
@@ -8143,16 +8182,11 @@ local options = {
       abbreviation = 'sta',
       defaults = true,
       desc = [=[
-        When on, a <Tab> in front of a line inserts blanks according to
-        'shiftwidth'.  'tabstop' or 'softtabstop' is used in other places.  A
-        <BS> will delete a 'shiftwidth' worth of space at the start of the
-        line.
-        When off, a <Tab> always inserts blanks according to 'tabstop' or
-        'softtabstop'.  'shiftwidth' is only used for shifting text left or
-        right |shift-left-right|.
-        What gets inserted (a <Tab> or spaces) depends on the 'expandtab'
-        option.  Also see |ins-expandtab|.  When 'expandtab' is not set, the
-        number of spaces is minimized by using <Tab>s.
+        When enabled, the <Tab> key will indent by 'shiftwidth' if the cursor
+        is in leading whitespace.  The <BS> key has the opposite effect.
+        This behaves as if 'softtabstop' is set to the value of 'shiftwidth'.
+        Have a look at section |30.5| of the user guide for detailed
+        explanations on how Vim works with tabs and spaces.
       ]=],
       full_name = 'smarttab',
       scope = { 'global' },
@@ -9053,45 +9087,12 @@ local options = {
       cb = 'did_set_shiftwidth_tabstop',
       defaults = 8,
       desc = [=[
-        Number of spaces that a <Tab> in the file counts for.  Also see
-        the |:retab| command, and the 'softtabstop' option.
-
-        Note: Setting 'tabstop' to any other value than 8 can make your file
-        appear wrong in many places.
-        The value must be more than 0 and less than 10000.
-
-        There are five main ways to use tabs in Vim:
-        1. Always keep 'tabstop' at 8, set 'softtabstop' and 'shiftwidth' to 4
-           (or 3 or whatever you prefer) and use 'noexpandtab'.  Then Vim
-           will use a mix of tabs and spaces, but typing <Tab> and <BS> will
-           behave like a tab appears every 4 (or 3) characters.
-           This is the recommended way, the file will look the same with other
-           tools and when listing it in a terminal.
-        2. Set 'softtabstop' and 'shiftwidth' to whatever you prefer and use
-           'expandtab'.  This way you will always insert spaces.  The
-           formatting will never be messed up when 'tabstop' is changed (leave
-           it at 8 just in case).  The file will be a bit larger.
-           You do need to check if no Tabs exist in the file.  You can get rid
-           of them by first setting 'expandtab' and using `%retab!`, making
-           sure the value of 'tabstop' is set correctly.
-        3. Set 'tabstop' and 'shiftwidth' to whatever you prefer and use
-           'expandtab'.  This way you will always insert spaces.  The
-           formatting will never be messed up when 'tabstop' is changed.
-           You do need to check if no Tabs exist in the file, just like in the
-           item just above.
-        4. Set 'tabstop' and 'shiftwidth' to whatever you prefer and use a
-           |modeline| to set these values when editing the file again.  Only
-           works when using Vim to edit the file, other tools assume a tabstop
-           is worth 8 spaces.
-        5. Always set 'tabstop' and 'shiftwidth' to the same value, and
-           'noexpandtab'.  This should then work (for initial indents only)
-           for any tabstop setting that people use.  It might be nice to have
-           tabs after the first non-blank inserted as spaces if you do this
-           though.  Otherwise aligned comments will be wrong when 'tabstop' is
-           changed.
-
-        The value of 'tabstop' will be ignored if |'vartabstop'| is set to
-        anything other than an empty string.
+        Defines the column multiple used to display the Horizontal Tab
+        character (ASCII 9); a Horizontal Tab always advances to the next tab
+        stop.
+        The value must be at least 1 and at most 9999.
+        If |'vartabstop'| is set, this option is ignored.
+        Leave it at 8 unless you have a strong reason (see usr |30.5|).
       ]=],
       full_name = 'tabstop',
       redraw = { 'current_buffer' },

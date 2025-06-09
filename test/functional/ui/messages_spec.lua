@@ -313,6 +313,23 @@ describe('ui/ext_messages', function()
       },
     })
 
+    feed(':call nvim_echo([["Foo"]], 1, #{ kind:"list_cmd" })<CR>')
+    screen:expect({
+      grid = [[
+        line 1                   |
+        line^                     |
+        {1:~                        }|*3
+      ]],
+      cmdline = { { abort = false } },
+      messages = {
+        {
+          content = { { 'Foo' } },
+          history = true,
+          kind = 'list_cmd',
+        },
+      },
+    })
+
     -- kind=verbose for :verbose messages
     feed(':1verbose filter Diff[AC] hi<CR>')
     screen:expect({
@@ -798,7 +815,7 @@ describe('ui/ext_messages', function()
       ^                         |
       {1:~                        }|*2
     ]],
-      showmode = { { '-- ^X mode (^]^D^E^F^I^K^L^N^O^Ps^U^V^Y)', 5, 11 } },
+      showmode = { { '-- ^X mode (^]^D^E^F^I^K^L^N^O^P^Rs^U^V^Y)', 5, 11 } },
     }
 
     feed('<c-p>')
@@ -1704,6 +1721,32 @@ stack traceback:
         },
       },
     })
+  end)
+
+  it('can capture execute("messages"))', function()
+    feed('Q')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = {
+        {
+          content = { { "E354: Invalid register name: '^@'", 9, 6 } },
+          history = true,
+          kind = 'emsg',
+        },
+      },
+    })
+    feed(':let msg = execute("messages")<CR>')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      cmdline = { { abort = false } },
+    })
+    eq("E354: Invalid register name: '^@'", eval('msg'):gsub('\n', ''))
   end)
 end)
 

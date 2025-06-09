@@ -39,12 +39,11 @@ local promptlen = 0 -- Current length of the prompt, stored for use in "cmdline_
 ---@param content CmdContent
 ---@param prompt string
 local function set_text(content, prompt)
-  promptlen = #prompt
+  promptlen, cmdbuff = #prompt, ''
   for _, chunk in ipairs(content) do
-    prompt = prompt .. chunk[2]
+    cmdbuff = cmdbuff .. chunk[2]
   end
-  cmdbuff = prompt
-  api.nvim_buf_set_lines(ext.bufs.cmd, M.row, -1, false, { fn.strtrans(cmdbuff) .. ' ' })
+  api.nvim_buf_set_lines(ext.bufs.cmd, M.row, -1, false, { prompt .. fn.strtrans(cmdbuff) .. ' ' })
 end
 
 --- Set the cmdline buffer text and cursor position.
@@ -65,8 +64,8 @@ function M.cmdline_show(content, pos, firstc, prompt, indent, level, hl_id)
     api.nvim_buf_set_extmark(ext.bufs.cmd, ext.ns, 0, 0, { hl_group = hl_id, end_col = promptlen })
   end
 
-  local height = math.max(ext.cmdheight, api.nvim_win_text_height(ext.wins[ext.tab].cmd, {}).all)
-  win_config(ext.wins[ext.tab].cmd, false, height)
+  local height = math.max(ext.cmdheight, api.nvim_win_text_height(ext.wins.cmd, {}).all)
+  win_config(ext.wins.cmd, false, height)
   M.cmdline_pos(pos)
 
   -- Clear message cmdline state; should not be shown during, and reset after cmdline.
@@ -84,7 +83,7 @@ end
 ---@param shift boolean
 --@param level integer
 function M.cmdline_special_char(c, shift)
-  api.nvim_win_call(ext.wins[ext.tab].cmd, function()
+  api.nvim_win_call(ext.wins.cmd, function()
     api.nvim_put({ c }, shift and '' or 'c', false, false)
   end)
 end
@@ -95,17 +94,17 @@ local curpos = { 0, 0 } -- Last drawn cursor position.
 ---@param pos integer
 --@param level integer
 function M.cmdline_pos(pos)
-  pos = #fn.strtrans(cmdbuff:sub(1, pos + 1)) - 1
+  pos = #fn.strtrans(cmdbuff:sub(1, pos))
   if curpos[1] ~= M.row + 1 or curpos[2] ~= promptlen + pos then
     curpos[1], curpos[2] = M.row + 1, promptlen + pos
     -- Add matchparen highlighting to non-prompt part of cmdline.
     if pos > 0 and fn.exists('#matchparen') then
-      api.nvim_win_set_cursor(ext.wins[ext.tab].cmd, { curpos[1], curpos[2] - 1 })
-      vim.wo[ext.wins[ext.tab].cmd].eventignorewin = ''
-      fn.win_execute(ext.wins[ext.tab].cmd, 'doautocmd CursorMoved')
-      vim.wo[ext.wins[ext.tab].cmd].eventignorewin = 'all'
+      api.nvim_win_set_cursor(ext.wins.cmd, { curpos[1], curpos[2] - 1 })
+      vim._with({ win = ext.wins.cmd, wo = { eventignorewin = '' } }, function()
+        api.nvim_exec_autocmds('CursorMoved', {})
+      end)
     end
-    api.nvim_win_set_cursor(ext.wins[ext.tab].cmd, curpos)
+    api.nvim_win_set_cursor(ext.wins.cmd, curpos)
   end
 end
 
@@ -118,7 +117,8 @@ function M.cmdline_hide(_, abort)
     return -- No need to hide when still in cmdline_block.
   end
 
-  fn.clearmatches(ext.wins[ext.tab].cmd) -- Clear matchparen highlights.
+  fn.clearmatches(ext.wins.cmd) -- Clear matchparen highlights.
+  api.nvim_win_set_cursor(ext.wins.cmd, { 1, 0 })
   if abort then
     -- Clear cmd buffer for aborted command (non-abort is left visible).
     api.nvim_buf_set_lines(ext.bufs.cmd, 0, -1, false, {})
@@ -129,7 +129,7 @@ function M.cmdline_hide(_, abort)
     -- loop iteration. E.g. when a non-choice confirm button is pressed.
     if was_prompt and not M.prompt then
       api.nvim_buf_set_lines(ext.bufs.cmd, 0, -1, false, {})
-      api.nvim_win_set_config(ext.wins[ext.tab].prompt, { hide = true })
+      api.nvim_win_set_config(ext.wins.prompt, { hide = true })
     end
     -- Messages emitted as a result of a typed command are treated specially:
     -- remember if the cmdline was used this event loop iteration.
@@ -141,7 +141,7 @@ function M.cmdline_hide(_, abort)
   clear(M.prompt)
 
   M.prompt, M.level, curpos[1], curpos[2] = false, 0, 0, 0
-  win_config(ext.wins[ext.tab].cmd, true, ext.cmdheight)
+  win_config(ext.wins.cmd, true, ext.cmdheight)
 end
 
 --- Set multi-line cmdline buffer text.

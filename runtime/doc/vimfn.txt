@@ -1,10 +1,10 @@
-*builtin.txt*	Nvim
+*vimfn.txt*	Nvim
 
 
 		  NVIM REFERENCE MANUAL
 
 
-Builtin functions		*vimscript-functions* *builtin-functions*
+Vimscript functions	*vimscript-functions* *builtin-functions* *builtin.txt*
 
 For functions grouped by what they are used for see |function-list|.
 
@@ -1236,6 +1236,7 @@ complete_info([{what}])                                        *complete_info()*
 		   "omni"	     Omni completion |i_CTRL-X_CTRL-O|
 		   "spell"	     Spelling suggestions |i_CTRL-X_s|
 		   "eval"	     |complete()| completion
+		   "register"	     Words from registers |i_CTRL-X_CTRL-R|
 		   "unknown"	     Other internal modes
 
 		If the optional {what} list argument is supplied, then only
@@ -1277,8 +1278,8 @@ complete_match([{lnum}, {col}])                               *complete_match()*
 		  or empty string if no match was found or when using the
 		  default 'iskeyword' pattern.
 
-		When 'isexpand' is empty, uses the 'iskeyword' pattern
-		"\k\+$" to find the start of the current keyword.
+		When 'isexpand' is empty, uses the 'iskeyword' pattern "\k\+$"
+		to find the start of the current keyword.
 
 		Examples: >vim
 		  set isexpand=.,->,/,/*,abc
@@ -3536,7 +3537,7 @@ getcurpos([{winid}])                                               *getcurpos()*
                   • {winid} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`[integer, integer, integer, integer, integer]`)
 
 getcursorcharpos([{winid}])                                 *getcursorcharpos()*
 		Same as |getcurpos()| but the column number in the returned
@@ -3845,7 +3846,7 @@ getmatches([{win}])                                               *getmatches()*
                   • {win} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`vim.fn.getmatches.ret.item[]`)
 
 getmousepos()                                                    *getmousepos()*
 		Returns a |Dictionary| with the last known position of the
@@ -3951,7 +3952,7 @@ getpos({expr})                                                        *getpos()*
                   • {expr} (`string`)
 
                 Return: ~
-                  (`integer[]`)
+                  (`[integer, integer, integer, integer]`)
 
 getqflist([{what}])                                                *getqflist()*
 		Returns a |List| with all the current quickfix errors.  Each
@@ -4088,6 +4089,7 @@ getreg([{regname} [, 1 [, {list}]]])                                  *getreg()*
 
                 Parameters: ~
                   • {regname} (`string?`)
+                  • {expr} (`any?`)
                   • {list} (`nil|false?`)
 
                 Return: ~
@@ -4167,6 +4169,10 @@ getregion({pos1}, {pos2} [, {opts}])                               *getregion()*
 		- It is evaluated in current window context, which makes a
 		  difference if the buffer is displayed in a window with
 		  different 'virtualedit' or 'list' values.
+		- When specifying an exclusive selection and {pos1} and {pos2}
+		  are equal, the returned list contains a single character as
+		  if selection is inclusive, to match the behavior of an empty
+		  exclusive selection in Visual mode.
 
 		Examples: >vim
 			xnoremap <CR>
@@ -4175,9 +4181,9 @@ getregion({pos1}, {pos2} [, {opts}])                               *getregion()*
 <
 
                 Parameters: ~
-                  • {pos1} (`table`)
-                  • {pos2} (`table`)
-                  • {opts} (`table?`)
+                  • {pos1} (`[integer, integer, integer, integer]`)
+                  • {pos2} (`[integer, integer, integer, integer]`)
+                  • {opts} (`{type?:string, exclusive?:boolean}?`)
 
                 Return: ~
                   (`string[]`)
@@ -4215,12 +4221,13 @@ getregionpos({pos1}, {pos2} [, {opts}])                         *getregionpos()*
 					(default: |FALSE|)
 
                 Parameters: ~
-                  • {pos1} (`table`)
-                  • {pos2} (`table`)
-                  • {opts} (`table?`)
+                  • {pos1} (`[integer, integer, integer, integer]`)
+                  • {pos2} (`[integer, integer, integer, integer]`)
+                  • {opts}
+                    (`{type?:string, exclusive?:boolean, eol?:boolean}?`)
 
                 Return: ~
-                  (`integer[][][]`)
+                  (`[ [integer, integer, integer, integer], [integer, integer, integer, integer] ][]`)
 
 getregtype([{regname}])                                           *getregtype()*
 		The result is a String, which is type of register {regname}.
@@ -7846,7 +7853,7 @@ readfile({fname} [, {type} [, {max}]])                              *readfile()*
                   • {max} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`string[]`)
 
 reduce({object}, {func} [, {initial}])                           *reduce()* *E998*
 		{func} is called for every item in {object}, which can be a
@@ -9057,7 +9064,7 @@ setmatches({list} [, {win}])                                      *setmatches()*
 		window ID instead of the current window.
 
                 Parameters: ~
-                  • {list} (`any`)
+                  • {list} (`vim.fn.getmatches.ret.item[]`)
                   • {win} (`integer?`)
 
                 Return: ~
@@ -11736,7 +11743,7 @@ virtcol({expr} [, {list} [, {winid}]])                               *virtcol()*
                   • {winid} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`integer|[integer, integer]`)
 
 virtcol2col({winid}, {lnum}, {col})                              *virtcol2col()*
 		The result is a Number, which is the byte index of the
@@ -12123,7 +12130,8 @@ winline()                                                            *winline()*
 winnr([{arg}])                                                         *winnr()*
 		The result is a Number, which is the number of the current
 		window.  The top window has number 1.
-		Returns zero for a popup window.
+		Returns zero for a hidden or non |focusable| window, unless
+		it is the current window.
 
 		The optional argument {arg} supports the following values:
 			$	the number of the last window (the window

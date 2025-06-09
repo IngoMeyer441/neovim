@@ -1450,6 +1450,7 @@ M.funcs = {
          "omni"	     Omni completion |i_CTRL-X_CTRL-O|
          "spell"	     Spelling suggestions |i_CTRL-X_s|
          "eval"	     |complete()| completion
+         "register"	     Words from registers |i_CTRL-X_CTRL-R|
          "unknown"	     Other internal modes
 
       If the optional {what} list argument is supplied, then only
@@ -1494,8 +1495,8 @@ M.funcs = {
         or empty string if no match was found or when using the
         default 'iskeyword' pattern.
 
-      When 'isexpand' is empty, uses the 'iskeyword' pattern
-      "\k\+$" to find the start of the current keyword.
+      When 'isexpand' is empty, uses the 'iskeyword' pattern "\k\+$"
+      to find the start of the current keyword.
 
       Examples: >vim
         set isexpand=.,->,/,/*,abc
@@ -3969,6 +3970,7 @@ M.funcs = {
     ]=],
     name = 'getcurpos',
     params = { { 'winid', 'integer' } },
+    returns = '[integer, integer, integer, integer, integer]',
     signature = 'getcurpos([{winid}])',
   },
   getcursorcharpos = {
@@ -4312,6 +4314,7 @@ M.funcs = {
     ]=],
     name = 'getmatches',
     params = { { 'win', 'integer' } },
+    returns = 'vim.fn.getmatches.ret.item[]',
     signature = 'getmatches([{win}])',
   },
   getmousepos = {
@@ -4427,7 +4430,7 @@ M.funcs = {
     ]=],
     name = 'getpos',
     params = { { 'expr', 'string' } },
-    returns = 'integer[]',
+    returns = '[integer, integer, integer, integer]',
     signature = 'getpos({expr})',
   },
   getqflist = {
@@ -4568,7 +4571,7 @@ M.funcs = {
 
     ]=],
     name = 'getreg',
-    params = { { 'regname', 'string' }, { 'list', 'nil|false' } },
+    params = { { 'regname', 'string' }, { 'expr', 'any' }, { 'list', 'nil|false' } },
     signature = 'getreg([{regname} [, 1 [, {list}]]])',
     returns = 'string',
   },
@@ -4576,8 +4579,8 @@ M.funcs = {
     args = { 3 },
     base = 1,
     name = 'getreg',
-    params = { { 'regname', 'string' }, { 'list', 'true|number|string|table' } },
-    returns = 'string|string[]',
+    params = { { 'regname', 'string' }, { 'expr', 'any' }, { 'list', 'true|number|string|table' } },
+    returns = 'string[]',
   },
   getreginfo = {
     args = { 0, 1 },
@@ -4659,6 +4662,10 @@ M.funcs = {
       - It is evaluated in current window context, which makes a
         difference if the buffer is displayed in a window with
         different 'virtualedit' or 'list' values.
+      - When specifying an exclusive selection and {pos1} and {pos2}
+        are equal, the returned list contains a single character as
+        if selection is inclusive, to match the behavior of an empty
+        exclusive selection in Visual mode.
 
       Examples: >vim
       	xnoremap <CR>
@@ -4667,7 +4674,11 @@ M.funcs = {
       <
     ]=],
     name = 'getregion',
-    params = { { 'pos1', 'table' }, { 'pos2', 'table' }, { 'opts', 'table' } },
+    params = {
+      { 'pos1', '[integer, integer, integer, integer]' },
+      { 'pos2', '[integer, integer, integer, integer]' },
+      { 'opts', '{type?:string, exclusive?:boolean}' },
+    },
     returns = 'string[]',
     signature = 'getregion({pos1}, {pos2} [, {opts}])',
   },
@@ -4707,8 +4718,12 @@ M.funcs = {
       			(default: |FALSE|)
     ]=],
     name = 'getregionpos',
-    params = { { 'pos1', 'table' }, { 'pos2', 'table' }, { 'opts', 'table' } },
-    returns = 'integer[][][]',
+    params = {
+      { 'pos1', '[integer, integer, integer, integer]' },
+      { 'pos2', '[integer, integer, integer, integer]' },
+      { 'opts', '{type?:string, exclusive?:boolean, eol?:boolean}' },
+    },
+    returns = '[ [integer, integer, integer, integer], [integer, integer, integer, integer] ][]',
     signature = 'getregionpos({pos1}, {pos2} [, {opts}])',
   },
   getregtype = {
@@ -8643,6 +8658,7 @@ M.funcs = {
     ]=],
     name = 'readfile',
     params = { { 'fname', 'string' }, { 'type', 'string' }, { 'max', 'integer' } },
+    returns = 'string[]',
     signature = 'readfile({fname} [, {type} [, {max}]])',
   },
   reduce = {
@@ -9993,7 +10009,7 @@ M.funcs = {
 
     ]=],
     name = 'setmatches',
-    params = { { 'list', 'any' }, { 'win', 'integer' } },
+    params = { { 'list', 'vim.fn.getmatches.ret.item[]' }, { 'win', 'integer' } },
     signature = 'setmatches({list} [, {win}])',
   },
   setpos = {
@@ -12919,6 +12935,7 @@ M.funcs = {
     ]=],
     name = 'virtcol',
     params = { { 'expr', 'string|any[]' }, { 'list', 'boolean' }, { 'winid', 'integer' } },
+    returns = 'integer|[integer, integer]',
     signature = 'virtcol({expr} [, {list} [, {winid}]])',
   },
   virtcol2col = {
@@ -13346,7 +13363,8 @@ M.funcs = {
     desc = [=[
       The result is a Number, which is the number of the current
       window.  The top window has number 1.
-      Returns zero for a popup window.
+      Returns zero for a hidden or non |focusable| window, unless
+      it is the current window.
 
       The optional argument {arg} supports the following values:
       	$	the number of the last window (the window

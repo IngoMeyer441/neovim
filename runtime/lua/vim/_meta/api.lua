@@ -1101,6 +1101,7 @@ function vim.api.nvim_del_var(name) end
 --- @param history boolean if true, add to `message-history`.
 --- @param opts vim.api.keyset.echo_opts Optional parameters.
 --- - err: Treat the message like `:echoerr`. Sets `hl_group` to `hl-ErrorMsg` by default.
+--- - kind: Set the `ui-messages` kind with which this message will be emitted.
 --- - verbose: Message is controlled by the 'verbose' option. Nvim invoked with `-V3log`
 ---   will write the message to the "log" file instead of standard output.
 function vim.api.nvim_echo(chunks, history, opts) end
@@ -1134,7 +1135,7 @@ function vim.api.nvim_eval(expr) end
 --- - use_tabline: (boolean) Evaluate tabline instead of statusline. When true, {winid}
 ---                          is ignored. Mutually exclusive with {use_winbar}.
 --- - use_statuscol_lnum: (number) Evaluate statuscolumn for this line number instead of statusline.
---- @return table<string,any> # Dict containing statusline information, with these keys:
+--- @return vim.api.keyset.eval_statusline_ret # Dict containing statusline information, with these keys:
 --- - str: (string) Characters that will be displayed on the statusline.
 --- - width: (number) Display width of the statusline.
 --- - highlights: Array containing highlight information of the statusline. Only included when
@@ -1668,10 +1669,7 @@ function vim.api.nvim_notify(msg, log_level, opts) end
 ---
 --- ```lua
 --- vim.api.nvim_create_user_command('TermHl', function()
----   local b = vim.api.nvim_create_buf(false, true)
----   local chan = vim.api.nvim_open_term(b, {})
----   vim.api.nvim_chan_send(chan, table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'))
----   vim.api.nvim_win_set_buf(0, b)
+---   vim.api.nvim_open_term(0, {})
 --- end, { desc = 'Highlights ANSI termcodes in curbuf' })
 --- ```
 ---
@@ -2540,7 +2538,7 @@ function vim.api.nvim_win_set_width(window, width) end
 ---               to find out how many buffer lines beyond "start_row" take
 ---               up a certain number of logical lines (returned in
 ---               "end_row" and "end_vcol").
---- @return table<string,any> # Dict containing text height information, with these keys:
+--- @return vim.api.keyset.win_text_height_ret # Dict containing text height information, with these keys:
 --- - all: The total number of screen lines occupied by the range.
 --- - fill: The number of diff filler or virtual lines among them.
 --- - end_row: The row on which the returned height is reached (first row of

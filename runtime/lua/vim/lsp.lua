@@ -41,7 +41,6 @@ lsp._resolve_to_request = {
 
 -- TODO improve handling of scratch buffers with LSP attached.
 
----@private
 --- Called by the client when trying to call a method that's not
 --- supported in any of the servers registered for the current buffer.
 ---@param method (vim.lsp.protocol.Method.ClientToServer) name of the method
@@ -54,7 +53,6 @@ function lsp._unsupported_method(method)
   return msg
 end
 
----@private
 ---@param workspace_folders string|lsp.WorkspaceFolder[]?
 ---@return lsp.WorkspaceFolder[]?
 function lsp._get_workspace_folders(workspace_folders)
@@ -78,8 +76,7 @@ local format_line_ending = {
   ['mac'] = '\r',
 }
 
----@private
----@param bufnr (number)
+---@param bufnr integer
 ---@return string
 function lsp._buf_get_line_ending(bufnr)
   return format_line_ending[vim.bo[bufnr].fileformat] or '\n'
@@ -110,10 +107,9 @@ lsp.client_errors = vim.tbl_extend(
   client_error('ON_EXIT_CALLBACK_ERROR')
 )
 
----@private
 --- Returns full text of buffer {bufnr} as a string.
 ---
----@param bufnr (number) Buffer handle, or 0 for current.
+---@param bufnr integer Buffer handle, or 0 for current.
 ---@return string # Buffer text as string.
 function lsp._buf_get_full_text(bufnr)
   local line_ending = lsp._buf_get_line_ending(bufnr)
@@ -284,44 +280,36 @@ end
 ---
 --- Predicate which decides if a client should be re-used. Used on all running clients. The default
 --- implementation re-uses a client if name and root_dir matches.
---- @field reuse_client? fun(client: vim.lsp.Client, config: vim.lsp.ClientConfig): boolean
+--- @field reuse_client? fun(client: vim.lsp.Client, config: vim.lsp.ClientConfig): boolean #
 ---
---- [lsp-root_dir()]() Directory where the LSP server will base its workspaceFolders, rootUri, and
---- rootPath on initialization. The function form receives a buffer number and `on_dir` callback
---- which it must call to provide root_dir, or LSP will not be activated for the buffer. Thus
---- a `root_dir()` function can dynamically decide per-buffer whether to activate (or skip) LSP. See
---- example at |vim.lsp.enable()|.
+--- [lsp-root_dir()]()
+--- Decides the workspace root: the directory where the LSP server will base its workspaceFolders,
+--- rootUri, and rootPath on initialization. The function form must call the `on_dir` callback to
+--- provide the root dir, or LSP will not be activated for the buffer. Thus a `root_dir()` function
+--- can dynamically decide per-buffer whether to activate (or skip) LSP.
+--- See example at |vim.lsp.enable()|.
 --- @field root_dir? string|fun(bufnr: integer, on_dir:fun(root_dir?:string))
 ---
---- Directory markers (.e.g. '.git/') where the LSP server will base its workspaceFolders,
---- rootUri, and rootPath on initialization. Unused if `root_dir` is provided.
+--- [lsp-root_markers]()
+--- Filename(s) (".git/", "package.json", …) used to decide the workspace root. Unused if `root_dir`
+--- is defined. The list order decides priority. To indicate "equal priority", specify names in
+--- a nested list `{ { 'a.txt', 'b.lua' }, ... }`.
 ---
---- The list order decides the priority. To indicate "equal priority", specify names in a nested list (`{ { 'a', 'b' }, ... }`)
---- Each entry in this list is a set of one or more markers. For each set, Nvim
---- will search upwards for each marker contained in the set. If a marker is
---- found, the directory which contains that marker is used as the root
---- directory. If no markers from the set are found, the process is repeated
---- with the next set in the list.
+--- For each item, Nvim will search upwards (from the buffer file) for that marker, or list of
+--- markers; search stops at the first directory containing that marker, and the directory is used
+--- as the root dir (workspace folder).
 ---
---- Example:
----
+--- Example: Find the first ancestor directory containing file or directory "stylua.toml"; if not
+--- found, find the first ancestor containing ".git":
 --- ```lua
 ---   root_markers = { 'stylua.toml', '.git' }
 --- ```
 ---
---- Find the first parent directory containing the file `stylua.toml`. If not
---- found, find the first parent directory containing the file or directory
---- `.git`.
----
---- Example:
----
+--- Example: Find the first ancestor directory containing EITHER "stylua.toml" or ".luarc.json"; if
+--- not found, find the first ancestor containing ".git":
 --- ```lua
 ---   root_markers = { { 'stylua.toml', '.luarc.json' }, '.git' }
 --- ```
----
---- Find the first parent directory containing EITHER `stylua.toml` or
---- `.luarc.json`. If not found, find the first parent directory containing the
---- file or directory `.git`.
 ---
 --- @field root_markers? (string|string[])[]
 
@@ -549,7 +537,9 @@ local function lsp_enable_callback(bufnr)
   -- Stop any clients that no longer apply to this buffer.
   local clients = lsp.get_clients({ bufnr = bufnr, _uninitialized = true })
   for _, client in ipairs(clients) do
-    if lsp.config[client.name] and not can_start(bufnr, client.name, lsp.config[client.name]) then
+    if
+      lsp.is_enabled(client.name) and not can_start(bufnr, client.name, lsp.config[client.name])
+    then
       lsp.buf_detach_client(bufnr, client.id)
     end
   end
@@ -587,6 +577,14 @@ end
 --- vim.lsp.enable({'luals', 'pyright'})
 --- ```
 ---
+--- Example: [lsp-restart]() Passing `false` stops and detaches the client(s). Thus you can
+--- "restart" LSP by disabling and re-enabling a given config:
+---
+--- ```lua
+--- vim.lsp.enable('clangd', false)
+--- vim.lsp.enable('clangd', true)
+--- ```
+---
 --- Example: To _dynamically_ decide whether LSP is activated, define a |lsp-root_dir()| function
 --- which calls `on_dir()` only when you want that config to activate:
 ---
@@ -603,7 +601,8 @@ end
 ---@since 13
 ---
 --- @param name string|string[] Name(s) of client(s) to enable.
---- @param enable? boolean `true|nil` to enable, `false` to disable.
+--- @param enable? boolean `true|nil` to enable, `false` to disable (actively stops and detaches
+--- clients as needed)
 function lsp.enable(name, enable)
   validate('name', name, { 'string', 'table' })
 
@@ -647,6 +646,8 @@ function lsp.enable(name, enable)
 end
 
 --- Checks if the given LSP config is enabled (globally, not per-buffer).
+---
+--- Unlike `vim.lsp.config['…']`, this does not have the side-effect of resolving the config.
 ---
 --- @param name string Config name
 --- @return boolean
@@ -827,7 +828,6 @@ local function is_empty_or_default(bufnr, option)
   return vim.startswith(scriptinfo[1].name, vim.fn.expand('$VIMRUNTIME'))
 end
 
----@private
 ---@param client vim.lsp.Client
 ---@param bufnr integer
 function lsp._set_defaults(client, bufnr)
@@ -1096,8 +1096,8 @@ end
 
 --- Checks if a buffer is attached for a particular client.
 ---
----@param bufnr (integer) Buffer handle, or 0 for current
----@param client_id (integer) the client id
+---@param bufnr integer Buffer handle, or 0 for current
+---@param client_id integer the client id
 function lsp.buf_is_attached(bufnr, client_id)
   return lsp.get_clients({ bufnr = bufnr, id = client_id, _uninitialized = true })[1] ~= nil
 end
@@ -1107,7 +1107,7 @@ end
 ---
 ---@param client_id integer client id
 ---
----@return (nil|vim.lsp.Client) client rpc object
+---@return vim.lsp.Client? client rpc object
 function lsp.get_client_by_id(client_id)
   return all_clients[client_id]
 end
@@ -1202,7 +1202,6 @@ function lsp.get_clients(filter)
   return clients
 end
 
----@private
 ---@deprecated
 function lsp.get_active_clients(filter)
   vim.deprecate('vim.lsp.get_active_clients()', 'vim.lsp.get_clients()', '0.12')
@@ -1258,7 +1257,7 @@ api.nvim_create_autocmd('VimLeavePre', {
   end,
 })
 
----@private
+---@nodoc
 --- Sends an async request for all active clients attached to the
 --- buffer.
 ---
@@ -1396,9 +1395,9 @@ end
 ---
 ---@since 7
 ---
----@param bufnr (integer|nil) The number of the buffer
----@param method (vim.lsp.protocol.Method.ClientToServer.Notification) Name of the request method
----@param params (any) Arguments to send to the server
+---@param bufnr integer? The number of the buffer
+---@param method vim.lsp.protocol.Method.ClientToServer.Notification Name of the request method
+---@param params any Arguments to send to the server
 ---
 ---@return boolean success true if any client returns true; false otherwise
 function lsp.buf_notify(bufnr, method, params)
@@ -1568,7 +1567,7 @@ end
 ---@deprecated Use |vim.lsp.get_client_by_id()| instead.
 ---Checks whether a client is stopped.
 ---
----@param client_id (integer)
+---@param client_id integer
 ---@return boolean stopped true if client is stopped, false otherwise.
 function lsp.client_is_stopped(client_id)
   vim.deprecate('vim.lsp.client_is_stopped()', 'vim.lsp.get_client_by_id()', '0.14')
@@ -1579,7 +1578,7 @@ end
 --- Gets a map of client_id:client pairs for the given buffer, where each value
 --- is a |vim.lsp.Client| object.
 ---
----@param bufnr (integer|nil): Buffer handle, or 0 for current
+---@param bufnr integer? Buffer handle, or 0 for current
 ---@return table result is table of (client_id, client) pairs
 ---@deprecated Use |vim.lsp.get_clients()| instead.
 function lsp.buf_get_clients(bufnr)
@@ -1625,7 +1624,7 @@ function lsp.get_log_path()
   return log.get_filename()
 end
 
----@private
+---@nodoc
 --- Invokes a function for each LSP client attached to a buffer.
 ---
 ---@param bufnr integer Buffer number
