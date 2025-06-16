@@ -43,13 +43,12 @@ local validate = vim.validate
 ---   array.
 --- @field capabilities? lsp.ClientCapabilities
 ---
---- command string[] that launches the language
---- server (treated as in |jobstart()|, must be absolute or on `$PATH`, shell constructs like
---- "~" are not expanded), or function that creates an RPC client. Function receives
---- a `dispatchers` table and returns a table with member functions `request`, `notify`,
---- `is_closing` and `terminate`.
+--- Command `string[]` that launches the language server (treated as in |jobstart()|, must be
+--- absolute or on `$PATH`, shell constructs like "~" are not expanded), or function that creates an
+--- RPC client. Function receives a `dispatchers` table and returns a table with member functions
+--- `request`, `notify`, `is_closing` and `terminate`.
 --- See |vim.lsp.rpc.request()|, |vim.lsp.rpc.notify()|.
----  For TCP there is a builtin RPC client factory: |vim.lsp.rpc.connect()|
+--- For TCP there is a builtin RPC client factory: |vim.lsp.rpc.connect()|
 --- @field cmd string[]|fun(dispatchers: vim.lsp.rpc.Dispatchers): vim.lsp.rpc.PublicClient
 ---
 --- Directory to launch the `cmd` process. Not related to `root_dir`.
@@ -554,6 +553,8 @@ function Client:initialize()
       assert(result.capabilities, "initialize result doesn't contain capabilities")
     self.server_capabilities = assert(lsp.protocol.resolve_capabilities(self.server_capabilities))
 
+    self:_process_static_registrations()
+
     if self.server_capabilities.positionEncoding then
       self.offset_encoding = self.server_capabilities.positionEncoding
     end
@@ -583,6 +584,48 @@ function Client:initialize()
       { server_capabilities = self.server_capabilities }
     )
   end)
+end
+
+-- Server capabilities for methods that support static registration.
+local static_registration_capabilities = {
+  [ms.textDocument_prepareCallHierarchy] = 'callHierarchyProvider',
+  [ms.textDocument_documentColor] = 'colorProvider',
+  [ms.textDocument_declaration] = 'declarationProvider',
+  [ms.textDocument_diagnostic] = 'diagnosticProvider',
+  [ms.textDocument_foldingRange] = 'foldingRangeProvider',
+  [ms.textDocument_implementation] = 'implementationProvider',
+  [ms.textDocument_inlayHint] = 'inlayHintProvider',
+  [ms.textDocument_inlineValue] = 'inlineValueProvider',
+  [ms.textDocument_linkedEditingRange] = 'linkedEditingRangeProvider',
+  [ms.textDocument_moniker] = 'monikerProvider',
+  [ms.textDocument_selectionRange] = 'selectionRangeProvider',
+  [ms.textDocument_semanticTokens_full] = 'semanticTokensProvider',
+  [ms.textDocument_typeDefinition] = 'typeDefinitionProvider',
+  [ms.textDocument_prepareTypeHierarchy] = 'typeHierarchyProvider',
+}
+
+--- @private
+function Client:_process_static_registrations()
+  local static_registrations = {} ---@type lsp.Registration[]
+
+  for method, capability in pairs(static_registration_capabilities) do
+    if
+      vim.tbl_get(self.server_capabilities, capability, 'id')
+      and self:_supports_registration(method)
+    then
+      static_registrations[#static_registrations + 1] = {
+        id = self.server_capabilities[capability].id,
+        method = method,
+        registerOptions = {
+          documentSelector = self.server_capabilities[capability].documentSelector, ---@type lsp.DocumentSelector?
+        },
+      }
+    end
+  end
+
+  if next(static_registrations) then
+    self:_register_dynamic(static_registrations)
+  end
 end
 
 --- @private

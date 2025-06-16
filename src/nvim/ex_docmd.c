@@ -5560,8 +5560,8 @@ static void ex_detach(exarg_T *eap)
   if (eap && eap->forceit) {
     emsg("bang (!) not supported yet");
   } else {
-    // 1. (TODO) Send "detach" UI-event (notification only).
-    // 2. Perform server-side `nvim_ui_detach`.
+    // 1. Send "error_exit" UI-event (notification only).
+    // 2. Perform server-side UI detach.
     // 3. Close server-side channel without self-exit.
 
     if (!current_ui) {
@@ -5578,7 +5578,7 @@ static void ex_detach(exarg_T *eap)
 
     // Server-side UI detach. Doesn't close the channel.
     Error err2 = ERROR_INIT;
-    nvim_ui_detach(chan->id, &err2);
+    remote_ui_disconnect(chan->id, &err2, true);
     if (ERROR_SET(&err2)) {
       emsg(err2.msg);  // UI disappeared already?
       api_clear_error(&err2);
@@ -8186,4 +8186,19 @@ void verify_command(char *cmd)
 uint32_t get_cmd_argt(cmdidx_T cmdidx)
 {
   return cmdnames[(int)cmdidx].cmd_argt;
+}
+
+/// Check if a command is a :map/:abbrev command.
+bool is_map_cmd(cmdidx_T cmdidx)
+{
+  if (IS_USER_CMDIDX(cmdidx)) {
+    return false;
+  }
+
+  ex_func_T func = cmdnames[cmdidx].cmd_func;
+  return func == ex_map           // :map, :nmap, :noremap, etc.
+         || func == ex_unmap         // :unmap, :nunmap, etc.
+         || func == ex_mapclear      // :mapclear, :nmapclear, etc.
+         || func == ex_abbreviate    // :abbreviate, :iabbrev, etc.
+         || func == ex_abclear;      // :abclear, :iabclear, etc.
 }

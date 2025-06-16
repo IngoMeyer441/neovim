@@ -70,6 +70,16 @@ Functions that take a severity as an optional parameter (e.g.
     This form allows users to filter for specific severities
 
 ==============================================================================
+DEFAULTS                                              *diagnostic-defaults*
+
+These diagnostic keymaps are created unconditionally when Nvim starts:
+- `]d` jumps to the next diagnostic in the buffer. |]d-default|
+- `[d` jumps to the previous diagnostic in the buffer. |[d-default|
+- `]D` jumps to the last diagnostic in the buffer. |]D-default|
+- `[D` jumps to the first diagnostic in the buffer. |[D-default|
+- `<C-w>d` shows diagnostic at cursor in a floating window. |CTRL-W_d-default|
+
+==============================================================================
 HANDLERS                                                *diagnostic-handlers*
 
 Diagnostics are shown to the user with |vim.diagnostic.show()|. The display of
@@ -201,7 +211,7 @@ following uses the `virtual_lines` handler when jumping to a diagnostic: >lua
   end
 
   vim.diagnostic.config({ jump = { on_jump = on_jump } })
-
+<
                                           *diagnostic-loclist-example*
 Whenever the |location-list| is opened, the following `show` handler will show
 the most recent diagnostics: >lua

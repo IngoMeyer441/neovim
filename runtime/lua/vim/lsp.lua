@@ -272,6 +272,7 @@ end
 --- @class vim.lsp.Config : vim.lsp.ClientConfig
 ---
 --- See `cmd` in [vim.lsp.ClientConfig].
+--- See also `reuse_client` to dynamically decide (per-buffer) when `cmd` should be re-invoked.
 --- @field cmd? string[]|fun(dispatchers: vim.lsp.rpc.Dispatchers): vim.lsp.rpc.PublicClient
 ---
 --- Filetypes the client will attach to, if activated by `vim.lsp.enable()`. If not provided, the
@@ -726,13 +727,7 @@ function lsp.start(config, opts)
     validate('root_markers', opts._root_markers, 'table')
     config = vim.deepcopy(config)
 
-    for _, marker in ipairs(opts._root_markers) do
-      local root = vim.fs.root(bufnr, marker)
-      if root ~= nil then
-        config.root_dir = root
-        break
-      end
-    end
+    config.root_dir = vim.fs.root(bufnr, opts._root_markers)
   end
 
   if
@@ -1312,7 +1307,9 @@ function lsp.buf_request(bufnr, method, params, handler, on_unsupported)
   local function _cancel_all_requests()
     for client_id, request_id in pairs(client_request_ids) do
       local client = all_clients[client_id]
-      client:cancel_request(request_id)
+      if client.requests[request_id] then
+        client:cancel_request(request_id)
+      end
     end
   end
 
