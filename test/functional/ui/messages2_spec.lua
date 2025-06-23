@@ -5,7 +5,7 @@ local clear, command, exec_lua, feed = n.clear, n.command, n.exec_lua, n.feed
 
 describe('messages2', function()
   local screen
-  describe('target=msg', function()
+  describe('target=cmd', function()
     before_each(function()
       clear()
       screen = Screen.new()
@@ -24,7 +24,7 @@ describe('messages2', function()
         {1:~                                                    }|*12
         foo[+1]                                              |
       ]])
-      command('set ruler')
+      command('set ruler showcmd noshowmode')
       feed('g<lt>')
       screen:expect([[
                                                              |
@@ -68,6 +68,32 @@ describe('messages2', function()
         {4:  1 %a   "[No Name]"                    line 1       }|
                                             1,1           All|
       ]])
+      -- edit_unputchar() does not clear already updated screen #34515.
+      feed('qix<Esc>dwi<C-r>')
+      screen:expect([[
+        {18:^"}                                                    |
+        {1:~                                                    }|*12
+                                 ^R         1,1           All|
+      ]])
+      feed('-')
+      screen:expect([[
+        x^                                                    |
+        {1:~                                                    }|*12
+                                            1,2           All|
+      ]])
+    end)
+
+    it('new buffer, window and options after closing a buffer', function()
+      command('set nomodifiable | echom "foo" | messages')
+      screen:expect([[
+                                                             |
+        {1:~                                                    }|*10
+        ─{100:Pager}───────────────────────────────────────────────|
+        {4:fo^o                                                  }|
+        foo                                                  |
+      ]])
+      command('bdelete | messages')
+      screen:expect_unchanged()
     end)
   end)
 end)

@@ -1543,6 +1543,9 @@ vim.deprecate({name}, {alternative}, {version}, {plugin}, {backtrace})
 vim.inspect()                                                  *vim.inspect()*
     Gets a human-readable representation of the given object.
 
+    Overloads: ~
+      • `fun(x: any, opts?: vim.inspect.Opts): string`
+
     Return: ~
         (`string`)
 
@@ -2458,6 +2461,10 @@ vim.validate({name}, {value}, {validator}, {optional}, {message})
       • {optional}   (`boolean?`) Argument is optional (may be omitted)
       • {message}    (`string?`) message when validation fails
 
+    Overloads: ~
+      • `fun(name: string, val: any, validator: vim.validate.Validator, message: string)`
+      • `fun(spec: table<string,[any, vim.validate.Validator, boolean|string]>)`
+
 
 ==============================================================================
 Lua module: vim.loader                                            *vim.loader*
@@ -2591,18 +2598,18 @@ vim.ui.input({opts}, {on_confirm})                            *vim.ui.input()*
 
     Parameters: ~
       • {opts}        (`table?`) Additional options. See |input()|
-                      • prompt (string|nil) Text of the prompt
-                      • default (string|nil) Default reply to the input
-                      • completion (string|nil) Specifies type of completion
+                      • {prompt}? (`string`) Text of the prompt
+                      • {default}? (`string`) Default reply to the input
+                      • {completion}? (`string`) Specifies type of completion
                         supported for input. Supported types are the same that
                         can be supplied to a user-defined command using the
                         "-complete=" argument. See |:command-completion|
-                      • highlight (function) Function that will be used for
-                        highlighting user inputs.
-      • {on_confirm}  (`function`) ((input|nil) -> ()) Called once the user
-                      confirms or abort the input. `input` is what the user
-                      typed (it might be an empty string if nothing was
-                      entered), or `nil` if the user aborted the dialog.
+                      • {highlight}? (`function`) Function that will be used
+                        for highlighting user inputs.
+      • {on_confirm}  (`fun(input?: string)`) Called once the user confirms or
+                      abort the input. `input` is what the user typed (it
+                      might be an empty string if nothing was entered), or
+                      `nil` if the user aborted the dialog.
 
 vim.ui.open({path}, {opt})                                     *vim.ui.open()*
     Opens `path` with the system default handler (macOS `open`, Windows
@@ -2628,8 +2635,8 @@ vim.ui.open({path}, {opt})                                     *vim.ui.open()*
 
     Parameters: ~
       • {path}  (`string`) Path or URL to open
-      • {opt}   (`{ cmd?: string[] }?`) Options
-                • cmd string[]|nil Command used to open the path or URL.
+      • {opt}   (`table?`) Options
+                • {cmd}? (`string[]`) Command used to open the path or URL.
 
     Return (multiple): ~
         (`vim.SystemObj?`) Command object, or nil if not found.
@@ -2660,12 +2667,12 @@ vim.ui.select({items}, {opts}, {on_choice})                  *vim.ui.select()*
     Parameters: ~
       • {items}      (`any[]`) Arbitrary items
       • {opts}       (`table`) Additional options
-                     • prompt (string|nil) Text of the prompt. Defaults to
+                     • {prompt}? (`string`) Text of the prompt. Defaults to
                        `Select one of:`
-                     • format_item (function item -> text) Function to format
-                       an individual item from `items`. Defaults to
+                     • {format_item}? (`fun(item: any):string`) Function to
+                       format an individual item from `items`. Defaults to
                        `tostring`.
-                     • kind (string|nil) Arbitrary hint string indicating the
+                     • {kind}? (`string`) Arbitrary hint string indicating the
                        item shape. Plugins reimplementing `vim.ui.select` may
                        wish to use this to infer the structure or semantics of
                        `items`, or the context in which select() was called.
@@ -2708,8 +2715,6 @@ options for these windows and their respective buffers.
 Rather than a |hit-enter-prompt|, messages shown in the cmdline area that do
 not fit are appended with a `[+x]` "spill" indicator, where `x` indicates the
 spilled lines. To see the full message, the |g<| command can be used.
-
-
 
 ==============================================================================
 Lua module: vim.filetype                                        *vim.filetype*
@@ -2990,11 +2995,13 @@ vim.fs.dir({path}, {opts})                                      *vim.fs.dir()*
                 iterate over. The path is first normalized
                 |vim.fs.normalize()|.
       • {opts}  (`table?`) Optional keyword arguments:
-                • depth: integer|nil How deep the traverse (default 1)
-                • skip: (fun(dir_name: string): boolean)|nil Predicate to
+                • {depth}? (`integer`, default: `1`) How deep the traverse.
+                • {skip}? (`fun(dir_name: string): boolean`) Predicate to
                   control traversal. Return false to stop searching the
-                  current directory. Only useful when depth > 1
-                • follow: boolean|nil Follow symbolic links. (default: false)
+                  current directory. Only useful when depth > 1 Return an
+                  iterator over the items located in {path}
+                • {follow}? (`boolean`, default: `false`) Follow symbolic
+                  links.
 
     Return: ~
         (`Iterator`) over items in {path}. Each iteration yields two values:
@@ -3056,7 +3063,7 @@ vim.fs.find({names}, {opts})                                   *vim.fs.find()*
 
                  The function should return `true` if the given item is
                  considered a match.
-      • {opts}   (`table`) Optional keyword arguments:
+      • {opts}   (`table?`) Optional keyword arguments:
                  • {path}? (`string`) Path to begin searching from. If
                    omitted, the |current-directory| is used.
                  • {upward}? (`boolean`, default: `false`) Search upward
