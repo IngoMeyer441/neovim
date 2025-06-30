@@ -387,10 +387,12 @@ static void terminfo_start(TUIData *tui)
 
   char *term = os_getenv("TERM");
 #ifdef MSWIN
-  os_tty_guess_term(&term, tui->out_fd);
-  os_setenv("TERM", term, 1);
-  // Old os_getenv() pointer is invalid after os_setenv(), fetch it again.
-  term = os_getenv("TERM");
+  const char *guessed_term = NULL;
+  os_tty_guess_term(&guessed_term, tui->out_fd);
+  if (term == NULL && guessed_term != NULL) {
+    term = xstrdup(guessed_term);
+    os_setenv("TERM", guessed_term, 1);
+  }
 #endif
 
   // Set up unibilium/terminfo.
@@ -1660,12 +1662,16 @@ void tui_set_icon(TUIData *tui, String icon)
 
 void tui_screenshot(TUIData *tui, String path)
 {
+  FILE *f = fopen(path.data, "w");
+  if (f == NULL) {
+    return;
+  }
+
   UGrid *grid = &tui->grid;
   flush_buf(tui);
   grid->row = 0;
   grid->col = 0;
 
-  FILE *f = fopen(path.data, "w");
   tui->screenshot = f;
   fprintf(f, "%d,%d\n", grid->height, grid->width);
   unibi_out(tui, unibi_clear_screen);

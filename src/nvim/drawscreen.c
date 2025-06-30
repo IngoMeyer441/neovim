@@ -552,7 +552,6 @@ int update_screen(void)
   }
 
   win_ui_flush(true);
-  msg_ext_check_clear();
 
   // reset cmdline_row now (may have been changed temporarily)
   compute_cmdrow();
@@ -568,6 +567,9 @@ int update_screen(void)
     screenclear();  // will reset clear_cmdline
                     // and set UPD_NOT_VALID for each window
     cmdline_screen_cleared();   // clear external cmdline state
+    if (ui_has(kUIMessages)) {
+      ui_call_msg_clear();
+    }
     type = UPD_NOT_VALID;
     // must_redraw may be set indirectly, avoid another redraw later
     must_redraw = 0;
@@ -964,10 +966,6 @@ bool skip_showmode(void)
 int showmode(void)
 {
   int length = 0;
-
-  if (ui_has(kUIMessages) && clear_cmdline) {
-    msg_ext_clear(true);
-  }
 
   // Don't make non-flushed message part of the showmode.
   msg_ext_ui_flush();

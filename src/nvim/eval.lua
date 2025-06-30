@@ -2421,7 +2421,8 @@ M.funcs = {
       	<SID>		"<SNR>123_"  where "123" is the
       			current script ID  |<SID>|
       	<script>	sourced script file, or script file
-      			where the current function was defined
+      			where the current function was defined.
+      			Use |debug.getinfo()| in Lua scripts.
       	<stack>		call stack
       	<cword>		word under the cursor
       	<cWORD>		WORD under the cursor
@@ -8331,6 +8332,21 @@ M.funcs = {
     params = { { 'fmt', 'string' }, { 'expr1', 'any' } },
     signature = 'printf({fmt}, {expr1} ...)',
     returns = 'string',
+  },
+  prompt_getinput = {
+    args = 1,
+    base = 1,
+    desc = [=[
+      Gets the current user-input in |prompt-buffer| {buf} without invoking
+      prompt_callback. {buf} can be a buffer name or number.
+
+      If the buffer doesn't exist or isn't a prompt buffer, an empty
+      string is returned.
+
+    ]=],
+    name = 'prompt_getinput',
+    params = { { 'buf', 'integer|string' } },
+    signature = 'prompt_getinput({buf})',
   },
   prompt_getprompt = {
     args = 1,
