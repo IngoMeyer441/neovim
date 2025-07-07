@@ -73,7 +73,7 @@ function M.hover(config)
 
     if vim.tbl_isempty(results1) then
       if config.silent ~= true then
-        vim.notify('No information available')
+        vim.notify('No information available', vim.log.levels.INFO)
       end
       return
     end
@@ -127,13 +127,6 @@ function M.hover(config)
 
     -- Remove last linebreak ('---')
     contents[#contents] = nil
-
-    if vim.tbl_isempty(contents) then
-      if config.silent ~= true then
-        vim.notify('No information available')
-      end
-      return
-    end
 
     local _, winid = lsp.util.open_floating_preview(contents, format, config)
 
@@ -375,7 +368,7 @@ function M.signature_help(config)
 
     if not next(signatures) then
       if config.silent ~= true then
-        print('No signature help available')
+        vim.notify('No signature help available', vim.log.levels.INFO)
       end
       return
     end
@@ -868,6 +861,13 @@ local function format_hierarchy_item(item)
   return string.format('%s %s', item.name, item.detail)
 end
 
+--- @alias vim.lsp.buf.HierarchyMethod
+--- | 'typeHierarchy/subtypes'
+--- | 'typeHierarchy/supertypes'
+--- | 'callHierarchy/incomingCalls'
+--- | 'callHierarchy/outgoingCalls'
+
+--- @type table<vim.lsp.buf.HierarchyMethod, 'type' | 'call'>
 local hierarchy_methods = {
   [ms.typeHierarchy_subtypes] = 'type',
   [ms.typeHierarchy_supertypes] = 'type',
@@ -875,12 +875,9 @@ local hierarchy_methods = {
   [ms.callHierarchy_outgoingCalls] = 'call',
 }
 
---- @param method vim.lsp.protocol.Method.ClientToServer.Request
+--- @param method vim.lsp.buf.HierarchyMethod
 local function hierarchy(method)
   local kind = hierarchy_methods[method]
-  if not kind then
-    error('unsupported method ' .. method)
-  end
 
   local prepare_method = kind == 'type' and ms.textDocument_prepareTypeHierarchy
     or ms.textDocument_prepareCallHierarchy
@@ -983,7 +980,7 @@ function M.add_workspace_folder(workspace_folder)
     return
   end
   if vim.fn.isdirectory(workspace_folder) == 0 then
-    print(workspace_folder, ' is not a valid directory')
+    vim.notify(workspace_folder .. ' is not a valid directory')
     return
   end
   local bufnr = api.nvim_get_current_buf()
@@ -1009,7 +1006,7 @@ function M.remove_workspace_folder(workspace_folder)
   for _, client in pairs(lsp.get_clients({ bufnr = bufnr })) do
     client:_remove_workspace_folder(workspace_folder)
   end
-  print(workspace_folder, 'is not currently part of the workspace')
+  vim.notify(workspace_folder .. 'is not currently part of the workspace')
 end
 
 --- Lists all symbols in the current workspace in the quickfix window.
@@ -1282,9 +1279,7 @@ function M.code_action(opts)
   local win = api.nvim_get_current_win()
   local clients = lsp.get_clients({ bufnr = bufnr, method = ms.textDocument_codeAction })
   if not next(clients) then
-    if next(lsp.get_clients({ bufnr = bufnr })) then
-      vim.notify(lsp._unsupported_method(ms.textDocument_codeAction), vim.log.levels.WARN)
-    end
+    vim.notify(lsp._unsupported_method(ms.textDocument_codeAction), vim.log.levels.WARN)
     return
   end
 

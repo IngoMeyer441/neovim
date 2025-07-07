@@ -1217,6 +1217,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 	without saving.  For writing there must be matching |BufWriteCmd|,
 	|FileWriteCmd| or |FileAppendCmd| autocommands.
 
+							*'busy'*
+'busy'			number	(default 0)
+			local to buffer
+	Sets a buffer "busy" status. Indicated in the default statusline.
+	When busy status is larger then 0 busy flag is shown in statusline.
+	The semantics of "busy" are arbitrary, typically decided by the plugin that owns the buffer.
+
 						*'casemap'* *'cmp'*
 'casemap' 'cmp'		string	(default "internal,keepascii")
 			global
@@ -1512,15 +1519,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 		name of a function or a |Funcref|.  For |Funcref| values,
 		spaces must be escaped with a backslash ('\'), and commas with
 		double backslashes ('\\') (see |option-backslash|).
+		Unlike other sources, functions can provide completions starting
+		from a non-keyword character before the cursor, and their
+		start position for replacing text may differ from other sources.
 		If the Dict returned by the {func} includes {"refresh": "always"},
 		the function will be invoked again whenever the leading text
 		changes.
-		Completion matches are always inserted at the keyword
-		boundary, regardless of the column returned by {func} when
-		a:findstart is 1.  This ensures compatibility with other
-		completion sources.
-		To make further modifications to the inserted text, {func}
-		can make use of |CompleteDonePre|.
 		If generating matches is potentially slow, |complete_check()|
 		should be used to avoid blocking and preserve editor
 		responsiveness.
@@ -1962,6 +1966,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 			character, the cursor won't move. When not included,
 			the cursor would skip over it and jump to the
 			following occurrence.
+								*cpo-~*
+		~	When included, don't resolve symbolic links when
+			changing directory with |:cd|, |:lcd|, or |:tcd|.
+			This preserves the symbolic link path in buffer names
+			and when displaying the current directory.  When
+			excluded (default), symbolic links are resolved to
+			their target paths.
 								*cpo-_*
 		_	When using |cw| on a word, do not include the
 			whitespace following the word in the motion.
@@ -2469,6 +2480,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 		|MenuPopup|,
 		|ModeChanged|,
 		|OptionSet|,
+		|PackChanged|,
+		|PackChangedPre|,
 		|QuickFixCmdPost|,
 		|QuickFixCmdPre|,
 		|QuitPre|,
@@ -6178,7 +6191,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	an expensive expression can negatively affect render performance.
 
 					*'statusline'* *'stl'* *E540* *E542*
-'statusline' 'stl'	string	(default "%<%f %h%w%m%r %=%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}")
+'statusline' 'stl'	string	(default "%<%f %h%w%m%r %=%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &busy > 0 ? '◐ ' : '' %}%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}")
 			global or local to window |global-local|
 	Sets the |status-line|.
 
@@ -7157,7 +7170,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 		:set wc=X
 		:set wc=^I
 		set wc=<Tab>
-<
+<	'wildchar' also enables completion in search pattern contexts such as
+	|/|, |?|, |:s|, |:g|, |:v|, and |:vim|.  To insert a literal <Tab>
+	instead of triggering completion, type <C-V><Tab> or "\t".
 
 						*'wildcharm'* *'wcm'*
 'wildcharm' 'wcm'	number	(default 0)

@@ -155,11 +155,14 @@ DIAGNOSTICS
 EDITOR
 
 • |:iput| works like |:put| but adjusts indent.
+• |:uniq| deduplicates text in the current buffer.
 • |omnicompletion| in `help` buffer. |ft-help-omni|
 • Setting "'0" in 'shada' prevents storing the jumplist in the shada file.
 • 'shada' now correctly respects "/0" and "f0".
 • |prompt-buffer| supports multiline input/paste, undo/redo, and o/O normal
   commands.
+• 'wildchar' now enables completion in search contexts using |/|, |?|, |:g|, |:v|
+   and |:vimgrep| commands.
 
 EVENTS
 
@@ -192,6 +195,7 @@ LSP
 • The function form of `cmd` in a vim.lsp.Config or vim.lsp.ClientConfig
   receives the resolved config as the second arg: `cmd(dispatchers, config)`.
 • Support for annotated text edits.
+• `:checkhealth vim.lsp` is now available to check which buffers the active LSP features are attached to.
 
 LUA
 
@@ -199,6 +203,10 @@ LUA
 • |vim.hl.range()| now allows multiple timed highlights.
 • |vim.tbl_extend()| and |vim.tbl_deep_extend()| now accept a function behavior argument.
 • |vim.fs.root()| can define "equal priority" via nested lists.
+• |vim.version.range()| output can be converted to human-readable string with |tostring()|.
+• |vim.version.intersect()| computes intersection of two version ranges.
+• |Iter:take()| and |Iter:skip()| now optionally accept predicates.
+• Built-in plugin manager |vim.pack|
 
 OPTIONS
 
@@ -217,6 +225,7 @@ OPTIONS
 • 'pummaxwidth' sets maximum width for the completion popup menu.
 • 'winborder' "bold" style.
 • |g:clipboard| accepts a string name to force any builtin clipboard tool.
+• 'busy' sets a buffer "busy" status. Indicated in the default statusline.
 
 PERFORMANCE
 
@@ -258,10 +267,12 @@ UI
 • Error messages are more concise:
   • "Error detected while processing:" changed to "Error in:".
   • "Error executing Lua:" changed to "Lua:".
+• 'busy' status is shown in default statusline with symbol ◐
 
 VIMSCRIPT
 
 • |cmdcomplete_info()| gets current cmdline completion info.
+• |getcompletiontype()| gets command-line completion type for any string.
 • |prompt_getinput()| gets current user-input in prompt-buffer.
 
 ==============================================================================

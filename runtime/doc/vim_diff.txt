@@ -404,6 +404,7 @@ Options:
 - 'ttimeout', 'ttimeoutlen' behavior was simplified
 - 'winblend'    pseudo-transparency in floating windows |api-floatwin|
 - 'winhighlight' window-local highlights
+- 'busy' busy status for buffers
 
 Performance:
 - Signs are implemented using Nvim's internal "marktree" (btree) structure.
@@ -872,9 +873,8 @@ Startup:
 Test functions:
 - test_alloc_fail()
 - test_autochdir()
-- test_disable_char_avail()
 - test_feedinput()
-- test_garbagecollect_soon
+- test_garbagecollect_soon()
 - test_getvalue()
 - test_ignore_error()
 - test_null_blob()
@@ -892,6 +892,8 @@ Test functions:
 - test_setmouse()
 - test_settime()
 - test_srand_seed()
+- test_unknown()
+- test_void()
 
 TUI:
                           *t_xx* *termcap-options* *t_AB* *t_Sb* *t_vb* *t_SI*
