@@ -322,12 +322,16 @@ local function get_api_keysets_meta()
 
   --- @type {name: string, keys: string[], types: table<string,string>}[]
   local keysets = metadata.keysets
+  local event_type = 'vim.api.keyset.events|vim.api.keyset.events[]'
 
   for _, k in ipairs(keysets) do
     local params = {}
     for _, key in ipairs(k.keys) do
       local pty = k.types[key] or 'any'
-      table.insert(params, { key .. '?', api_type(pty) })
+      table.insert(params, {
+        key .. '?',
+        k.name:find('autocmd') and key == 'event' and event_type or api_type(pty),
+      })
     end
     ret[k.name] = {
       signature = 'NA',
@@ -346,6 +350,16 @@ end
 local function render_api_keyset_meta(_f, fun, write)
   if string.sub(fun.name, 1, 1) == '_' then
     return -- not exported
+  elseif fun.name == 'create_autocmd' then
+    local events = vim.deepcopy(require('nvim.auevents'))
+    for event in pairs(events.aliases) do
+      events.events[event] = true
+    end
+    write('')
+    write('--- @alias vim.api.keyset.events')
+    for event in vim.spairs(events.events) do
+      write(("--- |'%s'"):format(event))
+    end
   end
   write('')
   write('--- @class vim.api.keyset.' .. fun.name)
@@ -858,13 +872,13 @@ local CONFIG = {
       '\t\t  NVIM REFERENCE MANUAL',
       '',
       '',
-      'Vimscript functions\t*vimscript-functions* *builtin-functions* *builtin.txt*',
+      'Vimscript functions\t\t\t*vimscript-functions* *builtin.txt*',
       '',
       'For functions grouped by what they are used for see |function-list|.',
       '',
       '\t\t\t\t      Type |gO| to see the table of contents.',
       '==============================================================================',
-      '1. Details					*builtin-function-details*',
+      '1. Details					*vimscript-functions-details*',
       '',
     },
     footer = {

@@ -133,7 +133,6 @@ local config = {
     filename = 'lua.txt',
     section_order = {
       'hl.lua',
-      'diff.lua',
       'mpack.lua',
       'json.lua',
       'base64.lua',
@@ -141,6 +140,7 @@ local config = {
       'builtin.lua',
       '_options.lua',
       '_editor.lua',
+      '_system.lua',
       '_inspector.lua',
       'shared.lua',
       'loader.lua',
@@ -161,6 +161,7 @@ local config = {
       'snippet.lua',
       'text.lua',
       'tohtml.lua',
+      'net.lua',
     },
     files = {
       'runtime/lua/vim/iter.lua',
@@ -172,6 +173,7 @@ local config = {
       'runtime/lua/vim/uri.lua',
       'runtime/lua/vim/ui.lua',
       'runtime/lua/vim/_extui.lua',
+      'runtime/lua/vim/_system.lua',
       'runtime/lua/vim/filetype.lua',
       'runtime/lua/vim/keymap.lua',
       'runtime/lua/vim/fs.lua',
@@ -183,7 +185,6 @@ local config = {
       'runtime/lua/vim/text.lua',
       'runtime/lua/vim/glob.lua',
       'runtime/lua/vim/_meta/builtin.lua',
-      'runtime/lua/vim/_meta/diff.lua',
       'runtime/lua/vim/_meta/mpack.lua',
       'runtime/lua/vim/_meta/json.lua',
       'runtime/lua/vim/_meta/base64.lua',
@@ -192,6 +193,7 @@ local config = {
       'runtime/lua/vim/_meta/re.lua',
       'runtime/lua/vim/_meta/spell.lua',
       'runtime/lua/tohtml.lua',
+      'runtime/lua/vim/net.lua',
     },
     fn_xform = function(fun)
       if contains(fun.module, { 'vim.uri', 'vim.shared', 'vim._editor' }) then
@@ -215,6 +217,8 @@ local config = {
       name = name:lower()
       if name == '_editor' then
         return 'Lua module: vim'
+      elseif name == '_system' then
+        return 'Lua module: vim.system'
       elseif name == '_options' then
         return 'LUA-VIMSCRIPT BRIDGE'
       elseif name == 'builtin' then
@@ -226,7 +230,6 @@ local config = {
           'mpack',
           'json',
           'base64',
-          'diff',
           'spell',
           'regex',
           'lpeg',
@@ -243,6 +246,8 @@ local config = {
     helptag_fmt = function(name)
       if name == '_editor' then
         return 'lua-vim'
+      elseif name == '_system' then
+        return 'lua-vim-system'
       elseif name == '_options' then
         return 'lua-vimscript'
       elseif name == 'tohtml' then

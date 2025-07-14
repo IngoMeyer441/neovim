@@ -923,6 +923,13 @@ describe('float window', function()
     assert_alive()
   end)
 
+  it("no error for zero height with 'winminheight'", function()
+    local win = api.nvim_open_win(0, false, { relative = 'editor', row = 0, col = 0, height = 1, width = 1 })
+    api.nvim_set_option_value('winminheight', 0, {})
+    api.nvim_win_set_height(win, 0)
+    api.nvim_win_set_config(win, api.nvim_win_get_config(win))
+  end)
+
   local function with_ext_multigrid(multigrid)
     local screen, attrs
     before_each(function()
@@ -959,6 +966,7 @@ describe('float window', function()
         [28] = { foreground = Screen.colors.DarkBlue, background = Screen.colors.LightGrey },
         [29] = { background = Screen.colors.Yellow1, foreground = Screen.colors.Blue4 },
         [30] = { background = Screen.colors.Grey, foreground = Screen.colors.Blue4, bold = true },
+        [31] = { foreground = Screen.colors.Grey0 },
       }
       screen:set_default_attr_ids(attrs)
     end)
@@ -1839,9 +1847,9 @@ describe('float window', function()
           grid = [[
           neeed some dummy                        |
           background text                         |
-          to sh{1: halloj! }{23:f}ect                      |
+          to sh{1: halloj! }{31:f}ect                      |
           of co{1: BORDAA  }{24:i}ng                       |
-          of bo{23:r}{24:der shado}w                        |
+          of bo{31:r}{24:der shado}w                        |
           ^                                        |
                                                   |
         ]],
@@ -10938,7 +10946,16 @@ describe('float window', function()
       winid = api.nvim_open_win(buf, false, config)
       eq('┏', api.nvim_win_get_config(winid).border[1])
 
-      -- it is currently not supported.
+      command([[set winborder=+,-,+,\|,+,-,+,\|]])
+      winid = api.nvim_open_win(buf, false, config)
+      eq('+', api.nvim_win_get_config(winid).border[1])
+
+      command([[set winborder=●,○,●,○,●,○,●,○]])
+      winid = api.nvim_open_win(buf, false, config)
+      eq('●', api.nvim_win_get_config(winid).border[1])
+
+      eq('Vim(set):E474: Invalid argument: winborder=,,', pcall_err(command, 'set winborder=,,'))
+      eq('Vim(set):E474: Invalid argument: winborder=+,-,+,|,+,-,+,', pcall_err(command, [[set winborder=+,-,+,\|,+,-,+,]]))
       eq('Vim(set):E474: Invalid argument: winborder=custom', pcall_err(command, 'set winborder=custom'))
     end)
   end

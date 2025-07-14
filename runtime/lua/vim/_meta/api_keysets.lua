@@ -18,7 +18,7 @@ error('Cannot require a meta file')
 
 --- @class vim.api.keyset.clear_autocmds
 --- @field buffer? integer
---- @field event? string|string[]
+--- @field event? vim.api.keyset.events|vim.api.keyset.events[]
 --- @field group? integer|string
 --- @field pattern? string|string[]
 
@@ -77,6 +77,148 @@ error('Cannot require a meta file')
 --- @class vim.api.keyset.create_augroup
 --- @field clear? boolean
 
+--- @alias vim.api.keyset.events
+--- |'BufAdd'
+--- |'BufCreate'
+--- |'BufDelete'
+--- |'BufEnter'
+--- |'BufFilePost'
+--- |'BufFilePre'
+--- |'BufHidden'
+--- |'BufLeave'
+--- |'BufModifiedSet'
+--- |'BufNew'
+--- |'BufNewFile'
+--- |'BufRead'
+--- |'BufReadCmd'
+--- |'BufReadPost'
+--- |'BufReadPre'
+--- |'BufUnload'
+--- |'BufWinEnter'
+--- |'BufWinLeave'
+--- |'BufWipeout'
+--- |'BufWrite'
+--- |'BufWriteCmd'
+--- |'BufWritePost'
+--- |'BufWritePre'
+--- |'ChanInfo'
+--- |'ChanOpen'
+--- |'CmdUndefined'
+--- |'CmdlineChanged'
+--- |'CmdlineEnter'
+--- |'CmdlineLeave'
+--- |'CmdlineLeavePre'
+--- |'CmdwinEnter'
+--- |'CmdwinLeave'
+--- |'ColorScheme'
+--- |'ColorSchemePre'
+--- |'CompleteChanged'
+--- |'CompleteDone'
+--- |'CompleteDonePre'
+--- |'CursorHold'
+--- |'CursorHoldI'
+--- |'CursorMoved'
+--- |'CursorMovedC'
+--- |'CursorMovedI'
+--- |'DiagnosticChanged'
+--- |'DiffUpdated'
+--- |'DirChanged'
+--- |'DirChangedPre'
+--- |'EncodingChanged'
+--- |'ExitPre'
+--- |'FileAppendCmd'
+--- |'FileAppendPost'
+--- |'FileAppendPre'
+--- |'FileChangedRO'
+--- |'FileChangedShell'
+--- |'FileChangedShellPost'
+--- |'FileEncoding'
+--- |'FileReadCmd'
+--- |'FileReadPost'
+--- |'FileReadPre'
+--- |'FileType'
+--- |'FileWriteCmd'
+--- |'FileWritePost'
+--- |'FileWritePre'
+--- |'FilterReadPost'
+--- |'FilterReadPre'
+--- |'FilterWritePost'
+--- |'FilterWritePre'
+--- |'FocusGained'
+--- |'FocusLost'
+--- |'FuncUndefined'
+--- |'GUIEnter'
+--- |'GUIFailed'
+--- |'InsertChange'
+--- |'InsertCharPre'
+--- |'InsertEnter'
+--- |'InsertLeave'
+--- |'InsertLeavePre'
+--- |'LspAttach'
+--- |'LspDetach'
+--- |'LspNotify'
+--- |'LspProgress'
+--- |'LspRequest'
+--- |'LspTokenUpdate'
+--- |'MenuPopup'
+--- |'ModeChanged'
+--- |'OptionSet'
+--- |'PackChanged'
+--- |'PackChangedPre'
+--- |'QuickFixCmdPost'
+--- |'QuickFixCmdPre'
+--- |'QuitPre'
+--- |'RecordingEnter'
+--- |'RecordingLeave'
+--- |'RemoteReply'
+--- |'SafeState'
+--- |'SearchWrapped'
+--- |'SessionLoadPost'
+--- |'SessionWritePost'
+--- |'ShellCmdPost'
+--- |'ShellFilterPost'
+--- |'Signal'
+--- |'SourceCmd'
+--- |'SourcePost'
+--- |'SourcePre'
+--- |'SpellFileMissing'
+--- |'StdinReadPost'
+--- |'StdinReadPre'
+--- |'SwapExists'
+--- |'Syntax'
+--- |'TabClosed'
+--- |'TabEnter'
+--- |'TabLeave'
+--- |'TabNew'
+--- |'TabNewEntered'
+--- |'TermChanged'
+--- |'TermClose'
+--- |'TermEnter'
+--- |'TermLeave'
+--- |'TermOpen'
+--- |'TermRequest'
+--- |'TermResponse'
+--- |'TextChanged'
+--- |'TextChangedI'
+--- |'TextChangedP'
+--- |'TextChangedT'
+--- |'TextYankPost'
+--- |'UIEnter'
+--- |'UILeave'
+--- |'User'
+--- |'VimEnter'
+--- |'VimLeave'
+--- |'VimLeavePre'
+--- |'VimResized'
+--- |'VimResume'
+--- |'VimSuspend'
+--- |'WinClosed'
+--- |'WinEnter'
+--- |'WinLeave'
+--- |'WinNew'
+--- |'WinResized'
+--- |'WinScrolled'
+
 --- @class vim.api.keyset.create_autocmd
 --- @field buffer? integer
 --- @field callback? string|fun(args: vim.api.keyset.create_autocmd.callback_args): boolean?
@@ -114,7 +256,7 @@ error('Cannot require a meta file')
 --- @field output? boolean
 
 --- @class vim.api.keyset.get_autocmds
---- @field event? string|string[]
+--- @field event? vim.api.keyset.events|vim.api.keyset.events[]
 --- @field group? integer|string
 --- @field pattern? string|string[]
 --- @field buffer? integer|integer[]
@@ -246,12 +388,12 @@ error('Cannot require a meta file')
 --- @field end_col? integer
 --- @field hl_group? any
 --- @field virt_text? any[]
---- @field virt_text_pos? string
+--- @field virt_text_pos? "eol"|"eol_right_align"|"overlay"|"right_align"|"inline"
 --- @field virt_text_win_col? integer
 --- @field virt_text_hide? boolean
 --- @field virt_text_repeat_linebreak? boolean
 --- @field hl_eol? boolean
---- @field hl_mode? string
+--- @field hl_mode? "replace"|"combine"|"blend"
 --- @field invalidate? boolean
 --- @field ephemeral? boolean
 --- @field priority? integer
@@ -260,7 +402,7 @@ error('Cannot require a meta file')
 --- @field virt_lines? any[]
 --- @field virt_lines_above? boolean
 --- @field virt_lines_leftcol? boolean
---- @field virt_lines_overflow? string
+--- @field virt_lines_overflow? "trunc"|"scroll"
 --- @field strict? boolean
 --- @field sign_text? string
 --- @field sign_hl_group? integer|string

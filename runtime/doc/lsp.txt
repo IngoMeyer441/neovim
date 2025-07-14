@@ -859,16 +859,13 @@ buf_request_sync({bufnr}, {method}, {params}, {timeout_ms})
         describing the failure reason, and `result` is nil.
 
 commands                                                    *vim.lsp.commands*
-    Registry (a table) for client-side handlers, for custom server-commands
-    that are not in the LSP specification.
+    Map of client-defined handlers implementing custom (off-spec) commands
+    which a server may invoke. Each key is a unique command name; each value
+    is a function which is called when an LSP action (code action, code
+    lenses, …) requests it by name.
 
-    If an LSP response contains a command which is not found in
-    `vim.lsp.commands`, the command will be executed via the LSP server using
-    `workspace/executeCommand`.
-
-    Each key in the table is a unique command name, and each value is a
-    function which is called when an LSP action (code action, code lenses,
-    …) triggers the command.
+    If an LSP response requests a command not defined client-side, Nvim will
+    forward it to the server as `workspace/executeCommand`.
     • Argument 1 is the `Command`: >
       Command
       title: String
@@ -1381,13 +1378,8 @@ Lua module: vim.lsp.client                                        *lsp-client*
                                    { PORT = 8080; HOST = '0.0.0.0'; }
 <
       • {commands}?            (`table<string,fun(command: lsp.Command, ctx: table)>`)
-                               Client commands. Map of command names to
-                               user-defined functions. Commands passed to
-                               `start()` take precedence over the global
-                               command registry. Each key must be a unique
-                               command name, and the value is a function which
-                               is called if any LSP action (code action, code
-                               lenses, …) triggers the command.
+                               Map of client-defined commands overriding the
+                               global |vim.lsp.commands|.
       • {detached}?            (`boolean`, default: `true`) Daemonize the
                                server process so that it runs in a separate
                                process group from Nvim. Nvim will shutdown the
@@ -1900,6 +1892,13 @@ workspace_symbol({query}, {opts})             *vim.lsp.buf.workspace_symbol()*
 ==============================================================================
 Lua module: vim.lsp.diagnostic                                *lsp-diagnostic*
 
+This module provides functionality for requesting LSP diagnostics for a
+document/workspace and populating them using |vim.Diagnostic|s.
+`DiagnosticRelatedInformation` is supported: it is included in the window
+shown by |vim.diagnostic.open_float()|. When the cursor is on a line with
+related information, |gf| jumps to the problem location.
+
+
 from({diagnostics})                                *vim.lsp.diagnostic.from()*
     Converts the input `vim.Diagnostic`s to LSP diagnostics.
 
@@ -2163,11 +2162,25 @@ is_enabled({filter})                         *vim.lsp.inlay_hint.is_enabled()*
 ==============================================================================
 Lua module: vim.lsp.semantic_tokens                      *lsp-semantic_tokens*
 
+enable({enable}, {filter})                  *vim.lsp.semantic_tokens.enable()*
+    Enables or disables semantic tokens for the {filter}ed scope.
+
+    To "toggle", pass the inverse of `is_enabled()`: >lua
+        vim.lsp.semantic_tokens.enable(not vim.lsp.semantic_tokens.is_enabled())
+<
+
+    Parameters: ~
+      • {enable}  (`boolean?`) true/nil to enable, false to disable
+      • {filter}  (`table?`) A table with the following fields:
+                  • {bufnr}? (`integer`) Buffer number, or 0 for current
+                    buffer, or nil for all.
+                  • {client_id}? (`integer`) Client ID, or nil for all
+
 force_refresh({bufnr})               *vim.lsp.semantic_tokens.force_refresh()*
     Force a refresh of all semantic tokens
 
     Only has an effect if the buffer is currently active for semantic token
-    highlighting (|vim.lsp.semantic_tokens.start()| has been called for it)
+    highlighting (|vim.lsp.semantic_tokens.enable()| has been called for it)
 
     Parameters: ~
       • {bufnr}  (`integer?`) filter by buffer. All buffers if nil, current
@@ -2216,42 +2229,21 @@ highlight_token({token}, {bufnr}, {client_id}, {hl_group}, {opts})
                        `vim.hl.priorities.semantic_tokens + 3`) Priority for
                        the applied extmark.
 
-start({bufnr}, {client_id}, {opts})          *vim.lsp.semantic_tokens.start()*
-    Start the semantic token highlighting engine for the given buffer with the
-    given client. The client must already be attached to the buffer.
-
-    NOTE: This is currently called automatically by
-    |vim.lsp.buf_attach_client()|. To opt-out of semantic highlighting with a
-    server that supports it, you can delete the semanticTokensProvider table
-    from the {server_capabilities} of your client in your |LspAttach| callback
-    or your configuration's `on_attach` callback: >lua
-        client.server_capabilities.semanticTokensProvider = nil
-<
+is_enabled({filter})                    *vim.lsp.semantic_tokens.is_enabled()*
+    Query whether semantic tokens is enabled in the {filter}ed scope
 
     Parameters: ~
-      • {bufnr}      (`integer`) Buffer number, or `0` for current buffer
-      • {client_id}  (`integer`) The ID of the |vim.lsp.Client|
-      • {opts}       (`table?`) Optional keyword arguments
-                     • debounce (integer, default: 200): Debounce token
-                       requests to the server by the given number in
-                       milliseconds
-
-stop({bufnr}, {client_id})                    *vim.lsp.semantic_tokens.stop()*
-    Stop the semantic token highlighting engine for the given buffer with the
-    given client.
-
-    NOTE: This is automatically called by a |LspDetach| autocmd that is set up
-    as part of `start()`, so you should only need this function to manually
-    disengage the semantic token engine without fully detaching the LSP client
-    from the buffer.
-
-    Parameters: ~
-      • {bufnr}      (`integer`) Buffer number, or `0` for current buffer
-      • {client_id}  (`integer`) The ID of the |vim.lsp.Client|
+      • {filter}  (`table?`) A table with the following fields:
+                  • {bufnr}? (`integer`) Buffer number, or 0 for current
+                    buffer, or nil for all.
+                  • {client_id}? (`integer`) Client ID, or nil for all
 
 
 ==============================================================================
 Lua module: vim.lsp.document_color                        *lsp-document_color*
+
+color_presentation()             *vim.lsp.document_color.color_presentation()*
+    Select from a list of presentations for the color under the cursor.
 
 enable({enable}, {bufnr}, {opts})            *vim.lsp.document_color.enable()*
     Enables document highlighting from the given language client in the given

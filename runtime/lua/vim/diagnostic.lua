@@ -2341,6 +2341,8 @@ function M.open_float(opts, ...)
     end
   end
 
+  ---@type table<integer, lsp.Location>
+  local related_info_locations = {}
   for i, diagnostic in ipairs(diagnostics) do
     if type(prefix_opt) == 'function' then
       --- @cast prefix_opt fun(...): string?, string?
@@ -2354,8 +2356,9 @@ function M.open_float(opts, ...)
     end
     local hiname = floating_highlight_map[diagnostic.severity]
     local message_lines = vim.split(diagnostic.message, '\n')
+    local default_pre = string.rep(' ', #prefix)
     for j = 1, #message_lines do
-      local pre = j == 1 and prefix or string.rep(' ', #prefix)
+      local pre = j == 1 and prefix or default_pre
       local suf = j == #message_lines and suffix or ''
       lines[#lines + 1] = pre .. message_lines[j] .. suf
       highlights[#highlights + 1] = {
@@ -2365,8 +2368,39 @@ function M.open_float(opts, ...)
           hlname = prefix_hl_group,
         },
         suffix = {
-          length = j == #message_lines and #suffix or 0,
+          length = #suf,
           hlname = suffix_hl_group,
+        },
+      }
+    end
+
+    ---@type lsp.DiagnosticRelatedInformation[]
+    local related_info = vim.tbl_get(diagnostic, 'user_data', 'lsp', 'relatedInformation') or {}
+
+    -- Below the diagnostic, show its LSP related information (if any) in the form of file name and
+    -- range, plus description.
+    for _, info in ipairs(related_info) do
+      local location = info.location
+      local file_name = vim.fs.basename(vim.uri_to_fname(location.uri))
+      local info_suffix = ': ' .. info.message
+      related_info_locations[#lines + 1] = info.location
+      lines[#lines + 1] = string.format(
+        '%s%s:%s:%s%s',
+        default_pre,
+        file_name,
+        location.range.start.line,
+        location.range.start.character,
+        info_suffix
+      )
+      highlights[#highlights + 1] = {
+        hlname = '@string.special.path',
+        prefix = {
+          length = #default_pre,
+          hlname = prefix_hl_group,
+        },
+        suffix = {
+          length = #info_suffix,
+          hlname = 'NormalFloat',
         },
       }
     end
@@ -2380,6 +2414,19 @@ function M.open_float(opts, ...)
   --- @diagnostic disable-next-line: param-type-mismatch
   local float_bufnr, winnr = vim.lsp.util.open_floating_preview(lines, 'plaintext', opts)
   vim.bo[float_bufnr].path = vim.bo[bufnr].path
+
+  -- TODO: Handle this generally (like vim.ui.open()), rather than overriding gf.
+  vim.keymap.set('n', 'gf', function()
+    local cursor_row = api.nvim_win_get_cursor(0)[1]
+    local location = related_info_locations[cursor_row]
+    if location then
+      -- Split the window before calling `show_document` so the window doesn't disappear.
+      vim.cmd.split()
+      vim.lsp.util.show_document(location, 'utf-16', { focus = true })
+    else
+      vim.cmd.normal({ 'gf', bang = true })
+    end
+  end, { buffer = float_bufnr, remap = false })
 
   --- @diagnostic disable-next-line: deprecated
   local add_highlight = api.nvim_buf_add_highlight

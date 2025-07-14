@@ -72,6 +72,7 @@ EVENTS
   emitted after the screen is cleared. These events arbitrarily assumed a
   message UI that mimicks the legacy message grid. Benefit: reduced UI event
   traffic and more flexibility for UIs.
+  The `msg_history_show` event has an additional "prev_cmd" argument.
 • A new `empty` message kind is emitted for an empty (e.g. `:echo ""`) message.
 
 HIGHLIGHTS
@@ -83,10 +84,13 @@ LSP
 • `root_markers` in |vim.lsp.Config| can now be ordered by priority.
 • The function set with |vim.lsp.log.set_format_func()| is now given all
   arguments corresponding to a log entry instead of the individual arguments.
+• `vim.lsp.semantic_tokens.start/stop` now renamed to
+  `vim.lsp.semantic_tokens.enable`
 
 LUA
 
-• todo
+• Renamed `vim.diff` to `vim.text.diff`.
+• |vim.net.request()| adds a minimal HTTP GET API using curl.
 
 OPTIONS
 
@@ -119,6 +123,8 @@ The following new features were added.
 
 API
 
+• |api-contract| allows existing functions to change return-type from `void =>
+  non-void`.
 • |nvim_win_text_height()| can limit the lines checked when a certain
   `max_height` is reached, and returns the `end_row` and `end_vcol` for which
   `max_height` or the calculated height is reached.
@@ -180,6 +186,8 @@ LSP
 • You can control priority of |vim.lsp.Config| `root_markers`.
 • Support for `textDocument/documentColor`: |lsp-document_color|
   https://microsoft.github.io/language-server-protocol/specification/#textDocument_documentColor
+• Support for `textDocument/colorPresentation |lsp-document_color|
+  https://microsoft.github.io/language-server-protocol/specification/#textDocument_colorPresentation
 • The `textDocument/diagnostic` request now includes the previous id in its
   parameters.
 • |vim.lsp.enable()| start/stops clients as necessary. And detaches
@@ -196,6 +204,12 @@ LSP
   receives the resolved config as the second arg: `cmd(dispatchers, config)`.
 • Support for annotated text edits.
 • `:checkhealth vim.lsp` is now available to check which buffers the active LSP features are attached to.
+• LSP `DiagnosticRelatedInformation` is now shown in
+  |vim.diagnostic.open_float()|. It is read from the LSP diagnostic object
+  stored in the `user_data` field.
+• When inside the float created by |vim.diagnostic.open_float()| and the
+  cursor is on a line with `DiagnosticRelatedInformation`, |gf| can be used to
+  jump to the problematic location.
 
 LUA
 
@@ -222,8 +236,9 @@ OPTIONS
 • 'completeopt' flag "nearset" sorts completion results by distance to cursor.
 • 'diffopt' `inline:` configures diff highlighting for changes within a line.
 • 'grepformat' is now a |global-local| option.
+• 'maxsearchcount' sets maximum value for |searchcount()| and defaults to 999.
 • 'pummaxwidth' sets maximum width for the completion popup menu.
-• 'winborder' "bold" style.
+• 'winborder' "bold" style, custom border style.
 • |g:clipboard| accepts a string name to force any builtin clipboard tool.
 • 'busy' sets a buffer "busy" status. Indicated in the default statusline.
 
@@ -285,7 +300,6 @@ These existing features changed their behavior.
 • 'spellfile' location defaults to `stdpath("data").."/site/spell/"` instead of
   the first writable directory in 'runtimepath'.
 • |vim.version.range()| doesn't exclude `to` if it is equal to `from`.
-• |searchcount()|'s maximal value is raised from 99 to 999.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
