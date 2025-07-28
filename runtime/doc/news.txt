@@ -214,6 +214,8 @@ LSP
   jump to the problematic location.
 • Support for `textDocument/linkedEditingRange`: |lsp-linked_editing_range|
   https://microsoft.github.io/language-server-protocol/specification/#textDocument_linkedEditingRange
+• Support for related documents in pull diagnostics:
+  https://microsoft.github.io/language-server-protocol/specifications/specification-current/#relatedFullDocumentDiagnosticReport
 
 LUA
 
@@ -294,6 +296,7 @@ VIMSCRIPT
 • |cmdcomplete_info()| gets current cmdline completion info.
 • |getcompletiontype()| gets command-line completion type for any string.
 • |prompt_getinput()| gets current user-input in prompt-buffer.
+• |wildtrigger()| triggers command-line expansion.
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*

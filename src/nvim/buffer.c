@@ -500,7 +500,7 @@ static bool can_unload_buffer(buf_T *buf)
 ///               close all other windows.
 /// @param ignore_abort
 ///               If true, don't abort even when aborting() returns true.
-/// @return  true when we got to the end and b_nwindows was decremented.
+/// @return  true if b_nwindows was decremented directly by this call (e.g: not via autocmds).
 bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool ignore_abort)
 {
   bool unload_buf = (action != 0);
@@ -625,7 +625,7 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
   // Return when a window is displaying the buffer or when it's not
   // unloaded.
   if (buf->b_nwindows > 0 || !unload_buf) {
-    return false;
+    return true;
   }
 
   if (buf->terminal) {
@@ -699,7 +699,7 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
   if (wipe_buf) {
     // Do not wipe out the buffer if it is used in a window.
     if (buf->b_nwindows > 0) {
-      return false;
+      return true;
     }
     FOR_ALL_TAB_WINDOWS(tp, wp) {
       mark_forget_file(wp, buf->b_fnum);
@@ -1683,7 +1683,7 @@ void set_curbuf(buf_T *buf, int action, bool update_jumplist)
 /// Enter a new current buffer.
 /// Old curbuf must have been abandoned already!  This also means "curbuf" may
 /// be pointing to freed memory.
-void enter_buffer(buf_T *buf)
+static void enter_buffer(buf_T *buf)
 {
   // when closing the current buffer stop Visual mode
   if (VIsual_active
@@ -2207,7 +2207,7 @@ int buflist_getfile(int n, linenr_T lnum, int options, int forceit)
 }
 
 /// Go to the last known line number for the current buffer.
-void buflist_getfpos(void)
+static void buflist_getfpos(void)
 {
   pos_T *fpos = &buflist_findfmark(curbuf)->mark;
 
