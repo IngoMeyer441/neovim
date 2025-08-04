@@ -1433,15 +1433,6 @@ describe('vim.diagnostic', function()
 
     describe('after inserting text before diagnostic position', function()
       before_each(function()
-        exec_lua(function()
-          vim.api.nvim_set_current_buf(_G.diagnostic_bufnr)
-
-          vim.diagnostic.set(_G.diagnostic_ns, _G.diagnostic_bufnr, {
-            _G.make_error('Diagnostic #1', 1, 4, 1, 7),
-            _G.make_error('Diagnostic #2', 3, 0, 3, 3),
-          })
-        end)
-
         api.nvim_buf_set_text(0, 3, 0, 3, 0, { 'new line', 'new ' })
       end)
 
@@ -1449,7 +1440,7 @@ describe('vim.diagnostic', function()
         eq(
           { 5, 4 },
           exec_lua(function()
-            vim.api.nvim_win_set_cursor(0, { 2, 4 })
+            vim.api.nvim_win_set_cursor(0, { 3, 1 })
             vim.diagnostic.jump({ count = 1 })
             return vim.api.nvim_win_get_cursor(0)
           end)
@@ -1471,8 +1462,6 @@ describe('vim.diagnostic', function()
     describe('if diagnostic is set after last character in line', function()
       before_each(function()
         exec_lua(function()
-          vim.api.nvim_set_current_buf(_G.diagnostic_bufnr)
-
           vim.diagnostic.set(_G.diagnostic_ns, _G.diagnostic_bufnr, {
             _G.make_error('Diagnostic #1', 2, 3, 3, 4),
           })
@@ -1495,6 +1484,34 @@ describe('vim.diagnostic', function()
           { 3, 2 },
           exec_lua(function()
             vim.api.nvim_win_set_cursor(0, { 4, 2 })
+            vim.diagnostic.jump({ count = -1 })
+            return vim.api.nvim_win_get_cursor(0)
+          end)
+        )
+      end)
+    end)
+
+    describe('after entire text range with a diagnostic was deleted', function()
+      before_each(function()
+        api.nvim_buf_set_text(0, 1, 1, 1, 4, {})
+      end)
+
+      it('does not find next diagnostic inside the deleted range', function()
+        eq(
+          { 3, 0 },
+          exec_lua(function()
+            vim.api.nvim_win_set_cursor(0, { 1, 0 })
+            vim.diagnostic.jump({ count = 1 })
+            return vim.api.nvim_win_get_cursor(0)
+          end)
+        )
+      end)
+
+      it('does not find previous diagnostic inside the deleted range', function()
+        eq(
+          { 1, 0 },
+          exec_lua(function()
+            vim.api.nvim_win_set_cursor(0, { 3, 0 })
             vim.diagnostic.jump({ count = -1 })
             return vim.api.nvim_win_get_cursor(0)
           end)
@@ -4002,6 +4019,72 @@ describe('vim.diagnostic', function()
         return { diagnostics, new_diagnostics }
       end)
       eq(result[1], result[2])
+    end)
+  end)
+
+  describe('status()', function()
+    it('returns empty string if no diagnostics', function()
+      local result = exec_lua(function()
+        vim.diagnostic.set(_G.diagnostic_ns, _G.diagnostic_bufnr, {})
+        return vim.diagnostic.status()
+      end)
+
+      eq('', result)
+    end)
+
+    it('returns count for each diagnostic kind', function()
+      local result = exec_lua(function()
+        vim.diagnostic.set(_G.diagnostic_ns, 0, {
+          _G.make_error('Error 1', 0, 1, 0, 1),
+
+          _G.make_warning('Warning 1', 2, 2, 2, 2),
+          _G.make_warning('Warning 2', 2, 2, 2, 2),
+
+          _G.make_info('Info 1', 3, 3, 3, 3),
+          _G.make_info('Info 2', 3, 3, 3, 3),
+          _G.make_info('Info 3', 3, 3, 3, 3),
+
+          _G.make_hint('Hint 1', 4, 4, 4, 4),
+          _G.make_hint('Hint 2', 4, 4, 4, 4),
+          _G.make_hint('Hint 3', 4, 4, 4, 4),
+          _G.make_hint('Hint 4', 4, 4, 4, 4),
+        })
+        return vim.diagnostic.status()
+      end)
+
+      eq('E:1 W:2 I:3 H:4', result)
+
+      exec_lua('vim.cmd.enew()')
+
+      -- Empty diagnostics for a buffer without diagnostics
+      eq(
+        '',
+        exec_lua(function()
+          return vim.diagnostic.status()
+        end)
+      )
+    end)
+
+    it('uses text from diagnostic.config().signs.text[severity]', function()
+      local result = exec_lua(function()
+        vim.diagnostic.config({
+          signs = {
+            text = {
+              [vim.diagnostic.severity.ERROR] = '⨯',
+              [vim.diagnostic.severity.WARN] = '⚠︎',
+            },
+          },
+        })
+
+        vim.diagnostic.set(_G.diagnostic_ns, 0, {
+          _G.make_error('Error 1', 0, 1, 0, 1),
+          _G.make_warning('Warning 1', 2, 2, 2, 2),
+        })
+
+        return vim.diagnostic.status()
+      end)
+
+      eq('⨯:1 ⚠︎:1', result)
     end)
   end)
 

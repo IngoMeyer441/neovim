@@ -648,6 +648,7 @@ local sign_highlight_map = make_highlight_map('Sign')
 --- @return integer col
 --- @return integer end_lnum
 --- @return integer end_col
+--- @return boolean valid
 local function get_logical_pos(diagnostic)
   local ns = M.get_namespace(diagnostic.namespace)
   local extmark = api.nvim_buf_get_extmark_by_id(
@@ -657,7 +658,7 @@ local function get_logical_pos(diagnostic)
     { details = true }
   )
 
-  return extmark[1], extmark[2], extmark[3].end_row, extmark[3].end_col
+  return extmark[1], extmark[2], extmark[3].end_row, extmark[3].end_col, not extmark[3].invalid
 end
 
 --- @param diagnostics vim.Diagnostic[]
@@ -669,13 +670,15 @@ local function diagnostic_lines(diagnostics)
 
   local diagnostics_by_line = {} --- @type table<integer,vim.Diagnostic[]>
   for _, diagnostic in ipairs(diagnostics) do
-    local lnum = get_logical_pos(diagnostic)
-    local line_diagnostics = diagnostics_by_line[lnum]
-    if not line_diagnostics then
-      line_diagnostics = {}
-      diagnostics_by_line[lnum] = line_diagnostics
+    local lnum, _, _, _, valid = get_logical_pos(diagnostic)
+    if valid then
+      local line_diagnostics = diagnostics_by_line[lnum]
+      if not line_diagnostics then
+        line_diagnostics = {}
+        diagnostics_by_line[lnum] = line_diagnostics
+      end
+      table.insert(line_diagnostics, diagnostic)
     end
-    table.insert(line_diagnostics, diagnostic)
   end
   return diagnostics_by_line
 end
@@ -1332,6 +1335,7 @@ function M.set(namespace, bufnr, diagnostics, opts)
       diagnostic._extmark_id = api.nvim_buf_set_extmark(bufnr, ns.user_data.location_ns, row, col, {
         end_row = end_row,
         end_col = end_col,
+        invalidate = true,
       })
     end
   end)
@@ -2835,5 +2839,45 @@ function M.fromqflist(list)
   end
   return diagnostics
 end
+
+--- Returns formatted string with diagnostics for the current buffer.
+--- The severities with 0 diagnostics are left out.
+--- Example `E:2 W:3 I:4 H:5`
+---
+--- To customise appearance, set diagnostic signs text with
+--- ```lua
+--- vim.diagnostic.config({
+---   signs = { text = { [vim.diagnostic.severity.ERROR] = 'e', ... } }
+--- })
+--- ```
+---@param bufnr? integer Buffer number to get diagnostics from.
+---                      Defaults to 0 for the current buffer
+---
+---@return string
+function M.status(bufnr)
+  vim.validate('bufnr', bufnr, 'number', true)
+  bufnr = bufnr or 0
+  local counts = M.count(bufnr)
+  local user_signs = vim.tbl_get(M.config() --[[@as vim.diagnostic.Opts]], 'signs', 'text') or {}
+  local signs = vim.tbl_extend('keep', user_signs, { 'E', 'W', 'I', 'H' })
+  local result_str = vim
+    .iter(pairs(counts))
+    :map(function(severity, count)
+      return ('%s:%s'):format(signs[severity], count)
+    end)
+    :join(' ')
+
+  return result_str
+end
+
+vim.api.nvim_create_autocmd('DiagnosticChanged', {
+  group = vim.api.nvim_create_augroup('nvim.diagnostic.status', {}),
+  callback = function(ev)
+    if vim.api.nvim_buf_is_loaded(ev.buf) then
+      vim.api.nvim__redraw({ buf = ev.buf, statusline = true })
+    end
+  end,
+  desc = 'diagnostics component for the statusline',
+})
 
 return M

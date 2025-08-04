@@ -229,6 +229,19 @@ local options = {
       varname = 'p_acd',
     },
     {
+      abbreviation = 'ac',
+      defaults = false,
+      desc = [=[
+        When on, Vim shows a completion menu as you type, similar to using
+        |i_CTRL-N|, but triggered automatically.  See |ins-autocompletion|.
+      ]=],
+      full_name = 'autocomplete',
+      scope = { 'global' },
+      short_desc = N_('automatic completion in insert mode'),
+      type = 'boolean',
+      varname = 'p_ac',
+    },
+    {
       abbreviation = 'ai',
       defaults = true,
       desc = [=[
@@ -992,12 +1005,16 @@ local options = {
     },
     {
       abbreviation = 'cdh',
-      defaults = false,
+      defaults = {
+        condition = 'MSWIN',
+        if_false = true,
+        if_true = false,
+        doc = [[on on Unix, off on Windows]],
+      },
       desc = [=[
         When on, |:cd|, |:tcd| and |:lcd| without an argument changes the
         current working directory to the |$HOME| directory like in Unix.
         When off, those commands just print the current directory name.
-        On Unix this option has no effect.
         This option cannot be set from a |modeline| or in the |sandbox|, for
         security reasons.
       ]=],
@@ -1465,9 +1482,9 @@ local options = {
         	If the Dict returned by the {func} includes {"refresh": "always"},
         	the function will be invoked again whenever the leading text
         	changes.
-        	If generating matches is potentially slow, |complete_check()|
-        	should be used to avoid blocking and preserve editor
-        	responsiveness.
+        	If generating matches is potentially slow, call
+        	|complete_check()| periodically to keep Vim responsive. This
+        	is especially important for |ins-autocompletion|.
         F	equivalent to using "F{func}", where the function is taken from
         	the 'completefunc' option.
         o	equivalent to using "F{func}", where the function is taken from
@@ -1652,6 +1669,9 @@ local options = {
            preview  Show extra information about the currently selected
         	    completion in the preview window.  Only works in
         	    combination with "menu" or "menuone".
+
+        Only "fuzzy", "popup" and "preview" have an effect when 'autocomplete'
+        is enabled.
 
         This option does not apply to |cmdline-completion|. See 'wildoptions'
         for that.
@@ -2847,7 +2867,8 @@ local options = {
         Unset 'exrc' to stop further searching of 'exrc' files in parent
         directories, similar to |editorconfig.root|.
 
-        To get its own location, Lua exrc files can use |debug.getinfo()|.
+        To get its own location, a Lua exrc file can use |debug.getinfo()|.
+        See |lua-script-location|.
 
         Compare 'exrc' to |editorconfig|:
         - 'exrc' can execute any code; editorconfig only specifies settings.
@@ -2857,7 +2878,7 @@ local options = {
         1. Enable 'exrc'.
         2. Place LSP configs at ".nvim/lsp/*.lua" in your project root.
         3. Create ".nvim.lua" in your project root directory with this line: >lua
-             vim.cmd[[set runtimepath+=.nvim]]
+            vim.cmd[[set runtimepath+=.nvim]]
         <
         This option cannot be set from a |modeline| or in the |sandbox|, for
         security reasons.
@@ -8705,15 +8726,19 @@ local options = {
     {
       abbreviation = 'stl',
       cb = 'did_set_statusline',
-      defaults = table.concat({
-        '%<',
-        '%f %h%w%m%r ',
-        '%=',
-        "%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}",
-        "%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}",
-        "%{% &busy > 0 ? '◐ ' : '' %}",
-        "%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}",
-      }),
+      defaults = {
+        if_true = table.concat({
+          '%<',
+          '%f %h%w%m%r ',
+          '%=',
+          "%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}",
+          "%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}",
+          "%{% &busy > 0 ? '◐ ' : '' %}",
+          "%(%{luaeval('(package.loaded[''vim.diagnostic''] and vim.diagnostic.status()) or '''' ')} %)",
+          "%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}",
+        }),
+        doc = 'is very long',
+      },
       desc = [=[
         Sets the |status-line|.
 

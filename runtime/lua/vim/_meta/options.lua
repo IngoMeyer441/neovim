@@ -111,6 +111,15 @@ vim.o.acd = vim.o.autochdir
 vim.go.autochdir = vim.o.autochdir
 vim.go.acd = vim.go.autochdir
 
+--- When on, Vim shows a completion menu as you type, similar to using
+--- `i_CTRL-N`, but triggered automatically.  See `ins-autocompletion`.
+---
+--- @type boolean
+vim.o.autocomplete = false
+vim.o.ac = vim.o.autocomplete
+vim.go.autocomplete = vim.o.autocomplete
+vim.go.ac = vim.go.autocomplete
+
 --- Copy indent from current line when starting a new line (typing <CR>
 --- in Insert mode or when using the "o" or "O" command).  If you do not
 --- type anything on the new line except <BS> or CTRL-D and then type
@@ -691,12 +700,11 @@ vim.go.cmp = vim.go.casemap
 --- When on, `:cd`, `:tcd` and `:lcd` without an argument changes the
 --- current working directory to the `$HOME` directory like in Unix.
 --- When off, those commands just print the current directory name.
---- On Unix this option has no effect.
 --- This option cannot be set from a `modeline` or in the `sandbox`, for
 --- security reasons.
 ---
 --- @type boolean
-vim.o.cdhome = false
+vim.o.cdhome = true
 vim.o.cdh = vim.o.cdhome
 vim.go.cdhome = vim.o.cdhome
 vim.go.cdh = vim.go.cdhome
@@ -1047,9 +1055,9 @@ vim.bo.cms = vim.bo.commentstring
 --- 	If the Dict returned by the {func} includes {"refresh": "always"},
 --- 	the function will be invoked again whenever the leading text
 --- 	changes.
---- 	If generating matches is potentially slow, `complete_check()`
---- 	should be used to avoid blocking and preserve editor
---- 	responsiveness.
+--- 	If generating matches is potentially slow, call
+--- 	`complete_check()` periodically to keep Vim responsive. This
+--- 	is especially important for `ins-autocompletion`.
 --- F	equivalent to using "F{func}", where the function is taken from
 --- 	the 'completefunc' option.
 --- o	equivalent to using "F{func}", where the function is taken from
@@ -1188,6 +1196,9 @@ vim.go.cia = vim.go.completeitemalign
 ---    preview  Show extra information about the currently selected
 --- 	    completion in the preview window.  Only works in
 --- 	    combination with "menu" or "menuone".
+---
+--- Only "fuzzy", "popup" and "preview" have an effect when 'autocomplete'
+--- is enabled.
 ---
 --- This option does not apply to `cmdline-completion`. See 'wildoptions'
 --- for that.
@@ -2239,7 +2250,8 @@ vim.bo.et = vim.bo.expandtab
 --- Unset 'exrc' to stop further searching of 'exrc' files in parent
 --- directories, similar to `editorconfig.root`.
 ---
---- To get its own location, Lua exrc files can use `debug.getinfo()`.
+--- To get its own location, a Lua exrc file can use `debug.getinfo()`.
+--- See `lua-script-location`.
 ---
 --- Compare 'exrc' to `editorconfig`:
 --- - 'exrc' can execute any code; editorconfig only specifies settings.
@@ -2251,7 +2263,7 @@ vim.bo.et = vim.bo.expandtab
 --- 3. Create ".nvim.lua" in your project root directory with this line:
 ---
 --- ```lua
----      vim.cmd[[set runtimepath+=.nvim]]
+---     vim.cmd[[set runtimepath+=.nvim]]
 --- ```
 ---
 --- This option cannot be set from a `modeline` or in the `sandbox`, for
@@ -6908,7 +6920,7 @@ vim.wo.stc = vim.wo.statuscolumn
 ---
 ---
 --- @type string
-vim.o.statusline = "%<%f %h%w%m%r %=%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &busy > 0 ? '◐ ' : '' %}%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}"
+vim.o.statusline = "%<%f %h%w%m%r %=%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &busy > 0 ? '◐ ' : '' %}%(%{luaeval('(package.loaded[''vim.diagnostic''] and vim.diagnostic.status()) or '''' ')} %)%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}"
 vim.o.stl = vim.o.statusline
 vim.wo.statusline = vim.o.statusline
 vim.wo.stl = vim.wo.statusline

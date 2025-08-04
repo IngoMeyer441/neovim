@@ -1855,35 +1855,35 @@ function vim.fn.exp(expr) end
 --- done like for the |cmdline-special| variables with their
 --- associated modifiers.  Here is a short overview:
 ---
----   %    current file name
----   #    alternate file name
----   #n    alternate file name n
----   <cfile>    file name under the cursor
----   <afile>    autocmd file name
----   <abuf>    autocmd buffer number (as a String!)
----   <amatch>  autocmd matched name
+---   %    Current file name
+---   #    Alternate file name
+---   #n    Alternate file name n
+---   <cfile>    File name under the cursor
+---   <afile>    Autocmd file name
+---   <abuf>    Autocmd buffer number (as a String!)
+---   <amatch>  Autocmd matched name
 ---   <cexpr>    C expression under the cursor
----   <sfile>    deprecated, use <script> or <stack>
----   <slnum>    sourced script line number or function
+---   <sfile>    Deprecated, use <script> or <stack>
+---   <slnum>    Sourced script line number or function
 ---       line number
----   <sflnum>  script file line number, also when in
+---   <sflnum>  Script file line number, also when in
 ---       a function
 ---   <SID>    "<SNR>123_"  where "123" is the
 ---       current script ID  |<SID>|
----   <script>  sourced script file, or script file
+---   <script>  Sourced script file, or script file
 ---       where the current function was defined.
----       Use |debug.getinfo()| in Lua scripts.
----   <stack>    call stack
----   <cword>    word under the cursor
+---       For Lua see |lua-script-location|.
+---   <stack>    Call stack
+---   <cword>    Word under the cursor
 ---   <cWORD>    WORD under the cursor
----   <client>  the {clientid} of the last received
+---   <client>  The {clientid} of the last received
 ---       message
 --- Modifiers:
----   :p    expand to full path
----   :h    head (last path component removed)
----   :t    tail (last path component only)
----   :r    root (one extension removed)
----   :e    extension only
+---   :p    Expand to full path
+---   :h    Head (last path component removed)
+---   :t    Tail (last path component only)
+---   :r    Root (one extension removed)
+---   :e    Extension only
 ---
 --- Example: >vim
 ---   let &tags = expand("%:p:h") .. "/tags"
@@ -7964,12 +7964,20 @@ function vim.fn.searchpos(pattern, flags, stopline, timeout, skip) end
 
 --- Returns a list of server addresses, or empty if all servers
 --- were stopped. |serverstart()| |serverstop()|
+---
+--- The optional argument {opts} is a Dict and supports the following items:
+---
+---   peer  : If |TRUE|, servers not started by |serverstart()|
+---           will also be returned. (default: |FALSE|)
+---           Not supported on Windows yet.
+---
 --- Example: >vim
 ---   echo serverlist()
 --- <
 ---
+--- @param opts? table
 --- @return string[]
-function vim.fn.serverlist() end
+function vim.fn.serverlist(opts) end
 
 --- Opens a socket or named pipe at {address} and listens for
 --- |RPC| messages. Clients can send |API| commands to the
@@ -10620,6 +10628,8 @@ function vim.fn.undofile(name) end
 --- @return vim.fn.undotree.ret
 function vim.fn.undotree(buf) end
 
+--- Note: Prefer |vim.list.unique()| in Lua.
+---
 --- Remove second and succeeding copies of repeated adjacent
 --- {list} items in-place.  Returns {list}.  If you want a list
 --- to remain unmodified make a copy first: >vim
