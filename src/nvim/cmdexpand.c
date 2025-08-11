@@ -2014,12 +2014,14 @@ static const char *set_context_by_cmdname(const char *cmd, cmdidx_T cmdidx, expa
   case CMD_lockmarks:
   case CMD_noautocmd:
   case CMD_noswapfile:
+  case CMD_restart:
   case CMD_rightbelow:
   case CMD_sandbox:
   case CMD_silent:
   case CMD_tab:
   case CMD_tabdo:
   case CMD_topleft:
+  case CMD_unsilent:
   case CMD_verbose:
   case CMD_vertical:
   case CMD_windo:
@@ -4044,8 +4046,18 @@ static int copy_substring_from_pos(pos_T *start, pos_T *end, char **match, pos_T
 /// case sensitivity.
 static bool is_regex_match(char *pat, char *str)
 {
+  if (strcmp(pat, str) == 0) {
+    return true;
+  }
+
   regmatch_T regmatch;
+
+  emsg_off++;
+  msg_silent++;
   regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
+  emsg_off--;
+  msg_silent--;
+
   if (regmatch.regprog == NULL) {
     return false;
   }
@@ -4054,7 +4066,11 @@ static bool is_regex_match(char *pat, char *str)
     regmatch.rm_ic = !pat_has_uppercase(pat);
   }
 
+  emsg_off++;
+  msg_silent++;
   bool result = vim_regexec_nl(&regmatch, str, (colnr_T)0);
+  emsg_off--;
+  msg_silent--;
 
   vim_regfree(regmatch.regprog);
   return result;

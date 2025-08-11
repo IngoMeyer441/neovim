@@ -1489,13 +1489,11 @@ static int command_line_execute(VimState *state, int key)
   // If already used to cancel/accept wildmenu, don't process the key further.
   if (wild_type == WILD_CANCEL || wild_type == WILD_APPLY) {
     // Apply search highlighting
-    if (wild_type == WILD_APPLY) {
-      if (s->is_state.winid != curwin->handle) {
-        init_incsearch_state(&s->is_state);
-      }
-      if (KeyTyped || vpeekc() == NUL) {
-        may_do_incsearch_highlighting(s->firstc, s->count, &s->is_state);
-      }
+    if (s->is_state.winid != curwin->handle) {
+      init_incsearch_state(&s->is_state);
+    }
+    if (KeyTyped || vpeekc() == NUL) {
+      may_do_incsearch_highlighting(s->firstc, s->count, &s->is_state);
     }
     return command_line_not_changed(s);
   }
@@ -1545,6 +1543,17 @@ static int may_do_command_line_next_incsearch(int firstc, int count, incsearch_s
     pat = ccline.cmdbuff + skiplen;
   }
 
+  bool bslsh = false;
+  // do not search for the search end delimiter,
+  // unless it is part of the pattern
+  if (patlen > 2 && firstc == pat[patlen - 1]) {
+    patlen--;
+    if (pat[patlen - 1] == '\\') {
+      pat[patlen - 1] = (char)(uint8_t)firstc;
+      bslsh = true;
+    }
+  }
+
   if (next_match) {
     t = s->match_end;
     if (lt(s->match_start, s->match_end)) {
@@ -1568,6 +1577,9 @@ static int may_do_command_line_next_incsearch(int firstc, int count, incsearch_s
                        RE_SEARCH, NULL);
   emsg_off--;
   pat[patlen] = save;
+  if (bslsh) {
+    pat[patlen - 1] = '\\';
+  }
   ui_busy_stop();
   if (found) {
     s->search_start = s->match_start;
@@ -2795,15 +2807,6 @@ static void do_autocmd_cmdlinechanged(int firstc)
 
 static int command_line_changed(CommandLineState *s)
 {
-  if (ccline.cmdpos != s->prev_cmdpos
-      || (s->prev_cmdbuff != NULL
-          && strncmp(s->prev_cmdbuff, ccline.cmdbuff, (size_t)s->prev_cmdpos) != 0)) {
-    // Trigger CmdlineChanged autocommands.
-    do_autocmd_cmdlinechanged(s->firstc > 0 ? s->firstc : '-');
-  }
-
-  may_trigger_cursormovedc(s);
-
   const bool prev_cmdpreview = cmdpreview;
   if (s->firstc == ':'
       && current_sctx.sc_sid == 0    // only if interactive
@@ -2824,6 +2827,15 @@ static int command_line_changed(CommandLineState *s)
       may_do_incsearch_highlighting(s->firstc, s->count, &s->is_state);
     }
   }
+
+  if (ccline.cmdpos != s->prev_cmdpos
+      || (s->prev_cmdbuff != NULL
+          && strncmp(s->prev_cmdbuff, ccline.cmdbuff, (size_t)s->prev_cmdpos) != 0)) {
+    // Trigger CmdlineChanged autocommands.
+    do_autocmd_cmdlinechanged(s->firstc > 0 ? s->firstc : '-');
+  }
+
+  may_trigger_cursormovedc(s);
 
   if (p_arshape && !p_tbidi) {
     // Always redraw the whole command line to fix shaping and
