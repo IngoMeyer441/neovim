@@ -7272,9 +7272,6 @@ M.funcs = {
       		given sequence.
           limit	Maximum number of matches in {list} to be
       		returned.  Zero means no limit.
-          camelcase	Use enhanced camel case scoring making results
-      		better suited for completion related to
-      		programming languages.  Defaults to v:true.
 
       If {list} is a list of dictionaries, then the optional {dict}
       argument supports the following additional items:
@@ -11395,8 +11392,8 @@ M.funcs = {
       log          String  Logs directory (for use by plugins too).
       run          String  Run directory: temporary, local storage
       		     for sockets, named pipes, etc.
-      state        String  Session state directory: storage for file
-      		     drafts, swap, undo, |shada|.
+      state        String  Session state: storage for backupdir,
+      		     file drafts, |shada|, swap, undo, 'viewdir'.
 
       Example: >vim
       	echo stdpath("config")

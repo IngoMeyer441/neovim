@@ -217,9 +217,7 @@ static bool getln_interrupted_highlight = false;
 
 static int cedit_key = -1;  ///< key value of 'cedit' option
 
-#ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "ex_getln.c.generated.h"
-#endif
+#include "ex_getln.c.generated.h"
 
 static handle_T cmdpreview_bufnr = 0;
 static int cmdpreview_ns = 0;
@@ -2678,7 +2676,7 @@ static bool cmdpreview_may_show(CommandLineState *s)
   char *cmdline = xstrdup(ccline.cmdbuff);
   const char *errormsg = NULL;
   emsg_off++;  // Block errors when parsing the command line, and don't update v:errmsg
-  if (!parse_cmdline(cmdline, &ea, &cmdinfo, &errormsg)) {
+  if (!parse_cmdline(&cmdline, &ea, &cmdinfo, &errormsg)) {
     emsg_off--;
     goto end;
   }
@@ -4818,6 +4816,10 @@ void get_user_input(const typval_T *const argvars, typval_T *const rettv, const 
 {
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;
+
+  if (cmdpreview) {
+    return;
+  }
 
   const char *prompt;
   const char *defstr = "";

@@ -82,9 +82,7 @@
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
-#ifdef INCLUDE_GENERATED_DECLARATIONS
-# include "window.c.generated.h"
-#endif
+#include "window.c.generated.h"
 
 #define NOWIN           ((win_T *)-1)   // non-existing window
 
@@ -640,8 +638,8 @@ wingotofile:
     // Make a copy, if the line was changed it will be freed.
     ptr = xmemdupz(ptr, len);
 
-    find_pattern_in_path(ptr, 0, len, true, Prenum == 0,
-                         type, Prenum1, ACTION_SPLIT, 1, MAXLNUM, false);
+    find_pattern_in_path(ptr, 0, len, true, Prenum == 0, type,
+                         Prenum1, ACTION_SPLIT, 1, MAXLNUM, false, false);
     xfree(ptr);
     curwin->w_set_curswant = true;
     break;
