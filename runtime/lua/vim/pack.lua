@@ -4,7 +4,9 @@
 ---is appreciated, but expect breaking changes without notice.
 ---
 ---Manages plugins only in a dedicated [vim.pack-directory]() (see |packages|):
----`$XDG_DATA_HOME/nvim/site/pack/core/opt`.
+---`$XDG_DATA_HOME/nvim/site/pack/core/opt`. `$XDG_DATA_HOME/nvim/site` needs to
+---be part of 'packpath'. It usually is, but might not be in cases like |--clean| or
+---setting |$XDG_DATA_HOME| during startup.
 ---Plugin's subdirectory name matches plugin's name in specification.
 ---It is assumed that all plugins in the directory are managed exclusively by `vim.pack`.
 ---
@@ -234,8 +236,10 @@ end
 --- - Output of |vim.version.range()| to install the greatest/last semver tag
 ---   inside the version constraint.
 --- @field version? string|vim.VersionRange
+---
+--- @field data? any Arbitrary data associated with a plugin.
 
---- @alias vim.pack.SpecResolved { src: string, name: string, version: nil|string|vim.VersionRange }
+--- @alias vim.pack.SpecResolved { src: string, name: string, version: nil|string|vim.VersionRange, data: any|nil }
 
 --- @param spec string|vim.pack.Spec
 --- @return vim.pack.SpecResolved
@@ -247,7 +251,7 @@ local function normalize_spec(spec)
   name = (type(name) == 'string' and name or ''):match('[^/]+$') or ''
   vim.validate('spec.name', name, is_nonempty_string, true, 'non-empty string')
   vim.validate('spec.version', spec.version, is_version, true, 'string or vim.VersionRange')
-  return { src = spec.src, name = name, version = spec.version }
+  return { src = spec.src, name = name, version = spec.version, data = spec.data }
 end
 
 --- @class (private) vim.pack.PlugInfo
@@ -268,10 +272,11 @@ end
 --- @field info vim.pack.PlugInfo Gathered information about plugin.
 
 --- @param spec string|vim.pack.Spec
+--- @param plug_dir string?
 --- @return vim.pack.Plug
-local function new_plug(spec)
+local function new_plug(spec, plug_dir)
   local spec_resolved = normalize_spec(spec)
-  local path = vim.fs.joinpath(get_plug_dir(), spec_resolved.name)
+  local path = vim.fs.joinpath(plug_dir or get_plug_dir(), spec_resolved.name)
   local info = { err = '', installed = uv.fs_stat(path) ~= nil }
   return { spec = spec_resolved, path = path, info = info }
 end
@@ -322,6 +327,7 @@ end
 --- @return vim.pack.Plug[]
 local function plug_list_from_names(names)
   local all_plugins = M.get()
+  local plug_dir = get_plug_dir()
   local plugs = {} --- @type vim.pack.Plug[]
   local used_names = {} --- @type table<string,boolean>
   -- Preserve plugin order; might be important during checkout or event trigger
@@ -332,7 +338,7 @@ local function plug_list_from_names(names)
     -- TODO(echasnovski): Consider changing this if/when there is lockfile.
     --- @cast names string[]
     if (not names and p_data.active) or vim.tbl_contains(names or {}, p_data.spec.name) then
-      plugs[#plugs + 1] = new_plug(p_data.spec)
+      plugs[#plugs + 1] = new_plug(p_data.spec, plug_dir)
       used_names[p_data.spec.name] = true
     end
   end
@@ -710,8 +716,11 @@ function M.add(specs, opts)
   opts = vim.tbl_extend('force', { load = vim.v.vim_did_enter == 1, confirm = true }, opts or {})
   vim.validate('opts', opts, 'table')
 
-  --- @type vim.pack.Plug[]
-  local plugs = vim.tbl_map(new_plug, specs)
+  local plug_dir = get_plug_dir()
+  local plugs = {} --- @type vim.pack.Plug[]
+  for i = 1, #specs do
+    plugs[i] = new_plug(specs[i], plug_dir)
+  end
   plugs = normalize_plugs(plugs)
 
   -- Install

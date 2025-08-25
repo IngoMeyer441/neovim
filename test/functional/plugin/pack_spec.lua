@@ -311,6 +311,22 @@ describe('vim.pack', function()
       eq(exec_lua('return #_G.event_log'), 0)
     end)
 
+    it('passes `data` field through to `opts.load`', function()
+      local out = exec_lua(function()
+        local map = {} ---@type table<string,boolean>
+        local load = function(p)
+          local name = p.spec.name ---@type string
+          map[name] = name == 'basic' and (p.spec.data.test == 'value') or (p.spec.data == 'value')
+        end
+        vim.pack.add({
+          { src = repos_src.basic, data = { test = 'value' } },
+          { src = repos_src.defbranch, data = 'value' },
+        }, { load = load })
+        return map
+      end)
+      eq({ basic = true, defbranch = true }, out)
+    end)
+
     it('asks for installation confirmation', function()
       exec_lua(function()
         ---@diagnostic disable-next-line: duplicate-set-field
@@ -1177,6 +1193,19 @@ describe('vim.pack', function()
         { active = true, path = basic_path, spec = basic_spec },
         { active = false, path = defbranch_path, spec = defbranch_spec },
       }, exec_lua('return vim.pack.get()'))
+    end)
+
+    it('respects `data` field', function()
+      local out = exec_lua(function()
+        vim.pack.add({
+          { src = repos_src.basic, data = { test = 'value' } },
+          { src = repos_src.defbranch, data = 'value' },
+        })
+        local plugs = vim.pack.get()
+        ---@type table<string,string>
+        return { basic = plugs[1].spec.data.test, defbranch = plugs[2].spec.data }
+      end)
+      eq({ basic = 'value', defbranch = 'value' }, out)
     end)
 
     it('works with `del()`', function()
