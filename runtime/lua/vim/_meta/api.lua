@@ -1100,10 +1100,25 @@ function vim.api.nvim_del_var(name) end
 --- the (optional) name or ID `hl_group`.
 --- @param history boolean if true, add to `message-history`.
 --- @param opts vim.api.keyset.echo_opts Optional parameters.
+--- - id: message id for updating existing message.
 --- - err: Treat the message like `:echoerr`. Sets `hl_group` to `hl-ErrorMsg` by default.
 --- - kind: Set the `ui-messages` kind with which this message will be emitted.
 --- - verbose: Message is controlled by the 'verbose' option. Nvim invoked with `-V3log`
 ---   will write the message to the "log" file instead of standard output.
+--- - title: The title for `progress-message`.
+--- - status: Current status of the `progress-message`. Can be
+---   one of the following values
+---   - success: The progress item completed successfully
+---   - running: The progress is ongoing
+---   - failed: The progress item failed
+---   - cancel: The progressing process should be canceled.
+---             note: Cancel needs to be handled by progress
+---             initiator by listening for the `Progress` event
+--- - percent: How much progress is done on the progress
+---   message
+--- - data: dictionary containing additional information
+--- @return integer|string # Message id.
+--- - -1 means nvim_echo didn't show a message
 function vim.api.nvim_echo(chunks, history, opts) end
 
 --- @deprecated
@@ -2113,7 +2128,7 @@ function vim.api.nvim_set_current_win(window) end
 --- Note: this function should not be called often. Rather, the callbacks
 --- themselves can be used to throttle unneeded callbacks. the `on_start`
 --- callback can return `false` to disable the provider until the next redraw.
---- Similarly, return `false` in `on_win` will skip the `on_line` calls
+--- Similarly, return `false` in `on_win` will skip the `on_line` and `on_range` calls
 --- for that window (but any extmarks set in `on_win` will still be used).
 --- A plugin managing multiple sources of decoration should ideally only set
 --- one provider, and merge the sources internally. You can use multiple `ns_id`
@@ -2125,7 +2140,7 @@ function vim.api.nvim_set_current_win(window) end
 --- Doing `vim.rpcnotify` should be OK, but `vim.rpcrequest` is quite dubious
 --- for the moment.
 ---
---- Note: It is not allowed to remove or update extmarks in `on_line` callbacks.
+--- Note: It is not allowed to remove or update extmarks in `on_line` or `on_range` callbacks.
 ---
 --- @param ns_id integer Namespace id from `nvim_create_namespace()`
 --- @param opts vim.api.keyset.set_decoration_provider Table of callbacks:
@@ -2146,6 +2161,14 @@ function vim.api.nvim_set_current_win(window) end
 ---     (The interaction with fold lines is subject to change)
 ---   ```
 ---     ["line", winid, bufnr, row]
+---   ```
+--- - on_range: called for each buffer range being redrawn.
+---   Range is end-exclusive and may span multiple lines. Range
+---   bounds point to the first byte of a character. An end position
+---   of the form (lnum, 0), including (number of lines, 0), is valid
+---   and indicates that EOL of the preceding line is included.
+---   ```
+---     ["range", winid, bufnr, begin_row, begin_col, end_row, end_col]
 ---   ```
 --- - on_end: called at the end of a redraw cycle
 ---   ```

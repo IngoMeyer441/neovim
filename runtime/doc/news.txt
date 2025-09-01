@@ -39,6 +39,11 @@ TREESITTER
 
 • todo
 
+UI
+
+• `progress` attribute removed form |ui-messages| msg_show event
+
+
 ==============================================================================
 BREAKING CHANGES                                                *news-breaking*
 
@@ -46,7 +51,7 @@ These changes may require adaptations in your config or plugins.
 
 API
 
-• todo
+• Decoration provider has `on_range()` callback.
 
 BUILD
 
@@ -113,6 +118,7 @@ TREESITTER
   `metadata[capture_id].offset`. The offset will be applied in
   |vim.treesitter.get_range()|, which should be preferred over reading
   metadata directly for retrieving node ranges.
+• |Query:iter_captures()| supports specifying starting and ending columns.
 
 TUI
 
@@ -139,9 +145,10 @@ API
   actually trusted.
 • Added |vim.lsp.is_enabled()| to check if a given LSP config has been enabled
   by |vim.lsp.enable()|.
-• |nvim_echo()| can set the |ui-messages| kind with which to emit the message.
 • |nvim_ui_send()| writes arbitrary data to a UI's stdout. Use this to write
   escape sequences to the terminal when Nvim is running in the |TUI|.
+• |nvim_echo()| can set the |ui-messages| kind with which to emit the message.
+• |nvim_echo()| can create |Progress| messages
 
 BUILD
 
@@ -189,6 +196,8 @@ EVENTS
 
 • |CmdlineLeavePre| triggered before preparing to leave the command line.
 • New `append` paremeter for |ui-messages| `msg_show` event.
+• New `msg_id` paremeter for |ui-messages| `msg_show` event.
+• Creating or updating a progress message with |nvim_echo()| triggers a |Progress| event.
 
 HIGHLIGHTS
 
@@ -233,6 +242,8 @@ LSP
 • |vim.lsp.buf.signature_help()| supports "noActiveParameterSupport".
 • Support for `textDocument/inlineCompletion` |lsp-inline_completion|
   https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textDocument_inlineCompletion
+• Support for `textDocument/onTypeFormatting`: |lsp-on_type_formatting|
+  https://microsoft.github.io/language-server-protocol/specification/#textDocument_onTypeFormatting
 
 LUA
 

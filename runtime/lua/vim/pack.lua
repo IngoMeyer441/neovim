@@ -365,7 +365,7 @@ local function trigger_event(p, event_name, kind)
   spec.version = spec.version or (uv.fs_stat(p.path) and git_get_default_branch(p.path))
 
   local data = { kind = kind, spec = spec, path = p.path }
-  vim.api.nvim_exec_autocmds(event_name, { pattern = p.path, data = data })
+  api.nvim_exec_autocmds(event_name, { pattern = p.path, data = data })
 end
 
 --- @param title string
@@ -395,7 +395,8 @@ local function new_progress_report(title)
     local progress = kind == 'end' and 'done' or ('%3d%%'):format(percent)
     local details = (' %s %s'):format(title, fmt:format(...))
     local chunks = { { 'vim.pack', 'ModeMsg' }, { ': ' }, { progress, 'WarningMsg' }, { details } }
-    vim.api.nvim_echo(chunks, true, { kind = 'progress' })
+    -- TODO: need to add support for progress-messages api
+    api.nvim_echo(chunks, true, {})
     -- Force redraw to show installation progress during startup
     vim.cmd.redraw({ bang = true })
   end)

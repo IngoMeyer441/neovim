@@ -825,7 +825,7 @@ will be set to zero, but can be changed and used for the replacing cmdline or
 message window. Cmdline state is emitted as |ui-cmdline| events, which the UI
 must handle.
 
-["msg_show", kind, content, replace_last, history, append] ~
+["msg_show", kind, content, replace_last, history, append, msg_id] ~
 	Display a message to the user.
 
 	kind
@@ -845,6 +845,7 @@ must handle.
 		"list_cmd"	List output for various commands (|:ls|, |:set|, …)
 		"lua_error"	Error in |:lua| code
 		"lua_print"	|print()| from |:lua| code
+		"progress"	Progress message emitted by |nvim_echo()|
 		"rpc_error"	Error response from |rpcrequest()|
 		"quickfix"	Quickfix navigation message
 		"search_cmd"	Entered search command
@@ -880,6 +881,10 @@ must handle.
 	append
 	    True if the message should be appeneded to the previous message,
 	    rather than started on a new line. Is set for |:echon|.
+
+	msg_id
+	    Unique identifier for the message. It can either be an integer or
+	    string. When message of same id appears it should replace the older message.
 
 ["msg_clear"] ~
 	Clear all messages currently displayed by "msg_show", emitted after
