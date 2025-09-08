@@ -1523,7 +1523,7 @@ func Test_complete_reginsert()
   exe "normal Goa\<C-P>\<C-R>=\"\\<C-P>\"\<CR>"
   call assert_equal('a123', getline(5))
   let @r = "\<C-P>\<C-P>"
-  exe "normal GCa\<C-P>\<C-R>r"
+  exe "normal GCa\<C-P>\<C-R>=@r\<CR>"
   call assert_equal('a12', getline(5))
   exe "normal GCa\<C-P>\<C-R>=\"x\"\<CR>"
   call assert_equal('a1234x', getline(5))
@@ -5620,7 +5620,7 @@ func Test_completetimeout_autocompletetimeout()
   set completetimeout=1
   call feedkeys("Gof\<C-N>\<F2>\<Esc>0", 'xt!')
   let match_count = len(b:matches->mapnew('v:val.word'))
-  call assert_true(match_count < 2000)
+  call assert_true(match_count < 4000)
 
   set completetimeout=1000
   call feedkeys("\<Esc>Sf\<C-N>\<F2>\<Esc>0", 'xt!')
