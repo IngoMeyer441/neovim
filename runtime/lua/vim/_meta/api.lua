@@ -1606,7 +1606,8 @@ function vim.api.nvim_input(keys) end
 --- The same specifiers are used as for a key press, except
 --- that the "-" separator is optional, so "C-A-", "c-a"
 --- and "CA" can all be used to specify Ctrl+Alt+click.
---- @param grid integer Grid number if the client uses `ui-multigrid`, else 0.
+--- @param grid integer Grid number (used by `ui-multigrid` client), or 0 to let Nvim decide positioning of
+--- windows. For more information, see [dev-ui-multigrid]
 --- @param row integer Mouse row-position (zero-based, like redraw events)
 --- @param col integer Mouse column-position (zero-based, like redraw events)
 function vim.api.nvim_input_mouse(button, action, modifier, grid, row, col) end
@@ -2175,6 +2176,13 @@ function vim.api.nvim_set_current_win(window) end
 ---   ```
 ---     ["range", winid, bufnr, begin_row, begin_col, end_row, end_col]
 ---   ```
+---
+---   In addition to returning a boolean, it is also allowed to
+---   return a `skip_row, skip_col` pair of integers. This implies
+---   that this function does not need to be called until a range
+---   which continues beyond the skipped position. A single integer
+---   return value `skip_row` is short for `skip_row, 0`
+---
 --- - on_end: called at the end of a redraw cycle
 ---   ```
 ---     ["end", tick]
