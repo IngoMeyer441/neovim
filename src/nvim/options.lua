@@ -236,7 +236,7 @@ local options = {
         |i_CTRL-N|, but triggered automatically.  See |ins-autocompletion|.
       ]=],
       full_name = 'autocomplete',
-      scope = { 'global' },
+      scope = { 'global', 'buf' },
       short_desc = N_('automatic completion in insert mode'),
       type = 'boolean',
       varname = 'p_ac',
@@ -2334,7 +2334,7 @@ local options = {
         Each anchor line splits the buffer (the split happens above the
         anchor), with each part being diff'ed separately before the final
         result is joined.  When more than one {address} are provided, the
-        anchors will be sorted interally by line number.  If using buffer
+        anchors will be sorted internally by line number.  If using buffer
         local options, each buffer should have the same number of anchors
         (extra anchors will be ignored).  This option is only used when
         'diffopt' has "anchor" set.  See |diff-anchors| for more details and

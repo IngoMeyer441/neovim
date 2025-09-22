@@ -74,12 +74,12 @@ the options are empty or were set by the builtin runtime (ftplugin) files. The
 options are not restored when the LSP client is stopped or detached.
 
 GLOBAL DEFAULTS
-                                *grr* *gra* *grn* *gri* *grt* *i_CTRL-S* *an* *in*
+                                *gra* *gri* *grn* *grr* *grt* *i_CTRL-S* *v_an* *v_in*
 These GLOBAL keymaps are created unconditionally when Nvim starts:
-- "grn" is mapped in Normal mode to |vim.lsp.buf.rename()|
 - "gra" is mapped in Normal and Visual mode to |vim.lsp.buf.code_action()|
-- "grr" is mapped in Normal mode to |vim.lsp.buf.references()|
 - "gri" is mapped in Normal mode to |vim.lsp.buf.implementation()|
+- "grn" is mapped in Normal mode to |vim.lsp.buf.rename()|
+- "grr" is mapped in Normal mode to |vim.lsp.buf.references()|
 - "grt" is mapped in Normal mode to |vim.lsp.buf.type_definition()|
 - "gO" is mapped in Normal mode to |vim.lsp.buf.document_symbol()|
 - CTRL-S is mapped in Insert mode to |vim.lsp.buf.signature_help()|
@@ -95,7 +95,7 @@ BUFFER-LOCAL DEFAULTS
 - 'formatexpr' is set to |vim.lsp.formatexpr()|, so you can format lines via
   |gq| if the language server supports it.
   - To opt out of this use |gw| instead of gq, or clear 'formatexpr' on |LspAttach|.
-- |K| is mapped to |vim.lsp.buf.hover()| unless |'keywordprg'| is customized or
+- |K| is mapped to |vim.lsp.buf.hover()| unless 'keywordprg' is customized or
   a custom keymap for `K` exists.
 - Document colors are enabled for highlighting color references in a document.
   - To opt out call `vim.lsp.document_color.enable(false, args.buf)` on |LspAttach|.

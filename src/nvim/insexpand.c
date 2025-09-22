@@ -2151,7 +2151,7 @@ bool ins_compl_preinsert_effect(void)
 }
 
 /// Returns true if autocompletion is active.
-bool ins_compl_has_autocomplete(void)
+bool ins_compl_autocomplete_enabled(void)
 {
   return compl_autocomplete;
 }
@@ -2197,6 +2197,11 @@ int ins_compl_bs(void)
   compl_leader = cbuf_to_string(line + compl_col,
                                 (size_t)(p_off - (ptrdiff_t)compl_col));
 
+  // Clear selection if a menu item is currently selected in autocompletion
+  if (compl_autocomplete && compl_first_match) {
+    compl_shown_match = compl_first_match;
+  }
+
   ins_compl_new_leader();
   if (compl_shown_match != NULL) {
     // Make sure current match is not a hidden item.
@@ -2220,6 +2225,13 @@ static bool ins_compl_need_restart(void)
   // Return true if we didn't complete finding matches or when the
   // "completefunc" returned "always" in the "refresh" dictionary item.
   return compl_was_interrupted || ins_compl_refresh_always();
+}
+
+/// Return true if 'autocomplete' option is set
+bool ins_compl_has_autocomplete(void)
+{
+  // Use buffer-local setting if defined (>= 0), otherwise use global
+  return curbuf->b_p_ac >= 0 ? curbuf->b_p_ac : p_ac;
 }
 
 /// Called after changing "compl_leader".
@@ -2251,9 +2263,7 @@ static void ins_compl_new_leader(void)
     // Matches were cleared, need to search for them now.
     // Set "compl_restarting" to avoid that the first match is inserted.
     compl_restarting = true;
-    if (p_ac) {
-      compl_autocomplete = true;
-    }
+    compl_autocomplete = ins_compl_has_autocomplete();
     if (ins_complete(Ctrl_N, true) == FAIL) {
       compl_cont_status = 0;
     }
@@ -2269,7 +2279,7 @@ static void ins_compl_new_leader(void)
       if ((cur_cot_flags & (kOptCotFlagNoinsert|kOptCotFlagNoselect)) == kOptCotFlagNoinsert
           && compl_first_match) {
         compl_shown_match = compl_first_match;
-        if (compl_shows_dir_forward()) {
+        if (compl_shows_dir_forward() && !compl_autocomplete) {
           compl_shown_match = compl_first_match->cp_next;
         }
       }
@@ -3026,7 +3036,7 @@ int set_cpt_callbacks(optset_T *args)
     }
   }
 
-  if (!local) {  // ':set' used insted of ':setlocal'
+  if (!local) {  // ':set' used instead of ':setlocal'
     // Cache the callback array
     copy_cpt_callbacks(&cpt_cb, &cpt_cb_count, curbuf->b_p_cpt_cb,
                        curbuf->b_p_cpt_count);
@@ -4286,8 +4296,9 @@ static int get_next_default_completion(ins_compl_next_state_T *st, pos_T *start_
 {
   char *ptr = NULL;
   int len = 0;
-  bool in_fuzzy_collect = (cfc_has_mode() && compl_length > 0)
-                          || ((get_cot_flags() & kOptCotFlagFuzzy) && compl_autocomplete);
+  bool in_fuzzy_collect = !compl_status_adding()
+                          && ((cfc_has_mode() && compl_length > 0)
+                              || ((get_cot_flags() & kOptCotFlagFuzzy) && compl_autocomplete));
   char *leader = ins_compl_leader();
   int score = FUZZY_SCORE_NONE;
   const bool in_curbuf = st->ins_buf == curbuf;
@@ -5064,10 +5075,11 @@ static char *find_common_prefix(size_t *prefix_len, bool curbuf_only)
 
       if (!match_limit_exceeded
           && (!curbuf_only || cpt_sources_array[cur_source].cs_flag == '.')) {
-        if (first == NULL) {
+        if (first == NULL && strncmp(ins_compl_leader(), compl->cp_str.data,
+                                     ins_compl_leader_len()) == 0) {
           first = compl->cp_str.data;
           len = (int)strlen(first);
-        } else {
+        } else if (first != NULL) {
           int j = 0;  // count in bytes
           char *s1 = first;
           char *s2 = compl->cp_str.data;
@@ -5095,7 +5107,7 @@ static char *find_common_prefix(size_t *prefix_len, bool curbuf_only)
 
   xfree(match_count);
 
-  if (len > get_compl_len()) {
+  if (len > (int)ins_compl_leader_len()) {
     *prefix_len = (size_t)len;
     return first;
   }
@@ -5184,12 +5196,14 @@ static void ins_compl_show_filename(void)
       MB_PTR_ADV(s);
     }
   }
-  msg_hist_off = true;
-  vim_snprintf(IObuff, IOSIZE, "%s %s%s", lead,
-               s > compl_shown_match->cp_fname ? "<" : "", s);
-  msg(IObuff, 0);
-  msg_hist_off = false;
-  redraw_cmdline = false;  // don't overwrite!
+  if (!compl_autocomplete) {
+    msg_hist_off = true;
+    vim_snprintf(IObuff, IOSIZE, "%s %s%s", lead,
+                 s > compl_shown_match->cp_fname ? "<" : "", s);
+    msg(IObuff, 0);
+    msg_hist_off = false;
+    redraw_cmdline = false;  // don't overwrite!
+  }
 }
 
 /// Find the appropriate completion item when 'complete' ('cpt') includes
@@ -6057,9 +6071,6 @@ static int ins_compl_start(void)
       compl_length = 0;
       compl_col = curwin->w_cursor.col;
       compl_lnum = curwin->w_cursor.lnum;
-    } else if (ctrl_x_mode_normal() && cfc_has_mode()) {
-      compl_startpos = curwin->w_cursor;
-      compl_cont_status &= CONT_S_IPOS;
     }
   } else {
     edit_submode_pre = NULL;

@@ -3718,6 +3718,14 @@ func Test_complete_fuzzy_collect()
   call feedkeys("A\<C-X>\<C-N>\<C-N>\<Esc>0", 'tx!')
   call assert_equal('你的 我的 我的', getline('.'))
 
+  " check that "adding" expansion works
+  call setline(1, ['hello world foo bar'])
+  call feedkeys("Ohlo\<C-X>\<C-N>\<C-X>\<C-N>\<C-X>\<C-N>\<C-X>\<C-N>\<Esc>0", 'tx!')
+  call assert_equal('hello world foo bar', getline('.'))
+  call feedkeys("Swld\<C-X>\<C-N>\<C-X>\<C-N>\<C-X>\<C-N>\<Esc>0", 'tx!')
+  call assert_equal('world foo bar', getline('.'))
+  %delete
+
   " fuzzy on file
   call writefile([''], 'fobar', 'D')
   call writefile([''], 'foobar', 'D')
@@ -5135,7 +5143,7 @@ func Test_nonkeyword_trigger()
   call assert_equal('a#', getline('.'))
   set completeopt&
 
-  " Test 2: Filter nonkeyword and keyword matches with differet startpos
+  " Test 2: Filter nonkeyword and keyword matches with different startpos
   set completeopt+=menuone,noselect
   call feedkeys("S#a\<C-N>b\<F2>\<F3>\<Esc>0", 'tx!')
   call assert_equal(['abc', 'abcd', '#abar'], b:matches->mapnew('v:val.word'))
@@ -5256,7 +5264,7 @@ func Test_autocomplete_trigger()
   call assert_equal(2, g:CallCount)
   call assert_equal('a#', getline('.'))
 
-  " Test 2: Filter nonkeyword and keyword matches with differet startpos
+  " Test 2: Filter nonkeyword and keyword matches with different startpos
   for fuzzy in range(2)
     if fuzzy
       set completeopt+=fuzzy
@@ -5358,6 +5366,28 @@ func Test_autocomplete_trigger()
   call assert_equal([], b:matches->mapnew('v:val.word'))
   call feedkeys("Sazx\<Left>\<BS>\<F2>\<Esc>0", 'tx!')
   call assert_equal(['and', 'afoo'], b:matches->mapnew('v:val.word'))
+
+  " Test 6: <BS> should clear the selected item (PR #18265)
+  %d
+  call setline(1, ["foobarfoo", "foobar", "foobarbaz"])
+  call feedkeys("Gofo\<C-N>\<C-N>\<F2>\<F3>\<Esc>0", 'tx!')
+  call assert_equal(['foobarbaz', 'foobar', 'foobarfoo'], b:matches->mapnew('v:val.word'))
+  call assert_equal(1, b:selected)
+  call feedkeys("Sfo\<C-N>\<C-N>\<BS>\<F2>\<F3>\<Esc>0", 'tx!')
+  call assert_equal(['foobarbaz', 'foobar', 'foobarfoo'], b:matches->mapnew('v:val.word'))
+  call assert_equal(-1, b:selected)
+  call assert_equal('fooba', getline(4))
+  call feedkeys("Sfo\<C-N>\<C-N>\<BS>\<C-N>\<F2>\<F3>\<Esc>0", 'tx!')
+  call assert_equal(['foobarbaz', 'foobar', 'foobarfoo'], b:matches->mapnew('v:val.word'))
+  call assert_equal(0, b:selected)
+  call assert_equal('foobarbaz', getline(4))
+
+  " Test 7: Remove selection when menu contents change (PR #18265)
+  %d
+  call setline(1, ["foobar", "fodxyz", "fodabc"])
+  call feedkeys("Gofoo\<C-N>\<BS>\<BS>\<BS>\<BS>d\<F2>\<F3>\<Esc>0", 'tx!')
+  call assert_equal(['fodabc', 'fodxyz'], b:matches->mapnew('v:val.word'))
+  call assert_equal(-1, b:selected)
 
   bw!
   call Ntest_override("char_avail", 0)
@@ -5536,7 +5566,7 @@ func Test_scriptlocal_autoload_func()
   call Ntest_override("char_avail", 1)
   new
   inoremap <buffer> <F2> <Cmd>let b:matches = complete_info(["matches"]).matches<CR>
-  set autocomplete
+  setlocal autocomplete
 
   setlocal complete=.,Fcompl#Func
   call feedkeys("im\<F2>\<Esc>0", 'xt!')
@@ -5547,7 +5577,6 @@ func Test_scriptlocal_autoload_func()
   call assert_equal(['foo', 'foobar'], b:matches->mapnew('v:val.word'))
 
   setlocal complete&
-  set autocomplete&
   bwipe!
   call Ntest_override("char_avail", 0)
   let &rtp = save_rtp
@@ -5646,7 +5675,7 @@ func Test_autocompletedelay()
 
   let lines =<< trim [SCRIPT]
     call setline(1, ['foo', 'foobar', 'foobarbaz'])
-    set autocomplete
+    setlocal autocomplete
   [SCRIPT]
   call writefile(lines, 'XTest_autocomplete_delay', 'D')
   let buf = RunVimInTerminal('-S XTest_autocomplete_delay', {'rows': 10})
@@ -5749,7 +5778,18 @@ func Test_autocomplete_completeopt_preinsert()
   call DoTest("f", 'f', 2)
   set cot-=fuzzy
 
+  " leader should match prefix of inserted word
+  %delete
+  set smartcase ignorecase
+  call setline(1, ["FOO"])
+  call feedkeys($"Gof\<F5>\<Esc>", 'tx')
+  call assert_equal('f', g:line)
+  call feedkeys($"SF\<F5>\<Esc>", 'tx')
+  call assert_equal('FOO', g:line)
+  set smartcase& ignorecase&
+
   " Verify that redo (dot) works
+  %delete
   call setline(1, ["foobar", "foozbar", "foobaz", "changed", "change"])
   call feedkeys($"/foo\<CR>", 'tx')
   call feedkeys($"cwch\<C-N>\<Esc>n.n.", 'tx')
@@ -5807,6 +5847,29 @@ func Test_autocomplete_completeopt_preinsert()
   delfunc GetLine
   delfunc DoTest
   call Ntest_override("char_avail", 0)
+endfunc
+
+" Issue #18326
+func Test_fuzzy_select_item_when_acl()
+  CheckScreendump
+  let lines =<< trim [SCRIPT]
+    call setline(1, ["v", "vi", "vim"])
+    set autocomplete completeopt=menuone,noinsert,fuzzy autocompletedelay=300
+  [SCRIPT]
+  call writefile(lines, 'XTest_autocomplete_delay', 'D')
+  let buf = RunVimInTerminal('-S XTest_autocomplete_delay', {'rows': 10})
+
+  call term_sendkeys(buf, "Govi")
+  call VerifyScreenDump(buf, 'Test_fuzzy_autocompletedelay_1', {})
+
+  call term_sendkeys(buf, "\<Esc>Sv")
+  call VerifyScreenDump(buf, 'Test_fuzzy_autocompletedelay_2', {})
+  sleep 500m
+  call term_sendkeys(buf, "i")
+  call VerifyScreenDump(buf, 'Test_fuzzy_autocompletedelay_3', {})
+
+  call term_sendkeys(buf, "\<esc>")
+  call StopVimInTerminal(buf)
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab nofoldenable
