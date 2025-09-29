@@ -65,7 +65,6 @@
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/unpacker.h"
-#include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
@@ -75,6 +74,7 @@
 #include "nvim/os/proc.h"
 #include "nvim/popupmenu.h"
 #include "nvim/pos_defs.h"
+#include "nvim/register.h"
 #include "nvim/runtime.h"
 #include "nvim/sign_defs.h"
 #include "nvim/state.h"
@@ -770,11 +770,9 @@ void nvim_set_vvar(String name, Object value, Error *err)
 ///            - success: The progress item completed successfully
 ///            - running: The progress is ongoing
 ///            - failed: The progress item failed
-///            - cancel: The progressing process should be canceled.
-///                      note: Cancel needs to be handled by progress
-///                      initiator by listening for the `Progress` event
-///          - percent: How much progress is done on the progress
-///            message
+///            - cancel: The progressing process should be canceled. NOTE: Cancel must be handled by
+///              progress initiator by listening for the `Progress` event
+///          - percent: How much progress is done on the progress message
 ///          - data: dictionary containing additional information
 /// @return Message id.
 ///         - -1 means nvim_echo didn't show a message
@@ -927,7 +925,7 @@ Window nvim_get_current_win(void)
   return curwin->handle;
 }
 
-/// Sets the current window (and tabpage, implicitly).
+/// Navigates to the given window (and tabpage, implicitly).
 ///
 /// @param window |window-ID| to focus
 /// @param[out] err Error details, if any
