@@ -135,6 +135,12 @@ end
 function repos_setup.plugindirs()
   init_test_repo('plugindirs')
 
+  -- Add semver tag
+  repo_write_file('plugindirs', 'lua/plugindirs.lua', 'return "plugindirs v0.0.1"')
+  git_add_commit('Add version v0.0.1', 'plugindirs')
+  git_cmd({ 'tag', 'v0.0.1' }, 'plugindirs')
+
+  -- Add various 'plugin/' files
   repo_write_file('plugindirs', 'lua/plugindirs.lua', 'return "plugindirs main"')
   repo_write_file('plugindirs', 'plugin/dirs.lua', 'vim.g._plugin = true')
   repo_write_file('plugindirs', 'plugin/dirs_log.lua', '_G.DL = _G.DL or {}; DL[#DL+1] = "p"')
@@ -310,6 +316,14 @@ local function is_jit()
   return exec_lua('return package.loaded.jit ~= nil')
 end
 
+local function get_lock_path()
+  return vim.fs.joinpath(fn.stdpath('config'), 'nvim-pack-lock.json')
+end
+
+local function get_lock_tbl()
+  return vim.json.decode(fn.readblob(get_lock_path()))
+end
+
 -- Tests ======================================================================
 
 describe('vim.pack', function()
@@ -326,6 +340,9 @@ describe('vim.pack', function()
 
   after_each(function()
     vim.fs.rm(pack_get_dir(), { force = true, recursive = true })
+    vim.fs.rm(get_lock_path(), { force = true })
+    local log_path = vim.fs.joinpath(fn.stdpath('log'), 'nvim-pack.log')
+    pcall(vim.fs.rm, log_path, { force = true })
   end)
 
   teardown(function()
@@ -411,6 +428,117 @@ describe('vim.pack', function()
       end)
       eq(1, exec_lua('return #_G.confirm_log'))
       eq('plugindirs main', exec_lua('return require("plugindirs")'))
+    end)
+
+    it('creates lockfile', function()
+      local helptags_rev = git_get_hash('HEAD', 'helptags')
+      exec_lua(function()
+        vim.pack.add({
+          { src = repos_src.basic, version = 'some-tag' },
+          { src = repos_src.defbranch, version = 'main' },
+          { src = repos_src.helptags, version = helptags_rev },
+          { src = repos_src.plugindirs },
+          { src = repos_src.semver, version = vim.version.range('*') },
+        })
+      end)
+
+      local basic_rev = git_get_hash('some-tag', 'basic')
+      local defbranch_rev = git_get_hash('main', 'defbranch')
+      local plugindirs_rev = git_get_hash('HEAD', 'plugindirs')
+      local semver_rev = git_get_hash('v1.0.0', 'semver')
+
+      -- Should properly format as indented JSON
+      local ref_lockfile_lines = {
+        '{',
+        '  "plugins": {',
+        '    "basic": {',
+        '      "rev": "' .. basic_rev .. '",',
+        '      "src": "' .. repos_src.basic .. '",',
+        -- Branch, tag, and commit should be serialized like `'value'` to be
+        -- distinguishable from version ranges
+        '      "version": "\'some-tag\'"',
+        '    },',
+        '    "defbranch": {',
+        '      "rev": "' .. defbranch_rev .. '",',
+        '      "src": "' .. repos_src.defbranch .. '",',
+        '      "version": "\'main\'"',
+        '    },',
+        '    "helptags": {',
+        '      "rev": "' .. helptags_rev .. '",',
+        '      "src": "' .. repos_src.helptags .. '",',
+        '      "version": "\'' .. helptags_rev .. '\'"',
+        '    },',
+        '    "plugindirs": {',
+        '      "rev": "' .. plugindirs_rev .. '",',
+        '      "src": "' .. repos_src.plugindirs .. '"',
+        -- Absent `version` should be missing and not autoresolved
+        '    },',
+        '    "semver": {',
+        '      "rev": "' .. semver_rev .. '",',
+        '      "src": "' .. repos_src.semver .. '",',
+        '      "version": ">=0.0.0"',
+        '    }',
+        '  }',
+        '}',
+      }
+      eq(ref_lockfile_lines, fn.readfile(get_lock_path()))
+    end)
+
+    it('updates lockfile', function()
+      exec_lua(function()
+        vim.pack.add({ repos_src.basic })
+      end)
+      local ref_lockfile = {
+        plugins = {
+          basic = { rev = git_get_hash('main', 'basic'), src = repos_src.basic },
+        },
+      }
+      eq(ref_lockfile, get_lock_tbl())
+
+      n.clear()
+      exec_lua(function()
+        vim.pack.add({ { src = repos_src.basic, version = 'main' } })
+      end)
+
+      ref_lockfile.plugins.basic.version = "'main'"
+      eq(ref_lockfile, get_lock_tbl())
+    end)
+
+    it('uses lockfile revision during install', function()
+      exec_lua(function()
+        vim.pack.add({ { src = repos_src.basic, version = 'feat-branch' } })
+      end)
+
+      -- Mock clean initial install, but with lockfile present
+      n.clear()
+      local basic_plug_path = vim.fs.joinpath(pack_get_dir(), 'basic')
+      vim.fs.rm(basic_plug_path, { force = true, recursive = true })
+
+      local basic_rev = git_get_hash('feat-branch', 'basic')
+      local ref_lockfile = {
+        plugins = {
+          basic = { rev = basic_rev, src = repos_src.basic, version = "'feat-branch'" },
+        },
+      }
+      eq(ref_lockfile, get_lock_tbl())
+
+      exec_lua(function()
+        -- Should use revision from lockfile (pointing at latest 'feat-branch'
+        -- commit) and not use latest `main` commit
+        vim.pack.add({ { src = repos_src.basic, version = 'main' } })
+      end)
+      local basic_lua_file = vim.fs.joinpath(pack_get_plug_path('basic'), 'lua', 'basic.lua')
+      eq({ 'return "basic feat-branch"' }, fn.readfile(basic_lua_file))
+
+      -- Running `update()` should still update to use `main`
+      exec_lua(function()
+        vim.pack.update(nil, { force = true })
+      end)
+      eq({ 'return "basic main"' }, fn.readfile(basic_lua_file))
+
+      ref_lockfile.plugins.basic.rev = git_get_hash('main', 'basic')
+      ref_lockfile.plugins.basic.version = "'main'"
+      eq(ref_lockfile, get_lock_tbl())
     end)
 
     it('installs at proper version', function()
@@ -597,9 +725,8 @@ describe('vim.pack', function()
         eq({}, n.exec_lua('return { vim.g._plugin, vim.g._after_plugin }'))
 
         -- Plugins should still be marked as "active", since they were added
-        plugindirs_data.active = true
-        basic_data.active = true
-        eq({ plugindirs_data, basic_data }, exec_lua('return vim.pack.get(nil, { info = false })'))
+        eq(true, exec_lua('return vim.pack.get({ "plugindirs" })[1].active'))
+        eq(true, exec_lua('return vim.pack.get({ "basic" })[1].active'))
       end
 
       -- Works on initial install
@@ -759,7 +886,7 @@ describe('vim.pack', function()
       -- Install initial versions of tested plugins
       exec_lua(function()
         vim.pack.add({
-          repos_src.fetch,
+          { src = repos_src.fetch, version = 'main' },
           { src = repos_src.semver, version = 'v0.3.0' },
           repos_src.defbranch,
         })
@@ -777,6 +904,11 @@ describe('vim.pack', function()
 
       repo_write_file('fetch', 'lua/fetch.lua', 'return "fetch new 2"')
       git_add_commit('Commit to be added 2', 'fetch')
+
+      -- Make `dev` default remote branch to check that `version` is respected
+      git_cmd({ 'checkout', '-b', 'dev' }, 'fetch')
+      repo_write_file('fetch', 'lua/fetch.lua', 'return "fetch dev"')
+      git_add_commit('Commit from default `dev` branch', 'fetch')
     end)
 
     after_each(function()
@@ -854,8 +986,8 @@ describe('vim.pack', function()
         local screen
         screen = Screen.new(85, 35)
 
-        hashes.fetch_new = git_get_hash('HEAD', 'fetch')
-        hashes.fetch_new_prev = git_get_hash('HEAD~', 'fetch')
+        hashes.fetch_new = git_get_hash('main', 'fetch')
+        hashes.fetch_new_prev = git_get_hash('main~', 'fetch')
         hashes.semver_head = git_get_hash('v0.3.0', 'semver')
 
         local tab_name = 'n' .. (t.is_os('win') and ':' or '') .. '//2/confirm-update'
@@ -1004,6 +1136,7 @@ describe('vim.pack', function()
 
       it('has in-process LSP features', function()
         t.skip(not is_jit(), "Non LuaJIT reports errors differently due to 'coxpcall'")
+        track_nvim_echo()
         exec_lua(function()
           vim.pack.add({
             repos_src.fetch,
@@ -1071,6 +1204,150 @@ describe('vim.pack', function()
         validate_hover({ 30, 0 }, 'Add version v1.0.0')
         validate_hover({ 31, 0 }, 'Add version v0.4')
         validate_hover({ 32, 0 }, 'Add version 0.3.1')
+
+        -- textDocument/codeAction
+        n.exec_lua(function()
+          -- Mock `vim.ui.select()` which is a default code action selection
+          _G.select_idx = 0
+
+          ---@diagnostic disable-next-line: duplicate-set-field
+          vim.ui.select = function(items, _, on_choice)
+            _G.select_items = items
+            local idx = _G.select_idx
+            if idx > 0 then
+              on_choice(items[idx], idx)
+              -- Minor delay before continue because LSP cmd execution is async
+              vim.wait(10)
+            end
+          end
+        end)
+
+        local ref_lockfile = get_lock_tbl() --- @type vim.pack.Lock
+
+        local function validate_action(pos, action_titles, select_idx)
+          api.nvim_win_set_cursor(0, pos)
+
+          local lines = api.nvim_buf_get_lines(0, 0, -1, false)
+          n.exec_lua(function()
+            _G.select_items = nil
+            _G.select_idx = select_idx
+            vim.lsp.buf.code_action()
+          end)
+          local titles = vim.tbl_map(function(x) --- @param x table
+            return x.action.title
+          end, n.exec_lua('return _G.select_items or {}'))
+          eq(titles, action_titles)
+
+          -- If no action is asked (like via cancel), should not delete lines
+          if select_idx <= 0 then
+            eq(lines, api.nvim_buf_get_lines(0, 0, -1, false))
+          end
+        end
+
+        -- - Should not include "namespace" header as "plugin at cursor"
+        validate_action({ 1, 1 }, {}, 0)
+        validate_action({ 2, 0 }, {}, 0)
+        -- - Only deletion should be available on errored plugin
+        validate_action({ 3, 1 }, { 'Delete `defbranch`' }, 0)
+        validate_action({ 7, 0 }, { 'Delete `defbranch`' }, 0)
+        -- - Should not include separator blank line as "plugin at cursor"
+        validate_action({ 8, 0 }, {}, 0)
+        validate_action({ 9, 0 }, {}, 0)
+        validate_action({ 10, 0 }, {}, 0)
+        -- - Should also suggest updating related actions if updates available
+        local fetch_actions = { 'Update `fetch`', 'Skip updating `fetch`', 'Delete `fetch`' }
+        validate_action({ 11, 0 }, fetch_actions, 0)
+        validate_action({ 14, 0 }, fetch_actions, 0)
+        validate_action({ 20, 0 }, fetch_actions, 0)
+        validate_action({ 21, 0 }, {}, 0)
+        validate_action({ 22, 0 }, {}, 0)
+        validate_action({ 23, 0 }, {}, 0)
+        -- - Only deletion should be available on plugins without update
+        validate_action({ 24, 0 }, { 'Delete `semver`' }, 0)
+        validate_action({ 28, 0 }, { 'Delete `semver`' }, 0)
+        validate_action({ 32, 0 }, { 'Delete `semver`' }, 0)
+
+        -- - Should correctly perform action and remove plugin's lines
+        local function line_match(lnum, pattern)
+          matches(pattern, api.nvim_buf_get_lines(0, lnum - 1, lnum, false)[1])
+        end
+
+        -- - Delete. Should remove from disk and update lockfile.
+        validate_action({ 3, 0 }, { 'Delete `defbranch`' }, 1)
+        eq(false, pack_exists('defbranch'))
+        line_match(1, '^# Error')
+        line_match(2, '^$')
+        line_match(3, '^# Update')
+
+        ref_lockfile.plugins.defbranch = nil
+        eq(ref_lockfile, get_lock_tbl())
+
+        -- - Skip udating
+        validate_action({ 5, 0 }, fetch_actions, 2)
+        eq({ 'return "fetch main"' }, fn.readfile(fetch_lua_file))
+        line_match(3, '^# Update')
+        line_match(4, '^$')
+        line_match(5, '^# Same')
+
+        -- - Update plugin. Should not re-fetch new data and update lockfile.
+        n.exec('quit')
+        n.exec_lua(function()
+          vim.pack.update({ 'fetch', 'semver' })
+        end)
+        exec_lua('_G.echo_log = {}')
+
+        ref_lockfile.plugins.fetch.rev = git_get_hash('main', 'fetch')
+        repo_write_file('fetch', 'lua/fetch.lua', 'return "fetch new 3"')
+        git_add_commit('Commit to be added 3', 'fetch')
+
+        validate_action({ 3, 0 }, fetch_actions, 1)
+
+        eq({ 'return "fetch new 2"' }, fn.readfile(fetch_lua_file))
+        validate_progress_report('Applying updates', { 'fetch' })
+        line_match(1, '^# Update')
+        line_match(2, '^$')
+        line_match(3, '^# Same')
+
+        eq(ref_lockfile, get_lock_tbl())
+
+        -- - Can still respect `:write` after action
+        n.exec('write')
+        eq('vim.pack: Nothing to update', n.exec_capture('1messages'))
+        eq(api.nvim_get_option_value('filetype', {}), '')
+      end)
+
+      it('has buffer-local mappings', function()
+        t.skip(not is_jit(), "Non LuaJIT reports update errors differently due to 'coxpcall'")
+        exec_lua(function()
+          vim.pack.add({
+            repos_src.fetch,
+            { src = repos_src.semver, version = 'v0.3.0' },
+            { src = repos_src.defbranch, version = 'does-not-exist' },
+          })
+          -- Enable sourcing filetype script (that creates mappings)
+          vim.cmd('filetype plugin on')
+          vim.pack.update()
+        end)
+
+        -- Plugin sections navigation
+        local validate = function(keys, ref_cursor)
+          n.feed(keys)
+          eq(ref_cursor, api.nvim_win_get_cursor(0))
+        end
+
+        api.nvim_win_set_cursor(0, { 1, 1 })
+        validate(']]', { 3, 0 })
+        validate(']]', { 11, 0 })
+        validate(']]', { 24, 0 })
+        -- - Should not wrap around the edge
+        validate(']]', { 24, 0 })
+
+        api.nvim_win_set_cursor(0, { 32, 1 })
+        validate('[[', { 24, 0 })
+        validate('[[', { 11, 0 })
+        validate('[[', { 3, 0 })
+        -- - Should not wrap around the edge
+        validate('[[', { 3, 0 })
       end)
 
       it('suggests newer versions when on non-tagged commit', function()
@@ -1087,12 +1364,27 @@ describe('vim.pack', function()
         local confirm_text = table.concat(api.nvim_buf_get_lines(0, 0, -1, false), '\n')
         matches('Available newer versions:\n• v1%.0%.0\n• v0%.4\n• 0%.3%.1$', confirm_text)
       end)
+
+      it('updates lockfile', function()
+        exec_lua(function()
+          vim.pack.add({ repos_src.fetch })
+        end)
+        local ref_fetch_lock = { rev = hashes.fetch_head, src = repos_src.fetch }
+        eq(ref_fetch_lock, get_lock_tbl().plugins.fetch)
+
+        exec_lua('vim.pack.update()')
+        n.exec('write')
+
+        ref_fetch_lock.rev = git_get_hash('main', 'fetch')
+        eq(ref_fetch_lock, get_lock_tbl().plugins.fetch)
+      end)
     end)
 
     it('works with not active plugins', function()
+      -- No plugins are added, but they are installed in `before_each()`
       exec_lua(function()
-        -- No plugins are added, but they are installed in `before_each()`
-        vim.pack.update({ 'fetch' })
+        -- By default should also include not active plugins
+        vim.pack.update()
       end)
       eq({ 'return "fetch main"' }, fn.readfile(fetch_lua_file))
       n.exec('write')
@@ -1116,8 +1408,8 @@ describe('vim.pack', function()
       eq('', api.nvim_get_option_value('filetype', {}))
 
       -- Write to log file
-      hashes.fetch_new = git_get_hash('HEAD', 'fetch')
-      hashes.fetch_new_prev = git_get_hash('HEAD~', 'fetch')
+      hashes.fetch_new = git_get_hash('main', 'fetch')
+      hashes.fetch_new_prev = git_get_hash('main~', 'fetch')
 
       local log_path = vim.fs.joinpath(fn.stdpath('log'), 'nvim-pack.log')
       local log_lines = fn.readfile(log_path)
@@ -1138,17 +1430,21 @@ describe('vim.pack', function()
         '',
       }
       eq(ref_log_lines, vim.list_slice(log_lines, 2))
+
+      -- Should update lockfile
+      eq(hashes.fetch_new, get_lock_tbl().plugins.fetch.rev)
     end)
 
     it('shows progress report', function()
       track_nvim_echo()
       exec_lua(function()
         vim.pack.add({ repos_src.fetch, repos_src.defbranch })
+        -- Should also include updates from not active plugins
         vim.pack.update()
       end)
 
       -- During initial download
-      validate_progress_report('Downloading updates', { 'fetch', 'defbranch' })
+      validate_progress_report('Downloading updates', { 'fetch', 'defbranch', 'semver' })
       exec_lua('_G.echo_log = {}')
 
       -- During application (only for plugins that have updates)
@@ -1165,7 +1461,7 @@ describe('vim.pack', function()
         vim.pack.add({ repos_src.fetch, repos_src.defbranch })
         vim.pack.update(nil, { force = true })
       end)
-      validate_progress_report('Updating', { 'fetch', 'defbranch' })
+      validate_progress_report('Updating', { 'fetch', 'defbranch', 'semver' })
     end)
 
     it('triggers relevant events', function()
@@ -1246,10 +1542,10 @@ describe('vim.pack', function()
     local make_basic_data = function(active, info)
       local spec = { name = 'basic', src = repos_src.basic, version = 'feat-branch' }
       local path = pack_get_plug_path('basic')
-      local res = { active = active, path = path, spec = spec }
+      local rev = git_get_hash('feat-branch', 'basic')
+      local res = { active = active, path = path, spec = spec, rev = rev }
       if info then
         res.branches = { 'main', 'feat-branch' }
-        res.rev = git_get_hash('feat-branch', 'basic')
         res.tags = { 'some-tag' }
       end
       return res
@@ -1258,50 +1554,74 @@ describe('vim.pack', function()
     local make_defbranch_data = function(active, info)
       local spec = { name = 'defbranch', src = repos_src.defbranch }
       local path = pack_get_plug_path('defbranch')
-      local res = { active = active, path = path, spec = spec }
+      local rev = git_get_hash('dev', 'defbranch')
+      local res = { active = active, path = path, spec = spec, rev = rev }
       if info then
         res.branches = { 'dev', 'main' }
-        res.rev = git_get_hash('dev', 'defbranch')
         res.tags = {}
       end
       return res
     end
 
+    local make_plugindirs_data = function(active, info)
+      local spec =
+        { name = 'plugindirs', src = repos_src.plugindirs, version = vim.version.range('*') }
+      local path = pack_get_plug_path('plugindirs')
+      local rev = git_get_hash('v0.0.1', 'plugindirs')
+      local res = { active = active, path = path, spec = spec, rev = rev }
+      if info then
+        res.branches = { 'main' }
+        res.tags = { 'v0.0.1' }
+      end
+      return res
+    end
+
     it('returns list with necessary data', function()
-      local basic_data, defbranch_data
+      local basic_data, defbranch_data, plugindirs_data
 
       -- Should work just after installation
       exec_lua(function()
-        vim.pack.add({ repos_src.defbranch, { src = repos_src.basic, version = 'feat-branch' } })
+        vim.pack.add({
+          repos_src.defbranch,
+          { src = repos_src.basic, version = 'feat-branch' },
+          { src = repos_src.plugindirs, version = vim.version.range('*') },
+        })
       end)
       defbranch_data = make_defbranch_data(true, true)
       basic_data = make_basic_data(true, true)
+      plugindirs_data = make_plugindirs_data(true, true)
       -- Should preserve order in which plugins were `vim.pack.add()`ed
-      eq({ defbranch_data, basic_data }, exec_lua('return vim.pack.get()'))
+      eq({ defbranch_data, basic_data, plugindirs_data }, exec_lua('return vim.pack.get()'))
 
       -- Should also list non-active plugins
       n.clear()
 
       exec_lua(function()
-        vim.pack.add({ { src = repos_src.basic, version = 'feat-branch' } })
+        vim.pack.add({ repos_src.defbranch })
       end)
-      defbranch_data = make_defbranch_data(false, true)
-      basic_data = make_basic_data(true, true)
-      -- Should first list active, then non-active
-      eq({ basic_data, defbranch_data }, exec_lua('return vim.pack.get()'))
+      defbranch_data = make_defbranch_data(true, true)
+      basic_data = make_basic_data(false, true)
+      plugindirs_data = make_plugindirs_data(false, true)
+      -- Should first list active, then non-active (including their latest
+      -- set `version` which is inferred from lockfile)
+      eq({ defbranch_data, basic_data, plugindirs_data }, exec_lua('return vim.pack.get()'))
 
       -- Should respect `names` for both active and not active plugins
       eq({ basic_data }, exec_lua('return vim.pack.get({ "basic" })'))
       eq({ defbranch_data }, exec_lua('return vim.pack.get({ "defbranch" })'))
-      eq({ defbranch_data, basic_data }, exec_lua('return vim.pack.get({ "defbranch", "basic" })'))
+      eq({ basic_data, defbranch_data }, exec_lua('return vim.pack.get({ "basic", "defbranch" })'))
 
       local bad_get_cmd = 'return vim.pack.get({ "ccc", "basic", "aaa" })'
       matches('Plugin `ccc` is not installed', pcall_err(exec_lua, bad_get_cmd))
 
       -- Should respect `opts.info`
-      defbranch_data = make_defbranch_data(false, false)
-      basic_data = make_basic_data(true, false)
-      eq({ basic_data, defbranch_data }, exec_lua('return vim.pack.get(nil, { info = false })'))
+      defbranch_data = make_defbranch_data(true, false)
+      basic_data = make_basic_data(false, false)
+      plugindirs_data = make_plugindirs_data(false, false)
+      eq(
+        { defbranch_data, basic_data, plugindirs_data },
+        exec_lua('return vim.pack.get(nil, { info = false })')
+      )
       eq({ basic_data }, exec_lua('return vim.pack.get({ "basic" }, { info = false })'))
       eq({ defbranch_data }, exec_lua('return vim.pack.get({ "defbranch" }, { info = false })'))
     end)
@@ -1350,6 +1670,10 @@ describe('vim.pack', function()
       eq(true, pack_exists('basic'))
       eq(true, pack_exists('plugindirs'))
 
+      local locked_plugins = vim.tbl_keys(get_lock_tbl().plugins)
+      table.sort(locked_plugins)
+      eq({ 'basic', 'plugindirs' }, locked_plugins)
+
       watch_events({ 'PackChangedPre', 'PackChanged' })
 
       n.exec('messages clear')
@@ -1371,6 +1695,23 @@ describe('vim.pack', function()
       eq(3, find_in_log(log, 'PackChangedPre', 'delete', 'plugindirs', nil))
       eq(4, find_in_log(log, 'PackChanged', 'delete', 'plugindirs', nil))
       eq(4, #log)
+
+      -- Should update lockfile
+      eq({ plugins = {} }, get_lock_tbl())
+    end)
+
+    it('works without prior `add()`', function()
+      exec_lua(function()
+        vim.pack.add({ repos_src.basic })
+      end)
+      n.clear()
+
+      eq(true, pack_exists('basic'))
+      exec_lua(function()
+        vim.pack.del({ 'basic' })
+      end)
+      eq(false, pack_exists('basic'))
+      eq({ plugins = {} }, get_lock_tbl())
     end)
 
     it('validates input', function()

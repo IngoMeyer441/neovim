@@ -2442,6 +2442,9 @@ M.funcs = {
       	:r		Root (one extension removed)
       	:e		Extension only
 
+      More modifiers are supported, for the full list see
+      |filename-modifiers|.
+
       Example: >vim
       	let &tags = expand("%:p:h") .. "/tags"
       <Note that when expanding a string that starts with '%', '#' or
@@ -8021,6 +8024,18 @@ M.funcs = {
     returns = 'number',
     signature = 'pow({x}, {y})',
   },
+  preinserted = {
+    desc = [=[
+      Returns non-zero if text has been inserted after the cursor
+      because "preinsert" is present in 'completeopt', or because
+      "longest" is present in 'completeopt' while 'autocomplete'
+      is active.  Otherwise returns zero.
+    ]=],
+    name = 'preinserted',
+    params = {},
+    returns = 'number',
+    signature = 'preinserted()',
+  },
   prevnonblank = {
     args = 1,
     base = 1,
@@ -12955,9 +12970,9 @@ M.funcs = {
     base = 1,
     desc = [=[
       The result is a Number, which is the screen column of the file
-      position given with {expr}.  That is, the last screen position
-      occupied by the character at that position, when the screen
-      would be of unlimited width.  When there is a <Tab> at the
+      position given with {expr}.  That is, the total number of
+      screen cells occupied by the part of the line until the end of
+      the character at that position.  When there is a <Tab> at the
       position, the returned Number will be the column at the end of
       the <Tab>.  For example, for a <Tab> in column 1, with 'ts'
       set to 8, it returns 8. |conceal| is ignored.

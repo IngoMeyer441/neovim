@@ -25,6 +25,7 @@
 #include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval_defs.h"
+#include "nvim/eval/vars.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/extmark.h"
@@ -606,10 +607,12 @@ static int insert_execute(VimState *state, int key)
                && (s->c == CAR || s->c == K_KENTER || s->c == NL)))
           && stop_arrow() == OK) {
         ins_compl_delete(false);
-        if (ins_compl_has_preinsert() && ins_compl_autocomplete_enabled()) {
-          (void)ins_compl_insert(false, true);
+        if (ins_compl_preinsert_longest() && !ins_compl_is_match_selected()) {
+          ins_compl_insert(false, true);
+          ins_compl_init_get_longest();
+          return 1;
         } else {
-          (void)ins_compl_insert(false, false);
+          ins_compl_insert(false, false);
         }
       } else if (ascii_iswhite_nl_or_nul(s->c) && ins_compl_preinsert_effect()) {
         // Delete preinserted text when typing special chars

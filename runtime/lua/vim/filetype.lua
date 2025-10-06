@@ -672,6 +672,7 @@ local extension = {
   kl = 'karel',
   KL = 'karel',
   kdl = 'kdl',
+  kerml = 'kerml',
   kv = 'kivy',
   kix = 'kix',
   kts = 'kotlin',
@@ -949,6 +950,7 @@ local extension = {
   pmod = 'pike',
   rcp = 'pilrc',
   pkl = 'pkl',
+  pcf = 'pkl',
   PL = detect.pl,
   pli = 'pli',
   pl1 = 'pli',
@@ -1215,6 +1217,7 @@ local extension = {
   sys = detect.sys,
   Sys = detect.sys,
   SYS = detect.sys,
+  sysml = 'sysml',
   svh = 'systemverilog',
   sv = 'systemverilog',
   cmm = 'trace32',
@@ -2683,6 +2686,7 @@ local pattern = {
     ['^pacman%.log'] = starsetf(function(path, _bufnr)
       return vim.uv.fs_stat(path) and 'pacmanlog' or nil
     end),
+    ['^pkl%-lsp://'] = 'pkl',
     ['printcap'] = starsetf(function(_path, _bufnr)
       return require('vim.filetype.detect').printcap('print')
     end),

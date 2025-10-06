@@ -20,6 +20,7 @@
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
+#include "nvim/clipboard.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/cmdhist.h"
@@ -3373,7 +3374,7 @@ static bool color_cmdline(CmdlineInfo *colored_ccline)
   } else if (colored_ccline->cmdfirstc == ':') {
     TRY_WRAP(&err, {
       err_errmsg = N_("E5408: Unable to get g:Nvim_color_cmdline callback: %s");
-      dgc_ret = tv_dict_get_callback(&globvardict, S_LEN("Nvim_color_cmdline"),
+      dgc_ret = tv_dict_get_callback(get_globvar_dict(), S_LEN("Nvim_color_cmdline"),
                                      &color_cb);
     });
     can_free_cb = true;

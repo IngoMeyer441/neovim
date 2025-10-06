@@ -252,6 +252,7 @@ LSP
   See |lsp-inline_completion| for quickstart instructions.
 • Support for `textDocument/onTypeFormatting`: |lsp-on_type_formatting|
   https://microsoft.github.io/language-server-protocol/specification/#textDocument_onTypeFormatting
+• The filter option of |vim.lsp.buf.code_action()| now receives the client ID as an argument.
 
 LUA
 
@@ -285,6 +286,7 @@ OPTIONS
 • 'completeopt' flag "nearest" sorts completion results by distance to cursor.
 • 'diffanchors' specifies addresses to anchor a diff.
 • 'diffopt' `inline:` configures diff highlighting for changes within a line.
+• 'fillchars' has new flag "foldinner".
 • 'grepformat' is now a |global-local| option.
 • 'maxsearchcount' sets maximum value for |searchcount()| and defaults to 999.
 • 'pummaxwidth' sets maximum width for the completion popup menu.
@@ -327,6 +329,8 @@ TREESITTER
 TUI
 
 • |TermResponse| now supports DA1 and APC query responses.
+• Native progress bars are displayed for |Progress| events using the OSC 9;4
+  sequence.
 
 UI
 

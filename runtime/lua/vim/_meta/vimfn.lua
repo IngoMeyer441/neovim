@@ -1893,6 +1893,9 @@ function vim.fn.exp(expr) end
 ---   :r    Root (one extension removed)
 ---   :e    Extension only
 ---
+--- More modifiers are supported, for the full list see
+--- |filename-modifiers|.
+---
 --- Example: >vim
 ---   let &tags = expand("%:p:h") .. "/tags"
 --- <Note that when expanding a string that starts with '%', '#' or
@@ -6551,6 +6554,14 @@ function vim.fn.perleval(expr) end
 --- @return number
 function vim.fn.pow(x, y) end
 
+--- Returns non-zero if text has been inserted after the cursor
+--- because "preinsert" is present in 'completeopt', or because
+--- "longest" is present in 'completeopt' while 'autocomplete'
+--- is active.  Otherwise returns zero.
+---
+--- @return number
+function vim.fn.preinserted() end
+
 --- Return the line number of the first line at or above {lnum}
 --- that is not blank.  Example: >vim
 ---   let ind = indent(prevnonblank(v:lnum - 1))
@@ -10700,9 +10711,9 @@ function vim.fn.utf16idx(string, idx, countcc, charidx) end
 function vim.fn.values(dict) end
 
 --- The result is a Number, which is the screen column of the file
---- position given with {expr}.  That is, the last screen position
---- occupied by the character at that position, when the screen
---- would be of unlimited width.  When there is a <Tab> at the
+--- position given with {expr}.  That is, the total number of
+--- screen cells occupied by the part of the line until the end of
+--- the character at that position.  When there is a <Tab> at the
 --- position, the returned Number will be the column at the end of
 --- the <Tab>.  For example, for a <Tab> in column 1, with 'ts'
 --- set to 8, it returns 8. |conceal| is ignored.
