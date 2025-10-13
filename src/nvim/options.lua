@@ -6720,6 +6720,22 @@ local options = {
       varname = 'p_pb',
     },
     {
+      full_name = 'pumborder',
+      scope = { 'global' },
+      cb = 'did_set_pumborder',
+      defaults = { if_true = '' },
+      values = { '', 'double', 'single', 'shadow', 'rounded', 'solid', 'bold', 'none' },
+      desc = [=[
+        Defines the default border style of popupmenu windows. Same as
+        'winborder'. |hl-PmenuBorder| is used. When style is "shadow", the
+        |hl-PmenuShadow| and |hl-PmenuShadowThrough| are used.
+      ]=],
+      short_desc = N_('border of popupmenu'),
+      type = 'string',
+      list = 'onecomma',
+      varname = 'p_pumborder',
+    },
+    {
       abbreviation = 'ph',
       defaults = 0,
       desc = [=[

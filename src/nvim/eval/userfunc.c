@@ -281,7 +281,7 @@ static ufunc_T *alloc_ufunc(const char *name, size_t namelen)
 {
   size_t len = offsetof(ufunc_T, uf_name) + namelen + 1;
   ufunc_T *fp = xcalloc(1, len);
-  STRCPY(fp->uf_name, name);
+  xmemcpyz(fp->uf_name, name, namelen);
   fp->uf_namelen = namelen;
 
   if ((uint8_t)name[0] == K_SPECIAL) {
@@ -415,10 +415,7 @@ int get_lambda_tv(char **arg, typval_T *rettv, evalarg_T *evalarg)
 
 errret:
   ga_clear_strings(&newargs);
-  if (fp != NULL) {
-    xfree(fp->uf_name_exp);
-    xfree(fp);
-  }
+  assert(fp == NULL);
   xfree(pt);
   if (evalarg != NULL && evalarg->eval_tofree == NULL) {
     evalarg->eval_tofree = tofree;

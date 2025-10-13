@@ -541,6 +541,29 @@ describe('vim.pack', function()
       eq(ref_lockfile, get_lock_tbl())
     end)
 
+    it('handles lockfile during install errors', function()
+      local repo_not_exist = 'file://' .. repo_get_path('does-not-exist')
+      pcall_err(exec_lua, function()
+        vim.pack.add({
+          repo_not_exist,
+          { src = repos_src.basic, version = 'not-exist' },
+          { src = repos_src.pluginerr, version = 'main' },
+        })
+      end)
+
+      local pluginerr_hash = git_get_hash('main', 'pluginerr')
+      local ref_lockfile = {
+        -- Should be no entry for `repo_not_exist`
+        plugins = {
+          -- No `rev` because there was no relevant checkout
+          basic = { src = repos_src.basic, version = "'not-exist'" },
+          -- Error during sourcing 'plugin/' should not affect lockfile
+          pluginerr = { rev = pluginerr_hash, src = repos_src.pluginerr, version = "'main'" },
+        },
+      }
+      eq(ref_lockfile, get_lock_tbl())
+    end)
+
     it('installs at proper version', function()
       local out = exec_lua(function()
         vim.pack.add({
@@ -558,6 +581,16 @@ describe('vim.pack', function()
       eq(true, vim.tbl_contains(rtp, plug_path))
       -- No 'after/' directory in runtimepath because it is not present in plugin
       eq(false, vim.tbl_contains(rtp, after_dir))
+    end)
+
+    it('does not checkout on bad `version`', function()
+      local err = pcall_err(exec_lua, function()
+        vim.pack.add({ { src = repos_src.basic, version = 'not-exist' } })
+      end)
+      matches('`not%-exist` is not a branch/tag/commit', err)
+      local plug_path = pack_get_plug_path('basic')
+      local entries = vim.iter(vim.fs.dir(plug_path)):totable()
+      eq({ { '.git', 'directory' } }, entries)
     end)
 
     it('can install from the Internet', function()
@@ -950,6 +983,7 @@ describe('vim.pack', function()
         local fetch_path = pack_get_plug_path('fetch')
         local semver_src = repos_src.semver
         local semver_path = pack_get_plug_path('semver')
+        local pack_runtime = '/lua/vim/pack.lua'
 
         exec_lua(function()
           -- Replace matches in line to preserve extmark highlighting
@@ -965,10 +999,11 @@ describe('vim.pack', function()
 
           vim.bo.modifiable = true
           local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-          local pack_runtime = vim.fs.joinpath(vim.env.VIMRUNTIME, 'lua', 'vim', 'pack.lua')
           -- NOTE: replace path to `vim.pack` in error traceback accounting for
-          -- possibly different slashes on Windows
-          local pack_runtime_pattern = vim.pesc(pack_runtime):gsub('/', '[\\/]') .. ':%d+'
+          -- pcall source truncation and possibly different slashes on Windows
+          local pack_runtime_pattern = ('%%S.+%s:%%d+'):format(
+            vim.pesc(pack_runtime):gsub('/', '[\\/]')
+          )
           for i = 1, #lines do
             replace_in_line(i, pack_runtime_pattern, 'VIM_PACK_RUNTIME')
             replace_in_line(i, vim.pesc(fetch_path), 'FETCH_PATH')

@@ -3641,9 +3641,9 @@ func Test_complete_opt_fuzzy()
 
   set cot=menu,fuzzy
   call feedkeys("Sblue\<CR>bar\<CR>b\<C-X>\<C-P>\<C-Y>\<ESC>", 'tx')
-  call assert_equal('bar', getline('.'))
-  call feedkeys("Sb\<C-X>\<C-N>\<C-Y>\<ESC>", 'tx')
   call assert_equal('blue', getline('.'))
+  call feedkeys("Sb\<C-X>\<C-N>\<C-Y>\<ESC>", 'tx')
+  call assert_equal('bar', getline('.'))
   call feedkeys("Sb\<C-X>\<C-P>\<C-N>\<C-Y>\<ESC>", 'tx')
   call assert_equal('b', getline('.'))
 
@@ -3668,15 +3668,29 @@ func Test_complete_opt_fuzzy()
   call feedkeys("S\<C-X>\<C-O>c\<C-Y>", 'tx')
   call assert_equal('cp_str', getline('.'))
 
+  " Issue 18488: sort after collection when "fuzzy" (unless "nosort")
+  %d
+  set completeopt&
+  set completeopt+=fuzzy,noselect completefuzzycollect=keyword
+  func! PrintMenuWords()
+    let info = complete_info(["items"])
+    call map(info.items, {_, v -> v.word})
+    return info
+  endfunc
+  call setline(1, ['func1', 'xfunc', 'func2'])
+  call feedkeys("Gof\<C-N>\<C-R>=PrintMenuWords()\<CR>\<Esc>0", 'tx')
+  call assert_equal('f{''items'': [''func1'', ''func2'', ''xfunc'']}', getline('.'))
+
   " clean up
   set omnifunc=
   bw!
-  set complete& completeopt&
+  set complete& completeopt& completefuzzycollect&
   autocmd! AAAAA_Group
   augroup! AAAAA_Group
   delfunc OnPumChange
   delfunc Omni_test
   delfunc Comp
+  delfunc PrintMenuWords
   unlet g:item
   unlet g:word
   unlet g:abbr
@@ -4845,18 +4859,6 @@ func Test_nearest_cpt_option()
   call setline(1, ["fo", "foo", "foobar", "foobarbaz"])
   exe "normal! 2jof\<c-p>\<c-r>=PrintMenuWords()\<cr>"
   call assert_equal('fo{''matches'': [''foobarbaz'', ''foobar'', ''foo'', ''fo''], ''selected'': -1}', getline(4))
-
-  " No effect if 'fuzzy' is present
-  set completeopt&
-  set completeopt+=fuzzy,nearest
-  %d
-  call setline(1, ["foo", "fo", "foobarbaz", "foobar"])
-  exe "normal! of\<c-n>\<c-r>=PrintMenuWords()\<cr>"
-  call assert_equal('fo{''matches'': [''fo'', ''foobarbaz'', ''foobar'', ''foo''], ''selected'': 0}', getline(2))
-  %d
-  call setline(1, ["fo", "foo", "foobar", "foobarbaz"])
-  exe "normal! 2jof\<c-p>\<c-r>=PrintMenuWords()\<cr>"
-  call assert_equal('foobar{''matches'': [''foobarbaz'', ''fo'', ''foo'', ''foobar''], ''selected'': 3}', getline(4))
   bw!
 
   set completeopt&
@@ -5526,10 +5528,33 @@ func Test_autocomplete_trigger()
   call assert_equal(['fodabc', 'fodxyz'], b:matches->mapnew('v:val.word'))
   call assert_equal(-1, b:selected)
 
+  " Test 8: Ctrl_W / Ctrl_U (delete word/line) should restart autocompletion
+  func! TestComplete(findstart, base)
+    if a:findstart
+      return col('.') - 1
+    endif
+    return ['fooze', 'faberge']
+  endfunc
+  set omnifunc=TestComplete
+  set complete+=o
+  call feedkeys("Sprefix->fo\<F2>\<Esc>0", 'tx!')
+  call assert_equal(['fodabc', 'fodxyz', 'foobar', 'fooze'], b:matches->mapnew('v:val.word'))
+  call feedkeys("Sprefix->fo\<C-W>\<F2>\<Esc>0", 'tx!')
+  call assert_equal(['fooze', 'faberge'], b:matches->mapnew('v:val.word'))
+  call feedkeys("Sprefix->\<Esc>afo\<C-U>\<F2>\<Esc>0", 'tx!')
+  call assert_equal(['fooze', 'faberge'], b:matches->mapnew('v:val.word'))
+
+  " Test 9: Trigger autocomplete immediately upon entering Insert mode
+  call feedkeys("Sprefix->foo\<Esc>a\<F2>\<Esc>0", 'tx!')
+  call assert_equal(['foobar', 'fooze', 'faberge'], b:matches->mapnew('v:val.word'))
+  call feedkeys("Sprefix->fooxx\<Esc>hcw\<F2>\<Esc>0", 'tx!')
+  call assert_equal(['foobar', 'fooze', 'faberge'], b:matches->mapnew('v:val.word'))
+
   bw!
   call Ntest_override("char_avail", 0)
   delfunc NonKeywordComplete
-  set autocomplete&
+  delfunc TestComplete
+  set autocomplete& omnifunc& complete&
   unlet g:CallCount
 endfunc
 

@@ -144,7 +144,7 @@ end
 --- @param url string
 --- @param path string
 local function git_clone(url, path)
-  local cmd = { 'clone', '--quiet', '--origin', 'origin' }
+  local cmd = { 'clone', '--quiet', '--origin', 'origin', '--no-checkout' }
 
   if vim.startswith(url, 'file://') then
     cmd[#cmd + 1] = '--no-hardlinks'
@@ -789,6 +789,11 @@ function M.add(specs, opts)
   if #plugs_to_install > 0 then
     git_ensure_exec()
     install_list(plugs_to_install, opts.confirm)
+    for _, p in ipairs(plugs_to_install) do
+      if not p.info.installed then
+        plugin_lock.plugins[p.spec.name] = nil
+      end
+    end
   end
 
   if needs_lock_write then
