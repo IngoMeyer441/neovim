@@ -117,7 +117,7 @@ local all_clients = {}
 --- @field on_init? elem_or_list<fun(client: vim.lsp.Client, init_result: lsp.InitializeResult)>
 ---
 --- Directory where the LSP server will base its workspaceFolders, rootUri, and rootPath on initialization.
---- @field root_dir? string|fun(bufnr: integer, on_dir:fun(root_dir?:string))
+--- @field root_dir? string
 ---
 --- Map of language server-specific settings, decided by the client. Sent to the LS if requested via
 --- `workspace/configuration`. Keys are case-sensitive.
@@ -190,7 +190,7 @@ local all_clients = {}
 --- @field requests table<integer,{ type: string, bufnr: integer, method: string}?>
 ---
 --- See [vim.lsp.ClientConfig].
---- @field root_dir? string|fun(bufnr: integer, on_dir:fun(root_dir?:string))
+--- @field root_dir string?
 ---
 --- RPC client object, for low level interaction with the client.
 --- See |vim.lsp.rpc.start()|.
@@ -649,7 +649,7 @@ end
 --- Returns the handler associated with an LSP method.
 --- Returns the default handler if the user hasn't set a custom one.
 ---
---- @param method (string) LSP method name
+--- @param method (vim.lsp.protocol.Method) LSP method name
 --- @return lsp.Handler? handler for the given method, if defined, or the default from |vim.lsp.handlers|
 function Client:_resolve_handler(method)
   return self.handlers[method] or lsp.handlers[method]
@@ -659,7 +659,7 @@ end
 --- @param id integer
 --- @param req_type 'pending'|'complete'|'cancel'
 --- @param bufnr? integer (only required for req_type='pending')
---- @param method? string (only required for req_type='pending')
+--- @param method? vim.lsp.protocol.Method (only required for req_type='pending')
 function Client:_process_request(id, req_type, bufnr, method)
   local pending = req_type == 'pending'
 
@@ -1365,27 +1365,6 @@ function Client:_remove_workspace_folder(dir)
       break
     end
   end
-end
-
---- Gets root_dir, waiting up to `ms` for a potentially async `root_dir()` result.
----
---- @param ms integer
---- @param buf integer
---- @return string|nil
-function Client._resolve_root_dir(ms, buf, root_dir)
-  if root_dir == nil or type(root_dir) == 'string' then
-    return root_dir --[[@type string|nil]]
-  end
-
-  local dir = nil --[[@type string|nil]]
-  root_dir(buf, function(d)
-    dir = d
-  end)
-  -- root_dir() may be async, wait for a result.
-  vim.wait(ms, function()
-    return not not dir
-  end)
-  return dir
 end
 
 -- Export for internal use only.

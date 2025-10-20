@@ -160,7 +160,6 @@ PRAGMA_DIAG_POP
 static const char *e_invalwindow = N_("E957: Invalid window number");
 static const char e_invalid_submatch_number_nr[]
   = N_("E935: Invalid submatch number: %d");
-static const char *e_reduceempty = N_("E998: Reduce of an empty %s with no initial value");
 static const char e_string_list_or_blob_required[]
   = N_("E1098: String, List or Blob required");
 static const char e_missing_function_argument[]
@@ -420,19 +419,6 @@ static void f_atan2(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   } else {
     rettv->vval.v_float = 0.0;
   }
-}
-
-/// "browse(save, title, initdir, default)" function
-static void f_browse(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-{
-  rettv->vval.v_string = NULL;
-  rettv->v_type = VAR_STRING;
-}
-
-/// "browsedir(title, initdir)" function
-static void f_browsedir(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-{
-  f_browse(argvars, rettv, fptr);
 }
 
 /// Get buffer by number or pattern.
@@ -1665,34 +1651,6 @@ static void f_fnameescape(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   rettv->vval.v_string = vim_strsave_fnameescape(tv_get_string(&argvars[0]), VSE_NONE);
   rettv->v_type = VAR_STRING;
-}
-
-/// "fnamemodify({fname}, {mods})" function
-static void f_fnamemodify(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-{
-  char *fbuf = NULL;
-  size_t len = 0;
-  char buf[NUMBUFLEN];
-  const char *fname = tv_get_string_chk(&argvars[0]);
-  const char *const mods = tv_get_string_buf_chk(&argvars[1], buf);
-  if (mods == NULL || fname == NULL) {
-    fname = NULL;
-  } else {
-    len = strlen(fname);
-    if (*mods != NUL) {
-      size_t usedlen = 0;
-      modify_fname((char *)mods, false, &usedlen,
-                   (char **)&fname, &fbuf, &len);
-    }
-  }
-
-  rettv->v_type = VAR_STRING;
-  if (fname == NULL) {
-    rettv->vval.v_string = NULL;
-  } else {
-    rettv->vval.v_string = xmemdupz(fname, len);
-  }
-  xfree(fbuf);
 }
 
 /// "foreground()" function
@@ -3596,8 +3554,8 @@ void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     }
   }
 
-  uint16_t width = 0;
-  uint16_t height = 0;
+  uint16_t width = (uint16_t)tv_dict_get_number(job_opts, "width");
+  uint16_t height = (uint16_t)tv_dict_get_number(job_opts, "height");
   char *term_name = NULL;
 
   if (term) {
@@ -3617,13 +3575,11 @@ void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     overlapped = false;
     detach = false;
     stdin_mode = kChannelStdinPipe;
-    width = (uint16_t)MAX(0, curwin->w_view_width - win_col_off(curwin));
-    height = (uint16_t)curwin->w_view_height;
+    width = width ? width : (uint16_t)MAX(0, curwin->w_view_width - win_col_off(curwin));
+    height = height ? height : (uint16_t)curwin->w_view_height;
   }
 
   if (pty) {
-    width = width ? width : (uint16_t)tv_dict_get_number(job_opts, "width");
-    height = height ? height : (uint16_t)tv_dict_get_number(job_opts, "height");
     // Deprecated TERM field is from before `env` option existed.
     term_name = term_name ? term_name : tv_dict_get_string(job_opts, "TERM", false);
     term_name = term_name ? term_name : "ansi";
@@ -5356,7 +5312,7 @@ static void reduce_list(typval_T *argvars, typval_T *expr, typval_T *rettv)
   const listitem_T *li = NULL;
   if (argvars[2].v_type == VAR_UNKNOWN) {
     if (tv_list_len(l) == 0) {
-      semsg(_(e_reduceempty), "List");
+      semsg(_(e_reduce_of_an_empty_str_with_no_initial_value), "List");
       return;
     }
     const listitem_T *const first = tv_list_first(l);
@@ -5403,7 +5359,7 @@ static void reduce_string(typval_T *argvars, typval_T *expr, typval_T *rettv)
 
   if (argvars[2].v_type == VAR_UNKNOWN) {
     if (*p == NUL) {
-      semsg(_(e_reduceempty), "String");
+      semsg(_(e_reduce_of_an_empty_str_with_no_initial_value), "String");
       return;
     }
     len = utfc_ptr2len(p);
@@ -5451,7 +5407,7 @@ static void reduce_blob(typval_T *argvars, typval_T *expr, typval_T *rettv)
   int i;
   if (argvars[2].v_type == VAR_UNKNOWN) {
     if (tv_blob_len(b) == 0) {
-      semsg(_(e_reduceempty), "Blob");
+      semsg(_(e_reduce_of_an_empty_str_with_no_initial_value), "Blob");
       return;
     }
     initial = (typval_T){
