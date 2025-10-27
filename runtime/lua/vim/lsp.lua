@@ -301,9 +301,9 @@ end
 ---     filetypes = { 'c', 'cpp' },
 ---   }
 ---   ```
---- - Get the resolved configuration for "luals":
+--- - Get the resolved configuration for "lua_ls":
 ---   ```lua
----   local cfg = vim.lsp.config.luals
+---   local cfg = vim.lsp.config.lua_ls
 ---   ```
 ---
 ---@since 13
@@ -376,7 +376,6 @@ lsp.config = setmetatable({ _configs = {} }, {
       end
 
       if not rtp_config and not self._configs[name] then
-        log.warn(('%s does not have a configuration'):format(name))
         return
       end
 
@@ -523,7 +522,7 @@ end
 ---
 --- ```lua
 --- vim.lsp.enable('clangd')
---- vim.lsp.enable({'luals', 'pyright'})
+--- vim.lsp.enable({'lua_ls', 'pyright'})
 --- ```
 ---
 --- Example: [lsp-restart]() Passing `false` stops and detaches the client(s). Thus you can
