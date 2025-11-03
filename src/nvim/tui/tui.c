@@ -86,6 +86,7 @@ struct TUIData {
   int row, col;
   int out_fd;
   int pending_resize_events;
+  bool terminfo_found_in_db;
   bool can_change_scroll_region;
   bool has_left_and_right_margin_mode;
   bool has_sync_mode;
@@ -172,7 +173,6 @@ void tui_start(TUIData **tui_p, int *width, int *height, char **term, bool *rgb)
   kv_push(tui->attrs, HLATTRS_INIT);
 
   tui->input.tk_ti_hook_fn = tui_tk_ti_getstr;
-  tinput_init(&tui->input, &main_loop);
   ugrid_init(&tui->grid);
   tui_terminal_start(tui);
 
@@ -370,6 +370,7 @@ static void terminfo_start(TUIData *tui)
   tui->input.tui_data = tui;
 
   tui->ti_arena = (Arena)ARENA_EMPTY;
+  assert(tui->term == NULL);
 
   char *term = os_getenv("TERM");
 #ifdef MSWIN
@@ -383,17 +384,15 @@ static void terminfo_start(TUIData *tui)
 #endif
 
   // Set up terminfo.
-  bool found_in_db = false;
+  tui->terminfo_found_in_db = false;
   if (term) {
-    if (terminfo_from_unibilium(&tui->ti, term, &tui->ti_arena)) {
-      if (!tui->term) {
-        tui->term = arena_strdup(&tui->ti_arena, term);
-      }
-      found_in_db = true;
+    if (terminfo_from_database(&tui->ti, term, &tui->ti_arena)) {
+      tui->term = arena_strdup(&tui->ti_arena, term);
+      tui->terminfo_found_in_db = true;
     }
   }
 
-  if (!found_in_db) {
+  if (!tui->terminfo_found_in_db) {
     const TerminfoEntry *new = terminfo_from_builtin(term, &tui->term);
     // we will patch it below, so make a copy
     memcpy(&tui->ti, new, sizeof tui->ti);
@@ -534,6 +533,7 @@ static void terminfo_disable(TUIData *tui)
   terminfo_out(tui, kTerm_exit_attribute_mode);
   // Reset cursor to normal before exiting alternate screen.
   terminfo_out(tui, kTerm_cursor_normal);
+  terminfo_out(tui, kTerm_reset_cursor_style);
   terminfo_out(tui, kTerm_keypad_local);
 
   // Reset the key encoding
@@ -591,12 +591,18 @@ static void terminfo_stop(TUIData *tui)
     abort();
   }
   arena_mem_free(arena_finish(&tui->ti_arena));
+  // Avoid using freed memory.
+  memset(&tui->ti, 0, sizeof(tui->ti));
+  tui->term = NULL;
 }
 
 static void tui_terminal_start(TUIData *tui)
 {
   tui->print_attr_id = -1;
   terminfo_start(tui);
+  if (tui->input.loop == NULL) {
+    tinput_init(&tui->input, &main_loop, &tui->ti);
+  }
   tui_guess_size(tui);
   tinput_start(&tui->input);
 }
@@ -1600,7 +1606,7 @@ static void show_verbose_terminfo(TUIData *tui)
   ADD_C(title, CSTR_AS_OBJ("Title"));
   ADD_C(chunks, ARRAY_OBJ(title));
   MAXSIZE_TEMP_ARRAY(info, 1);
-  String str = terminfo_info_msg(&tui->ti, tui->term);
+  String str = terminfo_info_msg(&tui->ti, tui->term, tui->terminfo_found_in_db);
   ADD_C(info, STRING_OBJ(str));
   ADD_C(chunks, ARRAY_OBJ(info));
   MAXSIZE_TEMP_ARRAY(end_fold, 2);
@@ -2031,6 +2037,7 @@ static void patch_terminfo_bugs(TUIData *tui, const char *term, const char *colo
                || terminfo_is_term_family(term, "iTerm.app")
                || terminfo_is_term_family(term, "iTerm2.app");
   bool alacritty = terminfo_is_term_family(term, "alacritty");
+  bool foot = terminfo_is_term_family(term, "foot");
   // None of the following work over SSH; see :help TERM .
   bool iterm_pretending_xterm = xterm && iterm_env;
   bool gnome_pretending_xterm = xterm && colorterm
@@ -2220,6 +2227,7 @@ static void patch_terminfo_bugs(TUIData *tui, const char *term, const char *colo
             || teraterm   // per TeraTerm "Supported Control Functions" doco
             || alacritty  // https://github.com/jwilm/alacritty/pull/608
             || cygwin
+            || foot
             // Some linux-type terminals implement the xterm extension.
             // Example: console-terminal-emulator from the nosh toolset.
             || (linuxvt
