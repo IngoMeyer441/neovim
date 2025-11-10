@@ -121,7 +121,7 @@ function Completor:handler(err, result, ctx)
     log.error('inlinecompletion', err)
     return
   end
-  if not result then
+  if not result or not vim.startswith(api.nvim_get_mode().mode, 'i') then
     return
   end
 
@@ -248,7 +248,7 @@ function Completor:show(hint)
   api.nvim_buf_set_extmark(self.bufnr, namespace, row, col, {
     virt_text = virt_text,
     virt_lines = virt_lines,
-    virt_text_pos = current.range and 'overlay' or 'inline',
+    virt_text_pos = (current.range and not current.range:is_empty() and 'overlay') or 'inline',
     hl_mode = 'combine',
   })
 end
@@ -344,7 +344,9 @@ function Completor:accept(item)
         lines
       )
       local pos = item.range.start:to_cursor()
-      api.nvim_win_set_cursor(vim.fn.bufwinid(self.bufnr), {
+      local win = api.nvim_get_current_win()
+      win = api.nvim_win_get_buf(win) == self.bufnr and win or vim.fn.bufwinid(self.bufnr)
+      api.nvim_win_set_cursor(win, {
         pos[1] + #lines - 1,
         (#lines == 1 and pos[2] or 0) + #lines[#lines],
       })
