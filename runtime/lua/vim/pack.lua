@@ -10,9 +10,9 @@
 ---Plugin's subdirectory name matches plugin's name in specification.
 ---It is assumed that all plugins in the directory are managed exclusively by `vim.pack`.
 ---
----Uses Git to manage plugins and requires present `git` executable of at
----least version 2.36. Target plugins should be Git repositories with versions
----as named tags following semver convention `v<major>.<minor>.<patch>`.
+---Uses Git to manage plugins and requires present `git` executable.
+---Target plugins should be Git repositories with versions as named tags
+---following semver convention `v<major>.<minor>.<patch>`.
 ---
 ---The latest state of all managed plugins is stored inside a [vim.pack-lockfile]()
 ---located at `$XDG_CONFIG_HOME/nvim/nvim-pack-lock.json`. It is a JSON file that
@@ -70,12 +70,16 @@
 ---Switch plugin's version:
 ---- Update 'init.lua' for plugin to have desired `version`. Let's say, plugin
 ---named 'plugin1' has changed to `vim.version.range('*')`.
----- |:restart|. The plugin's actual state on disk is not yet changed.
+---- |:restart|. The plugin's actual revision on disk is not yet changed.
 ---  Only plugin's `version` in |vim.pack-lockfile| is updated.
 ---- Execute `vim.pack.update({ 'plugin1' })`.
 ---- Review changes and either confirm or discard them. If discarded, revert
 ---any changes in 'init.lua' as well or you will be prompted again next time
 ---you run |vim.pack.update()|.
+---
+---Switch plugin's source:
+---- Update 'init.lua' for plugin to have desired `src`.
+---- |:restart|. This will cleanly reinstall plugin from the new source.
 ---
 ---Freeze plugin from being updated:
 ---- Update 'init.lua' for plugin to have `version` set to current revision.
@@ -86,6 +90,18 @@
 ---- Update 'init.lua' for plugin to have `version` set to whichever version
 ---you want it to be updated.
 ---- |:restart|.
+---
+---Revert plugin after an update:
+---- Locate plugin's revision at working state. For example:
+---    - If there is a previous version of |vim.pack-lockfile| (like from version
+---    control history), use it to get plugin's `rev` field.
+---    - If there is a log file ("nvim-pack.log" at "log" |stdpath()|), open it
+---      and navigate to latest updates (at the bottom). Locate lines about plugin
+---      update details and use revision from "State before".
+---- Freeze plugin to target revision (set `version` and |:restart|).
+---- Run `vim.pack.update({ 'plugin-name' }, { force = true })` to make plugin
+---  state on disk follow target revision. |:restart|.
+---- When ready to deal with updating plugin, unfreeze it.
 ---
 ---Remove plugins from disk:
 ---- Use |vim.pack.del()| with a list of plugin names to remove. Make sure their specs
@@ -162,24 +178,31 @@ local function git_cmd(cmd, cwd)
   return (stdout:gsub('\n+$', ''))
 end
 
+local git_version = vim.version.parse('1')
+
 local function git_ensure_exec()
-  if vim.fn.executable('git') == 0 then
+  local ok, sys = pcall(vim.system, { 'git', 'version' })
+  if not ok then
     error('No `git` executable')
   end
+  git_version = vim.version.parse(sys:wait().stdout)
 end
 
 --- @async
 --- @param url string
 --- @param path string
 local function git_clone(url, path)
-  local cmd = { 'clone', '--quiet', '--origin', 'origin', '--no-checkout' }
+  local cmd = { 'clone', '--quiet', '--no-checkout', '--recurse-submodules' }
 
   if vim.startswith(url, 'file://') then
     cmd[#cmd + 1] = '--no-hardlinks'
   else
-    -- NOTE: '--also-filter-submodules' requires Git>=2.36
-    local filter_args = { '--filter=blob:none', '--recurse-submodules', '--also-filter-submodules' }
-    vim.list_extend(cmd, filter_args)
+    if git_version >= vim.version.parse('2.36') then
+      cmd[#cmd + 1] = '--filter=blob:none'
+      cmd[#cmd + 1] = '--also-filter-submodules'
+    elseif git_version >= vim.version.parse('2.27') then
+      cmd[#cmd + 1] = '--filter=blob:none'
+    end
   end
 
   vim.list_extend(cmd, { '--origin', 'origin', url, path })
@@ -193,7 +216,7 @@ end
 local function git_get_hash(ref, cwd)
   -- Using `rev-list -1` shows a commit of reference, while `rev-parse` shows
   -- hash of reference. Those are different for annotated tags.
-  return git_cmd({ 'rev-list', '-1', '--abbrev-commit', ref }, cwd)
+  return git_cmd({ 'rev-list', '-1', ref }, cwd)
 end
 
 --- @async
@@ -602,7 +625,7 @@ end
 
 --- @async
 --- @param p vim.pack.Plug
-local function infer_states(p)
+local function infer_revisions(p)
   p.info.sha_head = p.info.sha_head or git_get_hash('HEAD', p.path)
 
   resolve_version(p)
@@ -616,10 +639,14 @@ end
 --- @param p vim.pack.Plug
 --- @param timestamp string
 local function checkout(p, timestamp)
-  infer_states(p)
+  infer_revisions(p)
 
-  local msg = ('vim.pack: %s Stash before checkout'):format(timestamp)
-  git_cmd({ 'stash', '--quiet', '--message', msg }, p.path)
+  local stash_cmd = { 'stash', '--quiet' }
+  if git_version > vim.version.parse('2.13') then
+    stash_cmd[#stash_cmd + 1] = '--message'
+    stash_cmd[#stash_cmd + 1] = ('vim.pack: %s Stash before checkout'):format(timestamp)
+  end
+  git_cmd(stash_cmd, p.path)
 
   git_cmd({ 'checkout', '--quiet', p.info.sha_target }, p.path)
 
@@ -668,7 +695,7 @@ end
 --- @param p vim.pack.Plug
 local function infer_update_details(p)
   p.info.update_details = ''
-  infer_states(p)
+  infer_revisions(p)
   local sha_head = assert(p.info.sha_head)
   local sha_target = assert(p.info.sha_target)
 
@@ -693,7 +720,10 @@ local function infer_update_details(p)
     return
   end
 
-  local older_tags = git_cmd({ 'tag', '--list', '--no-contains', sha_head }, p.path)
+  local older_tags = ''
+  if git_version >= vim.version.parse('2.13') then
+    older_tags = git_cmd({ 'tag', '--list', '--no-contains', sha_head }, p.path)
+  end
   local cur_tags = git_cmd({ 'tag', '--list', '--points-at', sha_head }, p.path)
   local past_tags = vim.split(older_tags, '\n')
   vim.list_extend(past_tags, vim.split(cur_tags, '\n'))
@@ -729,8 +759,9 @@ local function pack_add(plug, load)
   -- NOTE: The `:packadd` specifically seems to not handle spaces in dir name
   vim.cmd.packadd({ vim.fn.escape(plug.spec.name, ' '), bang = not load, magic = { file = false } })
 
-  -- Execute 'after/' scripts if not during startup (when they will be sourced
-  -- automatically), as `:packadd` only sources plain 'plugin/' files.
+  -- The `:packadd` only sources plain 'plugin/' files. Execute 'after/' scripts
+  -- if not during startup (when they will be sourced later, even if
+  -- `vim.pack.add` is inside user's 'plugin/')
   -- See https://github.com/vim/vim/issues/15584
   -- Deliberately do so after executing all currently known 'plugin/' files.
   if vim.v.vim_did_enter == 1 and load then
@@ -746,7 +777,7 @@ end
 --- @inlinedoc
 --- Load `plugin/` files and `ftdetect/` scripts. If `false`, works like `:packadd!`.
 --- If function, called with plugin data and is fully responsible for loading plugin.
---- Default `false` during startup and `true` afterwards.
+--- Default `false` during |init.lua| sourcing and `true` afterwards.
 --- @field load? boolean|fun(plug_data: {spec: vim.pack.Spec, path: string})
 ---
 --- @field confirm? boolean Whether to ask user to confirm initial install. Default `true`.
@@ -754,16 +785,18 @@ end
 --- Add plugin to current session
 ---
 --- - For each specification check that plugin exists on disk in |vim.pack-directory|:
----     - If exists, do nothing in this step.
+---     - If exists, check if its `src` is the same as input. If not - delete
+---       immediately to clean install from the new source. Otherwise do nothing.
 ---     - If doesn't exist, install it by downloading from `src` into `name`
----       subdirectory (via `git clone`) and update state to match `version` (via `git checkout`).
+---       subdirectory (via partial blobless `git clone`) and update revision
+---       to match `version` (via `git checkout`).
 --- - For each plugin execute |:packadd| (or customizable `load` function) making
 ---   it reachable by Nvim.
 ---
 --- Notes:
 --- - Installation is done in parallel, but waits for all to finish before
 ---   continuing next code execution.
---- - If plugin is already present on disk, there are no checks about its present state.
+--- - If plugin is already present on disk, there are no checks about its current revision.
 ---   The specified `version` can be not the one actually present on disk.
 ---   Execute |vim.pack.update()| to synchronize.
 --- - Adding plugin second and more times during single session does nothing:
@@ -774,7 +807,7 @@ end
 --- @param opts? vim.pack.keyset.add
 function M.add(specs, opts)
   vim.validate('specs', specs, vim.islist, false, 'list')
-  opts = vim.tbl_extend('force', { load = vim.v.vim_did_enter == 1, confirm = true }, opts or {})
+  opts = vim.tbl_extend('force', { load = vim.v.vim_did_init == 1, confirm = true }, opts or {})
   vim.validate('opts', opts, 'table')
 
   local plug_dir = get_plug_dir()
@@ -789,13 +822,19 @@ function M.add(specs, opts)
   local plugs_to_install = {} --- @type vim.pack.Plug[]
   local needs_lock_write = false
   for _, p in ipairs(plugs) do
-    -- TODO(echasnovski): check that lock's `src` is the same as in spec.
-    -- If not - cleanly reclone (delete directory and mark as not installed).
+    -- Allow to cleanly change `src` of an already installed plugin
+    if p.info.installed and plugin_lock.plugins[p.spec.name].src ~= p.spec.src then
+      M.del({ p.spec.name })
+      p.info.installed = false
+    end
+
+    -- Detect `version` change
     local p_lock = plugin_lock.plugins[p.spec.name] or {}
     needs_lock_write = needs_lock_write or p_lock.version ~= p.spec.version
     p_lock.version = p.spec.version
     plugin_lock.plugins[p.spec.name] = p_lock
 
+    -- Register for install
     if not p.info.installed then
       plugs_to_install[#plugs_to_install + 1] = p
       needs_lock_write = true
@@ -850,9 +889,9 @@ local function compute_feedback_lines_single(p)
 
   if p.info.sha_head == p.info.sha_target then
     parts[#parts + 1] = table.concat({
-      'Path:   ' .. p.path,
-      'Source: ' .. p.spec.src,
-      'State:  ' .. p.info.sha_target .. version_suffix,
+      'Path:     ' .. p.path,
+      'Source:   ' .. p.spec.src,
+      'Revision: ' .. p.info.sha_target .. version_suffix,
     }, '\n')
 
     if p.info.update_details ~= '' then
@@ -861,10 +900,10 @@ local function compute_feedback_lines_single(p)
     end
   else
     parts[#parts + 1] = table.concat({
-      'Path:         ' .. p.path,
-      'Source:       ' .. p.spec.src,
-      'State before: ' .. p.info.sha_head,
-      'State after:  ' .. p.info.sha_target .. version_suffix,
+      'Path:            ' .. p.path,
+      'Source:          ' .. p.spec.src,
+      'Revision before: ' .. p.info.sha_head,
+      'Revision after:  ' .. p.info.sha_target .. version_suffix,
       '',
       'Pending updates:',
       p.info.update_details,
@@ -923,7 +962,7 @@ end
 local function show_confirm_buf(lines, on_finish)
   -- Show buffer in a separate tabpage
   local bufnr = api.nvim_create_buf(true, true)
-  api.nvim_buf_set_name(bufnr, 'nvim-pack://' .. bufnr .. '/confirm-update')
+  api.nvim_buf_set_name(bufnr, 'nvim://pack-confirm#' .. bufnr)
   api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.cmd.sbuffer({ bufnr, mods = { tab = vim.fn.tabpagenr() } })
   local tab_id = api.nvim_get_current_tabpage()
@@ -996,7 +1035,7 @@ end
 --- Update plugins
 ---
 --- - Download new changes from source.
---- - Infer update info (current/target state, changelog, etc.).
+--- - Infer update info (current/target revisions, changelog, etc.).
 --- - Depending on `force`:
 ---     - If `false`, show confirmation buffer. It lists data about all set to
 ---       update plugins. Pending changes starting with `>` will be applied while
