@@ -119,7 +119,7 @@ end
 --- @field signs vim.diagnostic.Opts.Signs
 --- @field severity_sort {reverse?:boolean}
 
---- @class vim.diagnostic.Opts.Float
+--- @class vim.diagnostic.Opts.Float : vim.lsp.util.open_floating_preview.Opts
 ---
 --- Buffer number to show diagnostics from.
 --- (default: current buffer)
@@ -128,7 +128,7 @@ end
 --- Limit diagnostics to the given namespace(s).
 --- @field namespace? integer|integer[]
 ---
---- Show diagnostics from the whole buffer (`buffer"`, the current cursor line
+--- Show diagnostics from the whole buffer (`buffer`), the current cursor line
 --- (`line`), or the current cursor position (`cursor`). Shorthand versions
 --- are also accepted (`c` for `cursor`, `l` for `line`, `b` for `buffer`).
 --- (default: `line`)
@@ -183,10 +183,6 @@ end
 --- prepending it.
 --- Overrides the setting from |vim.diagnostic.config()|.
 --- @field suffix? string|table|(fun(diagnostic:vim.Diagnostic,i:integer,total:integer): string, string)
----
---- @field focus_id? string
----
---- @field border? string|string[] see |nvim_open_win()|.
 
 --- @class vim.diagnostic.Opts.Underline
 ---
@@ -1734,29 +1730,30 @@ M.handlers.underline = {
       local get_priority = severity_to_extmark_priority(vim.hl.priorities.diagnostics, opts)
 
       for _, diagnostic in ipairs(diagnostics) do
-        local higroup = underline_highlight_map[diagnostic.severity]
+        local higroups = { underline_highlight_map[diagnostic.severity] }
 
         if diagnostic._tags then
-          -- TODO(lewis6991): we should be able to stack these.
           if diagnostic._tags.unnecessary then
-            higroup = 'DiagnosticUnnecessary'
+            table.insert(higroups, 'DiagnosticUnnecessary')
           end
           if diagnostic._tags.deprecated then
-            higroup = 'DiagnosticDeprecated'
+            table.insert(higroups, 'DiagnosticDeprecated')
           end
         end
 
         local lines =
           api.nvim_buf_get_lines(diagnostic.bufnr, diagnostic.lnum, diagnostic.lnum + 1, true)
 
-        vim.hl.range(
-          bufnr,
-          underline_ns,
-          higroup,
-          { diagnostic.lnum, math.min(diagnostic.col, #lines[1] - 1) },
-          { diagnostic.end_lnum, diagnostic.end_col },
-          { priority = get_priority(diagnostic.severity) }
-        )
+        for _, higroup in ipairs(higroups) do
+          vim.hl.range(
+            bufnr,
+            underline_ns,
+            higroup,
+            { diagnostic.lnum, math.min(diagnostic.col, #lines[1] - 1) },
+            { diagnostic.end_lnum, diagnostic.end_col },
+            { priority = get_priority(diagnostic.severity) }
+          )
+        end
       end
       save_extmarks(underline_ns, bufnr)
     end)

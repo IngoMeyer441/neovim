@@ -157,10 +157,13 @@ BUILD
   for the time being.
 • Nvim can be built without Unibilium (terminfo implementation), in which case
   the user's terminfo database won't be loaded and only internal definitions
-  for the most common terminals are used. >
+  for the most common terminals are used: >
 
-  make distclean && make CMAKE_EXTRA_FLAGS="-DENABLE_UNIBILIUM=0" BUNDLED_CMAKE_FLAG="-DUSE_BUNDLED_UNIBILIUM=0"
+  make distclean && make CMAKE_EXTRA_FLAGS="-DENABLE_UNIBILIUM=0" DEPS_CMAKE_FLAGS"-DUSE_BUNDLED_UNIBILIUM=0"
 <
+• On Windows, `tee.exe` is installed with `nvim.exe` by default so that
+  commands like :make, :grep work out of the box.
+
 DEFAULTS
 
 • 'diffopt' default value now includes "indent-heuristic" and "inline:char".
@@ -264,6 +267,7 @@ LSP
 • The filter option of |vim.lsp.buf.code_action()| now receives the client ID as an argument.
 • |Client:stop()| now accepts a numerical `force` argument to be interpreted as the time to wait
   before forcing the shutdown.
+• Add cmp field to opts of |vim.lsp.completion.enable()| for custom completion ordering.
 
 LUA
 
@@ -307,6 +311,7 @@ OPTIONS
 • |g:clipboard| accepts a string name to force any builtin clipboard tool.
 • 'busy' sets a buffer "busy" status. Indicated in the default statusline.
 • 'pumborder' adds a border to the popup menu.
+• |g:clipboard| autodetection only selects tmux when running inside tmux
 
 PERFORMANCE
 
@@ -340,6 +345,7 @@ TREESITTER
 
 • |Query:iter_captures()| supports specifying starting and ending columns.
 • |:EditQuery| command gained tab-completion, works with injected languages.
+• |LanguageTree:parse()| now accepts a list of ranges.
 
 TUI
 

@@ -438,4 +438,33 @@ describe('messages2', function()
     ]])
     t.eq({ filetype = 4 }, n.eval('g:set')) -- still fires for 'filetype'
   end)
+
+  it('Search highlights only apply to pager', function()
+    screen:add_extra_attr_ids({
+      [100] = { background = Screen.colors.Blue1, foreground = Screen.colors.Red },
+      [101] = { background = Screen.colors.Red1, foreground = Screen.colors.Blue1 },
+    })
+    command('hi MsgArea guifg=Red guibg=Blue')
+    command('hi Search guifg=Blue guibg=Red')
+    command('set hlsearch shortmess+=s')
+    feed('/foo<CR>')
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      {9:E486: Pattern not found: foo}{100:                         }|
+    ]])
+    command('set cmdheight=0 | echo "foo"')
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      {1:~                                                 }{4:foo}|
+    ]])
+    feed('g<lt>')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*11
+      {3:                                                     }|
+      {101:fo^o}{100:                                                  }|
+    ]])
+  end)
 end)

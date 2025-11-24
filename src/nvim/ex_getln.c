@@ -933,6 +933,9 @@ static uint8_t *command_line_enter(int firstc, int count, int indent, bool clear
   // sure to still clean up to avoid memory corruption.
   if (cmdline_pum_active()) {
     cmdline_pum_remove(false);
+  } else {
+    // A previous cmdline_pum_remove() may have deferred redraw.
+    pum_check_clear();
   }
   wildmenu_cleanup(&ccline);
   s->did_wild_list = false;
@@ -1293,7 +1296,7 @@ static int command_line_execute(VimState *state, int key)
     } else if (s->c == K_COMMAND) {
       do_cmdline(NULL, getcmdkeycmd, NULL, DOCMD_NOWAIT);
     } else {
-      map_execute_lua(false);
+      map_execute_lua(false, false);
     }
     // If the window changed incremental search state is not valid.
     if (s->is_state.winid != curwin->handle) {
