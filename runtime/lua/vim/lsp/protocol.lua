@@ -412,8 +412,7 @@ function protocol.make_client_capabilities()
         },
         formats = { 'relative' },
         requests = {
-          -- TODO(jdrouhard): Add support for this
-          range = false,
+          range = true,
           full = { delta = true },
         },
 
@@ -560,6 +559,7 @@ function protocol.make_client_capabilities()
           valueSet = get_value_set(constants.DiagnosticTag),
         },
         dataSupport = true,
+        versionSupport = true,
       },
       callHierarchy = {
         dynamicRegistration = false,

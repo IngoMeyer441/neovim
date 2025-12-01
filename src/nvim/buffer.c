@@ -686,10 +686,14 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
     return false;
   }
 
+  bool clear_w_buf = false;
   if (win != NULL  // Avoid bogus clang warning.
       && win_valid_any_tab(win)
       && win->w_buffer == buf) {
-    win->w_buffer = NULL;  // make sure we don't use the buffer now
+    // Defer clearing w_buffer until after operations that may invoke dict
+    // watchers (e.g., buf_clear_file()), so callers like tabpagebuflist()
+    // never see a window in the winlist with a NULL buffer.
+    clear_w_buf = true;
   }
 
   // Autocommands may have opened or closed windows for this buffer.
@@ -700,6 +704,9 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
 
   // Remove the buffer from the list.
   if (wipe_buf) {
+    if (clear_w_buf) {
+      win->w_buffer = NULL;
+    }
     // Do not wipe out the buffer if it is used in a window.
     if (buf->b_nwindows > 0) {
       return true;
@@ -737,6 +744,9 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
       buf->b_p_initialized = false;
     }
     buf_clear_file(buf);
+    if (clear_w_buf) {
+      win->w_buffer = NULL;
+    }
     if (del_buf) {
       buf->b_p_bl = false;
     }
@@ -2105,7 +2115,6 @@ void free_buf_options(buf_T *buf, bool free_p_ff)
   clear_string_option(&buf->b_p_cinw);
   clear_string_option(&buf->b_p_cot);
   clear_string_option(&buf->b_p_cpt);
-  clear_string_option(&buf->b_p_ise);
   clear_string_option(&buf->b_p_cfu);
   callback_free(&buf->b_cfu_cb);
   clear_string_option(&buf->b_p_ofu);
@@ -4179,10 +4188,12 @@ void buf_set_changedtick(buf_T *const buf, const varnumber_T changedtick)
   buf->changedtick_di.di_tv.vval.v_number = changedtick;
 
   if (tv_dict_is_watched(buf->b_vars)) {
+    buf->b_locked++;
     tv_dict_watcher_notify(buf->b_vars,
                            (char *)buf->changedtick_di.di_key,
                            &buf->changedtick_di.di_tv,
                            &old_val);
+    buf->b_locked--;
   }
 }
 

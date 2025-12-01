@@ -219,11 +219,11 @@ do
       vim.lsp.buf.type_definition()
     end, { desc = 'vim.lsp.buf.type_definition()' })
 
-    vim.keymap.set('x', 'an', function()
+    vim.keymap.set({ 'x', 'o' }, 'an', function()
       vim.lsp.buf.selection_range(vim.v.count1)
     end, { desc = 'vim.lsp.buf.selection_range(vim.v.count1)' })
 
-    vim.keymap.set('x', 'in', function()
+    vim.keymap.set({ 'x', 'o' }, 'in', function()
       vim.lsp.buf.selection_range(-vim.v.count1)
     end, { desc = 'vim.lsp.buf.selection_range(-vim.v.count1)' })
 
