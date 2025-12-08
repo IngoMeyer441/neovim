@@ -2213,6 +2213,7 @@ vim.go.ei = vim.go.eventignore
 --- 	`LspProgress`,
 --- 	`LspRequest`,
 --- 	`LspTokenUpdate`,
+--- 	`MarkSet`,
 --- 	`MenuPopup`,
 --- 	`ModeChanged`,
 --- 	`OptionSet`,
@@ -4398,7 +4399,7 @@ vim.go.mmd = vim.go.maxmapdepth
 --- behaves like CTRL-C was typed.
 --- Running into the limit often means that the pattern is very
 --- inefficient or too complex.  This may already happen with the pattern
---- "\(.\)*" on a very long line.  ".*" works much better.
+--- `\(.\)*` on a very long line.  `.*` works much better.
 --- Might also happen on redraw, when syntax rules try to match a complex
 --- text structure.
 --- Vim may run out of memory before hitting the 'maxmempattern' limit, in

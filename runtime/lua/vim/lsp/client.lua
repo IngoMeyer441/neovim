@@ -72,10 +72,10 @@ local all_clients = {}
 --- Milliseconds to wait for server to exit cleanly after sending the "shutdown" request before
 --- sending kill -15. If set to false, waits indefinitely. If set to true, nvim will kill the
 --- server immediately.
---- (default: `3000`)
+--- (default: `false`)
 --- @field exit_timeout? integer|boolean
 ---
---- A table with flags for the client. The current (experimental) flags are:
+--- Experimental client flags:
 --- @field flags? vim.lsp.Client.Flags
 ---
 --- Language ID as string. Defaults to the buffer filetype.
@@ -160,10 +160,10 @@ local all_clients = {}
 --- Milliseconds to wait for server to exit cleanly after sending the "shutdown" request before
 --- sending kill -15. If set to false, waits indefinitely. If set to true, nvim will kill the
 --- server immediately.
---- (default: `3000`)
+--- (default: `false`)
 --- @field exit_timeout integer|boolean
 ---
---- A table with flags for the client. The current (experimental) flags are:
+--- Experimental client flags:
 --- @field flags vim.lsp.Client.Flags
 ---
 --- See [vim.lsp.ClientConfig].
@@ -218,6 +218,9 @@ local all_clients = {}
 ---
 --- Whether on-type formatting is enabled for this client.
 --- @field _otf_enabled boolean?
+---
+--- Timer for stop() with timeout.
+--- @field private _shutdown_timer uv.uv_timer_t?
 ---
 --- Track this so that we can escalate automatically if we've already tried a
 --- graceful shutdown
@@ -395,7 +398,7 @@ function Client.create(config)
     commands = config.commands or {},
     settings = config.settings or {},
     flags = config.flags or {},
-    exit_timeout = config.exit_timeout == nil and 3000 or config.exit_timeout --[[@as integer|boolean]],
+    exit_timeout = config.exit_timeout or false,
     get_language_id = config.get_language_id or default_get_language_id,
     capabilities = config.capabilities,
     workspace_folders = lsp._get_workspace_folders(config.workspace_folders or config.root_dir),
@@ -609,41 +612,22 @@ function Client:initialize()
   end)
 end
 
--- Server capabilities for methods that support static registration.
-local static_registration_capabilities = {
-  ['textDocument/prepareCallHierarchy'] = 'callHierarchyProvider',
-  ['textDocument/documentColor'] = 'colorProvider',
-  ['textDocument/declaration'] = 'declarationProvider',
-  ['textDocument/diagnostic'] = 'diagnosticProvider',
-  ['textDocument/foldingRange'] = 'foldingRangeProvider',
-  ['textDocument/implementation'] = 'implementationProvider',
-  ['textDocument/inlayHint'] = 'inlayHintProvider',
-  ['textDocument/inlineCompletion'] = 'inlineCompletionProvider',
-  ['textDocument/inlineValue'] = 'inlineValueProvider',
-  ['textDocument/linkedEditingRange'] = 'linkedEditingRangeProvider',
-  ['textDocument/moniker'] = 'monikerProvider',
-  ['textDocument/selectionRange'] = 'selectionRangeProvider',
-  ['textDocument/semanticTokens/full'] = 'semanticTokensProvider',
-  ['textDocument/semanticTokens/range'] = 'semanticTokensProvider',
-  ['textDocument/typeDefinition'] = 'typeDefinitionProvider',
-  ['textDocument/prepareTypeHierarchy'] = 'typeHierarchyProvider',
-}
-
 --- @private
 function Client:_process_static_registrations()
   local static_registrations = {} ---@type lsp.Registration[]
 
-  for method, capability in pairs(static_registration_capabilities) do
+  for method, capability in pairs(lsp.protocol._request_name_to_server_capability) do
     if
-      vim.tbl_get(self.server_capabilities, capability, 'id')
+      vim.tbl_get(self.server_capabilities, unpack(capability), 'id')
       --- @cast method vim.lsp.protocol.Method
       and self:_supports_registration(method)
     then
+      local cap = vim.tbl_get(self.server_capabilities, unpack(capability))
       static_registrations[#static_registrations + 1] = {
-        id = self.server_capabilities[capability].id,
+        id = cap.id,
         method = method,
         registerOptions = {
-          documentSelector = self.server_capabilities[capability].documentSelector, ---@type lsp.DocumentSelector|lsp.null
+          documentSelector = cap.documentSelector, ---@type lsp.DocumentSelector|lsp.null
         },
       }
     end
@@ -868,24 +852,27 @@ function Client:cancel_request(id)
   return self.rpc.notify('$/cancelRequest', { id = id })
 end
 
---- Stops a client, optionally with force.
+--- Stops a client, optionally with force after a timeout.
 ---
---- By default, it will just request the server to shutdown without force. If
+--- By default, it will request the server to shutdown, then force a shutdown
+--- if the server has not exited after `self.exit_timeout` milliseconds. If
 --- you request to stop a client which has previously been requested to
---- shutdown, it will automatically escalate and force shutdown.
----
---- If `force` is a number, it will be treated as the time in milliseconds to
---- wait before forcing the shutdown.
+--- shutdown, it will automatically escalate and force shutdown immediately,
+--- regardless of the value of `force` (or `self.exit_timeout` if `nil`).
 ---
 --- Note: Forcing shutdown while a server is busy writing out project or index
 --- files can lead to file corruption.
 ---
---- @param force? boolean|integer
+--- @param force? integer|boolean Time in milliseconds to wait before forcing
+---                               a shutdown. If false, only request the
+---                               server to shutdown, but don't force it. If
+---                               true, force a shutdown immediately.
+---                               (default: `self.exit_timeout`)
 function Client:stop(force)
-  if type(force) == 'number' then
-    vim.defer_fn(function()
-      self:stop(true)
-    end, force)
+  validate('force', force, { 'number', 'boolean' }, true)
+
+  if force == nil then
+    force = self.exit_timeout
   end
 
   local rpc = self.rpc
@@ -902,6 +889,13 @@ function Client:stop(force)
     return
   end
 
+  if type(force) == 'number' then
+    self._shutdown_timer = vim.defer_fn(function()
+      self._shutdown_timer = nil
+      self:stop(true)
+    end, force)
+  end
+
   -- Sending a signal after a process has exited is acceptable.
   rpc.request('shutdown', nil, function(err, _)
     if err == nil then
@@ -915,7 +909,7 @@ function Client:stop(force)
 end
 
 --- Get options for a method that is registered dynamically.
---- @param method vim.lsp.protocol.Method
+--- @param method vim.lsp.protocol.Method | vim.lsp.protocol.Method.Registration
 function Client:_supports_registration(method)
   local capability_path = lsp.protocol._request_name_to_client_capability[method] or {}
   local capability = vim.tbl_get(self.capabilities, unpack(capability_path))
@@ -989,7 +983,7 @@ function Client:_get_language_id(bufnr)
   return self.get_language_id(bufnr, vim.bo[bufnr].filetype)
 end
 
---- @param method vim.lsp.protocol.Method
+--- @param method vim.lsp.protocol.Method | vim.lsp.protocol.Method.Registration
 --- @param bufnr? integer
 --- @return lsp.Registration?
 function Client:_get_registration(method, bufnr)
@@ -1158,7 +1152,7 @@ end
 --- Always returns true for unknown off-spec methods.
 ---
 --- Note: Some language server capabilities can be file specific.
---- @param method vim.lsp.protocol.Method.ClientToServer
+--- @param method vim.lsp.protocol.Method.ClientToServer | vim.lsp.protocol.Method.Registration
 --- @param bufnr? integer
 function Client:supports_method(method, bufnr)
   -- Deprecated form
@@ -1309,6 +1303,11 @@ end
 --- @param code integer) exit code of the process
 --- @param signal integer the signal used to terminate (if any)
 function Client:_on_exit(code, signal)
+  if self._shutdown_timer and not self._shutdown_timer:is_closing() then
+    self._shutdown_timer:close()
+    self._shutdown_timer = nil
+  end
+
   vim.schedule(function()
     for bufnr in pairs(self.attached_buffers) do
       self:_on_detach(bufnr)
