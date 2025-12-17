@@ -479,6 +479,11 @@ static bool can_unload_buffer(buf_T *buf)
       }
     }
   }
+  // Don't unload the buffer while it's still being saved
+  if (can_unload && buf->b_saving) {
+    can_unload = false;
+  }
+
   if (!can_unload) {
     char *fname = buf->b_fname != NULL ? buf->b_fname : buf->b_ffname;
     semsg(_(e_attempt_to_delete_buffer_that_is_in_use_str),
@@ -2233,7 +2238,8 @@ int buflist_getfile(int n, linenr_T lnum, int options, int forceit)
 /// Go to the last known line number for the current buffer.
 static void buflist_getfpos(void)
 {
-  pos_T *fpos = &buflist_findfmark(curbuf)->mark;
+  fmark_T *fm = buflist_findfmark(curbuf);
+  const pos_T *fpos = &fm->mark;
 
   curwin->w_cursor.lnum = fpos->lnum;
   check_cursor_lnum(curwin);
@@ -2245,6 +2251,10 @@ static void buflist_getfpos(void)
     check_cursor_col(curwin);
     curwin->w_cursor.coladd = 0;
     curwin->w_set_curswant = true;
+  }
+
+  if (jop_flags & kOptJopFlagView) {
+    mark_view_restore(fm);
   }
 }
 
@@ -2826,7 +2836,7 @@ void get_winopts(buf_T *buf)
 fmark_T *buflist_findfmark(buf_T *buf)
   FUNC_ATTR_PURE
 {
-  static fmark_T no_position = { { 1, 0, 0 }, 0, 0, { 0 }, NULL };
+  static fmark_T no_position = { { 1, 0, 0 }, 0, 0, INIT_FMARKV, NULL };
 
   WinInfo *const wip = find_wininfo(buf, false, false);
   return (wip == NULL) ? &no_position : &(wip->wi_mark);

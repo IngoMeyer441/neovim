@@ -1289,7 +1289,7 @@ func Test_cmdline_complete_various()
 
   " completion for a command with a trailing command
   call feedkeys(":ls | ls\<C-A>\<C-B>\"\<CR>", 'xt')
-  call assert_equal("\"ls | ls", @:)
+  call assert_equal("\"ls | ls lsp", @:)
 
   " completion for a command with an CTRL-V escaped argument
   call feedkeys(":ls \<C-V>\<C-V>a\<C-A>\<C-B>\"\<CR>", 'xt')
@@ -2559,6 +2559,14 @@ func Test_cmdwin_insert_mode_close()
   exe "normal q:a\<C-C>let s='Hello'\<CR>"
   call assert_equal('Hello', s)
   call assert_equal(1, winnr('$'))
+endfunc
+
+func Test_cmdwin_ex_mode_with_modifier()
+  " this was accessing memory after allocated text in Ex mode
+  new
+  call setline(1, ['some', 'text', 'lines'])
+  silent! call feedkeys("gQnormal vq:atopleft\<C-V>\<CR>\<CR>", 'xt')
+  bwipe!
 endfunc
 
 " test that ";" works to find a match at the start of the first line

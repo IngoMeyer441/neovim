@@ -1106,8 +1106,8 @@ M.cmds = {
   },
   {
     command = 'helpclose',
-    flags = bit.bor(RANGE, COUNT, TRLBAR),
-    addr_type = 'ADDR_OTHER',
+    flags = TRLBAR,
+    addr_type = 'ADDR_NONE',
     func = 'ex_helpclose',
   },
   {
@@ -1669,6 +1669,12 @@ M.cmds = {
     flags = bit.bor(BANG, EXTRA, TRLBAR, CMDWIN, LOCK_OK),
     addr_type = 'ADDR_NONE',
     func = 'buflist_list',
+  },
+  {
+    command = 'lsp',
+    flags = bit.bor(NEEDARG, EXTRA),
+    addr_type = 'ADDR_NONE',
+    func = 'ex_lsp',
   },
   {
     command = 'move',

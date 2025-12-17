@@ -27,7 +27,6 @@ Follow these steps to get LSP features:
 1. Install language servers using your package manager or by following the
    upstream installation instructions. You can find language servers here:
    https://microsoft.github.io/language-server-protocol/implementors/servers/
-
 2. Define a new config |lsp-new-config| (or install https://github.com/neovim/nvim-lspconfig).
    Example: >lua
      vim.lsp.config['lua_ls'] = {
@@ -49,18 +48,14 @@ Follow these steps to get LSP features:
          }
        }
      }
-
 3. Use |vim.lsp.enable()| to enable the config.
    Example: >lua
      vim.lsp.enable('lua_ls')
-<
 4. Open a code file matching one of the `filetypes` specified in the config.
    Note: Depending on the LSP server, you may need to ensure your project has
    a |lsp-root_markers| file so the workspace can be recognized.
-
 5. Check that LSP is active ("attached") for the buffer: >vim
-    :checkhealth vim.lsp
-<
+     :checkhealth vim.lsp
 6. (Optional) Configure keymaps and autocommands to use LSP features.
    |lsp-attach|
 
@@ -121,6 +116,29 @@ To remove or override BUFFER-LOCAL defaults, define a |LspAttach| handler: >lua
       end,
     })
 <
+==============================================================================
+COMMANDS                                                    *:lsp*
+
+:lsp enable {name}?                                       *:lsp-enable*
+    Enables the given lsp clients. If no names are given, all clients
+    configured with |vim.lsp.config()| with a filetype matching the current
+    buffer's filetype are enabled. Use |vim.lsp.enable()| for non-interactive
+    use.
+
+:lsp disable {name}?                                      *:lsp-disable*
+    Disables (and stops) the given lsp clients. If no names are given,
+    all clients attached to the current buffer are disabled. Use
+    |vim.lsp.enable()| with `enable=false` for non-interactive use.
+
+:lsp restart {client}?                                    *:lsp-restart*
+    Restarts the given lsp clients. If no client names are given, all active
+    clients attached to the current buffer are restarted.
+
+:lsp stop {client}?                                       *:lsp-stop*
+    Stops the given lsp clients. If no client names are given, all active
+    clients attached to the current buffer are stopped. Use |Client:stop()|
+    for non-interactive use.
+
 ==============================================================================
 CONFIG                                                  *lsp-config*
 
@@ -1026,12 +1044,6 @@ enable({name}, {enable})                                    *vim.lsp.enable()*
     Examples: >lua
         vim.lsp.enable('clangd')
         vim.lsp.enable({'lua_ls', 'pyright'})
-<
-
-    Example: *lsp-restart* Passing `false` stops and detaches the client(s).
-    Thus you can "restart" LSP by disabling and re-enabling a given config: >lua
-        vim.lsp.enable('clangd', false)
-        vim.lsp.enable('clangd', true)
 <
 
     Example: To dynamically decide whether LSP is activated, define a

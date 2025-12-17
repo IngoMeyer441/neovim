@@ -1052,8 +1052,11 @@ char *msg_may_trunc(bool force, char *s)
     return s;
   }
 
+  // If something unexpected happened "room" may be negative, check for that
+  // just in case.
   int room = (Rows - cmdline_row - 1) * Columns + sc_col - 1;
-  if ((force || (shortmess(SHM_TRUNC) && !exmode_active))
+  if (room > 0
+      && (force || (shortmess(SHM_TRUNC) && !exmode_active))
       && (int)strlen(s) - room > 0) {
     int size = vim_strsize(s);
 
@@ -1394,6 +1397,11 @@ void wait_return(int redraw)
     msg_puts(" ");              // make sure the cursor is on the right line
     c = CAR;                    // no need for a return in ex mode
     got_int = false;
+  } else if (!stuff_empty()) {
+    // When there are stuffed characters, the next stuffed character will
+    // dismiss the hit-enter prompt immediately and have to be put back, so
+    // instead just don't show the hit-enter prompt at all.
+    c = CAR;
   } else {
     State = MODE_HITRETURN;
     setmouse();
@@ -1485,7 +1493,7 @@ void wait_return(int redraw)
       if (c == K_LEFTMOUSE || c == K_MIDDLEMOUSE || c == K_RIGHTMOUSE
           || c == K_X1MOUSE || c == K_X2MOUSE) {
         jump_to_mouse(MOUSE_SETPOS, NULL, 0);
-      } else if (vim_strchr("\r\n ", c) == NULL && c != Ctrl_C) {
+      } else if (vim_strchr("\r\n ", c) == NULL && c != Ctrl_C && c != 'q') {
         // Put the character back in the typeahead buffer.  Don't use the
         // stuff buffer, because lmaps wouldn't work.
         ins_char_typebuf(vgetc_char, vgetc_mod_mask, true);
@@ -2862,9 +2870,10 @@ static msgchunk_T *disp_sb_line(int row, msgchunk_T *smp)
 /// @return  true when messages should be printed to stdout/stderr:
 ///          - "batch mode" ("silent mode", -es/-Es/-l)
 ///          - no UI and not embedded
+///          - no ext_messages
 int msg_use_printf(void)
 {
-  return !embedded_mode && !ui_active();
+  return !embedded_mode && !ui_active() && !ui_has(kUIMessages);
 }
 
 /// Print a message when there is no valid screen.
@@ -3517,13 +3526,16 @@ int verbose_open(void)
 
 /// Give a warning message (for searching).
 /// Use 'w' highlighting and may repeat the message after redrawing
-void give_warning(const char *message, bool hl)
+void give_warning(const char *message, bool hl, bool hist)
   FUNC_ATTR_NONNULL_ARG(1)
 {
   // Don't do this for ":silent".
   if (msg_silent != 0) {
     return;
   }
+
+  bool save_msg_hist_off = msg_hist_off;
+  msg_hist_off = !hist;
 
   // Don't want a hit-enter prompt here.
   no_wait_return++;
@@ -3548,6 +3560,7 @@ void give_warning(const char *message, bool hl)
   msg_col = 0;
 
   no_wait_return--;
+  msg_hist_off = save_msg_hist_off;
 }
 
 /// Shows a warning, with optional highlighting.
@@ -3566,7 +3579,7 @@ void swmsg(bool hl, const char *const fmt, ...)
   vim_vsnprintf(IObuff, IOSIZE, fmt, args);
   va_end(args);
 
-  give_warning(IObuff, hl);
+  give_warning(IObuff, hl, true);
 }
 
 /// Advance msg cursor to column "col".

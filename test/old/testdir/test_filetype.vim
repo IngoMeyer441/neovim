@@ -575,6 +575,7 @@ func s:GetFilenameChecks() abort
     \ 'ninja': ['file.ninja'],
     \ 'nix': ['file.nix'],
     \ 'norg': ['file.norg'],
+    \ 'nq': ['file.nq'],
     \ 'nqc': ['file.nqc'],
     \ 'nroff': ['file.tr', 'file.nr', 'file.roff', 'file.tmac', 'tmac.file'],
     \ 'nsis': ['file.nsi', 'file.nsh'],
@@ -3201,6 +3202,36 @@ func Test_m4_format()
   bwipe!
 
   cd -
+  filetype off
+endfunc
+
+" Erlang Application Resource File
+func Test_app_file()
+  filetype on
+
+  call writefile(['% line comment', '{application, xfile1,'], 'xfile1.app', 'D')
+  split xfile1.app
+  call assert_equal('erlang', &filetype)
+  bwipe!
+
+  call writefile(['% line comment', "{application, 'Xfile2',"], 'Xfile2.app', 'D')
+  split Xfile2.app
+  call assert_equal('erlang', &filetype)
+  bwipe!
+
+  call writefile([' % line comment',
+        \ ' ',
+        \ ' % line comment',
+        \ ' { ',
+        \ ' % line comment ',
+        \ ' application , ',
+        \ ' % line comment ',
+        \ ' xfile3 , '],
+        \ 'xfile3.app', 'D')
+  split xfile3.app
+  call assert_equal('erlang', &filetype)
+  bwipe!
+
   filetype off
 endfunc
 
