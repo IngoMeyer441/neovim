@@ -1046,11 +1046,20 @@ static void mb_adjust_opend(oparg_T *oap)
   }
 }
 
-/// Put character 'c' at position 'lp'
-static inline void pbyte(pos_T lp, int c)
+/// put byte 'c' at position 'lp', but
+/// verify, that the position to place
+/// is actually safe
+static void pbyte(pos_T lp, int c)
 {
   assert(c <= UCHAR_MAX);
-  *(ml_get_buf_mut(curbuf, lp.lnum) + lp.col) = (char)c;
+  char *p = ml_get_buf_mut(curbuf, lp.lnum);
+  colnr_T len = curbuf->b_ml.ml_line_textlen;
+
+  // safety check
+  if (lp.col >= len) {
+    lp.col = (len > 1 ? len - 2 : 0);
+  }
+  *(p + lp.col) = (char)c;
   if (!curbuf_splice_pending) {
     extmark_splice_cols(curbuf, (int)lp.lnum - 1, lp.col, 1, 1, kExtmarkUndo);
   }
@@ -1784,6 +1793,7 @@ void adjust_cursor_eol(void)
   const bool adj_cursor = (curwin->w_cursor.col > 0
                            && gchar_cursor() == NUL
                            && (cur_ve_flags & kOptVeFlagOnemore) == 0
+                           && (cur_ve_flags & kOptVeFlagAll) == 0
                            && !(restart_edit || (State & MODE_INSERT)));
   if (!adj_cursor) {
     return;
@@ -1865,7 +1875,7 @@ char *skip_comment(char *line, bool process, bool include_space, bool *is_commen
   return line;
 }
 
-/// @param count              number of lines (minimal 2) to join at cursor position.
+/// @param count              number of lines (minimal 2) to join at the cursor position.
 /// @param save_undo          when true, save lines for undo first.
 /// @param use_formatoptions  set to false when e.g. processing backspace and comment
 ///                           leaders should not be removed.
@@ -2068,7 +2078,7 @@ theend:
 
 /// Reset 'linebreak' and take care of side effects.
 /// @return  the previous value, to be passed to restore_lbr().
-static bool reset_lbr(void)
+bool reset_lbr(void)
 {
   if (!curwin->w_p_lbr) {
     return false;
@@ -2080,7 +2090,7 @@ static bool reset_lbr(void)
 }
 
 /// Restore 'linebreak' and take care of side effects.
-static void restore_lbr(bool lbr_saved)
+void restore_lbr(bool lbr_saved)
 {
   if (curwin->w_p_lbr || !lbr_saved) {
     return;

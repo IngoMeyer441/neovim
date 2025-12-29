@@ -3002,12 +3002,16 @@ vim.go.fp = vim.go.formatprg
 --- - system signals low battery life
 --- - Nvim exits abnormally
 ---
+--- This is a `global-local` option, so it can be set per buffer, for
+--- example when writing to a slow filesystem.
 --- This option cannot be set from a `modeline` or in the `sandbox`, for
 --- security reasons.
 ---
 --- @type boolean
 vim.o.fsync = true
 vim.o.fs = vim.o.fsync
+vim.bo.fsync = vim.o.fsync
+vim.bo.fs = vim.bo.fsync
 vim.go.fsync = vim.o.fsync
 vim.go.fs = vim.go.fsync
 
@@ -4385,7 +4389,8 @@ vim.go.mmp = vim.go.maxmempattern
 --- When the number of matches exceeds this value, Vim shows ">" instead
 --- of the exact count to keep searching fast.
 --- Note: larger values may impact performance.
---- The value must be between 1 and 9999.
+--- The value must be between 1 and 9999.  See also the `searchcount()`
+--- function.
 ---
 --- @type integer
 vim.o.maxsearchcount = 999
@@ -6073,7 +6078,8 @@ vim.bo.sw = vim.bo.shiftwidth
 --- 	"search hit TOP, continuing at BOTTOM" messages are only
 --- 	indicated by a "W" (Mnemonic: Wrapped) letter before the
 --- 	search count statistics.  The maximum limit can be set with
---- 	the 'maxsearchcount' option.
+--- 	the 'maxsearchcount' option, see also `searchcount()`
+--- 	function.
 ---
 --- This gives you the opportunity to avoid that a change between buffers
 --- requires you to hit <Enter>, but still gives as useful a message as

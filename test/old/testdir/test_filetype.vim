@@ -141,7 +141,8 @@ func s:GetFilenameChecks() abort
     \ 'bdf': ['file.bdf'],
     \ 'beancount': ['file.beancount'],
     \ 'bib': ['file.bib'],
-    \ 'bicep': ['file.bicep', 'file.bicepparam'],
+    \ 'bicep': ['file.bicep'],
+    \ 'bicep-params': ['file.bicepparam'],
     \ 'bindzone': ['named.root', '/bind/db.file', '/named/db.file', 'any/bind/db.file', 'any/named/db.file', 'foobar.zone'],
     \ 'bitbake': ['file.bb', 'file.bbappend', 'file.bbclass', 'build/conf/local.conf', 'meta/conf/layer.conf', 'build/conf/bbappend.conf', 'meta-layer/conf/distro/foo.conf', 'project-spec/configs/zynqmp-generic-xczu7ev.conf'],
     \ 'blade': ['file.blade.php'],
@@ -298,6 +299,7 @@ func s:GetFilenameChecks() abort
     \ 'firrtl': ['file.fir'],
     \ 'fish': ['file.fish'],
     \ 'flix': ['file.flix'],
+    \ 'fluent': ['file.ftl'],
     \ 'focexec': ['file.fex', 'file.focexec'],
     \ 'form': ['file.frm'],
     \ 'forth': ['file.ft', 'file.fth', 'file.4th'],
@@ -380,6 +382,7 @@ func s:GetFilenameChecks() abort
     \ 'http': ['file.http'],
     \ 'hurl': ['file.hurl'],
     \ 'hy': ['file.hy', '.hy-history'],
+    \ 'hylo': ['file.hylo'],
     \ 'hyprlang': ['hyprlock.conf', 'hyprland.conf', 'hypridle.conf', 'hyprpaper.conf', '/hypr/foo.conf'],
     \ 'i3config': ['/home/user/.i3/config', '/home/user/.config/i3/config', '/etc/i3/config', '/etc/xdg/i3/config'],
     \ 'ibasic': ['file.iba', 'file.ibi'],
@@ -1089,6 +1092,7 @@ func s:GetScriptChecks() abort
       \          ['#!/path/regina']],
       \ 'janet':  [['#!/path/janet']],
       \ 'dart':   [['#!/path/dart']],
+      \ 'bpftrace':  [['#!/path/bpftrace']],
       \ 'vim':   [['#!/path/vim']],
       \ }
 endfunc
@@ -3189,9 +3193,9 @@ endfunc
 func Test_m4_format()
   filetype on
 
-  call mkdir('Xm4', 'D')
+  call mkdir('Xm4', 'R')
   cd Xm4
-  call writefile([''], 'alocal.m4', 'D')
+  call writefile([''], 'alocal.m4')
   split alocal.m4
   call assert_equal('m4', &filetype)
   bwipe!
