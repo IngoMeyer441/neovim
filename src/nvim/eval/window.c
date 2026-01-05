@@ -29,6 +29,7 @@
 #include "nvim/option_vars.h"
 #include "nvim/os/fs.h"
 #include "nvim/pos_defs.h"
+#include "nvim/strings.h"
 #include "nvim/types_defs.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
@@ -328,7 +329,7 @@ static dict_T *get_win_info(win_T *wp, int16_t tpnr, int16_t winnr)
   dict_T *const dict = tv_dict_alloc();
 
   // make sure w_botline is valid
-  validate_botline(wp);
+  validate_botline_win(wp);
 
   tv_dict_add_nr(dict, S_LEN("tabnr"), tpnr);
   tv_dict_add_nr(dict, S_LEN("winnr"), winnr);
@@ -854,12 +855,12 @@ void f_winrestcmd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       if (!win_has_winnr(wp, curtab)) {
         continue;
       }
-      snprintf(buf, sizeof(buf), "%dresize %d|", winnr,
-               wp->w_height);
-      ga_concat(&ga, buf);
-      snprintf(buf, sizeof(buf), "vert %dresize %d|", winnr,
-               wp->w_width);
-      ga_concat(&ga, buf);
+      size_t buflen = vim_snprintf_safelen(buf, sizeof(buf),
+                                           "%dresize %d|", winnr, wp->w_height);
+      ga_concat_len(&ga, buf, buflen);
+      buflen = vim_snprintf_safelen(buf, sizeof(buf),
+                                    "vert %dresize %d|", winnr, wp->w_width);
+      ga_concat_len(&ga, buf, buflen);
       winnr++;
     }
   }
