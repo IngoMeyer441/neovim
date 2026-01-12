@@ -2104,10 +2104,12 @@ void do_wqall(exarg_T *eap)
   }
 
   FOR_ALL_BUFFERS(buf) {
-    if (exiting
+    if (exiting && !eap->forceit
         && buf->terminal
+        // TODO(zeertzjq): this always returns false for nvim_open_term() terminals.
+        // Use terminal_running() instead?
         && channel_job_running((uint64_t)buf->b_p_channel)) {
-      no_write_message_nobang(buf);
+      no_write_message_buf(buf);
       error++;
     } else if (!bufIsChanged(buf) || bt_dontwrite(buf)) {
       continue;
@@ -2599,7 +2601,10 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
         // oldwin->w_buffer to NULL.
         u_sync(false);
         const bool did_decrement
-          = close_buffer(oldwin, curbuf, (flags & ECMD_HIDE) || curbuf->terminal ? 0 : DOBUF_UNLOAD,
+          = close_buffer(oldwin, curbuf,
+                         (flags & ECMD_HIDE)
+                         || (curbuf->terminal && terminal_running(curbuf->terminal))
+                         ? 0 : DOBUF_UNLOAD,
                          false, false);
 
         // Autocommands may have closed the window.

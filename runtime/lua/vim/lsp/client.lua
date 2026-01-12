@@ -22,9 +22,8 @@ local all_clients = {}
 --- @field allow_incremental_sync? boolean
 ---
 --- Debounce `didChange` notifications to the server by the given number in milliseconds.
---- No debounce occurs if `nil`.
 --- (default: `150`)
---- @field debounce_text_changes integer
+--- @field debounce_text_changes? integer
 
 --- @class vim.lsp.ClientConfig
 ---
@@ -942,7 +941,7 @@ function Client:_supports_registration(method)
   return type(capability) == 'table' and capability.dynamicRegistration
 end
 
---- Get provider for a method to be registered dyanamically.
+--- Get provider for a method to be registered dynamically.
 --- @param method vim.lsp.protocol.Method | vim.lsp.protocol.Method.Registration
 function Client:_registration_provider(method)
   local capability_path = lsp.protocol._request_name_to_server_capability[method]

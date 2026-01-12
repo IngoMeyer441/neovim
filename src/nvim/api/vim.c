@@ -65,6 +65,7 @@
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/unpacker.h"
+#include "nvim/normal.h"
 #include "nvim/option.h"
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
@@ -232,7 +233,7 @@ void nvim_set_hl_ns(Integer ns_id, Error *err)
 
 /// Set active namespace for highlights defined with |nvim_set_hl()| while redrawing.
 ///
-/// This function meant to be called while redrawing, primarily from
+/// This function is meant to be called while redrawing, primarily from
 /// |nvim_set_decoration_provider()| on_win and on_line callbacks, which
 /// are allowed to change the namespace during a redraw cycle.
 ///
@@ -975,6 +976,9 @@ void nvim_set_current_win(Window window, Error *err)
   }
 
   TRY_WRAP(err, {
+    if (win->w_buffer != curbuf) {
+      reset_VIsual_and_resel();
+    }
     goto_tabpage_win(win_find_tabpage(win), win);
   });
 }
@@ -1107,6 +1111,17 @@ Integer nvim_open_term(Buffer buffer, Dict(open_term) *opts, Error *err)
     return 0;
   }
 
+  bool may_read_buffer = true;
+  if (buf->terminal) {
+    if (terminal_running(buf->terminal)) {
+      api_set_error(err, kErrorTypeException,
+                    "Terminal already connected to buffer %d", buf->handle);
+      return 0;
+    }
+    buf_close_terminal(buf);
+    may_read_buffer = false;
+  }
+
   LuaRef cb = LUA_NOREF;
   if (HAS_KEY(opts, open_term, on_input)) {
     cb = opts->on_input;
@@ -1130,7 +1145,9 @@ Integer nvim_open_term(Buffer buffer, Dict(open_term) *opts, Error *err)
 
   // Read existing buffer contents (if any)
   StringBuilder contents = KV_INITIAL_VALUE;
-  read_buffer_into(buf, 1, buf->b_ml.ml_line_count, &contents);
+  if (may_read_buffer) {
+    read_buffer_into(buf, 1, buf->b_ml.ml_line_count, &contents);
+  }
 
   channel_incref(chan);
   terminal_open(&chan->term, buf, topts);

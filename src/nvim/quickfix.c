@@ -4327,6 +4327,7 @@ static list_T *call_qftf_func(qf_list_T *qfl, int qf_winid, int start_idx, int e
     args[0].v_type = VAR_DICT;
     args[0].vval.v_dict = dict;
 
+    textlock++;
     if (callback_call(cb, 1, args, &rettv)) {
       if (rettv.v_type == VAR_LIST) {
         qftf_list = rettv.vval.v_list;
@@ -4334,6 +4335,7 @@ static list_T *call_qftf_func(qf_list_T *qfl, int qf_winid, int start_idx, int e
       }
       tv_clear(&rettv);
     }
+    textlock--;
     tv_dict_unref(dict);
   }
 
@@ -6622,7 +6624,7 @@ static int qf_add_entry_from_dict(qf_list_T *qfl, dict_T *d, bool first_entry, b
   if (bufnum != 0 && (buflist_findnr(bufnum) == NULL)) {
     if (!did_bufnr_emsg) {
       did_bufnr_emsg = true;
-      semsg(_("E92: Buffer %" PRId64 " not found"), (int64_t)bufnum);
+      semsg(_("E92: Buffer %d not found"), bufnum);
     }
     valid = false;
     bufnum = 0;

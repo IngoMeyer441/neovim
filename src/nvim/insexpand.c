@@ -6187,11 +6187,17 @@ int ins_complete(int c, bool enable_pum)
   compl_curr_buf = curwin->w_buffer;
   compl_shown_match = compl_curr_match;
   compl_shows_dir = compl_direction;
+  compl_num_bests = 0;
 
   // Find next match (and following matches).
   int save_w_wrow = curwin->w_wrow;
   int save_w_leftcol = curwin->w_leftcol;
   int n = ins_compl_next(true, ins_compl_key2count(c), insert_match);
+
+  // Reset autocompletion timer expiry flag
+  if (compl_autocomplete) {
+    compl_time_slice_expired = false;
+  }
 
   if (n > 1) {          // all matches have been found
     compl_matches = n;
