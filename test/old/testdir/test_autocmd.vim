@@ -276,7 +276,9 @@ endfunc
 func Test_win_tab_autocmd()
   let g:record = []
 
+  defer CleanUpTestAuGroup()
   augroup testing
+    au WinNewPre * call add(g:record, 'WinNewPre')
     au WinNew * call add(g:record, 'WinNew')
     au WinClosed * call add(g:record, 'WinClosed')
     au WinEnter * call add(g:record, 'WinEnter')
@@ -293,7 +295,7 @@ func Test_win_tab_autocmd()
   close
 
   call assert_equal([
-	\ 'WinLeave', 'WinNew', 'WinEnter',
+	\ 'WinNewPre', 'WinLeave', 'WinNew', 'WinEnter',
 	\ 'WinLeave', 'TabLeave', 'WinNew', 'WinEnter', 'TabNew', 'TabEnter',
 	\ 'WinLeave', 'TabLeave', 'WinClosed', 'TabClosed', 'WinEnter', 'TabEnter',
 	\ 'WinLeave', 'WinClosed', 'WinEnter'
@@ -310,10 +312,81 @@ func Test_win_tab_autocmd()
 	\ 'WinClosed', 'TabClosed'
 	\ ], g:record)
 
+  let g:record = []
+  copen
+  help
+  tabnext
+  vnew
+
+  call assert_equal([
+	\ 'WinNewPre', 'WinLeave', 'WinNew', 'WinEnter',
+	\ 'WinNewPre', 'WinLeave', 'WinNew', 'WinEnter',
+	\ 'WinNewPre', 'WinLeave', 'WinNew', 'WinEnter'
+	\ ], g:record)
+
+  unlet g:record
+endfunc
+
+func Test_WinNewPre()
+  " Test that the old window layout can be accessed before a new window is created.
+  let g:layouts_pre = []
+  let g:layouts_post = []
+  augroup testing
+    au WinNewPre * call add(g:layouts_pre, winlayout())
+    au WinNew * call add(g:layouts_post, winlayout())
+  augroup END
+  defer CleanUpTestAuGroup()
+  split
+  call assert_notequal(g:layouts_pre[0], g:layouts_post[0])
+  split
+  call assert_equal(g:layouts_pre[1], g:layouts_post[0])
+  call assert_notequal(g:layouts_pre[1], g:layouts_post[1])
+  " not triggered for tabnew
+  tabnew
+  call assert_equal(2, len(g:layouts_pre))
+  unlet g:layouts_pre
+  unlet g:layouts_post
+
+  " Test modifying window layout during WinNewPre throws.
+  let g:caught = 0
   augroup testing
     au!
+    au WinNewPre * split
   augroup END
-  unlet g:record
+  try
+    vnew
+  catch
+    let g:caught += 1
+  endtry
+  augroup testing
+    au!
+    au WinNewPre * tabnew
+  augroup END
+  try
+    vnew
+  catch
+    let g:caught += 1
+  endtry
+  augroup testing
+    au!
+    au WinNewPre * close
+  augroup END
+  try
+    vnew
+  catch
+    let g:caught += 1
+  endtry
+  augroup testing
+    au!
+    au WinNewPre * tabclose
+  augroup END
+  try
+    vnew
+  catch
+    let g:caught += 1
+  endtry
+  call assert_equal(4, g:caught)
+  unlet g:caught
 endfunc
 
 func Test_WinResized()
@@ -789,6 +862,46 @@ func Test_BufUnload_close_other()
   call Run_test_BufUnload_close_other('setlocal bufhidden=wipe')
 endfunc
 
+func Run_test_BufUnload_tabonly(first_cmd)
+  exe a:first_cmd
+  tabnew Xa
+  setlocal bufhidden=wipe
+  tabprevious
+  autocmd BufWinLeave Xa ++once tabnext
+  autocmd BufUnload Xa ++once tabonly
+  tabonly
+
+  %bwipe!
+endfunc
+
+func Test_BufUnload_tabonly()
+  " This used to dereference a NULL curbuf.
+  call Run_test_BufUnload_tabonly('setlocal bufhidden=hide')
+  " This used to dereference a NULL firstbuf.
+  call Run_test_BufUnload_tabonly('setlocal bufhidden=wipe')
+endfunc
+
+func Run_test_BufUnload_tabonly_nested(second_autocmd)
+  file Xa
+  tabnew Xb
+  setlocal bufhidden=wipe
+  tabnew Xc
+  setlocal bufhidden=wipe
+  autocmd BufUnload Xb ++once ++nested bwipe! Xa
+  exe $'autocmd BufUnload Xa ++once ++nested {a:second_autocmd}'
+  autocmd BufWinLeave Xc ++once tabnext
+  tabfirst
+  2tabclose
+
+  %bwipe!
+endfunc
+
+func Test_BufUnload_tabonly_nested()
+  " These used to cause heap-use-after-free.
+  call Run_test_BufUnload_tabonly_nested('tabonly')
+  call Run_test_BufUnload_tabonly_nested('tabonly | tabprevious')
+endfunc
+
 func s:AddAnAutocmd()
   augroup vimBarTest
     au BufReadCmd * echo 'hello'
@@ -1010,6 +1123,14 @@ func Test_BufEnter()
     bwipe!
     au! BufEnter
   endfor
+
+  new
+  new
+  autocmd BufEnter * ++once close
+  call assert_fails('close', 'E1312:')
+
+  au! BufEnter
+  only
 endfunc
 
 " Closing a window might cause an endless loop
@@ -2268,7 +2389,7 @@ func Test_bufunload_all()
     endfunc
     au BufUnload * call UnloadAllBufs()
     au VimLeave * call writefile(['Test Finished'], 'Xout')
-    set nohidden
+    set nohidden  " Accommodate Nvim default
     edit Xxx1
     split Xxx2
     q
@@ -2820,7 +2941,8 @@ endfunc
 
 func Test_autocmd_nested()
   let g:did_nested = 0
-  augroup Testing
+  defer CleanUpTestAuGroup()
+  augroup testing
     au WinNew * edit somefile
     au BufNew * let g:did_nested = 1
   augroup END
@@ -2830,7 +2952,7 @@ func Test_autocmd_nested()
   bwipe! somefile
 
   " old nested argument still works
-  augroup Testing
+  augroup testing
     au!
     au WinNew * nested edit somefile
     au BufNew * let g:did_nested = 1
@@ -4377,6 +4499,38 @@ func Test_BufEnter_botline()
   au! BufEnter Xxx1
   set hidden&vim
 endfunc
+
+" those commands caused null pointer access, see #15464
+func Test_WinNewPre_crash()
+  defer CleanUpTestAuGroup()
+  let _cmdheight=&cmdheight
+  augroup testing
+    au!
+    autocmd WinNewPre * redraw
+  augroup END
+  tabnew
+  tabclose
+  augroup testing
+    au!
+    autocmd WinNewPre * wincmd t
+  augroup END
+  tabnew
+  tabclose
+  augroup testing
+    au!
+    autocmd WinNewPre * wincmd b
+  augroup END
+  tabnew
+  tabclose
+  augroup testing
+    au!
+    autocmd WinNewPre * set cmdheight+=1
+  augroup END
+  tabnew
+  tabclose
+  let &cmdheight=_cmdheight
+endfunc
+
 
 " This was using freed memory
 func Test_autocmd_BufWinLeave_with_vsp()

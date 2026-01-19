@@ -116,6 +116,17 @@
 
 #include "buffer.c.generated.h"
 
+#ifdef ABORT_ON_INTERNAL_ERROR
+# define CHECK_CURBUF \
+  do { \
+    if (curwin != NULL && curwin->w_buffer != curbuf) { \
+      iemsg("curbuf != curwin->w_buffer"); \
+    } \
+  } while (0)
+#else
+# define CHECK_CURBUF do {} while (0)
+#endif
+
 static const char e_attempt_to_delete_buffer_that_is_in_use_str[]
   = N_("E937: Attempt to delete a buffer that is in use: %s");
 
@@ -128,6 +139,19 @@ typedef enum {
   kBffClearWinInfo = 1,
   kBffInitChangedtick = 2,
 } BufFreeFlags;
+
+static void trigger_undo_ftplugin(buf_T *buf, win_T *win)
+{
+  const bool win_was_locked = win->w_locked;
+  window_layout_lock();
+  buf->b_locked++;
+  win->w_locked = true;
+  // b:undo_ftplugin may be set, undo it
+  do_cmdline_cmd("if exists('b:undo_ftplugin') | exe b:undo_ftplugin | endif");
+  buf->b_locked--;
+  win->w_locked = win_was_locked;
+  window_layout_unlock();
+}
 
 /// Calculate the percentage that `part` is of the `whole`.
 int calc_percentage(int64_t part, int64_t whole)
@@ -531,6 +555,8 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
   win_T *the_curwin = curwin;
   tabpage_T *the_curtab = curtab;
 
+  CHECK_CURBUF;
+
   // Force unloading or deleting when 'bufhidden' says so, but not for terminal
   // buffers.
   // The caller must take care of NOT deleting/freeing when 'bufhidden' is
@@ -705,13 +731,21 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
 
   // Autocommands may have opened or closed windows for this buffer.
   // Decrement the count for the close we do here.
-  if (buf->b_nwindows > 0) {
+  // Don't decrement b_nwindows if the buffer wasn't displayed in any window
+  // before calling buf_freeall().
+  if (nwindows > 0 && buf->b_nwindows > 0) {
     buf->b_nwindows--;
   }
 
   // Remove the buffer from the list.
-  // Do not wipe out the buffer if it is used in a window.
-  if (wipe_buf && buf->b_nwindows <= 0) {
+  // Do not wipe out the buffer if it is used in a window, or if autocommands
+  // wiped out all other buffers (unless when inside free_all_mem() where all
+  // buffers need to be freed and autocommands are blocked).
+  if (wipe_buf && buf->b_nwindows <= 0 && (buf->b_prev != NULL || buf->b_next != NULL
+#if defined(EXITFREE)
+                                           || entered_free_all_mem
+#endif
+                                           )) {
     if (clear_w_buf) {
       win->w_buffer = NULL;
     }
@@ -917,6 +951,9 @@ static void free_buffer(buf_T *buf)
     au_pending_free_buf = buf;
   } else {
     xfree(buf);
+    if (curbuf == buf) {
+      curbuf = NULL;  // make clear it's not to be used
+    }
   }
 }
 
@@ -1945,6 +1982,7 @@ buf_T *buflist_new(char *ffname_arg, char *sfname_arg, linenr_T lnum, int flags)
     assert(curbuf != NULL);
     buf = curbuf;
     set_bufref(&bufref, buf);
+    trigger_undo_ftplugin(buf, curwin);
     // It's like this buffer is deleted.  Watch out for autocommands that
     // change curbuf!  If that happens, allocate a new buffer anyway.
     buf_freeall(buf, BFA_WIPE | BFA_DEL);
@@ -4127,10 +4165,7 @@ bool buf_contents_changed(buf_T *buf)
   return differ;
 }
 
-/// Wipe out a buffer and decrement the last buffer number if it was used for
-/// this buffer.  Call this to wipe out a temp buffer that does not contain any
-/// marks.
-///
+/// Wipe out a (typically temporary) buffer.
 /// @param aucmd  When true trigger autocommands.
 void wipe_buffer(buf_T *buf, bool aucmd)
 {

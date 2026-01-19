@@ -883,6 +883,7 @@ func s:GetFilenameChecks() abort
     \ 'tf': ['file.tf', '.tfrc', 'tfrc'],
     \ 'thrift': ['file.thrift'],
     \ 'tidy': ['.tidyrc', 'tidyrc', 'tidy.conf'],
+    \ 'tiger': ['file.tig'],
     \ 'tilde': ['file.t.html'],
     \ 'tla': ['file.tla'],
     \ 'tli': ['file.tli'],
@@ -1194,6 +1195,34 @@ func Test_filetype_indent_off()
   call assert_equal(['filetype detection:ON  plugin:OFF  indent:OFF'],
         \ execute('filetype')->split("\n"))
   close
+endfunc
+
+func Test_undo_ftplugin_on_buffer_reuse()
+  filetype on
+
+  new
+  let b:undo_ftplugin = ":let g:var='exists'"
+  let g:bufnr = bufnr('%')
+  " no changes done to the buffer, so the buffer will be re-used
+  e $VIMRUNTIME/defaults.vim
+  call assert_equal(g:bufnr, bufnr('%'))
+  call assert_equal('exists', get(g:, 'var', 'fail'))
+  unlet! g:bufnr g:var
+
+  " try to wipe the buffer
+  enew
+  bw defaults.vim
+  let b:undo_ftplugin = ':bw'
+  call assert_fails(':e $VIMRUNTIME/defaults.vim', 'E937:')
+
+  " try to split the window
+  enew
+  bw defaults.vim
+  let b:undo_ftplugin = ':sp $VIMRUNTIME/defaults.vim'
+  call assert_fails(':e $VIMRUNTIME/defaults.vim', 'E242:')
+
+  bwipe!
+  filetype off
 endfunc
 
 """""""""""""""""""""""""""""""""""""""""""""""""

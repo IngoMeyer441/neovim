@@ -108,6 +108,52 @@ static char *m_onlyone = N_("Already only one window");
 /// autocommands mess up the window structure.
 static int split_disallowed = 0;
 
+/// When non-zero closing a window is forbidden.  Used to avoid that nasty
+/// autocommands mess up the window structure.
+static int close_disallowed = 0;
+
+/// When non-zero changing the window frame structure is forbidden.  Used
+/// to avoid that winframe_remove() is called recursively
+static int frame_locked = 0;
+
+/// Disallow changing the window layout (split window, close window, move
+/// window).  Resizing is still allowed.
+/// Used for autocommands that temporarily use another window and need to
+/// make sure the previously selected window is still there.
+/// Must be matched with exactly one call to window_layout_unlock()!
+void window_layout_lock(void)
+{
+  split_disallowed++;
+  close_disallowed++;
+}
+
+void window_layout_unlock(void)
+{
+  split_disallowed--;
+  close_disallowed--;
+}
+
+bool frames_locked(void)
+{
+  return frame_locked;
+}
+
+/// When the window layout cannot be changed give an error and return true.
+/// "cmd" indicates the action being performed and is used to pick the relevant
+/// error message.
+bool window_layout_locked(cmdidx_T cmd)
+{
+  if (split_disallowed > 0 || close_disallowed > 0) {
+    if (close_disallowed == 0 && cmd == CMD_tabnew) {
+      emsg(_(e_cannot_split_window_when_closing_buffer));
+    } else {
+      emsg(_(e_not_allowed_to_change_window_layout_in_this_autocmd));
+    }
+    return true;
+  }
+  return false;
+}
+
 // #define WIN_DEBUG
 #ifdef WIN_DEBUG
 /// Call this method to log the current window layout.
@@ -1084,6 +1130,10 @@ win_T *win_split_ins(int size, int flags, win_T *new_wp, int dir, frame_T *to_fl
   // aucmd_win[] should always remain floating
   if (new_wp != NULL && is_aucmd_win(new_wp)) {
     return NULL;
+  }
+
+  if (new_wp == NULL) {
+    trigger_winnewpre();
   }
 
   win_T *oldwin;
@@ -2715,6 +2765,9 @@ static void win_unclose_buffer(win_T *win, bufref_T *bufref, bool did_decrement)
     // If the buffer was removed from the window we have to give it any buffer.
     win->w_buffer = firstbuf;
     firstbuf->b_nwindows++;
+    if (win == curwin) {
+      curbuf = curwin->w_buffer;
+    }
     win_init_empty(win);
   } else if (did_decrement && win->w_buffer == bufref->br_buf && bufref_valid(bufref)) {
     // close_buffer() decremented the window count, but we're keeping the window.
@@ -2737,6 +2790,9 @@ int win_close(win_T *win, bool free_buf, bool force)
 
   if (last_window(win)) {
     emsg(_(e_cannot_close_last_window));
+    return FAIL;
+  }
+  if (!win->w_floating && window_layout_locked(CMD_close)) {
     return FAIL;
   }
 
@@ -3025,6 +3081,13 @@ int win_close(win_T *win, bool free_buf, bool force)
   return OK;
 }
 
+static void trigger_winnewpre(void)
+{
+  window_layout_lock();
+  apply_autocmds(EVENT_WINNEWPRE, NULL, NULL, false, NULL);
+  window_layout_unlock();
+}
+
 static void do_autocmd_winclosed(win_T *win)
   FUNC_ATTR_NONNULL_ALL
 {
@@ -3271,6 +3334,8 @@ win_T *winframe_remove(win_T *win, int *dirp, tabpage_T *tp, frame_T **unflat_al
 
   frame_T *frp_close = win->w_frame;
 
+  frame_locked++;
+
   // Save the position of the containing frame (which will also contain the
   // altframe) before we remove anything, to recompute window positions later.
   const win_T *const topleft = frame2win(frp_close->fr_parent);
@@ -3306,6 +3371,8 @@ win_T *winframe_remove(win_T *win, int *dirp, tabpage_T *tp, frame_T **unflat_al
   } else {
     *unflat_altfr = altfr;
   }
+
+  frame_locked--;
 
   return wp;
 }
@@ -4303,6 +4370,10 @@ void free_tabpage(tabpage_T *tp)
 ///
 /// It will edit the current buffer, like after :split.
 ///
+/// Does not trigger WinNewPre, since the window structures
+/// are not completely setup yet and could cause dereferencing
+/// NULL pointers
+///
 /// @param after Put new tabpage after tabpage "after", or after the current
 ///              tabpage in case of 0.
 /// @param filename Will be passed to apply_autocmds().
@@ -4313,6 +4384,9 @@ int win_new_tabpage(int after, char *filename)
 
   if (cmdwin_type != 0) {
     emsg(_(e_cmdwin));
+    return FAIL;
+  }
+  if (window_layout_locked(CMD_tabnew)) {
     return FAIL;
   }
 
