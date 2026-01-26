@@ -2057,6 +2057,7 @@ endfunc
 
 " Test for positioning cursor after CTRL-R expression failed
 func Test_edit_ctrl_r_failed()
+  CheckScreendump
   CheckRunVimInTerminal
 
   let buf = RunVimInTerminal('', #{rows: 6, cols: 60})
@@ -2123,7 +2124,7 @@ endfunc
 func Test_read_invalid()
   " set encoding=latin1
   " This was not properly checking for going past the end.
-  call assert_fails('r`=', 'E484')
+  call assert_fails('r`=', 'E484:')
   set encoding=utf-8
 endfunc
 
