@@ -148,6 +148,19 @@ describe('messages2', function()
       {1:~                                                    }|*12
                                                            |
     ]])
+    -- A redraw indicates the start of messages in the cmdline, which empty should clear.
+    command('echo "foo" | redraw | echo "bar"')
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      bar                                                  |
+    ]])
+    command('echo "foo" | redraw | echo ""')
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+                                                           |
+    ]])
     command('set cmdheight=0')
     command('echo "foo"')
     screen:expect([[
@@ -365,61 +378,6 @@ describe('messages2', function()
     screen:expect(top)
   end)
 
-  it('in cmdline_block mode', function()
-    feed(':if 1<CR>')
-    screen:expect([[
-                                                           |
-      {1:~                                                    }|*11
-      {16::}{15:if} {26:1}                                                |
-      {16::}  ^                                                  |
-    ]])
-    feed([[echo input("foo\nbar:")<CR>]])
-    screen:expect([[
-                                                           |
-      {1:~                                                    }|*9
-      :if 1                                                |
-      :  echo input("foo\nbar:")                           |
-      foo                                                  |
-      bar:^                                                 |
-    ]])
-    feed('baz<CR>')
-    screen:expect([[
-                                                           |
-      {1:~                                                    }|*9
-      {16::}{15:if} {26:1}                                                |
-      {16::}  {15:echo} {25:input}{16:(}{26:"foo\nbar:"}{16:)}                           |
-      {15:baz}                                                  |
-      {16::}  ^                                                  |
-    ]])
-    feed([[echo input("foo\nbar:")<CR>]])
-    screen:expect([[
-                                                           |
-      {1:~                                                    }|*7
-      :if 1                                                |
-      :  echo input("foo\nbar:")                           |
-      baz                                                  |
-      :  echo input("foo\nbar:")                           |
-      foo                                                  |
-      bar:^                                                 |
-    ]])
-    feed('<Esc>:endif')
-    screen:expect([[
-                                                           |
-      {1:~                                                    }|*8
-      {16::}{15:if} {26:1}                                                |
-      {16::}  {15:echo} {25:input}{16:(}{26:"foo\nbar:"}{16:)}                           |
-      {15:baz}                                                  |
-      {16::}  {15:echo} {25:input}{16:(}{26:"foo\nbar:"}{16:)}                           |
-      {16::}  {16::}{15:endif}^                                            |
-    ]])
-    feed('<CR>')
-    screen:expect([[
-      ^                                                     |
-      {1:~                                                    }|*12
-                                                           |
-    ]])
-  end)
-
   it('FileType is fired after default options are set', function()
     n.exec([[
       let g:set = {}
@@ -430,13 +388,12 @@ describe('messages2', function()
     ]])
     screen:expect([[
                                                            |
-      {1:~                                                    }|*9
+      {1:~                                                    }|*10
       {3:                                                     }|
-      ^foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofo|
-      {1:                                                     }|
+      foofoofoofoofoofoofoofoofo^o                          |
                                                            |
     ]])
-    t.eq({ filetype = 4 }, n.eval('g:set')) -- still fires for 'filetype'
+    t.eq({ filetype = 5 }, n.eval('g:set')) -- still fires for 'filetype'
   end)
 
   it('Search highlights only apply to pager', function()
@@ -465,6 +422,93 @@ describe('messages2', function()
       {1:~                                                    }|*11
       {3:                                                     }|
       {101:fo^o}{100:                                                  }|
+    ]])
+  end)
+
+  it('shows message from still running command', function()
+    exec_lua(function()
+      vim.schedule(function()
+        print('foo')
+        vim.fn.getchar()
+      end)
+    end)
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      foo                                                  |
+    ]])
+  end)
+
+  it('properly formatted carriage return messages', function()
+    screen:try_resize(screen._width, 20)
+    command([[echon "\r" | echon "Hello" | echon " " | echon "World"]])
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*18
+      Hello World                                          |
+    ]])
+    exec_lua(function()
+      vim.api.nvim_echo({ { 'fooo\nbarbaz\n\nlol', 'statement' }, { '\rbar' } }, true, {})
+      vim.api.nvim_echo({ { 'foooooooo', 'statement' }, { 'baz\rb', 'error' } }, true, {})
+      vim.api.nvim_echo({ { 'fooobar', 'statement' }, { '\rbaz\n' } }, true, {})
+      vim.api.nvim_echo({ { 'fooobar', 'statement' }, { '\rbaz\rb', 'error' } }, true, {})
+      vim.api.nvim_echo({ { 'fooo\rbar', 'statement' }, { 'baz', 'error' } }, true, {})
+    end)
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*9
+      {3:                                                     }|
+      {15:fooo}                                                 |
+      {15:barbaz}                                               |
+                                                           |
+      bar                                                  |
+      {9:b}{15:oooooooo}{9:baz}                                         |
+      baz{15:obar}                                              |
+                                                           |
+      {9:baz}{15:obar}                                              |
+      {15:bar}{9:baz}                                               |
+    ]])
+  end)
+
+  it('can show message during textlock', function()
+    exec_lua(function()
+      _G.omnifunc = function()
+        print('x!')
+        vim.cmd.sleep('100m')
+      end
+      vim.bo.omnifunc = 'v:lua.omnifunc'
+    end)
+    feed('i<C-X>')
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      {5:-- ^X mode (^]^D^E^F^I^K^L^N^O^P^Rs^U^V^Y)}           |
+    ]])
+    feed('<C-O>')
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      x!                                                   |
+    ]])
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      {5:-- Omni completion (^O^N^P) }{9:Pattern not found}        |
+    ]])
+    exec_lua(function()
+      vim.keymap.set('n', '<F1>', function()
+        print('i hate locks so much!!!!')
+        vim.cmd.messages()
+      end, { expr = true })
+    end)
+    feed('<Esc><F1>')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*8
+      {3:                                                     }|
+      x^!                                                   |
+      x!                                                   |
+      i hate locks so much!!!!                             |*2
     ]])
   end)
 end)

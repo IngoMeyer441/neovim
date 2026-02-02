@@ -263,7 +263,7 @@ void pty_proc_teardown(Loop *loop)
 }
 
 static void init_child(PtyProc *ptyproc)
-  FUNC_ATTR_NONNULL_ALL
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_NORETURN
 {
 #if defined(HAVE__NSGETENVIRON)
 # define environ (*_NSGetEnviron())
@@ -281,9 +281,11 @@ static void init_child(PtyProc *ptyproc)
   signal(SIGALRM, SIG_DFL);
 
   Proc *proc = (Proc *)ptyproc;
-  if (proc->cwd && os_chdir(proc->cwd) != 0) {
-    ELOG("chdir(%s) failed: %s", proc->cwd, strerror(errno));
-    return;
+  int err = 0;
+  // Don't use os_chdir() as that may buffer UI events unnecessarily.
+  if (proc->cwd && (err = uv_chdir(proc->cwd)) != 0) {
+    ELOG("chdir(%s) failed: %s", proc->cwd, uv_strerror(err));
+    _exit(122);
   }
 
   const char *prog = proc_get_exepath(proc);

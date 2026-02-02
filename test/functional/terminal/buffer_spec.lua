@@ -89,11 +89,10 @@ describe(':terminal buffer', function()
     end)
 
     it('does not create swap files', function()
-      local swapfile = api.nvim_exec('swapname', true):gsub('\n', '')
-      eq(nil, io.open(swapfile))
+      eq('No swap file', n.exec_capture('swapname'))
     end)
 
-    it('does not create undofiles files', function()
+    it('does not create undo files', function()
       local undofile = api.nvim_eval('undofile(bufname("%"))')
       eq(nil, io.open(undofile))
     end)
@@ -772,23 +771,57 @@ describe(':terminal buffer', function()
     ]])
   end)
 
-  it('does not drop data when job exits immediately after output #3030', function()
+  --- @param subcmd 'REP'|'REPFAST'
+  local function check_term_rep(subcmd, count)
     local screen = Screen.new(50, 7)
     api.nvim_create_autocmd('TermClose', { command = 'let g:did_termclose = 1' })
-    fn.jobstart({ testprg('shell-test'), 'REPFAST', '20000', 'TEST' }, { term = true })
+    fn.jobstart({ testprg('shell-test'), subcmd, count, 'TEST' }, { term = true })
     retry(nil, nil, function()
       eq(1, api.nvim_get_var('did_termclose'))
     end)
     feed('i')
-    screen:expect([[
-      19996: TEST                                       |
-      19997: TEST                                       |
-      19998: TEST                                       |
-      19999: TEST                                       |
+    screen:expect(([[
+      %d: TEST{MATCH: +}|
+      %d: TEST{MATCH: +}|
+      %d: TEST{MATCH: +}|
+      %d: TEST{MATCH: +}|
                                                         |
       [Process exited 0]^                                |
       {5:-- TERMINAL --}                                    |
-    ]])
+    ]]):format(count - 4, count - 3, count - 2, count - 1))
+    local lines = api.nvim_buf_get_lines(0, 0, -1, true)
+    for i = 1, count do
+      eq(('%d: TEST'):format(i - 1), lines[i])
+    end
+  end
+
+  it('does not drop data when job exits immediately after output #3030', function()
+    api.nvim_set_option_value('scrollback', 30000, {})
+    check_term_rep('REPFAST', 20000)
+  end)
+
+  it('does not drop data when autocommands poll for events #37559', function()
+    api.nvim_set_option_value('scrollback', 30000, {})
+    api.nvim_create_autocmd('BufFilePre', { command = 'sleep 50m', nested = true })
+    api.nvim_create_autocmd('BufFilePost', { command = 'sleep 50m', nested = true })
+    api.nvim_create_autocmd('TermOpen', { command = 'sleep 50m', nested = true })
+    -- REP pauses 1 ms every 100 lines, so each autocommand processes some output.
+    check_term_rep('REP', 20000)
+  end)
+
+  describe('scrollback is correct if all output is drained by', function()
+    for _, event in ipairs({ 'BufFilePre', 'BufFilePost', 'TermOpen' }) do
+      describe(('%s autocommand that lasts for'):format(event), function()
+        for _, delay in ipairs({ 5, 15, 25 }) do
+          -- Terminal refresh delay is 10 ms.
+          it(('%.1f * terminal refresh delay'):format(delay / 10), function()
+            local cmd = ('sleep %dm'):format(delay)
+            api.nvim_create_autocmd(event, { command = cmd, nested = true })
+            check_term_rep('REPFAST', 200)
+          end)
+        end
+      end)
+    end
   end)
 
   it('handles unprintable chars', function()
@@ -1114,6 +1147,36 @@ describe(':terminal buffer', function()
     eq({ mode = 't', blocking = false }, api.nvim_get_mode())
     feed([[<C-\><C-N>]])
     eq({ mode = 'nt', blocking = false }, api.nvim_get_mode())
+  end)
+
+  it('does not allow b:term_title watcher to delete buffer', function()
+    local chan = api.nvim_open_term(0, {})
+    api.nvim_chan_send(chan, '\027]2;SOME_TITLE\007')
+    eq('SOME_TITLE', api.nvim_buf_get_var(0, 'term_title'))
+    command([[call dictwatcheradd(b:, 'term_title', {-> execute('bwipe!')})]])
+    api.nvim_chan_send(chan, '\027]2;OTHER_TITLE\007')
+    eq('OTHER_TITLE', api.nvim_buf_get_var(0, 'term_title'))
+    matches('^E937: ', api.nvim_get_vvar('errmsg'))
+  end)
+
+  it('using NameBuff in BufFilePre does not interfere with buffer rename', function()
+    local oldbuf = api.nvim_get_current_buf()
+    n.exec([[
+      file Xoldfile
+      new Xotherfile
+      wincmd w
+      let g:BufFilePre_bufs = []
+      let g:BufFilePost_bufs = []
+      autocmd BufFilePre * call add(g:BufFilePre_bufs, [bufnr(), bufname()])
+      autocmd BufFilePost * call add(g:BufFilePost_bufs, [bufnr(), bufname()])
+      autocmd BufFilePre,BufFilePost * call execute('ls')
+    ]])
+    fn.jobstart({ testprg('shell-test') }, { term = true })
+    eq({ { oldbuf, 'Xoldfile' } }, api.nvim_get_var('BufFilePre_bufs'))
+    local buffilepost_bufs = api.nvim_get_var('BufFilePost_bufs')
+    eq(1, #buffilepost_bufs)
+    eq(oldbuf, buffilepost_bufs[1][1])
+    matches('^term://', buffilepost_bufs[1][2])
   end)
 end)
 

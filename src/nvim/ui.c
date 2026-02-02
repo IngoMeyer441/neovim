@@ -371,9 +371,14 @@ void do_autocmd_uienter_all(void)
   }
 }
 
+bool ui_can_attach_more(void)
+{
+  return ui_count < MAX_UI_COUNT;
+}
+
 void ui_attach_impl(RemoteUI *ui, uint64_t chanid)
 {
-  if (ui_count == MAX_UI_COUNT) {
+  if (ui_count >= MAX_UI_COUNT) {
     abort();
   }
   if (!ui->ui_ext[kUIMultigrid] && !ui->ui_ext[kUIFloatDebug]
@@ -419,7 +424,7 @@ void ui_detach_impl(RemoteUI *ui, uint64_t chanid)
     }
   }
 
-  if (shift_index == MAX_UI_COUNT) {
+  if (shift_index >= MAX_UI_COUNT) {
     abort();
   }
 
@@ -550,7 +555,7 @@ void ui_flush(void)
 
   win_ui_flush(false);
   // Avoid flushing callbacks expected to change text during textlock.
-  if (textlock == 0) {
+  if (textlock == 0 && expr_map_lock == 0) {
     cmdline_ui_flush();
     msg_ext_ui_flush();
   }
@@ -741,11 +746,34 @@ static void ui_attach_error(uint32_t ns_id, const char *name, const char *msg)
   msg_schedule_semsg_multiline("Error in \"%s\" UI event handler (ns=%s):\n%s", name, ns, msg);
 }
 
-void ui_call_event(char *name, bool fast, Array args)
+void ui_call_event(char *name, Array args)
 {
+  // Internal messages are considered unsafe and are executed in fast context.
+  bool fast = strcmp(name, "msg_show") == 0;
+  const char *not_fast[] = {
+    "empty",
+    "echo",
+    "echomsg",
+    "echoerr",
+    "list_cmd",
+    "lua_error",
+    "lua_print",
+    "progress",
+    NULL,
+  };
+
+  for (int i = 0; fast && not_fast[i]; i++) {
+    fast = !strequal(not_fast[i], args.items[0].data.string.data);
+  }
+
+  // Don't impose textlock restrictions upon UI event handlers.
+  int save_expr_map_lock = expr_map_lock;
+  int save_textlock = textlock;
+  expr_map_lock = 0;
+  textlock = 0;
+
   bool handled = false;
   UIEventCallback *event_cb;
-
   map_foreach(&ui_event_cbs, ui_event_ns_id, event_cb, {
     Error err = ERROR_INIT;
     uint32_t ns_id = ui_event_ns_id;
@@ -760,6 +788,8 @@ void ui_call_event(char *name, bool fast, Array args)
     }
     api_clear_error(&err);
   })
+  expr_map_lock = save_expr_map_lock;
+  textlock = save_textlock;
 
   if (!handled) {
     UI_CALL(true, event, ui, name, args);

@@ -382,10 +382,18 @@ static void nlua_schedule_event(void **argv)
   lua_State *const lstate = global_lstate;
   nlua_pushref(lstate, cb);
   nlua_unref_global(lstate, cb);
+
+  // Don't impose textlock restrictions upon UI event handlers.
+  int save_expr_map_lock = expr_map_lock;
+  int save_textlock = textlock;
+  expr_map_lock = ns_id > 0 ? 0 : expr_map_lock;
+  textlock = ns_id > 0 ? 0 : textlock;
   if (nlua_pcall(lstate, 0, 0)) {
     nlua_error(lstate, _("vim.schedule callback: %.*s"));
     ui_remove_cb(ns_id, true);
   }
+  expr_map_lock = save_expr_map_lock;
+  textlock = save_textlock;
 }
 
 /// Schedule Lua callback on main loop's event queue
@@ -399,17 +407,20 @@ static int nlua_schedule(lua_State *const lstate)
     return lua_error(lstate);
   }
 
+  lua_pushnil(lstate);
   // If main_loop is closing don't schedule tasks to run in the future,
   // otherwise any refs allocated here will not be cleaned up.
   if (main_loop.closing) {
-    return 0;
+    lua_pushliteral(lstate, "main loop is closing");
+    return 2;
   }
 
   LuaRef cb = nlua_ref_global(lstate, 1);
   // Pass along UI event handler to disable on error.
   multiqueue_put(main_loop.events, nlua_schedule_event, (void *)(ptrdiff_t)cb,
                  (void *)(ptrdiff_t)ui_event_ns_id);
-  return 0;
+  lua_pushnil(lstate);
+  return 2;
 }
 
 // Dummy timer callback. Used by f_wait().

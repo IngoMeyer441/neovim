@@ -246,9 +246,12 @@ describe('jobs', function()
     eq({ 'notification', 'exit', { 0, 0 } }, next_msg())
   end)
 
-  it('changes to given `cwd` directory', function()
+  local function test_job_cwd()
     local dir = eval('resolve(tempname())'):gsub('/', get_pathsep())
     mkdir(dir)
+    finally(function()
+      rmdir(dir)
+    end)
     command("let g:job_opts.cwd = '" .. dir .. "'")
     if is_os('win') then
       command("let j = jobstart('cd', g:job_opts)")
@@ -269,7 +272,15 @@ describe('jobs', function()
         { 'notification', 'exit', { 0, 0 } },
       }
     )
-    rmdir(dir)
+  end
+
+  it('changes to given `cwd` directory', function()
+    test_job_cwd()
+  end)
+
+  it('changes to given `cwd` directory with pty', function()
+    command('let g:job_opts.pty = v:true')
+    test_job_cwd()
   end)
 
   it('fails to change to invalid `cwd`', function()
@@ -286,18 +297,42 @@ describe('jobs', function()
   end)
 
   it('error on non-executable `cwd`', function()
-    if is_os('win') then
-      return -- Not applicable for Windows.
-    end
+    skip(is_os('win'), 'N/A for Windows')
 
     local dir = 'Xtest_not_executable_dir'
     mkdir(dir)
+    finally(function()
+      rmdir(dir)
+    end)
     fn.setfperm(dir, 'rw-------')
+
     matches(
       '^Vim%(call%):E903: Process failed to start: permission denied: .*',
-      pcall_err(command, "call jobstart(['pwd'], {'cwd': '" .. dir .. "'})")
+      pcall_err(command, ("call jobstart(['pwd'], {'cwd': '%s'})"):format(dir))
     )
-    rmdir(dir)
+  end)
+
+  it('error log and exit status 122 on non-executable `cwd`', function()
+    skip(is_os('win'), 'N/A for Windows')
+
+    local logfile = 'Xchdir_fail_log'
+    clear({ env = { NVIM_LOG_FILE = logfile } })
+
+    local dir = 'Xtest_not_executable_dir'
+    mkdir(dir)
+    finally(function()
+      rmdir(dir)
+      n.check_close()
+      os.remove(logfile)
+    end)
+    fn.setfperm(dir, 'rw-------')
+
+    n.exec(([[
+      let s:chan = jobstart(['pwd'], {'cwd': '%s', 'pty': v:true})
+      let g:status = jobwait([s:chan], 1000)[0]
+    ]]):format(dir))
+    eq(122, eval('g:status'))
+    t.assert_log(('chdir%%(%s%%) failed: permission denied'):format(dir), logfile, 100)
   end)
 
   it('returns 0 when it fails to start', function()
@@ -738,7 +773,7 @@ describe('jobs', function()
 
   it('lists passed to callbacks are freed if not stored #25891', function()
     if not exec_lua('return pcall(require, "ffi")') then
-      pending('missing LuaJIT FFI')
+      pending('N/A: missing LuaJIT FFI')
     end
 
     source([[

@@ -2784,7 +2784,8 @@ static int eval7_leader(typval_T *const rettv, const bool numeric_only,
           break;
         }
         if (rettv->v_type == VAR_FLOAT) {
-          f = !(bool)f;
+          rettv->v_type = VAR_BOOL;
+          val = f == 0.0 ? kBoolVarTrue : kBoolVarFalse;
         } else {
           val = !val;
         }
@@ -6633,9 +6634,8 @@ char *prompt_get_input(buf_T *buf)
   linenr_T lnum_last = buf->b_ml.ml_line_count;
 
   char *text = ml_get_buf(buf, lnum_start);
-  char *prompt = prompt_text();
-  if (strlen(text) >= strlen(prompt)) {
-    text += strlen(prompt);
+  if ((int)strlen(text) >= buf->b_prompt_start.mark.col) {
+    text += buf->b_prompt_start.mark.col;
   }
 
   char *full_text = xstrdup(text);

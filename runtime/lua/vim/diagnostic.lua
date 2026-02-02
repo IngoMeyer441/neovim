@@ -1390,7 +1390,25 @@ function M.set(namespace, bufnr, diagnostics, opts)
         -- avoid ending an extmark before start of the line
         if end_col == 0 then
           end_row = end_row - 1
-          end_col = #lines[end_row + 1]
+
+          local end_line = lines[end_row + 1]
+
+          if not end_line then
+            error(
+              'Failed to adjust diagnostic position to the end of a previous line. #lines in a buffer: '
+                .. #lines
+                .. ', lnum: '
+                .. diagnostic.lnum
+                .. ', col: '
+                .. diagnostic.col
+                .. ', end_lnum: '
+                .. diagnostic.end_lnum
+                .. ', end_col: '
+                .. diagnostic.end_col
+            )
+          end
+
+          end_col = #end_line
         end
       end
 
@@ -1467,7 +1485,7 @@ end
 ---@param bufnr? integer Buffer number to get diagnostics from. Use 0 for
 ---                      current buffer or nil for all buffers.
 ---@param opts? vim.diagnostic.GetOpts
----@return table : Table with actually present severity values as keys
+---@return table<integer, integer> : Table with actually present severity values as keys
 ---                (see |diagnostic-severity|) and integer counts as values.
 function M.count(bufnr, opts)
   vim.validate('bufnr', bufnr, 'number', true)

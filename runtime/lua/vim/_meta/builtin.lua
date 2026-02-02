@@ -178,6 +178,8 @@ function vim.iconv(str, from, to, opts) end
 --- Schedules {fn} to be invoked soon by the main event-loop. Useful
 --- to avoid |textlock| or other temporary restrictions.
 --- @param fn fun()
+--- @return nil result
+--- @return string? err Error message if scheduling failed, `nil` otherwise.
 function vim.schedule(fn) end
 
 --- Waits up to `time` milliseconds, until `callback` returns `true` (success). Executes
@@ -227,8 +229,9 @@ function vim.wait(time, callback, interval, fast_only) end
 --- {callback} receives event name plus additional parameters. See |ui-popupmenu|
 --- and the sections below for event format for respective events.
 ---
---- Callbacks for `msg_show` events are executed in |api-fast| context; showing
---- the message should be scheduled.
+--- Callbacks for `msg_show` events originating from internal messages (as
+--- opposed to events from commands or API calls) are executed in |api-fast|
+--- context; showing the message needs to be scheduled.
 ---
 --- Excessive errors inside the callback will result in forced detachment.
 ---
