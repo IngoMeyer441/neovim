@@ -6310,6 +6310,7 @@ void last_set_msg(sctx_T script_ctx)
 
   bool should_free;
   char *p = get_scriptname(script_ctx, &should_free);
+  msg_ext_skip_verbose = true;  // no verbose kind for last set messages: too noisy
 
   verbose_enter();
   msg_puts(_("\n\tLast set from "));
@@ -6668,6 +6669,7 @@ void prompt_invoke_callback(void)
   curwin->w_cursor.lnum = lnum + 1;
   curwin->w_cursor.col = 0;
   curbuf->b_prompt_start.mark.lnum = lnum + 1;
+  curbuf->b_prompt_start.mark.col = 0;
 
   if (curbuf->b_prompt_callback.type == kCallbackNone) {
     xfree(user_input);

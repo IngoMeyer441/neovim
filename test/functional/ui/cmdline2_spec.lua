@@ -13,9 +13,10 @@ describe('cmdline2', function()
     screen = Screen.new()
     screen:add_extra_attr_ids({
       [100] = { foreground = Screen.colors.Magenta1, bold = true },
+      [101] = { background = Screen.colors.Yellow, foreground = Screen.colors.Grey0 },
     })
     exec_lua(function()
-      require('vim._extui').enable({})
+      require('vim._core.ui2').enable({})
     end)
   end)
 
@@ -146,7 +147,7 @@ describe('cmdline2', function()
   end)
 
   it('highlights after deleting buffer', function()
-    feed(':%bw!<CR>:call foo()')
+    feed(':sil %bw!<CR>:call foo()')
     screen:expect([[
                                                            |
       {1:~                                                    }|*12
@@ -180,6 +181,54 @@ describe('cmdline2', function()
       {16::}{15:s}{16:/f}^                                                 |
     ]])
   end)
+
+  it('dialog position is adjusted for toggled non-pum wildmenu', function()
+    exec([[
+      set wildmode=list:full,full wildoptions-=pum
+      func Foo()
+      endf
+      func Fooo()
+      endf
+    ]])
+    feed(':call Fo<C-Z>')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*9
+      {3:                                                     }|
+      Foo()   Fooo()                                       |
+                                                           |
+      {16::}{15:call} Fo^                                             |
+    ]])
+    feed('<C-Z>')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*8
+      {3:                                                     }|
+      Foo()   Fooo()                                       |
+                                                           |
+      {101:Foo()}{3:  Fooo()                                        }|
+      {16::}{15:call} {25:Foo}{16:()}^                                          |
+    ]])
+    feed('<BS><BS>')
+    exec('set wildoptions+=pum laststatus=2')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*9
+      {3:                                                     }|
+      Foo()   Fooo()                                       |
+                                                           |
+      {16::}{15:call} Foo^                                            |
+    ]])
+    feed('<C-Z><C-Z>')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*9
+      {3:                                                     }|
+      Foo(){12: Foo()          }                                |
+           {4: Fooo()         }                                |
+      {16::}{15:call} {25:Foo}{16:()}^                                          |
+    ]])
+  end)
 end)
 
 describe('cmdline2', function()
@@ -187,7 +236,7 @@ describe('cmdline2', function()
     clear({
       args = {
         '--clean',
-        '+lua require("vim._extui").enable({})',
+        '+lua require("vim._core.ui2").enable({})',
         "+call feedkeys(':')",
       },
     })
