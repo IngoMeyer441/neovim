@@ -3718,7 +3718,13 @@ vim.go.isi = vim.go.isident
 --- "w", "*", "[i", etc.  It is also used for "\k" in a `pattern`.  See
 --- 'isfname' for a description of the format of this option.  For '@'
 --- characters above 255 check the "word" character class (any character
---- that is not white space or punctuation).
+--- that is categorized as a letter, number or emoji according to the
+--- Unicode general category).
+---
+--- Note that there is a difference between the "\k" character class and
+--- the `word` motion.  The former matches any word character, while the
+--- latter stops at a change of the character class.
+---
 --- For C programs you could use "a-z,A-Z,48-57,_,.,-,>".
 --- For a help file it is set to all non-blank printable characters except
 --- "*", '"' and '|' (so that CTRL-] on a command finds the help for that
@@ -6851,6 +6857,8 @@ vim.wo.stc = vim.wo.statuscolumn
 ---       Thus use %#HLname# for highlight group HLname.  The same
 ---       highlighting is used, also for the statusline of non-current
 ---       windows.
+--- $ -   Same as `#`, except the `%$HLname$` group will inherit from
+---       preceding highlight attributes.
 --- * -   Set highlight group to User{N}, where {N} is taken from the
 ---       minwid field, e.g. %1*.  Restore normal highlight with %* or
 ---       %0*.  The difference between User{N} and StatusLine will be
