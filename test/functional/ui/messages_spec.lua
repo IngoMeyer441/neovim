@@ -1615,6 +1615,27 @@ stack traceback:
       },
     })
   end)
+
+  it('completion message overwrites previous', function()
+    command('set shortmess-=C | edit foo | edit bar | edit baz')
+    feed('i<C-N>')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = {
+        {
+          content = { { 'Scanning tags.', 6, 'Question' } },
+          kind = 'completion',
+        },
+      },
+      showmode = {
+        { '-- Keyword completion (^N^P) ', 5, 'ModeMsg' },
+        { 'Pattern not found', 9, 'ErrorMsg' },
+      },
+    })
+  end)
 end)
 
 describe('ui/builtin messages', function()
@@ -2447,7 +2468,7 @@ describe('ui/msg_puts_printf', function()
     fn.mkdir(locale_dir, 'p')
     fn.filecopy(build_dir .. '/src/nvim/po/ja.mo', locale_dir .. '/nvim.mo')
     finally(function()
-      n.rmdir(build_dir .. '/share')
+      n.rmdir(vim.fs.dirname(locale_dir))
     end)
 
     cmd = cmd .. '"' .. nvim_prog .. '" -u NONE -i NONE -Es -V1'

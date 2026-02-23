@@ -1126,6 +1126,9 @@ function lsp.get_active_clients(filter)
   return lsp.get_clients(filter)
 end
 
+-- Minimum time before warning about LSP exit_timeout on Nvim exit.
+local min_warn_exit_timeout = 100
+
 api.nvim_create_autocmd('VimLeavePre', {
   desc = 'vim.lsp: exit handler',
   callback = function()
@@ -1137,13 +1140,20 @@ api.nvim_create_autocmd('VimLeavePre', {
       max_timeout = math.max(max_timeout, tonumber(client.exit_timeout) or 0)
       client:stop(client.exit_timeout)
     end
-    if max_timeout > 10 then
-      api.nvim_echo({
-        {
-          string.format('Waiting %ss for lsp exit (Press Ctrl-C to force exit)', max_timeout / 1e3),
-          'WarningMsg',
-        },
-      }, true, {})
+
+    local exit_warning_timer --- @type uv.uv_timer_t?
+    if max_timeout > min_warn_exit_timeout then
+      exit_warning_timer = vim.defer_fn(function()
+        api.nvim_echo({
+          {
+            string.format(
+              'Waiting %ss for LSP exit (Press Ctrl-C to force exit)',
+              max_timeout / 1e3
+            ),
+            'WarningMsg',
+          },
+        }, true, {})
+      end, min_warn_exit_timeout)
     end
 
     vim.wait(max_timeout, function()
@@ -1151,6 +1161,10 @@ api.nvim_create_autocmd('VimLeavePre', {
         return client.rpc.is_closing()
       end)
     end)
+
+    if exit_warning_timer and not exit_warning_timer:is_closing() then
+      exit_warning_timer:close()
+    end
   end,
 })
 
@@ -1556,6 +1570,11 @@ end
 ---@param handler (lsp.Handler) See |lsp-handler|
 ---@param override_config (table) Table containing the keys to override behavior of the {handler}
 function lsp.with(handler, override_config)
+  vim.deprecate(
+    'vim.lsp.with()',
+    'Pass the configuration to equivalent functions in `vim.lsp.buf`',
+    '0.12'
+  )
   return function(err, result, ctx, config)
     return handler(err, result, ctx, vim.tbl_deep_extend('force', config or {}, override_config))
   end

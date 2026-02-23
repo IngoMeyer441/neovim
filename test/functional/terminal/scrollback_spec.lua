@@ -97,9 +97,8 @@ local function test_terminal_scrollback(hide_curbuf)
     screen = tt.setup_screen(nil, nil, 30)
     buf = api.nvim_get_current_buf()
     chan = api.nvim_get_option_value('channel', { buf = buf })
-    if hide_curbuf then
-      otherbuf = api.nvim_create_buf(true, false)
-    end
+    otherbuf = hide_curbuf and api.nvim_create_buf(true, false) or nil
+    restore_terminal_mode = nil
   end)
 
   describe('when the limit is exceeded', function()
@@ -1099,6 +1098,31 @@ describe('pending scrollback line handling', function()
       [Process exited 0]^            |
       {5:-- TERMINAL --}                |
     ]]
+    assert_alive()
+  end)
+
+  it('does not crash after deleting buffer lines', function()
+    local buf = api.nvim_get_current_buf()
+    local chan = api.nvim_open_term(buf, {})
+    api.nvim_chan_send(chan, ('a\n'):rep(11) .. 'a')
+    screen:expect([[
+      ^a                             |
+      a                             |*5
+                                    |
+    ]])
+    api.nvim_set_option_value('modifiable', true, { buf = buf })
+    api.nvim_buf_set_lines(buf, 0, -1, true, {})
+    screen:expect([[
+      ^                              |
+      {1:~                             }|*5
+                                    |
+    ]])
+    api.nvim_chan_send(chan, ('\nb'):rep(11) .. '\n')
+    screen:expect([[
+      b                             |*5
+      ^                              |
+                                    |
+    ]])
     assert_alive()
   end)
 end)

@@ -1044,7 +1044,7 @@ static void f_dictwatcheradd(typval_T *argvars, typval_T *rettv, EvalFuncData fp
   } else if (argvars[0].vval.v_dict == NULL) {
     const char *const arg_errmsg = _("dictwatcheradd() argument");
     const size_t arg_errmsg_len = strlen(arg_errmsg);
-    semsg(_(e_readonlyvar), (int)arg_errmsg_len, arg_errmsg);
+    semsg(_(e_cannot_change_readonly_variable_str), (int)arg_errmsg_len, arg_errmsg);
     return;
   }
 
@@ -3611,6 +3611,17 @@ void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     const int pid = chan->stream.pty.proc.pid;
     buf_T *const buf = curbuf;
 
+    // Unset 'swapfile' to ensure no swapfile is created.
+    buf->b_p_swf = false;
+    // If the buffer isn't loaded, open a memfile here to avoid spurious autocommands
+    // from open_buffer() when updating the terminal buffer later.
+    if (buf->b_ml.ml_mfp == NULL && ml_open(buf) == FAIL) {
+      // Internal error in ml_open(): stop the job.
+      proc_stop(&chan->stream.proc);
+      channel_decref(chan);
+      return;
+    }
+
     channel_incref(chan);
     channel_terminal_alloc(buf, chan);
 
@@ -3637,8 +3648,6 @@ void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
     // Terminal URI: "term://$CWD//$PID:$CMD"
     snprintf(NameBuff, sizeof(NameBuff), "term://%s//%d:%s", IObuff, pid, cmd);
-    // Unset 'swapfile' to ensure no swapfile is created.
-    buf->b_p_swf = false;
 
     setfname(buf, NameBuff, NULL, true);
     apply_autocmds(EVENT_BUFFILEPOST, NULL, NULL, false, buf);
@@ -7362,9 +7371,20 @@ static void f_synIDattr(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   case 'b':
     if (TOLOWER_ASC(what[1]) == 'g') {  // bg[#]
       p = highlight_color(id, what, modec);
+    } else if (TOLOWER_ASC(what[1]) == 'l') {  // blink
+      p = highlight_has_attr(id, HL_BLINK, modec);
     } else {  // bold
       p = highlight_has_attr(id, HL_BOLD, modec);
     }
+    break;
+  case 'c':    // conceal
+    p = highlight_has_attr(id, HL_CONCEALED, modec);
+    break;
+  case 'd':    // dim
+    p = highlight_has_attr(id, HL_DIM, modec);
+    break;
+  case 'o':    // overline
+    p = highlight_has_attr(id, HL_OVERLINE, modec);
     break;
   case 'f':    // fg[#] or font
     p = highlight_color(id, what, modec);

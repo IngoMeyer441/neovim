@@ -617,7 +617,7 @@ size_t channel_send(uint64_t id, char *data, size_t len, bool data_owned, const 
   // write can be delayed indefinitely, so always use an allocated buffer
   WBuffer *buf = wstream_new_buffer(data_owned ? data : xmemdup(data, len),
                                     len, 1, xfree);
-  return wstream_write(in, buf) ? len : 0;
+  return wstream_write(in, buf) == 0 ? len : 0;
 
 retfree:
   if (data_owned) {
@@ -849,10 +849,8 @@ static void term_resize(uint16_t width, uint16_t height, void *data)
 
 static void term_resume(void *data)
 {
-#ifdef UNIX
   Channel *chan = data;
   pty_proc_resume(&chan->stream.pty);
-#endif
 }
 
 static inline void term_delayed_free(void **argv)

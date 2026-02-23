@@ -1363,14 +1363,16 @@ M.funcs = {
       Insert mode completion.  The popup menu will appear if
       specified, see |ins-completion-menu|.
       Example: >vim
-      	inoremap <F5> <C-R>=ListMonths()<CR>
 
-      	func ListMonths()
-      	  call complete(col('.'), ['January', 'February', 'March',
-      	    \ 'April', 'May', 'June', 'July', 'August', 'September',
-      	    \ 'October', 'November', 'December'])
-      	  return ''
-      	endfunc
+      inoremap <F5> <C-R>=ListMonths()<CR>
+
+      func ListMonths()
+        call complete(col('.'), ['January', 'February', 'March',
+      	\ 'April', 'May', 'June', 'July', 'August',
+      	\ 'September', 'October', 'November', 'December'])
+        return ''
+      endfunc
+
       <This isn't very useful, but it shows how it works.  Note that
       an empty string is returned to avoid a zero being inserted.
 
@@ -6042,7 +6044,7 @@ M.funcs = {
       Return a |List| with all key/index and value pairs of {expr}.
       Each |List| item is a list with two items:
       - for a |Dict|: the key and the value
-      - for a |List| or |String|: the index and the value
+      - for a |List|, |Blob| or |String|: the index and the value
       The returned |List| is in arbitrary order for a |Dict|,
       otherwise it's in ascending order of the index.
 
@@ -6055,6 +6057,7 @@ M.funcs = {
       	endfor
       	echo items([1, 2, 3])
       	echo items("foobar")
+      	echo items(0z0102)
       <
     ]=],
     name = 'items',
@@ -9678,7 +9681,7 @@ M.funcs = {
 
       The optional argument {opts} is a Dict and supports the following items:
 
-        peer  : If |TRUE|, servers not started by |serverstart()| 
+        peer  : If |TRUE|, servers not started by |serverstart()|
                 will also be returned. (default: |FALSE|)
                 Not supported on Windows yet.
 
@@ -12155,6 +12158,10 @@ M.funcs = {
       "strikethrough"	"1" if struckthrough
       "altfont"	"1" if alternative font
       "nocombine"	"1" if nocombine
+      "dim"	"1" if half-bright/dimmed
+      "blink"	"1" if blinking
+      "conceal"	"1" if concealed
+      "overline"	"1" if overlined
 
       Returns an empty string on error.
 

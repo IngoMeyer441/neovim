@@ -1153,11 +1153,13 @@ vim.go.cia = vim.go.completeitemalign
 ---    fuzzy    Enable `fuzzy-matching` for completion candidates.  This
 --- 	    allows for more flexible and intuitive matching, where
 --- 	    characters can be skipped and matches can be found even
---- 	    if the exact sequence is not typed.
+--- 	    if the exact sequence is not typed (disabled for thesaurus
+--- 	    completion `compl-thesaurus`).
 ---
 ---    longest
 --- 	    When 'autocomplete' is not active, only the longest common
---- 	    prefix of the matches is inserted.  If the popup menu is
+--- 	    prefix of the matches is inserted (disabled for thesaurus
+--- 	    completion `compl-thesaurus`).  If the popup menu is
 --- 	    displayed, you can use CTRL-L to add more characters.
 --- 	    Whether case is ignored depends on the type of completion.
 --- 	    For buffer text the 'ignorecase' option applies.
@@ -3237,7 +3239,7 @@ vim.go.gcr = vim.go.guicursor
 ---
 ---
 --- @type string
-vim.o.guifont = ""
+vim.o.guifont = "Source Code Pro,DejaVu Sans Mono,Courier New,monospace"
 vim.o.gfn = vim.o.guifont
 vim.go.guifont = vim.o.guifont
 vim.go.gfn = vim.go.guifont

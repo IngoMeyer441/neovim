@@ -93,14 +93,12 @@ static const char e_string_or_number_required_for_argument_nr[]
   = N_("E1220: String or Number required for argument %d");
 static const char e_string_or_list_required_for_argument_nr[]
   = N_("E1222: String or List required for argument %d");
-static const char e_string_list_or_dict_required_for_argument_nr[]
-  = N_("E1225: String, List or Dictionary required for argument %d");
+static const char e_list_dict_blob_or_string_required_for_argument_nr[]
+  = N_("E1225: List, Dictionary, Blob or String required for argument %d");
 static const char e_list_or_blob_required_for_argument_nr[]
   = N_("E1226: List or Blob required for argument %d");
 static const char e_blob_required_for_argument_nr[]
   = N_("E1238: Blob required for argument %d");
-static const char e_invalid_value_for_blob_nr[]
-  = N_("E1239: Invalid value for blob: %d");
 static const char e_string_list_or_blob_required_for_argument_nr[]
   = N_("E1252: String, List or Blob required for argument %d");
 static const char e_string_or_function_required_for_argument_nr[]
@@ -793,6 +791,30 @@ void tv_list_flatten(list_T *list, listitem_T *first, int64_t maxitems, int64_t 
   }
 }
 
+/// "items(blob)" function
+/// Converts a Blob into a List of [index, byte] pairs.
+/// Caller must have already checked that argvars[0] is a Blob.
+/// A null blob behaves like an empty blob.
+static void tv_blob2items(typval_T *argvars, typval_T *rettv)
+{
+  blob_T *blob = argvars[0].vval.v_blob;
+
+  tv_list_alloc_ret(rettv, tv_blob_len(blob));
+
+  for (int i = 0; i < tv_blob_len(blob); i++) {
+    list_T *l2 = tv_list_alloc(2);
+    tv_list_append_list(rettv->vval.v_list, l2);
+    tv_list_append_number(l2, i);
+    tv_list_append_number(l2, tv_blob_get(blob, i));
+  }
+}
+
+/// "items(dict)" function
+static void tv_dict2items(typval_T *argvars, typval_T *rettv)
+{
+  tv_dict2list(argvars, rettv, kDict2ListItems);
+}
+
 /// "items(list)" function
 /// Caller must have already checked that argvars[0] is a List.
 static void tv_list2items(typval_T *argvars, typval_T *rettv)
@@ -949,7 +971,7 @@ int tv_list_slice_or_index(list_T *list, bool range, varnumber_T n1_arg, varnumb
 }
 
 typedef struct {
-  char *s;
+  String s;
   char *tofree;
 } Join;
 
@@ -973,25 +995,26 @@ static int list_join_inner(garray_T *const gap, list_T *const l, const char *con
     if (got_int) {
       break;
     }
-    char *s;
-    size_t len;
-    s = encode_tv2echo(TV_LIST_ITEM_TV(item), &len);
-    if (s == NULL) {
+    String s;
+    s.data = encode_tv2echo(TV_LIST_ITEM_TV(item), &s.size);
+    if (s.data == NULL) {
       return FAIL;
     }
 
-    sumlen += len;
+    sumlen += s.size;
 
     Join *const p = GA_APPEND_VIA_PTR(Join, join_gap);
-    p->tofree = p->s = s;
+    p->s = s;
+    p->tofree = s.data;
 
     line_breakcheck();
   });
 
   // Allocate result buffer with its total size, avoid re-allocation and
   // multiple copy operations.  Add 2 for a tailing ']' and NUL.
+  size_t seplen = strlen(sep);
   if (join_gap->ga_len >= 2) {
-    sumlen += strlen(sep) * (size_t)(join_gap->ga_len - 1);
+    sumlen += seplen * (size_t)(join_gap->ga_len - 1);
   }
   ga_grow(gap, (int)sumlen + 2);
 
@@ -999,12 +1022,12 @@ static int list_join_inner(garray_T *const gap, list_T *const l, const char *con
     if (first) {
       first = false;
     } else {
-      ga_concat(gap, sep);
+      ga_concat_len(gap, sep, seplen);
     }
     const Join *const p = ((const Join *)join_gap->ga_data) + i;
 
-    if (p->s != NULL) {
-      ga_concat(gap, p->s);
+    if (p->s.data != NULL) {
+      ga_concat_len(gap, p->s.data, p->s.size);
     }
     line_breakcheck();
   }
@@ -1084,8 +1107,10 @@ void f_list2str(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   char buf[MB_MAXBYTES + 1];
 
   TV_LIST_ITER_CONST(l, li, {
-    buf[utf_char2bytes((int)tv_get_number(TV_LIST_ITEM_TV(li)), buf)] = NUL;
-    ga_concat(&ga, buf);
+    const varnumber_T n = tv_get_number(TV_LIST_ITEM_TV(li));
+    const size_t buflen = (size_t)utf_char2bytes((int)n, buf);
+    buf[buflen] = NUL;
+    ga_concat_len(&ga, buf, buflen);
   });
   ga_append(&ga, NUL);
 
@@ -3226,9 +3251,7 @@ void tv_dict_alloc_ret(typval_T *const ret_tv)
 /// @param[in] what    What to save in rettv.
 static void tv_dict2list(typval_T *const argvars, typval_T *const rettv, const DictListType what)
 {
-  if ((what == kDict2ListItems
-       ? tv_check_for_string_or_list_or_dict_arg(argvars, 0)
-       : tv_check_for_dict_arg(argvars, 0)) == FAIL) {
+  if (tv_check_for_dict_arg(argvars, 0) == FAIL) {
     tv_list_alloc_ret(rettv, 0);
     return;
   }
@@ -3267,15 +3290,19 @@ static void tv_dict2list(typval_T *const argvars, typval_T *const rettv, const D
   });
 }
 
-/// "items(dict)" function
+/// "items()" function
 void f_items(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   if (argvars[0].v_type == VAR_STRING) {
     tv_string2items(argvars, rettv);
   } else if (argvars[0].v_type == VAR_LIST) {
     tv_list2items(argvars, rettv);
+  } else if (argvars[0].v_type == VAR_BLOB) {
+    tv_blob2items(argvars, rettv);
+  } else if (argvars[0].v_type == VAR_DICT) {
+    tv_dict2items(argvars, rettv);
   } else {
-    tv_dict2list(argvars, rettv, kDict2ListItems);
+    semsg(_(e_list_dict_blob_or_string_required_for_argument_nr), 1);
   }
 }
 
@@ -3888,25 +3915,27 @@ bool value_check_lock(VarLockStatus lock, const char *name, size_t name_len)
   case VAR_UNLOCKED:
     return false;
   case VAR_LOCKED:
-    error_message = N_("E741: Value is locked: %.*s");
+    error_message = name == NULL ? N_(e_value_is_locked)
+                                 : N_(e_value_is_locked_str);
     break;
   case VAR_FIXED:
-    error_message = N_("E742: Cannot change value of %.*s");
+    error_message = name == NULL ? N_(e_cannot_change_value)
+                                 : N_(e_cannot_change_value_of_str);
     break;
   }
   assert(error_message != NULL);
 
   if (name == NULL) {
-    name = _("Unknown");
-    name_len = strlen(name);
-  } else if (name_len == TV_TRANSLATE) {
-    name = _(name);
-    name_len = strlen(name);
-  } else if (name_len == TV_CSTRING) {
-    name_len = strlen(name);
+    emsg(_(error_message));
+  } else {
+    if (name_len == TV_TRANSLATE) {
+      name = _(name);
+      name_len = strlen(name);
+    } else if (name_len == TV_CSTRING) {
+      name_len = strlen(name);
+    }
+    semsg(_(error_message), (int)name_len, name);
   }
-
-  semsg(_(error_message), (int)name_len, name);
 
   return true;
 }
@@ -4507,19 +4536,6 @@ int tv_check_for_opt_string_or_list_arg(const typval_T *const args, const int id
 {
   return (args[idx].v_type == VAR_UNKNOWN
           || tv_check_for_string_or_list_arg(args, idx) != FAIL) ? OK : FAIL;
-}
-
-/// Give an error and return FAIL unless "args[idx]" is a string or a list or a dict
-int tv_check_for_string_or_list_or_dict_arg(const typval_T *const args, const int idx)
-  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
-{
-  if (args[idx].v_type != VAR_STRING
-      && args[idx].v_type != VAR_LIST
-      && args[idx].v_type != VAR_DICT) {
-    semsg(_(e_string_list_or_dict_required_for_argument_nr), idx + 1);
-    return FAIL;
-  }
-  return OK;
 }
 
 /// Give an error and return FAIL unless "args[idx]" is a string

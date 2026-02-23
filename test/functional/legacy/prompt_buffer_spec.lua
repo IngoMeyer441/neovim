@@ -62,7 +62,7 @@ describe('prompt buffer', function()
     screen:expect([[
       cmd: ^                    |
       {1:~                        }|*3
-      {3:[Prompt]                 }|
+      {3:[Prompt] [+]             }|
       other buffer             |
       {1:~                        }|*3
       {5:-- INSERT --}             |
@@ -149,7 +149,7 @@ describe('prompt buffer', function()
     screen:expect([[
       cmd:                     |
       {1:~                        }|*3
-      {2:[Prompt]                 }|
+      {2:[Prompt] [+]             }|
       ^other buffer             |
       {1:~                        }|*3
                                |
@@ -158,7 +158,7 @@ describe('prompt buffer', function()
     screen:expect([[
       cmd: ^                    |
       {1:~                        }|*3
-      {3:[Prompt]                 }|
+      {3:[Prompt] [+]             }|
       other buffer             |
       {1:~                        }|*3
       {5:-- INSERT --}             |
@@ -167,7 +167,7 @@ describe('prompt buffer', function()
     screen:expect([[
       cmd:^                     |
       {1:~                        }|*3
-      {3:[Prompt]                 }|
+      {3:[Prompt] [+]             }|
       other buffer             |
       {1:~                        }|*3
                                |
@@ -514,6 +514,60 @@ describe('prompt buffer', function()
       {1:~                        }|*3
       1 line {MATCH:.*} |
     ]])
+
+    -- "S" does not clear undo
+    feed('ihello<Esc>S')
+    screen:expect([[
+      cmd: tests-initial       |
+      Command: "tests-initial" |
+      cmd: ^                    |
+      {1:~                        }|
+      {3:[Prompt] [+]             }|
+      other buffer             |
+      {1:~                        }|*3
+      {5:-- INSERT --}             |
+    ]])
+    feed('<Esc>u')
+    screen:expect([[
+      cmd: tests-initial       |
+      Command: "tests-initial" |
+      ^cmd: hello               |
+      {1:~                        }|
+      {3:[Prompt] [+]             }|
+      other buffer             |
+      {1:~                        }|*3
+      1 change; {MATCH:.*} |
+    ]])
+
+    -- undo cleared if prompt changes
+    -- (otherwise undoing would abort it and append a new prompt, which isn't useful)
+    fn('prompt_setprompt', '', 'cmd > ')
+    feed('u')
+    screen:expect([[
+      cmd: tests-initial       |
+      Command: "tests-initial" |
+      c^md > hello              |
+      {1:~                        }|
+      {3:[Prompt] [+]             }|
+      other buffer             |
+      {1:~                        }|*3
+      Already at oldest change |
+    ]])
+
+    -- new prompt line appended to fix missing prompt also clears undo
+    feed('A there')
+    fn('setpos', "':", { 0, fn('line', '.'), 99, 0 })
+    feed('<Esc>u')
+    screen:expect([[
+      cmd: tests-initial       |
+      Command: "tests-initial" |
+      cmd > hello there        |
+      cmd >^                    |
+      {3:[Prompt] [+]             }|
+      other buffer             |
+      {1:~                        }|*3
+      Already at oldest change |
+    ]])
   end)
 
   it('o/O can create new lines', function()
@@ -691,12 +745,19 @@ describe('prompt buffer', function()
     eq(true, api.nvim_buf_set_mark(0, ':', fn('line', '.'), 999, {}))
     eq({ 12, 6 }, api.nvim_buf_get_mark(0, ':'))
 
+    -- Clamps lnum to at least 1. Do in one event to repro the leak.
+    exec_lua(function()
+      vim.fn.setpos("':", { 0, 0, 0, 0 })
+      vim.fn.prompt_setprompt('', 'bar > ')
+    end)
+    eq({ 1, 6 }, api.nvim_buf_get_mark(0, ':'))
+
     -- No ml_get error from invalid lnum.
     command('set messagesopt+=wait:0 messagesopt-=hit-enter')
     fn('setpos', "':", { 0, 999, 7, 0 })
     eq('', api.nvim_get_vvar('errmsg'))
     command('set messagesopt&')
-    eq({ 12, 6 }, api.nvim_buf_get_mark(0, ':'))
+    eq({ 13, 6 }, api.nvim_buf_get_mark(0, ':'))
   end)
 
   describe('prompt_getinput', function()
@@ -892,10 +953,67 @@ describe('prompt buffer', function()
       {1:~                        }|*7
                                |
     ]])
+    -- Correct col when prompt has multi-cell chars.
+    feed('i<Left><Left>')
+    screen:expect([[
+      new-prompt > user input  |
+      <>< user inp^ut           |
+      {1:~                        }|*7
+      {5:-- INSERT --}             |
+    ]])
+    set_prompt('\t > ')
+    screen:expect([[
+      new-prompt > user input  |
+               > user inp^ut    |
+      {1:~                        }|*7
+      {5:-- INSERT --}             |
+    ]])
+    -- Works with 'virtualedit': coladd remains sensible. Cursor is redrawn correctly.
+    -- Tab size visually changes due to multiples of 'tabstop'.
+    command('set virtualedit=all')
+    feed('<C-O>Sa<Tab>b<C-O>3h')
+    screen:expect([[
+      new-prompt > user input  |
+               > a  ^  b        |
+      {1:~                        }|*7
+      {5:-- INSERT --}             |
+    ]])
+    set_prompt('😊 > ')
+    screen:expect([[
+      new-prompt > user input  |
+      😊 > a ^ b                |
+      {1:~                        }|*7
+      {5:-- INSERT --}             |
+    ]])
+    -- Minimum col should be 1. Same event to avoid corrections from the state loop.
+    feed('<Esc>0')
+    local colnr = exec_lua(function()
+      vim.fn.prompt_setprompt('', '')
+      return vim.fn.col('.')
+    end)
+    eq(1, colnr)
+    -- Correct cursor adjustment when old ': col and old prompt length differs.
+    set_prompt('foo > ')
+    fn('setpos', "':", { 0, fn('line', '.'), 10, 0 })
+    fn('setline', '.', '   foo > hello')
+    feed('fh')
+    screen:expect([[
+      new-prompt > user input  |
+         foo > ^hello           |
+      {1:~                        }|*7
+                               |
+    ]])
+    set_prompt('bar > ')
+    screen:expect([[
+      new-prompt > user input  |
+      bar > ^hello              |
+      {1:~                        }|*7
+                               |
+    ]])
 
     -- No crash when setting shorter prompt than curbuf's in other buffer.
-    feed('i<C-O>zt')
-    command('new | setlocal buftype=prompt')
+    feed('ztA')
+    command('set virtualedit& | new | setlocal buftype=prompt')
     set_prompt('looooooooooooooooooooooooooooooooooooooooooooong > ', '') -- curbuf
     set_prompt('foo > ')
     screen:expect([[
@@ -904,7 +1022,7 @@ describe('prompt buffer', function()
        ^                        |
       {1:~                        }|
       {3:[Prompt] [+]             }|
-      foo > user input         |
+      foo > hello              |
       {1:~                        }|*3
       {5:-- INSERT --}             |
     ]])
@@ -920,5 +1038,11 @@ describe('prompt buffer', function()
       {1:~                        }|*8
       {5:-- INSERT --}             |
     ]])
+
+    -- No leak if prompt_setprompt called for unloaded prompt buffer.
+    local unloaded_buf = fn('bufadd', '')
+    api.nvim_set_option_value('buftype', 'prompt', { buf = unloaded_buf })
+    fn('prompt_setprompt', unloaded_buf, 'hello unloaded! > ')
+    eq('hello unloaded! > ', fn('prompt_getprompt', unloaded_buf))
   end)
 end)

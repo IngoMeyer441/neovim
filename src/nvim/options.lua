@@ -1624,11 +1624,13 @@ local options = {
            fuzzy    Enable |fuzzy-matching| for completion candidates.  This
         	    allows for more flexible and intuitive matching, where
         	    characters can be skipped and matches can be found even
-        	    if the exact sequence is not typed.
+        	    if the exact sequence is not typed (disabled for thesaurus
+        	    completion |compl-thesaurus|).
 
            longest
         	    When 'autocomplete' is not active, only the longest common
-        	    prefix of the matches is inserted.  If the popup menu is
+        	    prefix of the matches is inserted (disabled for thesaurus
+        	    completion |compl-thesaurus|).  If the popup menu is
         	    displayed, you can use CTRL-L to add more characters.
         	    Whether case is ignored depends on the type of completion.
         	    For buffer text the 'ignorecase' option applies.
@@ -3996,7 +3998,13 @@ local options = {
     },
     {
       abbreviation = 'gfn',
-      defaults = '',
+      defaults = {
+        if_true = macros('DFLT_GFN', 'string'),
+        doc = [[(MS-Windows) "Cascadia Code,Cascadia Mono,Consolas,Courier New,monospace"
+                     (Mac) "SF Mono,Menlo,Monaco,Courier New,monospace"
+                   (Linux) "Source Code Pro,DejaVu Sans Mono,Courier New,monospace"
+                  (others) "DejaVu Sans Mono,Courier New,monospace"]],
+      },
       desc = [=[
         This is a list of fonts which will be used for the GUI version of Vim.
         In its simplest form the value is just one font name.  When

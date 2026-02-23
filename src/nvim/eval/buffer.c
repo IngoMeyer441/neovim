@@ -20,6 +20,7 @@
 #include "nvim/eval/typval_defs.h"
 #include "nvim/eval/window.h"
 #include "nvim/ex_cmds.h"
+#include "nvim/extmark.h"
 #include "nvim/globals.h"
 #include "nvim/macros_defs.h"
 #include "nvim/memline.h"
@@ -771,9 +772,10 @@ void f_prompt_setprompt(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   // Update the prompt-text and prompt-marks if a plugin calls prompt_setprompt()
   // even while user is editing their input.
-  if (bt_prompt(buf)) {
+  if (bt_prompt(buf) && buf->b_ml.ml_mfp != NULL) {
     // In case the mark is set to a nonexistent line.
-    buf->b_prompt_start.mark.lnum = MIN(buf->b_prompt_start.mark.lnum, buf->b_ml.ml_line_count);
+    buf->b_prompt_start.mark.lnum = MAX(1, MIN(buf->b_prompt_start.mark.lnum,
+                                               buf->b_ml.ml_line_count));
 
     linenr_T prompt_lno = buf->b_prompt_start.mark.lnum;
     char *old_prompt = buf_prompt_text(buf);
@@ -790,6 +792,7 @@ void f_prompt_setprompt(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       // If for some odd reason the old prompt is missing,
       // replace prompt line with new-prompt (discards user-input).
       ml_replace_buf(buf, prompt_lno, (char *)new_prompt, true, false);
+      extmark_splice_cols(buf, prompt_lno - 1, 0, old_line_len, new_prompt_len, kExtmarkNoUndo);
       cursor_col = new_prompt_len;
     } else {
       // Replace prev-prompt + user-input with new-prompt + user-input
@@ -797,14 +800,18 @@ void f_prompt_setprompt(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       if (ml_replace_buf(buf, prompt_lno, new_line, false, false) != OK) {
         xfree(new_line);
       }
-      cursor_col += new_prompt_len - old_prompt_len;
+      extmark_splice_cols(buf, prompt_lno - 1, 0, buf->b_prompt_start.mark.col, new_prompt_len,
+                          kExtmarkNoUndo);
+      cursor_col += new_prompt_len - buf->b_prompt_start.mark.col;
     }
 
     if (curwin->w_buffer == buf && curwin->w_cursor.lnum == prompt_lno) {
-      coladvance(curwin, cursor_col);
+      curwin->w_cursor.col = cursor_col;
+      check_cursor_col(curwin);
     }
-    changed_lines_redraw_buf(buf, prompt_lno, prompt_lno + 1, 0);
-    redraw_buf_later(buf, UPD_INVERTED);
+    changed_lines(buf, prompt_lno, 0, prompt_lno + 1, 0, true);
+    // Undo history contains the old prompt.
+    u_clearallandblockfree(buf);
   }
 
   // Clear old prompt text and replace with the new one

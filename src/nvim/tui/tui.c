@@ -753,6 +753,10 @@ static void update_attrs(TUIData *tui, int attr_id)
   bool standout = attr & HL_STANDOUT;
   bool strikethrough = attr & HL_STRIKETHROUGH;
   bool altfont = attr & HL_ALTFONT;
+  bool dim = attr & HL_DIM;
+  bool blink = attr & HL_BLINK;
+  bool conceal = attr & HL_CONCEALED;
+  bool overline = attr & HL_OVERLINE;
 
   bool underline;
   bool undercurl;
@@ -778,13 +782,13 @@ static void update_attrs(TUIData *tui, int attr_id)
                            || underdouble || underdotted || underdashed;
 
   if (tui->ti.defs[kTerm_set_attributes] != NULL) {
-    if (bold || reverse || underline || standout) {
+    if (bold || dim || blink || reverse || underline || standout) {
       TPVAR params[9] = { 0 };
       params[0].num = standout;
       params[1].num = underline;
       params[2].num = reverse;
-      params[3].num = 0;   // blink
-      params[4].num = 0;   // dim
+      params[3].num = blink;
+      params[4].num = dim;
       params[5].num = bold;
       params[6].num = 0;   // blank
       params[7].num = 0;   // protect
@@ -809,6 +813,12 @@ static void update_attrs(TUIData *tui, int attr_id)
     if (reverse) {
       terminfo_out(tui, kTerm_enter_reverse_mode);
     }
+    if (dim) {
+      terminfo_out(tui, kTerm_enter_dim_mode);
+    }
+    if (blink) {
+      terminfo_out(tui, kTerm_enter_blink_mode);
+    }
   }
   if (italic) {
     terminfo_out(tui, kTerm_enter_italics_mode);
@@ -818,6 +828,12 @@ static void update_attrs(TUIData *tui, int attr_id)
   }
   if (strikethrough) {
     terminfo_out(tui, kTerm_enter_strikethrough_mode);
+  }
+  if (conceal) {
+    terminfo_out(tui, kTerm_enter_secure_mode);
+  }
+  if (overline) {
+    out(tui, S_LEN("\x1b[53m"));
   }
   if (tui->ti.defs[kTerm_set_underline_style]) {
     if (undercurl) {
@@ -899,14 +915,14 @@ static void update_attrs(TUIData *tui, int attr_id)
   }
 
   tui->default_attr = fg == -1 && bg == -1
-                      && !bold && !italic && !has_any_underline && !reverse && !standout
-                      && !strikethrough;
+                      && !bold && !dim && !blink && !conceal && !overline && !italic
+                      && !has_any_underline && !reverse && !standout && !strikethrough;
 
   // Non-BCE terminals can't clear with non-default background color. Some BCE
   // terminals don't support attributes either, so don't rely on it. But assume
   // italic and bold has no effect if there is no text.
-  tui->can_clear_attr = !reverse && !standout && !has_any_underline
-                        && !strikethrough && (tui->bce || bg == -1);
+  tui->can_clear_attr = !reverse && !standout && !dim && !blink && !conceal && !overline
+                        && !has_any_underline && !strikethrough && (tui->bce || bg == -1);
 }
 
 static void final_column_wrap(TUIData *tui)

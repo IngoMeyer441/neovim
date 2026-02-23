@@ -18,7 +18,7 @@ local sleep = uv.sleep
 --- Functions executing in the current nvim session/process being tested.
 local M = {}
 
-local lib_path = t.is_zig_build() and './zig-out/lib' or './build/lib/nvim/'
+local lib_path = t.paths.test_build_dir .. (t.is_zig_build() and '/lib' or '/lib/nvim')
 M.runtime_set = 'set runtimepath^=' .. lib_path
 
 M.nvim_prog = (os.getenv('NVIM_PRG') or t.paths.test_build_dir .. '/bin/nvim')
@@ -320,7 +320,9 @@ function M.run(request_cb, notification_cb, setup_cb, timeout)
 end
 
 function M.stop()
-  assert(session):stop()
+  if loop_running then
+    assert(session):stop()
+  end
 end
 
 -- Use for commands which expect nvim to quit.
@@ -458,7 +460,9 @@ end
 
 --- Starts a new, global Nvim session and clears the current one.
 ---
---- Note: Use `new_session()` to start a session without replacing the current one.
+--- Note:
+--- - Use `new_session()` to start a session without replacing the current one.
+--- - Use `spawn_wait()` to start Nvim without connecting a RPC session.
 ---
 --- Parameters are interpreted as startup args, OR a map with these keys:
 --- - args:       List: Args appended to the default `nvim_argv` set.
@@ -488,7 +492,7 @@ local n_processes = 0
 --- Does not replace the current global session, unlike `clear()`.
 ---
 --- @param keep boolean (default: false) Don't close the current global session.
---- @param ... string Nvim CLI args (or see overload)
+--- @param ... string Nvim CLI args
 --- @return test.Session
 --- @overload fun(keep: boolean, opts: test.session.Opts): test.Session
 function M.new_session(keep, ...)

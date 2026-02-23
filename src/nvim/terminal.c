@@ -560,11 +560,13 @@ Terminal *terminal_alloc(buf_T *buf, TerminalOptions opts)
   // events from this queue are copied back onto the main event queue.
   term->pending.events = multiqueue_new(NULL, NULL);
 
-  linenr_T line_count = buf->b_ml.ml_line_count;
-  while (!(buf->b_ml.ml_flags & ML_EMPTY)) {
-    ml_delete_buf(buf, 1, false);
+  if (!(buf->b_ml.ml_flags & ML_EMPTY)) {
+    linenr_T line_count = buf->b_ml.ml_line_count;
+    while (!(buf->b_ml.ml_flags & ML_EMPTY)) {
+      ml_delete_buf(buf, 1, false);
+    }
+    deleted_lines_buf(buf, 1, line_count);
   }
-  deleted_lines_buf(buf, 1, line_count);
   term->old_height = 1;
 
   return term;
@@ -1403,6 +1405,8 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
     bool bg_set = vt_bg_idx && vt_bg_idx <= 16 && term->color_set[vt_bg_idx - 1];
 
     int hl_attrs = (cell.attrs.bold ? HL_BOLD : 0)
+                   | (cell.attrs.blink ? HL_BLINK : 0)
+                   | (cell.attrs.conceal ? HL_CONCEALED : 0)
                    | (cell.attrs.italic ? HL_ITALIC : 0)
                    | (cell.attrs.reverse ? HL_INVERSE : 0)
                    | get_underline_hl_flag(cell.attrs)
@@ -1414,10 +1418,10 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
 
     if (hl_attrs || !fg_default || !bg_default) {
       attr_id = hl_get_term_attr(&(HlAttrs) {
-        .cterm_ae_attr = (int16_t)hl_attrs,
+        .cterm_ae_attr = (int32_t)hl_attrs,
         .cterm_fg_color = vt_fg_idx,
         .cterm_bg_color = vt_bg_idx,
-        .rgb_ae_attr = (int16_t)hl_attrs,
+        .rgb_ae_attr = (int32_t)hl_attrs,
         .rgb_fg_color = vt_fg,
         .rgb_bg_color = vt_bg,
         .rgb_sp_color = -1,
@@ -2468,6 +2472,8 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
     deleted--;
   }
 
+  // Clamp old_height in case buffer lines have been deleted by the user.
+  old_height = MIN(old_height, buf->b_ml.ml_line_count);
   while (term->sb_pending > 0) {
     // This means that either the window height has decreased or the screen
     // became full and libvterm had to push all rows up. Convert the first

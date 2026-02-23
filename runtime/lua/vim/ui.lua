@@ -204,6 +204,43 @@ function M._get_open_cmd()
   end
 end
 
+--- @param bufnr integer
+local get_lsp_urls = function(bufnr)
+  local has_lsp_support = false
+  for _, client in pairs(vim.lsp.get_clients({ bufnr = bufnr })) do
+    has_lsp_support = has_lsp_support or client:supports_method('textDocument/documentLink', bufnr)
+  end
+  if not has_lsp_support then
+    return {}
+  end
+  local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
+  local results = vim.lsp.buf_request_sync(bufnr, 'textDocument/documentLink', params)
+
+  local urls = {}
+  for client_id, result in pairs(results or {}) do
+    if result.error then
+      vim.lsp.log.error(result.error)
+    else
+      local client = assert(vim.lsp.get_client_by_id(client_id))
+      local lsp_position = vim.lsp.util.make_position_params(0, client.offset_encoding).position
+      local position = vim.pos.lsp(bufnr, lsp_position, client.offset_encoding)
+
+      local document_links = result.result or {} ---@type lsp.DocumentLink[]
+      for _, document_link in ipairs(document_links) do
+        local range = vim.range.lsp(bufnr, document_link.range, client.offset_encoding)
+        if document_link.target and range:has(position) then
+          local target = document_link.target ---@type string
+          if vim.startswith(target, 'file://') then
+            target = vim.uri_to_fname(target)
+          end
+          table.insert(urls, target)
+        end
+      end
+    end
+  end
+  return urls
+end
+
 --- Returns all URLs at cursor, if any.
 --- @return string[]
 function M._get_urls()
@@ -213,6 +250,9 @@ function M._get_urls()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local row = cursor[1] - 1
   local col = cursor[2]
+
+  urls = vim.list_extend(urls, get_lsp_urls(bufnr))
+
   local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, -1, { row, col }, { row, col }, {
     details = true,
     type = 'highlight',

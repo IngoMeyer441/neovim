@@ -415,7 +415,7 @@ int os_expand_wildcards(int num_pat, char **pat, int *num_file, char ***file, in
   os_remove(tempname);
   if (readlen != len) {
     // unexpected read error
-    semsg(_(e_notread), tempname);
+    semsg(_(e_cant_read_file_str), tempname);
     xfree(tempname);
     xfree(buffer);
     return FAIL;
@@ -809,7 +809,7 @@ char *get_cmd_output(char *cmd, char *infile, int flags, size_t *ret_len)
   fclose(fd);
   os_remove(tempname);
   if (i != len) {
-    semsg(_(e_notread), tempname);
+    semsg(_(e_cant_read_file_str), tempname);
     XFREE_CLEAR(buffer);
   } else if (ret_len == NULL) {
     // Change NUL into SOH, otherwise the string is truncated.
@@ -923,7 +923,7 @@ static int do_os_system(char **argv, const char *input, size_t len, char **outpu
   if (has_input) {
     WBuffer *input_buffer = wstream_new_buffer((char *)input, len, 1, NULL);
 
-    if (!wstream_write(&proc->in, input_buffer)) {
+    if (wstream_write(&proc->in, input_buffer) != 0) {
       // couldn't write, stop the process and tell the user about it
       proc_stop(proc);
       goto end;

@@ -40,7 +40,7 @@ local function test_embed(ext_linegrid)
     startup('--cmd', 'echoerr invalid+')
     screen:expect([[
                                                                   |*4
-      {102:                                                            }|
+      {3:                                                            }|
       {9:Error in pre-vimrc command line:}                            |
       {9:E121: Undefined variable: invalid}                           |
       {6:Press ENTER or type command to continue}^                     |
@@ -74,7 +74,7 @@ local function test_embed(ext_linegrid)
     screen:expect {
       grid = [[
                                                                   |*3
-      {102:                                                            }|
+      {3:                                                            }|
       {9:Error in pre-vimrc command line:}                            |
       {9:foo}                                                         |
       {9:bar}                                                         |
@@ -236,6 +236,7 @@ describe('--embed UI', function()
 
   it('updates cwd of attached UI #21771', function()
     clear { args_rm = { '--headless' } }
+    api.nvim_set_current_dir(t.paths.test_source_path)
 
     local screen = Screen.new(40, 8)
 

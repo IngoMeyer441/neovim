@@ -122,6 +122,8 @@ PLUGINS
 
 TREESITTER
 
+• The |vim.treesitter.query.lint()| is no longer enabled by default in the
+  |ft-query-plugin|.
 • |treesitter-directive-offset!| can now be applied to quantified captures. It
   no longer sets `metadata[capture_id].range`; it instead sets
   `metadata[capture_id].offset`. The offset will be applied in
@@ -188,6 +190,7 @@ DEFAULTS
 • Mappings:
   • |grt| in Normal mode maps to |vim.lsp.buf.type_definition()|
 • 'shada' default now excludes "/tmp/" and "/private/" paths to reduce clutter in |:oldfiles|.
+• Enabled treesitter highlighting for Markdown files
 
 DIAGNOSTICS
 
@@ -245,6 +248,8 @@ HIGHLIGHTS
 • |hl-OkMsg| |hl-StderrMsg| |hl-StdoutMsg|
 • |hl-SnippetTabstopActive| highlights the currently active tabstop.
 • |hl-PmenuBorder| |hl-PmenuShadow| |hl-PmenuShadowThrough| see 'pumborder'.
+• |nvim_set_hl()| and |nvim_get_hl()| support the SGR attributes "dim",
+  "blink", "conceal", and "overline".
 
 LSP
 
@@ -307,6 +312,7 @@ LSP
 • Code lenses now display as virtual lines
 • Support for `workspace/codeLens/refresh`:
   https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#codeLens_refresh
+• `gx` will use `textDocument/documentLink` if available.
 
 LUA
 
@@ -400,6 +406,8 @@ TUI
 • |TermResponse| now supports DA1 and APC query responses.
 • Native progress bars are displayed for |Progress| events using the OSC 9;4
   sequence.
+• The TUI now renders the SGR dim (faint), blink, conceal, and overline
+  attributes.
 
 UI
 
