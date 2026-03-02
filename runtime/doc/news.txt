@@ -164,6 +164,7 @@ API
   `style='minimal'` or `:setlocal statusline=` to hide the statusline.
 • Added experimental |nvim__exec_lua_fast()| to allow remote API clients to
   execute code while nvim is blocking for input.
+• |vim.secure.trust()| accepts `path` for the `allow` action.
 
 BUILD
 
@@ -239,6 +240,7 @@ EVENTS
 • Creating or updating a progress message with |nvim_echo()| triggers a |Progress| event.
 • |MarkSet| is triggered after a |mark| is set by the user (currently doesn't
   support implicit marks like |'[| or |'<|, …).
+• |SessionLoadPre| is triggered before loading a |Session| file.
 • |TabClosedPre| is triggered before closing a |tabpage|.
 • New `terminator` parameter for |TermRequest| event.
 
@@ -313,6 +315,7 @@ LSP
 • Support for `workspace/codeLens/refresh`:
   https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#codeLens_refresh
 • `gx` will use `textDocument/documentLink` if available.
+• |vim.lsp.completion.enable()| adds colored symbol preview for color items.
 
 LUA
 
@@ -372,6 +375,10 @@ PERFORMANCE
 • |i_CTRL-R| inserts named/clipboard registers literally, 10x speedup.
 • LSP `textDocument/semanticTokens/range` is supported, which requests tokens
   for the viewport (visible screen) only.
+• |:packadd| doesn't invalidate the cached Lua package path. Instead the cache
+  gets updated in place. This might make a big startuptime difference for
+  certain |init.lua| patterns where multiple |:packadd| or |vim.pack.add()|
+  calls are interspersed with other code.
 
 PLUGINS
 
@@ -411,13 +418,18 @@ TUI
 
 UI
 
+• |ui2| is a redesign of the core messages and commandline UI, which will
+  replace the legacy message grid in the TUI.
+  • Avoids "Press ENTER" interruptions.
+  • Avoids delays from |W10| "Changing a readonly file" and other warnings.
+  • Highlights the cmdline as you type.
+  • Provides the |pager| as a buffer + window.
+  • Currently experimental. To enable it: `require('vim._core.ui2').enable()`
 • |:restart| restarts Nvim and reattaches the current UI.
 • |:connect| dynamically connects the current UI to the server at the given
   address.
 • |:checkhealth| shows a summary in the header for every healthcheck.
 • |ui-multigrid| provides composition information and absolute coordinates.
-• `vim._core.ui2` provides an experimental commandline and message UI intended to
-  replace the message grid in the TUI.
 • Error messages are more concise:
   • "Error detected while processing:" changed to "Error in:".
   • "Error executing Lua:" changed to "Lua:".

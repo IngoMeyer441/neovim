@@ -60,12 +60,7 @@ uint64_t ui_client_start_server(const char *exepath, size_t argc, char **argv)
   CallbackReader on_err = CALLBACK_READER_INIT;
   on_err.fwd_err = true;
 
-#ifdef MSWIN
-  // TODO(justinmk): detach breaks `tt.setup_child_nvim` tests on Windows?
-  bool detach = os_env_exists("__NVIM_DETACH", true);
-#else
   bool detach = true;
-#endif
   varnumber_T exit_status;
   Channel *channel = channel_job_start(args, exepath,
                                        CALLBACK_READER_INIT, on_err, CALLBACK_NONE,
@@ -298,7 +293,7 @@ static void channel_connect_event(void **argv)
   char *server_addr = argv[0];
 
   const char *err = "";
-  bool is_tcp = socket_address_is_tcp(server_addr);
+  bool is_tcp = socket_address_tcp_host_end(server_addr) != NULL;
   CallbackReader on_data = CALLBACK_READER_INIT;
   uint64_t chan = channel_connect(is_tcp, server_addr, true, on_data, 50, &err);
 

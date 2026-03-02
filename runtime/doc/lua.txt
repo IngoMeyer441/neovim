@@ -1285,7 +1285,7 @@ vim.defer_fn({fn}, {timeout})                                 *vim.defer_fn()*
                    `fn`
 
     Return: ~
-        (`table`) timer luv timer object
+        (`uv.uv_timer_t`) timer luv timer object
 
                                                              *vim.deprecate()*
 vim.deprecate({name}, {alternative}, {version}, {plugin}, {backtrace})
@@ -2592,10 +2592,11 @@ vim.fs.joinpath({...})                                     *vim.fs.joinpath()*
     Concatenates partial paths (one absolute or relative path followed by zero
     or more relative paths). Slashes are normalized: redundant slashes are
     removed, and (on Windows) backslashes are replaced with forward-slashes.
-    Paths are not expanded/resolved.
+    Empty segments are removed. Paths are not expanded/resolved.
 
     Examples:
     • "foo/", "/bar" => "foo/bar"
+    • "", "after/plugin" => "after/plugin"
     • Windows: "a\foo\", "\bar" => "a/foo/bar"
 
     Attributes: ~
@@ -4480,8 +4481,7 @@ vim.secure.trust({opts})                                  *vim.secure.trust()*
                 • `'deny'` to add a file to the trust database and deny it,
                 • `'remove'` to remove file from the trust database
                 • {path}? (`string`) Path to a file to update. Mutually
-                  exclusive with {bufnr}. Cannot be used when {action} is
-                  "allow".
+                  exclusive with {bufnr}.
                 • {bufnr}? (`integer`) Buffer number to update. Mutually
                   exclusive with {path}.
 
@@ -5276,7 +5276,7 @@ vim.version.range({spec})                                *vim.version.range()*
 
 
 ==============================================================================
-Lua module: vim._core.ui2                                      *vim._core.ui2*
+UI2                                                                      *ui2*
 
 WARNING: This is an experimental interface intended to replace the message
 grid in the TUI.
@@ -5285,9 +5285,11 @@ To enable the experimental UI (default opts shown): >lua
     require('vim._core.ui2').enable({
      enable = true, -- Whether to enable or disable the UI.
      msg = { -- Options related to the message module.
-       ---@type 'cmd'|'msg' Where to place regular messages, either in the
+       ---@type 'cmd'|'msg' Default message target, either in the
        ---cmdline or in a separate ephemeral message window.
-       target = 'cmd',
+       ---@type string|table<string, 'cmd'|'msg'|'pager'> Default message target
+       or table mapping |ui-messages| kinds to a target.
+       targets = 'cmd',
        timeout = 4000, -- Time a message is visible in the message window.
      },
     })

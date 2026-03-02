@@ -532,6 +532,7 @@ function lsp.enable(name, enable)
   validate('name', name, { 'string', 'table' })
 
   local names = vim._ensure_list(name) --[[@as string[] ]]
+  local configs = {} --- @type table<string,{resolved_config:vim.lsp.Config?}>
 
   -- Check for errors, and abort with no side-effects if there is one.
   for _, nm in ipairs(names) do
@@ -542,13 +543,13 @@ function lsp.enable(name, enable)
     -- Raise error if `lsp.config[nm]` raises an error, instead of waiting for
     -- the error to be triggered by `lsp_enable_callback()`.
     if enable ~= false then
-      _ = lsp.config[nm]
+      configs[nm] = { resolved_config = lsp.config[nm] }
     end
   end
 
   -- Now that there can be no errors, enable/disable all names.
   for _, nm in ipairs(names) do
-    lsp._enabled_configs[nm] = enable ~= false and {} or nil
+    lsp._enabled_configs[nm] = enable ~= false and configs[nm] or nil
   end
 
   if not next(lsp._enabled_configs) then
@@ -1141,9 +1142,8 @@ api.nvim_create_autocmd('VimLeavePre', {
       client:stop(client.exit_timeout)
     end
 
-    local exit_warning_timer --- @type uv.uv_timer_t?
-    if max_timeout > min_warn_exit_timeout then
-      exit_warning_timer = vim.defer_fn(function()
+    local exit_warning_timer = max_timeout > min_warn_exit_timeout
+      and vim.defer_fn(function()
         api.nvim_echo({
           {
             string.format(
@@ -1154,7 +1154,6 @@ api.nvim_create_autocmd('VimLeavePre', {
           },
         }, true, {})
       end, min_warn_exit_timeout)
-    end
 
     vim.wait(max_timeout, function()
       return vim.iter(active_clients):all(function(client)

@@ -50,18 +50,20 @@ describe('TUI', function()
     end)
 
     screen:expect({ any = vim.pesc('[Process exited 1]') })
+
     -- When the address is very long, the error message may be only partly visible.
     if #addr_in_use <= 600 then
       screen:expect({
         any = vim.pesc(
           ('%s: Failed to --listen: address already in use:'):format(
-            is_os('win') and 'nvim.exe' or 'nvim'
+            fn.fnamemodify(nvim_prog, ':t')
           )
         ),
         unchanged = true,
       })
     end
 
+    -- Always assert the log for the error message.
     assert_log(
       vim.pesc('Failed to start server: address already in use: ' .. addr_in_use),
       testlog,
@@ -116,41 +118,6 @@ describe('TUI :detach', function()
   it('does not stop server', function()
     local job_opts = { env = t.shallowcopy(env_notermguicolors) }
 
-    if is_os('win') then
-      -- TODO(justinmk): on Windows,
-      --    - tt.setup_child_nvim() is broken.
-      --    - session.lua is broken after the pipe closes.
-      -- So this test currently just exercises __NVIM_DETACH + :detach, without asserting anything.
-
-      -- TODO(justinmk): temporary hack for Windows.
-      job_opts.env['__NVIM_DETACH'] = '1'
-      n.clear(job_opts)
-
-      local screen = Screen.new(50, 10)
-      n.feed('iHello, World')
-      screen:expect([[
-        Hello, World^                                      |
-        {1:~                                                 }|*8
-        {5:-- INSERT --}                                      |
-      ]])
-
-      -- local addr = api.nvim_get_vvar('servername')
-      eq(1, #n.api.nvim_list_uis())
-
-      -- TODO(justinmk): test util should not freak out when the pipe closes.
-      n.expect_exit(n.command, 'detach')
-
-      -- n.get_session():close() -- XXX: hangs
-      -- n.set_session(n.connect(addr)) -- XXX: hangs
-      -- eq(0, #n.api.nvim_list_uis()) -- XXX: hangs
-
-      -- Avoid a dangling process.
-      n.get_session():close('kill')
-      -- n.expect_exit(n.command, 'qall!')
-
-      return
-    end
-
     n.clear()
     finally(function()
       n.check_close()
@@ -171,13 +138,16 @@ describe('TUI :detach', function()
     }, job_opts)
 
     tt.feed_data('iHello, World')
-    screen:expect([[
+    tt.screen_expect(
+      screen,
+      [[
       Hello, World^                                      |
       {100:~                                                 }|*3
       {3:[No Name] [+]                                     }|
       {5:-- INSERT --}                                      |
       {5:-- TERMINAL --}                                    |
-    ]])
+    ]]
+    )
 
     local child_session = n.connect(child_server)
     finally(function()
@@ -226,13 +196,16 @@ describe('TUI :detach', function()
       child_server,
     }, job_opts)
 
-    screen_reattached:expect([[
+    tt.screen_expect(
+      screen_reattached,
+      [[
       We did it, pooky^.                                 |
       {100:~                                                 }|*3
       {3:[No Name] [+]                                     }|
                                                         |
       {5:-- TERMINAL --}                                    |
-    ]])
+    ]]
+    )
   end)
 end)
 
@@ -264,16 +237,8 @@ describe('TUI :restart', function()
       'echo getpid()',
     }, { env = env_notermguicolors })
 
-    --- FIXME: On Windows spaces at the end of a screen line may have wrong attrs.
-    --- Remove this function when that's fixed.
-    ---
-    --- @param s string
     local function screen_expect(s)
-      if is_os('win') then
-        s = s:gsub(' *%} +%|\n', '{MATCH: *}}{MATCH: *}|\n')
-        s = s:gsub('%}%^ +%|\n', '{MATCH:[ ^]*}}{MATCH:[ ^]*}|\n')
-      end
-      screen:expect(s)
+      tt.screen_expect(screen, s)
     end
 
     -- The value of has("gui_running") should be 0 before and after :restart.
@@ -458,6 +423,8 @@ describe('TUI :restart', function()
       server_pipe,
       '--cmd',
       'set notermguicolors',
+      '-s',
+      '-',
       '-',
       '--',
       'Xtest-file1',
@@ -472,7 +439,9 @@ describe('TUI :restart', function()
     ]])
     server_session = n.connect(server_pipe)
     local expr = 'index(v:argv, "-") >= 0 || index(v:argv, "--") >= 0 ? v:true : v:false'
+    local has_s = 'index(v:argv, "-s") >= 0 ? v:true : v:false'
     eq({ true, true }, { server_session:request('nvim_eval', expr) })
+    eq({ true, true }, { server_session:request('nvim_eval', has_s) })
 
     tt.feed_data(":restart put='foo'\013")
     screen:expect([[
@@ -487,6 +456,7 @@ describe('TUI :restart', function()
     server_session = n.connect(server_pipe)
 
     eq({ true, false }, { server_session:request('nvim_eval', expr) })
+    eq({ true, false }, { server_session:request('nvim_eval', has_s) })
     local argv = ({ server_session:request('nvim_eval', 'v:argv') })[2] --[[@type table]]
     eq(13, #argv)
     eq("-c put='foo'", table.concat(argv, ' ', #argv - 1, #argv))
@@ -494,10 +464,6 @@ describe('TUI :restart', function()
 end)
 
 describe('TUI :connect', function()
-  if t.skip(is_os('win'), "relies on :detach which currently doesn't work on windows") then
-    return
-  end
-
   local screen_empty = [[
     ^                                                  |
     {100:~                                                 }|*5
@@ -2886,10 +2852,15 @@ describe('TUI', function()
   for _, guicolors in ipairs({ 'notermguicolors', 'termguicolors' }) do
     it('has no black flicker when clearing regions during startup with ' .. guicolors, function()
       local screen = Screen.new(50, 10)
+      -- Colorscheme is automatically detected as light in _core/defaults.lua, so fg
+      -- should be dark except on Windows, where it doesn't respond to the OSC11 query,
+      -- so bg is dark.
+      local fg = is_os('win') and Screen.colors.NvimLightGrey2 or Screen.colors.NvimDarkGrey2
+      local bg = is_os('win') and Screen.colors.NvimDarkGrey2 or Screen.colors.NvimLightGrey2
       screen:add_extra_attr_ids({
         [100] = {
-          foreground = Screen.colors.NvimLightGrey2,
-          background = Screen.colors.NvimDarkGrey2,
+          foreground = fg,
+          background = bg,
         },
       })
       fn.jobstart({
@@ -2903,6 +2874,7 @@ describe('TUI', function()
         'sleep 10',
       }, {
         term = true,
+        env = { VIMRUNTIME = os.getenv('VIMRUNTIME') },
       })
       if guicolors == 'termguicolors' then
         screen:expect([[
@@ -2924,22 +2896,12 @@ describe('TUI', function()
 
   it('argv[0] can be overridden #23953', function()
     t.skip(is_os('win'), 'N/A for Windows')
-    if not exec_lua('return pcall(require, "ffi")') then
-      pending('N/A: missing LuaJIT FFI')
-    end
-    local script_file = 'Xargv0.lua'
-    write_file(
-      script_file,
-      [=[
-      local ffi = require('ffi')
-      ffi.cdef([[int execl(const char *, const char *, ...);]])
-      ffi.C.execl(vim.v.progpath, 'Xargv0nvim', '--clean', nil)
-    ]=]
+    local screen = Screen.new(50, 7, { rgb = false })
+    fn.jobstart(
+      { testprg('shell-test'), 'EXECVP', nvim_prog, 'Xargv0nvim', '--clean' },
+      { term = true, env = { VIMRUNTIME = os.getenv('VIMRUNTIME') } }
     )
-    finally(function()
-      os.remove(script_file)
-    end)
-    local screen = tt.setup_child_nvim({ '--clean', '-l', script_file })
+    command('startinsert')
     screen:expect([[
       ^                                                  |
       ~                                                 |*3
