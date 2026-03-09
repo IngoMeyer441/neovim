@@ -2807,6 +2807,13 @@ describe('TUI', function()
       eq('TEST_TITLE', api.nvim_buf_get_var(0, 'term_title'))
     end)
   end)
+
+  it('stdin and stdout are tty fds in embedded server #38172', function()
+    eq(
+      { 'tty', 'tty' },
+      child_exec_lua('return { vim.uv.guess_handle(0), vim.uv.guess_handle(1) }')
+    )
+  end)
 end)
 
 describe('TUI', function()
@@ -4334,7 +4341,7 @@ describe('TUI client', function()
       ffi.C.ui_call_chdir(to_api_string('README.md'))
     ]])
     screen_client:expect_unchanged()
-    assert_log('Failed to chdir to README.md: not a directory', testlog)
+    assert_log('Failed to chdir to README%.md: not a directory', testlog)
   end)
 
   it('nvim_ui_send works with remote client #36317', function()

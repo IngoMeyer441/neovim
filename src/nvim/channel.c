@@ -692,8 +692,8 @@ static size_t on_channel_output(RStream *stream, Channel *chan, const char *buf,
   // creates a pipe instead. Write to stdout because ConPTY only captures stdout.
   // On non-Windows, fwd_err uses UV_INHERIT_FD directly; this path is never reached.
   if (reader->fwd_err && count > 0) {
-    os_write(STDOUT_FILENO, buf, count, false);
-    return count;
+    ptrdiff_t wres = os_write(STDOUT_FILENO, buf, count, false);
+    return (size_t)MAX(wres, 0);
   }
 #endif
 

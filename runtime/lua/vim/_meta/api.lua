@@ -1827,8 +1827,8 @@ function vim.api.nvim_open_term(buffer, opts) end
 ---    - "win"        Window given by the `win` field, or current window.
 --- - row: Row position in units of "screen cell height", may be fractional.
 --- - split: Split direction: "left", "right", "above", "below".
---- - style: (optional) Configure the appearance of the window. Currently
----     only supports one value:
+--- - style: (optional) Configure the appearance of the window:
+---     - ""         No special style.
 ---     - "minimal"  Nvim will display the window with many UI options
 ---                  disabled. This is useful when displaying a temporary
 ---                  float where the text should not be edited. Disables
@@ -2484,8 +2484,9 @@ function vim.api.nvim_win_hide(window) end
 --- @return boolean # true if the window is valid, false otherwise
 function vim.api.nvim_win_is_valid(window) end
 
---- Sets the current buffer in a window, without side effects
+--- Sets the current buffer in a window.
 ---
+--- Note: As a side-effect, this executes `BufEnter` and `BufLeave` autocommands.
 --- @param window integer `window-ID`, or 0 for current window
 --- @param buffer integer Buffer id
 function vim.api.nvim_win_set_buf(window, buffer) end

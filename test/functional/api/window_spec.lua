@@ -2495,6 +2495,12 @@ describe('API/win', function()
         "non-float with 'win' requires at least 'split' or 'vertical'",
         pcall_err(api.nvim_win_set_config, 0, { win = 0, relative = '' })
       )
+
+      -- "minimal" style takes effect immediately for a split.
+      api.nvim_set_option_value('cursorline', true, { win = win, scope = 'local' })
+      eq(true, api.nvim_get_option_value('cursorline', { win = win }))
+      api.nvim_win_set_config(win, { style = 'minimal' })
+      eq(false, api.nvim_get_option_value('cursorline', { win = win }))
     end)
 
     it('creates top-level splits', function()
@@ -3332,6 +3338,46 @@ describe('API/win', function()
       eq('right', api.nvim_win_get_config(win2).split)
       eq('right', api.nvim_win_get_config(float).split)
     end)
+
+    it('includes style', function()
+      local unused_style1 = api.nvim_open_win(0, false, {
+        width = 10,
+        height = 10,
+        relative = 'editor',
+        row = 10,
+        col = 10,
+      })
+      local unused_style2 = api.nvim_open_win(0, false, {
+        width = 10,
+        height = 10,
+        relative = 'editor',
+        row = 10,
+        col = 10,
+        style = '',
+      })
+      local minimal_style = api.nvim_open_win(0, false, {
+        width = 10,
+        height = 10,
+        relative = 'editor',
+        row = 10,
+        col = 10,
+        style = 'minimal',
+      })
+
+      eq('', api.nvim_win_get_config(unused_style1).style)
+      eq('', api.nvim_win_get_config(unused_style2).style)
+      eq('minimal', api.nvim_win_get_config(minimal_style).style)
+
+      -- "style" is allowed for splits too.
+      eq('', api.nvim_win_get_config(0).relative)
+      eq('', api.nvim_win_get_config(0).style)
+      api.nvim_win_set_config(0, { style = 'minimal' })
+      eq('minimal', api.nvim_win_get_config(0).style)
+      api.nvim_win_set_config(0, { height = 1 }) -- "style" unchanged when not included.
+      eq('minimal', api.nvim_win_get_config(0).style)
+      api.nvim_win_set_config(0, { style = '' })
+      eq('', api.nvim_win_get_config(0).style)
+    end)
   end)
 
   describe('set_config', function()
@@ -3506,6 +3552,42 @@ describe('API/win', function()
       eq('auto', api.nvim_get_option_value('signcolumn', { win = win }))
       eq('', api.nvim_get_option_value('colorcolumn', { win = win }))
       eq('', api.nvim_get_option_value('statuscolumn', { win = win }))
+    end)
+
+    it('merges configs only after successfully configuring split', function()
+      local win = api.nvim_open_win(0, true, {
+        relative = 'editor',
+        width = 10,
+        height = 10,
+        row = 5,
+        col = 5,
+      })
+      local cfg = api.nvim_win_get_config(win)
+      eq('', cfg.style)
+      command('set cursorline | tabnew')
+      local tp2_win = api.nvim_get_current_win()
+      command('tabfirst | autocmd WinEnter * ++once wincmd p')
+      eq(
+        'Failed to switch away from window 1001',
+        pcall_err(
+          api.nvim_win_set_config,
+          win,
+          { split = 'below', win = tp2_win, style = 'minimal' }
+        )
+      )
+      eq(cfg, api.nvim_win_get_config(win))
+      eq(true, api.nvim_get_option_value('cursorline', { win = win }))
+
+      exec([[
+        autocmd WinLeave * ++once let g:style_before = nvim_win_get_config(0).style
+                               \| let g:cul_before = &cursorline
+                               \| call nvim_win_set_config(0, #{style: ""})
+      ]])
+      api.nvim_win_set_config(win, { split = 'below', win = tp2_win, style = 'minimal' })
+      eq('', eval('g:style_before'))
+      eq(1, eval('g:cul_before'))
+      eq('minimal', api.nvim_win_get_config(win).style)
+      eq(false, api.nvim_get_option_value('cursorline', { win = win }))
     end)
   end)
 end)
