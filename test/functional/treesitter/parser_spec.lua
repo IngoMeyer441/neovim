@@ -7,7 +7,6 @@ local dedent = t.dedent
 local eq = t.eq
 local insert = n.insert
 local exec_lua = n.exec_lua
-local pcall_err = t.pcall_err
 local feed = n.feed
 local run_query = ts_t.run_query
 local assert_alive = n.assert_alive
@@ -337,25 +336,25 @@ describe('treesitter parser API', function()
   end)
 
   local test_text = [[
-void ui_refresh(void)
-{
-  int width = INT_MAX, height = INT_MAX;
-  bool ext_widgets[kUIExtCount];
-  for (UIExtension i = 0; (int)i < kUIExtCount; i++) {
-    ext_widgets[i] = true;
-  }
+    void ui_refresh(void)
+    {
+      int width = INT_MAX, height = INT_MAX;
+      bool ext_widgets[kUIExtCount];
+      for (UIExtension i = 0; (int)i < kUIExtCount; i++) {
+        ext_widgets[i] = true;
+      }
 
-  bool inclusive = ui_override();
-  for (size_t i = 0; i < ui_count; i++) {
-    UI *ui = uis[i];
-    width = MIN(ui->width, width);
-    height = MIN(ui->height, height);
-    foo = BAR(ui->bazaar, bazaar);
-    for (UIExtension j = 0; (int)j < kUIExtCount; j++) {
-      ext_widgets[j] &= (ui->ui_ext[j] || inclusive);
-    }
-  }
-}]]
+      bool inclusive = ui_override();
+      for (size_t i = 0; i < ui_count; i++) {
+        UI *ui = uis[i];
+        width = MIN(ui->width, width);
+        height = MIN(ui->height, height);
+        foo = BAR(ui->bazaar, bazaar);
+        for (UIExtension j = 0; (int)j < kUIExtCount; j++) {
+          ext_widgets[j] &= (ui->ui_ext[j] || inclusive);
+        }
+      }
+    }]]
 
   it('can iterate over nodes children', function()
     insert(test_text)
@@ -382,10 +381,11 @@ void ui_refresh(void)
   it('does not get parser for empty filetype', function()
     insert(test_text)
 
-    eq(
-      '.../treesitter.lua:0: Parser not found for buffer 1: language could not be determined',
-      pcall_err(exec_lua, 'vim.treesitter.get_parser(0)')
-    )
+    local parser, error = exec_lua(function()
+      return vim.treesitter.get_parser(0)
+    end)
+    eq(vim.NIL, parser)
+    eq('Parser not found for buffer 1: language could not be determined', error)
 
     -- Must provide language for buffers with an empty filetype
     exec_lua("vim.treesitter.get_parser(0, 'c')")
@@ -424,7 +424,7 @@ void ui_refresh(void)
       local tree = parser:parse()[1]
       return vim.treesitter.get_node_text(tree:root(), 0)
     end)
-    eq(test_text, res)
+    eq(t.dedent(test_text), res)
 
     local res2 = exec_lua(function()
       local parser = vim.treesitter.get_parser(0, 'c')
@@ -436,9 +436,9 @@ void ui_refresh(void)
 
   it('can get text where start of node is one past EOF', function()
     local text = [[
-def run
-  a = <<~E
-end]]
+      def run
+        a = <<~E
+      end]]
     insert(text)
     eq(
       '',
@@ -463,9 +463,10 @@ end]]
 
   it('can get empty text if node range is zero-width', function()
     local text = [[
-```lua
-{}
-```]]
+      ```lua
+      {}
+      ```
+    ]]
     insert(text)
     local result = exec_lua(function()
       local fake_node = {}
@@ -602,12 +603,12 @@ end]]
 
     before_each(function()
       insert([[
-int x = INT_MAX;
-#define READ_STRING(x, y) (char *)read_string((x), (size_t)(y))
-#define READ_STRING_OK(x, y) (char *)read_string((x), (size_t)(y))
-#define VALUE 123
-#define VALUE1 123
-#define VALUE2 123
+        int x = INT_MAX;
+        #define READ_STRING(x, y) (char *)read_string((x), (size_t)(y))
+        #define READ_STRING_OK(x, y) (char *)read_string((x), (size_t)(y))
+        #define VALUE 123
+        #define VALUE1 123
+        #define VALUE2 123
       ]])
     end)
 
@@ -989,8 +990,8 @@ int x = INT_MAX;
   describe('when getting the language for a range', function()
     before_each(function()
       insert([[
-int x = INT_MAX;
-#define VALUE 123456789
+        int x = INT_MAX;
+        #define VALUE 123456789
       ]])
     end)
 
@@ -1015,7 +1016,7 @@ int x = INT_MAX;
   describe('when setting the node for an injection', function()
     before_each(function()
       insert([[
-print()
+        print()
       ]])
     end)
 

@@ -117,8 +117,8 @@ describe('command-line option', function()
       )
       feed('i:cq<CR>')
       screen:expect([[
-                                                |
-        [Process exited 1]^                      |
+        ^                                        |
+        [Process exited 1]                      |
                                                 |*5
         {5:-- TERMINAL --}                          |
       ]])
@@ -223,6 +223,7 @@ describe('vim._core', function()
       'vim._core.ex_cmd',
       'vim._core.exrc',
       'vim._core.help',
+      'vim._core.log',
       'vim._core.options',
       'vim._core.server',
       'vim._core.shared',

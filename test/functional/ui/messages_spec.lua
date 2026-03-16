@@ -439,12 +439,14 @@ describe('ui/ext_messages', function()
         {
           content = { { ('stdout%s\n'):format(t.is_os('win') and '\r' or ''), 'StdoutMsg' } },
           kind = 'shell_out',
+          append = true,
         },
         {
           content = { { ('stderr%s\n'):format(t.is_os('win') and '\r' or ''), 9, 'StderrMsg' } },
           kind = 'shell_err',
+          append = true,
         },
-        { content = { { '\nshell returned 3\n' } }, kind = 'shell_ret' },
+        { content = { { 'shell returned 3' } }, kind = 'shell_ret' },
       },
     })
 
@@ -1636,6 +1638,34 @@ stack traceback:
       },
     })
   end)
+
+  it('trigger', function()
+    command('echo "foo"')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = { { content = { { 'foo' } }, kind = 'echo', trigger = '' } },
+    })
+    command('map Q :echo "foo"<CR>')
+    feed('Q')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = { { content = { { 'foo' } }, kind = 'echo', trigger = '' } },
+    })
+    feed(':echo "foo"<CR>')
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = { { content = { { 'foo' } }, kind = 'echo', trigger = 'typed_cmd' } },
+    })
+  end)
 end)
 
 describe('ui/builtin messages', function()
@@ -2316,8 +2346,7 @@ describe('ui/ext_messages', function()
     screen:expect([[
                                                                                       |
       {1:~    }{4:^     }{1:                                                                      }|
-      {1:~                                                                               }|*21
-      {2:[No Name]                                                                       }|
+      {1:~                                                                               }|*22
     ]])
   end)
 
@@ -2477,7 +2506,7 @@ describe('ui/msg_puts_printf', function()
       ^Exモードに入ります。ノー |
       マルモードに戻るには "vis|
       ual" と入力してください。|
-      :                        |
+      [Process exited 0]       |
                                |
     ]])
   end)

@@ -1744,6 +1744,7 @@ describe('builtin popupmenu', function()
         exec([[
           let g:list = [#{word: "one", info: "1info"}, #{word: "two", info: "2info"}, #{word: "looooooooooooooong"}]
           let g:bufnrs = []
+          let g:reduce_info_height = 0
           funct Omni_test(findstart, base)
             if a:findstart
               return col(".") - 1
@@ -1763,11 +1764,15 @@ describe('builtin popupmenu', function()
           endfunc
           funct TsHl()
             let comp_info = complete_info(['selected'])
-            if get(comp_info, 'preview_bufnr', 0) > 0
-              call v:lua.vim.treesitter.start(comp_info['preview_bufnr'], 'markdown')
-            endif
             if comp_info['selected'] == 0
-              call nvim__complete_set(comp_info['selected'], {"info": "```lua\nfunction test()\n  print('foo')\nend\n```"})
+              let windata = nvim__complete_set(comp_info['selected'], {"info": "```lua\nfunction test()\n  print('foo')\nend\n```"})
+              call v:lua.vim.treesitter.start(windata['bufnr'], 'markdown')
+              if g:reduce_info_height > 0
+                let h = v:lua.vim.api.nvim_win_text_height(windata['winid'], {}).all
+                if h > 3
+                  call v:lua.vim.api.nvim_win_set_height(windata['winid'], h - 3)
+                endif
+              endif
             endif
           endfunc
           augroup Group
@@ -1808,31 +1813,7 @@ describe('builtin popupmenu', function()
             win_pos = { [2] = { height = 10, startcol = 0, startrow = 0, width = 40, win = 1000 } },
             float_pos = {
               [5] = { -1, 'NW', 2, 1, 0, false, 100, 2, 1, 0 },
-              [4] = { 1001, 'NW', 1, 1, 19, false, 50, 1, 1, 19 },
-            },
-            win_viewport = {
-              [2] = {
-                win = 1000,
-                topline = 0,
-                botline = 2,
-                curline = 0,
-                curcol = 3,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-              [4] = {
-                win = 1001,
-                topline = 0,
-                botline = 1,
-                curline = 0,
-                curcol = 0,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-            },
-            win_viewport_margins = {
-              [2] = { bottom = 0, left = 0, right = 0, top = 0, win = 1000 },
-              [4] = { bottom = 0, left = 0, right = 0, top = 0, win = 1001 },
+              [4] = { 1001, 'NW', 1, 1, 19, true, 50, 1, 1, 19 },
             },
           })
         else
@@ -1868,31 +1849,7 @@ describe('builtin popupmenu', function()
             win_pos = { [2] = { height = 10, startcol = 0, startrow = 0, width = 40, win = 1000 } },
             float_pos = {
               [5] = { -1, 'NW', 2, 1, 0, false, 100, 2, 1, 0 },
-              [4] = { 1001, 'NW', 1, 1, 15, false, 50, 1, 1, 15 },
-            },
-            win_viewport = {
-              [2] = {
-                win = 1000,
-                topline = 0,
-                botline = 2,
-                curline = 0,
-                curcol = 2,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-              [4] = {
-                win = 1001,
-                topline = 0,
-                botline = 1,
-                curline = 0,
-                curcol = 0,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-            },
-            win_viewport_margins = {
-              [2] = { bottom = 0, left = 0, right = 0, top = 0, win = 1000 },
-              [4] = { bottom = 0, left = 0, right = 0, top = 0, win = 1001 },
+              [4] = { 1001, 'NW', 1, 1, 15, true, 50, 1, 1, 15 },
             },
           })
         else
@@ -1983,31 +1940,7 @@ describe('builtin popupmenu', function()
             win_pos = { [2] = { height = 10, startcol = 0, startrow = 0, width = 40, win = 1000 } },
             float_pos = {
               [5] = { -1, 'NW', 2, 1, 0, false, 100, 2, 1, 0 },
-              [4] = { 1001, 'NW', 1, 1, 19, false, 50, 1, 1, 19 },
-            },
-            win_viewport = {
-              [2] = {
-                win = 1000,
-                topline = 0,
-                botline = 2,
-                curline = 0,
-                curcol = 18,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-              [4] = {
-                win = 1001,
-                topline = 0,
-                botline = 1,
-                curline = 0,
-                curcol = 0,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-            },
-            win_viewport_margins = {
-              [2] = { bottom = 0, left = 0, right = 0, top = 0, win = 1000 },
-              [4] = { bottom = 0, left = 0, right = 0, top = 0, win = 1001 },
+              [4] = { 1001, 'NW', 1, 1, 19, true, 50, 1, 1, 19 },
             },
           })
         else
@@ -2047,31 +1980,7 @@ describe('builtin popupmenu', function()
             win_pos = { [2] = { height = 10, startcol = 0, startrow = 0, width = 40, win = 1000 } },
             float_pos = {
               [5] = { -1, 'NW', 2, 1, 18, false, 100, 2, 1, 18 },
-              [4] = { 1001, 'NW', 1, 1, 13, false, 50, 1, 1, 13 },
-            },
-            win_viewport = {
-              [2] = {
-                win = 1000,
-                topline = 0,
-                botline = 2,
-                curline = 0,
-                curcol = 22,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-              [4] = {
-                win = 1001,
-                topline = 0,
-                botline = 1,
-                curline = 0,
-                curcol = 0,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-            },
-            win_viewport_margins = {
-              [2] = { bottom = 0, left = 0, right = 0, top = 0, win = 1000 },
-              [4] = { bottom = 0, left = 0, right = 0, top = 0, win = 1001 },
+              [4] = { 1001, 'NW', 1, 1, 13, true, 50, 1, 1, 13 },
             },
           })
         else
@@ -2115,31 +2024,7 @@ describe('builtin popupmenu', function()
             win_pos = { [2] = { height = 10, startcol = 0, startrow = 0, width = 40, win = 1000 } },
             float_pos = {
               [5] = { -1, 'NW', 2, 1, 0, false, 100, 2, 1, 0 },
-              [4] = { 1001, 'NW', 1, 1, 19, false, 50, 1, 1, 19 },
-            },
-            win_viewport = {
-              [2] = {
-                win = 1000,
-                topline = 0,
-                botline = 2,
-                curline = 0,
-                curcol = 3,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-              [4] = {
-                win = 1001,
-                topline = 0,
-                botline = 5,
-                curline = 0,
-                curcol = 0,
-                linecount = 5,
-                sum_scroll_delta = 0,
-              },
-            },
-            win_viewport_margins = {
-              [2] = { bottom = 0, left = 0, right = 0, top = 0, win = 1000 },
-              [4] = { bottom = 0, left = 0, right = 0, top = 0, win = 1001 },
+              [4] = { 1001, 'NW', 1, 1, 19, true, 50, 1, 1, 19 },
             },
           })
         else
@@ -2154,7 +2039,48 @@ describe('builtin popupmenu', function()
             {5:-- }{6:match 1 of 3}                         |
           ]])
         end
-        feed('<C-E><ESC>')
+      end)
+
+      it('info window aligns with pum when above cursor', function()
+        command('let g:reduce_info_height=1 | call TestTs()')
+        feed('<C-E><ESC>18o<Esc>i<C-x><C-O>')
+        if multigrid then
+          screen:expect({
+            grid = [[
+            ## grid 1
+              [2:----------------------------------------]|*10
+              [3:----------------------------------------]|
+            ## grid 2
+                                                      |*9
+              one^                                     |
+            ## grid 3
+              {5:-- }{6:match 1 of 3}                         |
+            ## grid 4
+              {mn:```}{102:lua}{n:         }|
+              {102:function}{mn: }{103:test}{104:()}|
+            ## grid 5
+              {12:one                }|
+              {n:two                }|
+              {n:looooooooooooooong }|
+            ]],
+            win_pos = {
+              [2] = { height = 10, startcol = 0, startrow = 0, width = 40, win = 1000 },
+            },
+            float_pos = {
+              [5] = { -1, 'SW', 2, 9, 0, false, 100, 2, 6, 0 },
+              [4] = { 1001, 'NW', 1, 6, 19, true, 50, 1, 6, 19 },
+            },
+          })
+        else
+          screen:expect([[
+                                                    |*6
+            {12:one                }{mn:```}{102:lua}{n:         }      |
+            {n:two                }{102:function}{mn: }{103:test}{104:()}      |
+            {n:looooooooooooooong }                     |
+            one^                                     |
+            {5:-- }{6:match 1 of 3}                         |
+          ]])
+        end
       end)
 
       it('avoid modified original info text', function()
@@ -2186,32 +2112,8 @@ describe('builtin popupmenu', function()
             ]],
             win_pos = { [2] = { height = 10, startcol = 0, startrow = 0, width = 40, win = 1000 } },
             float_pos = {
-              [5] = { 1001, 'NW', 1, 1, 19, false, 50, 1, 1, 19 },
+              [5] = { 1001, 'NW', 1, 1, 19, true, 50, 1, 1, 19 },
               [4] = { -1, 'NW', 2, 1, 0, false, 100, 2, 1, 0 },
-            },
-            win_viewport = {
-              [2] = {
-                win = 1000,
-                topline = 0,
-                botline = 2,
-                curline = 0,
-                curcol = 13,
-                linecount = 1,
-                sum_scroll_delta = 0,
-              },
-              [5] = {
-                win = 1001,
-                topline = 0,
-                botline = 5,
-                curline = 0,
-                curcol = 0,
-                linecount = 5,
-                sum_scroll_delta = 0,
-              },
-            },
-            win_viewport_margins = {
-              [2] = { bottom = 0, left = 0, right = 0, top = 0, win = 1000 },
-              [5] = { bottom = 0, left = 0, right = 0, top = 0, win = 1001 },
             },
           })
         else
@@ -8834,7 +8736,7 @@ describe('builtin popupmenu', function()
             },
             float_pos = {
               [5] = { -1, 'NW', 2, 1, 0, false, 100, 2, 1, 0 },
-              [4] = { 1001, 'NW', 1, 1, 17, false, 50, 1, 1, 17 },
+              [4] = { 1001, 'NW', 1, 1, 17, true, 50, 1, 1, 17 },
             },
             win_viewport = {
               [2] = {
@@ -8920,7 +8822,7 @@ describe('builtin popupmenu', function()
             },
             float_pos = {
               [5] = { -1, 'NW', 2, 2, 11, false, 100, 2, 2, 11 },
-              [4] = { 1001, 'NW', 1, 2, 6, false, 50, 1, 2, 6 },
+              [4] = { 1001, 'NW', 1, 2, 6, true, 50, 1, 2, 6 },
             },
             win_viewport = {
               [2] = {
@@ -9271,7 +9173,7 @@ describe('builtin popupmenu', function()
             },
             float_pos = {
               [5] = { -1, 'NW', 2, 1, 0, false, 100, 2, 1, 0 },
-              [4] = { 1001, 'NW', 1, 1, 16, false, 50, 1, 1, 16 },
+              [4] = { 1001, 'NW', 1, 1, 16, true, 50, 1, 1, 16 },
             },
           })
         else
@@ -9322,7 +9224,7 @@ describe('builtin popupmenu', function()
             },
             float_pos = {
               [5] = { -1, 'NW', 2, 1, 2, false, 100, 2, 1, 2 },
-              [4] = { 1001, 'NW', 1, 1, 19, false, 50, 1, 1, 19 },
+              [4] = { 1001, 'NW', 1, 1, 19, true, 50, 1, 1, 19 },
             },
           })
         else

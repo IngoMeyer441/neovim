@@ -152,6 +152,7 @@ bool keep_msg_more = false;    // keep_msg was set by msgmore()
 
 // Extended msg state, currently used for external UIs with ext_messages
 static const char *msg_ext_kind = NULL;
+static const char *msg_ext_trigger = NULL;
 static MsgID msg_ext_id = { .type = kObjectTypeInteger, .data.integer = 1 };
 static Array *msg_ext_chunks = NULL;
 static garray_T msg_ext_last_chunk = GA_INIT(sizeof(char), 40);
@@ -292,8 +293,8 @@ void msg_multiline(String str, int hl_id, bool check_int, bool hist, bool *need_
   }
 }
 
-// Avoid starting a new message for each chunk and adding message to history in msg_keep().
-static bool is_multihl = false;
+// Ensure a single msg_show event, msg_list and history entry for entire multihl message.
+static int is_multihl = 0;
 
 /// Format a progress message, adding title and percent if given.
 ///
@@ -360,7 +361,6 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
   if (kind != NULL) {
     msg_ext_set_kind(kind);
   }
-  is_multihl = true;
   msg_ext_skip_flush = true;
 
   // provide a new id if not given
@@ -384,6 +384,7 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
 
   for (uint32_t i = 0; i < kv_size(hl_msg); i++) {
     HlMessageChunk chunk = kv_A(hl_msg, i);
+    is_multihl++;
     if (err) {
       emsg_multiline(chunk.text.data, kind, chunk.hl_id, true);
     } else {
@@ -397,7 +398,7 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
   }
 
   msg_ext_skip_flush = false;
-  is_multihl = false;
+  is_multihl = 0;
   no_wait_return--;
   msg_end();
 
@@ -776,7 +777,7 @@ bool emsg_multiline(const char *s, const char *kind, int hl_id, bool multiline)
     // be found, the message will be displayed later on.)  "ignore" is set
     // when the message should be ignored completely (used for the
     // interrupt message).
-    if (cause_errthrow(s, multiline, severe, &ignore)) {
+    if (cause_errthrow(s, multiline, is_multihl > 1, severe, &ignore)) {
       if (!ignore) {
         did_emsg++;
       }
@@ -1152,7 +1153,7 @@ static void msg_hist_add_multihl(HlMessage msg, bool temp, MessageData *msg_data
   MessageHistoryEntry *entry = xmalloc(sizeof(MessageHistoryEntry));
   entry->msg = msg;
   entry->temp = temp;
-  entry->kind = msg_ext_kind;
+  entry->kind = msg_ext_kind ? xstrdup(msg_ext_kind) : NULL;
   entry->prev = msg_hist_last;
   entry->next = NULL;
   // NOTE: this does not encode if the message was actually appended to the
@@ -1194,6 +1195,7 @@ static void msg_hist_free_msg(MessageHistoryEntry *entry)
     msg_hist_temp = entry->next;
   }
   hl_msg_free(entry->msg);
+  xfree(entry->kind);
   xfree(entry);
 }
 
@@ -1648,6 +1650,13 @@ void msg_ext_set_kind(const char *msg_kind)
   // the kind but this is called more consistently at the start of a message
   // than msg_start() at this point.
   redir_col = msg_ext_append ? redir_col : 0;
+}
+
+void msg_ext_set_trigger(const char *trigger)
+{
+  // Don't change the trigger of an existing batch:
+  msg_ext_ui_flush();
+  msg_ext_trigger = trigger;
 }
 
 /// Prepare for outputting characters in the command line.
@@ -2294,7 +2303,7 @@ void msg_puts_len(const char *const str, const ptrdiff_t len, int hl_id, bool hi
   if (msg_silent != 0 || *str == NUL) {
     if (*str == NUL && ui_has(kUIMessages)) {
       ui_call_msg_show(cstr_as_string("empty"), (Array)ARRAY_DICT_INIT, false, false, false,
-                       INTEGER_OBJ(-1));
+                       INTEGER_OBJ(-1), (String)STRING_INIT);
     }
     return;
   }
@@ -2678,21 +2687,21 @@ void msg_ui_flush(void)
 static void inc_msg_scrolled(void)
 {
   if (*get_vim_var_str(VV_SCROLLSTART) == NUL) {
-    char *p = SOURCING_NAME;
+    String p = { .data = SOURCING_NAME };
     char *tofree = NULL;
 
     // v:scrollstart is empty, set it to the script/function name and line
     // number
-    if (p == NULL) {
-      p = _("Unknown");
+    if (p.data == NULL) {
+      p = cstr_as_string(_("Unknown"));
     } else {
-      size_t len = strlen(p) + 40;
-      tofree = xmalloc(len);
-      vim_snprintf(tofree, len, _("%s line %" PRId64),
-                   p, (int64_t)SOURCING_LNUM);
-      p = tofree;
+      size_t tofreesize = strlen(p.data) + 40;
+      tofree = xmalloc(tofreesize);
+      p.size = vim_snprintf_safelen(tofree, tofreesize, _("%s line %" PRId64),
+                                    p.data, (int64_t)SOURCING_LNUM);
+      p.data = tofree;
     }
-    set_vim_var_string(VV_SCROLLSTART, p, -1);
+    set_vim_var_string(VV_SCROLLSTART, p.data, (ptrdiff_t)p.size);
     xfree(tofree);
   }
   msg_scrolled++;
@@ -2921,7 +2930,7 @@ static void msg_puts_printf(const char *str, const ptrdiff_t maxlen)
     if (!(silent_mode && p_verbose == 0)) {
       // NL --> CR NL translation (for Unix, not for "--version")
       p = &buf[0];
-      if (*s == '\n' && !info_message) {
+      if (*s == '\n' && !info_message && !silent_mode && !headless_mode) {
         *p++ = '\r';
       }
       memcpy(p, s, (size_t)len);
@@ -3326,7 +3335,7 @@ void msg_ext_ui_flush(void)
     Array *tofree = msg_ext_init_chunks();
 
     ui_call_msg_show(cstr_as_string(msg_ext_kind), *tofree, msg_ext_overwrite, msg_ext_history,
-                     msg_ext_append, msg_ext_id);
+                     msg_ext_append, msg_ext_id, cstr_as_string(msg_ext_trigger));
     // clear info after emitting message.
     if (msg_ext_history) {
       api_free_array(*tofree);
@@ -3478,7 +3487,7 @@ void verbose_enter(void)
   if (*p_vfile != NUL) {
     msg_silent++;
   }
-  // last_set_msg unsets p_verbose to avoid setting the verbose kind.
+  // Don't set the verbose kind if message continuity is wanted like with last_set_msg().
   if (!msg_ext_skip_verbose) {
     if (msg_ext_kind != verbose_kind) {
       pre_verbose_kind = msg_ext_kind;

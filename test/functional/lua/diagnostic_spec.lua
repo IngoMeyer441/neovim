@@ -2877,9 +2877,9 @@ describe('vim.diagnostic', function()
         local changed_diags --- @type vim.Diagnostic[]?
         vim.api.nvim_create_autocmd('DiagnosticChanged', {
           buffer = _G.diagnostic_bufnr,
-          callback = function(args)
+          callback = function(ev)
             --- @type vim.Diagnostic[]
-            changed_diags = args.data.diagnostics
+            changed_diags = ev.data.diagnostics
           end,
         })
         vim.diagnostic.set(_G.diagnostic_ns, _G.diagnostic_bufnr, {})
@@ -4065,7 +4065,7 @@ describe('vim.diagnostic', function()
     end)
   end)
 
-  describe('toqflist() and fromqflist()', function()
+  describe('toqflist(), fromqflist()', function()
     it('works', function()
       local result = exec_lua(function()
         vim.diagnostic.set(_G.diagnostic_ns, _G.diagnostic_bufnr, {
@@ -4091,95 +4091,71 @@ describe('vim.diagnostic', function()
     end)
 
     it('merge_lines=true merges continuation lines', function()
-      local result = exec_lua(function()
-        local qflist = {
-          {
-            bufnr = 1,
-            lnum = 10,
-            col = 5,
-            end_lnum = 10,
-            end_col = 10,
-            text = 'error: [GHC-83865]',
-            type = 'E',
-            nr = 0,
-            valid = 1,
-          },
-          {
-            bufnr = 1,
-            lnum = 0,
-            col = 0,
-            end_lnum = 0,
-            end_col = 0,
-            text = "    Couldn't match expected type",
-            type = '',
-            nr = 0,
-            valid = 0,
-          },
-          {
-            bufnr = 1,
-            lnum = 0,
-            col = 0,
-            end_lnum = 0,
-            end_col = 0,
-            text = '    with actual type',
-            type = '',
-            nr = 0,
-            valid = 0,
-          },
-          {
-            bufnr = 1,
-            lnum = 20,
-            col = 1,
-            end_lnum = 20,
-            end_col = 5,
-            text = 'warning: unused',
-            type = 'W',
-            nr = 0,
-            valid = 1,
-          },
-        }
-        return vim.diagnostic.fromqflist(qflist, { merge_lines = true })
-      end)
+      local function get_fromqflist(merge_lines)
+        return exec_lua(function(merge_lines_)
+          local qflist = {
+            {
+              bufnr = 1,
+              lnum = 10,
+              col = 5,
+              end_lnum = 10,
+              end_col = 10,
+              text = 'error: [GHC-83865]',
+              type = 'E',
+              nr = 0,
+              valid = 1,
+            },
+            {
+              bufnr = 1,
+              lnum = 0,
+              col = 0,
+              end_lnum = 0,
+              end_col = 0,
+              text = "    Couldn't match expected type",
+              type = '',
+              nr = 0,
+              valid = 0,
+            },
+            {
+              bufnr = 1,
+              lnum = 0,
+              col = 0,
+              end_lnum = 0,
+              end_col = 0,
+              text = '    with actual type',
+              type = '',
+              nr = 0,
+              valid = 0,
+            },
+            {
+              bufnr = 1,
+              lnum = 20,
+              col = 1,
+              end_lnum = 20,
+              end_col = 5,
+              text = 'warning: unused',
+              type = 'W',
+              nr = 0,
+              valid = 1,
+            },
+          }
+          return vim.diagnostic.fromqflist(qflist, { merge_lines = merge_lines_ })
+        end, merge_lines)
+      end
 
+      -- merge_lines=true
+      local result = get_fromqflist(true)
       eq(2, #result)
       eq(
         "error: [GHC-83865]\n    Couldn't match expected type\n    with actual type",
         result[1].message
       )
       eq('warning: unused', result[2].message)
-    end)
 
-    it('merge_lines=false ignores continuation lines', function()
-      local result = exec_lua(function()
-        local qflist = {
-          {
-            bufnr = 1,
-            lnum = 10,
-            col = 5,
-            end_lnum = 10,
-            end_col = 10,
-            text = 'error: main',
-            type = 'E',
-            nr = 0,
-            valid = 1,
-          },
-          {
-            bufnr = 1,
-            lnum = 0,
-            col = 0,
-            end_lnum = 0,
-            end_col = 0,
-            text = 'continuation',
-            type = '',
-            nr = 0,
-            valid = 0,
-          },
-        }
-        return vim.diagnostic.fromqflist(qflist)
-      end)
-
-      eq(1, #result)
-      eq('error: main', result[1].message)
+      -- merge_lines=false
+      result = get_fromqflist(false)
+      eq(2, #result)
+      eq('error: [GHC-83865]', result[1].message)
     end)
   end)
 
@@ -4229,11 +4205,11 @@ describe('vim.diagnostic', function()
       )
     end)
 
-    it('uses text from diagnostic.config().status.text[severity]', function()
+    it('uses text from diagnostic.config().status.format[severity]', function()
       local result = exec_lua(function()
         vim.diagnostic.config({
           status = {
-            text = {
+            format = {
               [vim.diagnostic.severity.ERROR] = '⨯',
               [vim.diagnostic.severity.WARN] = '⚠︎',
             },
@@ -4249,6 +4225,45 @@ describe('vim.diagnostic', function()
       end)
 
       eq('%#DiagnosticSignError#⨯:1 %#DiagnosticSignWarn#⚠︎:1%##', result)
+    end)
+
+    it('uses format function diagnostic.config().status.format', function()
+      local result = exec_lua(function()
+        local signs = {
+          [vim.diagnostic.severity.ERROR] = 'EE',
+          [vim.diagnostic.severity.WARN] = 'WW',
+          [vim.diagnostic.severity.INFO] = 'II',
+          [vim.diagnostic.severity.HINT] = 'HH',
+        }
+        local hl_map = {
+          [vim.diagnostic.severity.ERROR] = 'ERROR',
+          [vim.diagnostic.severity.WARN] = 'WARN',
+          [vim.diagnostic.severity.INFO] = 'INFO',
+          [vim.diagnostic.severity.HINT] = 'HINT',
+        }
+        vim.diagnostic.config({
+          status = {
+            format = function(counts)
+              local items = {}
+              for severity, sign in ipairs(signs) do
+                local count = counts[severity] or 0
+                local hl = hl_map[severity]
+                table.insert(items, ('%%#%s#%s %s'):format(hl, sign, count))
+              end
+              return table.concat(items, ' ')
+            end,
+          },
+        })
+
+        vim.diagnostic.set(_G.diagnostic_ns, 0, {
+          _G.make_error('Error 1', 0, 1, 0, 1),
+          _G.make_warning('Warning 1', 2, 2, 2, 2),
+        })
+
+        return vim.diagnostic.status()
+      end)
+
+      eq('%#ERROR#EE 1 %#WARN#WW 1 %#INFO#II 0 %#HINT#HH 0%##', result)
     end)
   end)
 
@@ -4346,8 +4361,8 @@ describe('vim.diagnostic', function()
 
           local triggered = {}
           vim.api.nvim_create_autocmd('DiagnosticChanged', {
-            callback = function(args)
-              triggered = { args.buf, #args.data.diagnostics }
+            callback = function(ev)
+              triggered = { ev.buf, #ev.data.diagnostics }
             end,
           })
           vim.api.nvim_buf_set_name(_G.diagnostic_bufnr, 'test | test')

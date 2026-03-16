@@ -20,7 +20,7 @@ function methods.shutdown(_, callback)
 end
 
 local get_confirm_bufnr = function(uri)
-  return tonumber(uri:match('^nvim%-pack://confirm#(%d+)$'))
+  return vim._tointeger(uri:match('^nvim%-pack://confirm#(%d+)$'))
 end
 
 local group_header_pattern = '^# (%S+)'
@@ -167,7 +167,7 @@ local commands = {
   end,
 }
 
--- NOTE: Use `vim.schedule_wrap` to avoid press-enter after choosing code
+-- NOTE: Use `vim.schedule_wrap` to avoid hit-enter after choosing code
 -- action via built-in `vim.fn.inputlist()`
 --- @param params { command: string, arguments: table }
 --- @param callback function

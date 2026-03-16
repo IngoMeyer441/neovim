@@ -568,7 +568,7 @@ function vim.api.nvim_buf_line_count(buffer) end
 --- @param opts vim.api.keyset.set_extmark Optional parameters.
 --- - id : id of the extmark to edit.
 --- - end_row : ending line of the mark, 0-based inclusive.
---- - end_col : ending col of the mark, 0-based exclusive.
+--- - end_col : ending col of the mark, 0-based exclusive, or -1 to extend the range to end of line.
 --- - hl_group : highlight group used for the text range. This and below
 ---     highlight groups can be supplied either as a string or as an integer,
 ---     the latter of which can be obtained using `nvim_get_hl_id_by_name()`.
@@ -853,25 +853,32 @@ function vim.api.nvim_chan_send(chan, data) end
 ---     - NOTE: If not passed, will only delete autocmds *not* in any group.
 function vim.api.nvim_clear_autocmds(opts) end
 
---- Executes an Ex command.
+--- Executes an Ex command `cmd`, specified as a Dict with the same structure as returned by
+--- `nvim_parse_cmd()`.
 ---
---- Unlike `nvim_command()` this command takes a structured Dict instead of a String. This
---- allows for easier construction and manipulation of an Ex command. This also allows for things
---- such as having spaces inside a command argument, expanding filenames in a command that otherwise
---- doesn't expand filenames, etc. Command arguments may also be Number, Boolean or String.
+--- Use `magic={…=false}` to disable special chars:
+--- ```lua
+--- vim.api.nvim_cmd({
+---     cmd = 'edit',
+---     args = { '%foo"|bar#baz"' },
+---     magic = { file = false, bar = false }
+---   },
+---   {}
+--- )
+--- ```
 ---
---- The first argument may also be used instead of count for commands that support it in order to
---- make their usage simpler with `vim.cmd()`. For example, instead of
---- `vim.cmd.bdelete{ count = 2 }`, you may do `vim.cmd.bdelete(2)`.
+--- - See `nvim_parse_cmd()` to parse a cmdline string (which can then be passed to `nvim_cmd`).
+--- - See `nvim_command()` to execute a cmdline string.
 ---
 --- On execution error: fails with Vimscript error, updates v:errmsg.
 ---
 ---
---- @see vim.api.nvim_exec2
 --- @see vim.api.nvim_command
---- @param cmd vim.api.keyset.cmd Command to execute. Must be a Dict that can contain the same values as
---- the return value of `nvim_parse_cmd()` except "addr", "nargs" and "nextcmd"
---- which are ignored if provided. All values except for "cmd" are optional.
+--- @see vim.api.nvim_exec2
+--- @see vim.api.nvim_parse_cmd
+--- @param cmd vim.api.keyset.cmd Command to execute, a Dict with the same structure as the return value of
+--- `nvim_parse_cmd()` (except "addr", "nargs" and "nextcmd" are ignored).
+--- All keys except "cmd" are optional.
 --- @param opts vim.api.keyset.cmd_opts Optional parameters.
 --- - output: (boolean, default false) Whether to return command output.
 --- @return string # Command output (non-error, non-shell |:!|) if `output` is true, else empty string.
@@ -1299,16 +1306,17 @@ function vim.api.nvim_get_autocmds(opts) end
 ---      - "stderr"     stderr of this Nvim instance
 ---      - "socket"     TCP/IP socket or named pipe
 ---      - "job"        Job with communication over its stdio.
---- -  "mode"    How data received on the channel is interpreted.
+--- - "mode"     How data received on the channel is interpreted.
 ---      - "bytes"      Send and receive raw bytes.
 ---      - "terminal"   |terminal| instance interprets ASCII sequences.
 ---      - "rpc"        |RPC| communication on the channel is active.
---- -  "pty"     (optional) Name of pseudoterminal. On a POSIX system this is a device path like
+--- - "pty"      (optional) Name of pseudoterminal. On a POSIX system this is a device path like
 ---              "/dev/pts/1". If unknown, the key will still be present if a pty is used (e.g.
 ---              for conpty on Windows).
---- -  "buffer"  (optional) Buffer connected to |terminal| instance.
---- -  "client"  (optional) Info about the peer (client on the other end of the channel), as set
+--- - "buffer"   (optional) Buffer connected to |terminal| instance.
+--- - "client"   (optional) Info about the peer (client on the other end of the channel), as set
 ---              by |nvim_set_client_info()|.
+--- - "exitcode" (optional) Exit code of the |terminal| process.
 ---
 function vim.api.nvim_get_chan_info(chan) end
 
@@ -1702,26 +1710,19 @@ function vim.api.nvim_notify(msg, log_level, opts) end
 --- @return integer # Channel id, or 0 on error
 function vim.api.nvim_open_term(buffer, opts) end
 
---- Opens a new split window, or a floating window if `relative` is specified,
---- or an external window (managed by the UI) if `external` is specified.
+--- Opens a new split window, floating window, or external window.
 ---
---- Floats are windows that are drawn above the split layout, at some anchor
---- position in some other window. Floats can be drawn internally or by external
---- GUI with the `ui-multigrid` extension. External windows are only supported
---- with multigrid GUIs, and are displayed as separate top-level windows.
----
---- For a general overview of floats, see `api-floatwin`.
----
---- The `width` and `height` of the new window must be specified when opening
---- a floating window, but are optional for normal windows.
----
---- If `relative` and `external` are omitted, a normal "split" window is created.
---- The `win` property determines which window will be split. If no `win` is
---- provided or `win == 0`, a window will be created adjacent to the current window.
---- If -1 is provided, a top-level split will be created. `vertical` and `split` are
---- only valid for normal windows, and are used to control split direction. For `vertical`,
---- the exact direction is determined by 'splitright' and 'splitbelow'.
---- Split windows cannot have `bufpos`, `row`, `col`, `border`, `title`, `footer` properties.
+--- - Specify `relative` to create a floating window. Floats are drawn over the split layout,
+---   relative to a position in some other window. See `api-floatwin`.
+---   - Floats must specify `width` and `height`.
+--- - Specify `external` to create an external window. External windows are displayed as separate
+---   top-level windows managed by the `ui-multigrid` UI (not Nvim).
+--- - If `relative` and `external` are omitted, a normal "split" window is created.
+---   - The `win` key decides which window to split. If nil or 0, the split will be adjacent to
+---     the current window. If -1, a top-level split will be created.
+---   - Use `vertical` and `split` to control split direction. For `vertical`, the exact direction
+---     is determined by 'splitright' and 'splitbelow'.
+---   - Split windows cannot have `bufpos`, `row`, `col`, `border`, `title`, `footer`.
 ---
 --- With relative=editor (row=0,col=0) refers to the top-left corner of the
 --- screen-grid and (row=Lines-1,col=Columns-1) refers to the bottom-right
@@ -1847,8 +1848,9 @@ function vim.api.nvim_open_term(buffer, opts) end
 ---     Default is `"left"`.
 --- - vertical: Split vertically `:vertical`.
 --- - width: Window width (in character cells). Minimum of 1.
---- - win: `window-ID` window to split, or relative window when creating a float (relative="win").
----     When splitting, negative value works like `:topleft`, `:botright`.
+--- - win: `window-ID` target window. Can be in a different tab page. Determines the window to
+---     split (negative values act like `:topleft`, `:botright`), the relative window for a
+---     `relative="win"` float, or just the target tab page (inferred from the window) for others.
 --- - zindex: Stacking order. floats with higher `zindex` go on top on
 ---             floats with lower indices. Must be larger than zero. The
 ---             following screen elements have hard-coded z-indices:
@@ -2491,11 +2493,11 @@ function vim.api.nvim_win_is_valid(window) end
 --- @param buffer integer Buffer id
 function vim.api.nvim_win_set_buf(window, buffer) end
 
---- Reconfigures the layout of a window.
+--- Reconfigures the layout and properties of a window.
 ---
---- - Absent (`nil`) keys will not be changed.
---- - `row` / `col` / `relative` must be reconfigured together.
---- - Cannot be used to move the last window in a tabpage to a different one.
+--- - Updates only the given keys; unspecified (`nil`) keys will not be changed.
+--- - Keys `row` / `col` / `relative` must be specified together.
+--- - Cannot move the last window in a tabpage to a different one.
 ---
 --- Example: to convert a floating window to a "normal" split window, specify the `win` field:
 ---

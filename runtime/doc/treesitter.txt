@@ -548,7 +548,6 @@ When multiple captures set this metadata over a region, only the innermost
 
 ==============================================================================
 TREESITTER LANGUAGE INJECTIONS                *treesitter-language-injections*
-<
 
 Note the following information is adapted from:
 https://tree-sitter.github.io/tree-sitter/3-syntax-highlighting.html#language-injection
@@ -611,22 +610,22 @@ empty `queries/c/injections.scm` file in your 'runtimepath'.
 DEFAULTS                                                 *treesitter-defaults*
 
 							*v_an*
-v_an			Selects [count]th parent node.
+an			Selects [count]th parent node.
 
 			If buffer has no treesitter parser,
 			falls back to |vim.lsp.buf.selection_range()|.
 
 							*v_in*
-v_in			Selects [count]th previous (or first) child node.
+in			Selects [count]th previous (or first) child node.
 
 			If buffer has no treesitter parser,
 			falls back to |vim.lsp.buf.selection_range()|.
 
 							*v_]n*
-v_]n			Selects [count]th next node.
+]n			Selects [count]th next node.
 
 							*v_[n*
-v_[n			Selects [count]th previous node.
+[n			Selects [count]th previous node.
 
 ==============================================================================
 VIM.TREESITTER                                                *lua-treesitter*
@@ -1042,10 +1041,7 @@ get_parser({bufnr}, {lang}, {opts})              *vim.treesitter.get_parser()*
 
     If needed, this will create the parser.
 
-    If no parser can be created, an error is thrown. Set `opts.error = false`
-    to suppress this and return nil (and an error message) instead. WARNING:
-    This behavior will become default in Nvim 0.12 and the option will be
-    removed.
+    If no parser can be created, nil (and an error message) is returned.
 
     Parameters: ~
       • {bufnr}  (`integer?`) Buffer the parser should be tied to (default:
@@ -1166,9 +1162,9 @@ start({bufnr}, {lang})                                *vim.treesitter.start()*
 
     Example: >lua
         vim.api.nvim_create_autocmd( 'FileType', { pattern = 'tex',
-            callback = function(args)
-                vim.treesitter.start(args.buf, 'latex')
-                vim.bo[args.buf].syntax = 'ON'  -- only if additional legacy syntax is needed
+            callback = function(ev)
+                vim.treesitter.start(ev.buf, 'latex')
+                vim.bo[ev.buf].syntax = 'ON'  -- only if additional legacy syntax is needed
             end
         })
 <
@@ -1604,10 +1600,8 @@ edit({lang})                                     *vim.treesitter.query.edit()*
 
     If you move the cursor to a capture name ("@foo"), text matching the
     capture is highlighted with |hl-DiagnosticVirtualTextHint| in the source
-    buffer.
-
-    The query editor is a scratch buffer, use `:write` to save it. You can
-    find example queries at `$VIMRUNTIME/queries/`.
+    buffer. The query editor is a scratch buffer, use `:write` to save it. You
+    can find example queries at `$VIMRUNTIME/queries/`.
 
     Parameters: ~
       • {lang}  (`string?`) language to open the query editor for. If omitted,

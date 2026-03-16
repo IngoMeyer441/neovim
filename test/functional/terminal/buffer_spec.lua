@@ -422,12 +422,12 @@ describe(':terminal buffer', function()
     exec_lua(function()
       _G.last_event = nil
       vim.api.nvim_create_autocmd({ 'TermEnter', 'TermLeave' }, {
-        callback = function(args)
-          _G.last_event = args.event
+        callback = function(ev)
+          _G.last_event = ev.event
             .. ' '
-            .. vim.fs.basename(args.file)
+            .. vim.fs.basename(ev.file)
             .. ' '
-            .. tostring(vim.b[args.buf].term_focused)
+            .. tostring(vim.b[ev.buf].term_focused)
         end,
       })
     end)
@@ -706,8 +706,8 @@ describe(':terminal buffer', function()
           force_crlf = false,
         })
         vim.api.nvim_create_autocmd('TermRequest', {
-          callback = function(args)
-            if args.data.sequence == '\027]11;?' then
+          callback = function(ev)
+            if ev.data.sequence == '\027]11;?' then
               table.insert(_G.input, '\027]11;rgb:0000/0000/0000\027\\')
             end
           end
@@ -758,8 +758,8 @@ describe(':terminal buffer', function()
         _G.cursor = {}
         local term = vim.api.nvim_open_term(0, {})
         vim.api.nvim_create_autocmd('TermRequest', {
-          callback = function(args)
-            _G.cursor = args.data.cursor
+          callback = function(ev)
+            _G.cursor = ev.data.cursor
           end
         })
         return term
@@ -986,7 +986,7 @@ describe(':terminal buffer', function()
       3: å̲│{1:~                                            }|
           │{1:~                                            }|
       [Pro│{1:~                                            }|
-      cess│{1:~                                            }|
+          │{1:~                                            }|
                                                         |
     ]])
   end)
@@ -1005,10 +1005,10 @@ describe(':terminal buffer', function()
       %d: TEST{MATCH: +}|
       %d: TEST{MATCH: +}|
       %d: TEST{MATCH: +}|
-                                                        |
-      [Process exited 0]^                                |
+      %d: TEST{MATCH: +}|
+      ^[Process exited 0]                                |
       {5:-- TERMINAL --}                                    |
-    ]]):format(count - 4, count - 3, count - 2, count - 1))
+    ]]):format(count - 5, count - 4, count - 3, count - 2, count - 1))
     local lines = api.nvim_buf_get_lines(0, 0, -1, true)
     for i = 1, count do
       eq(('%d: TEST'):format(i - 1), lines[i])
@@ -1144,6 +1144,16 @@ describe(':terminal buffer', function()
                                                         |
     ]])
     eq(false, api.nvim_buf_is_valid(term_buf))
+  end)
+
+  it('no heap-use-after-free from autocmds when entering terminal mode', function()
+    local chans = api.nvim_list_chans()
+    local buf = api.nvim_get_current_buf()
+    api.nvim_open_term(0, {})
+    command('autocmd TermEnter,ModeChanged * ++once bwipeout!')
+    feed('i')
+    eq(false, api.nvim_buf_is_valid(buf))
+    eq(chans, api.nvim_list_chans())
   end)
 
   local enew_screen = [[

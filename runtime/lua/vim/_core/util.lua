@@ -70,8 +70,8 @@ end
 --- @param line2 integer End line (1-indexed)
 --- @return boolean True if the range is in a Lua injection
 function M.source_is_lua(bufnr, line1, line2)
-  local ok, parser = pcall(vim.treesitter.get_parser, bufnr)
-  if not ok or not parser then
+  local parser = vim.treesitter.get_parser(bufnr)
+  if not parser then
     return false
   end
   -- Parse from buffer start through one line past line2 to include injection closing markers
@@ -79,6 +79,24 @@ function M.source_is_lua(bufnr, line1, line2)
   parser:parse({ 0, 0, line2, -1 })
   local lang_tree = parser:language_for_range(range)
   return lang_tree:lang() == 'lua'
+end
+
+--- Returns the exit code string for the current buffer, given:
+--- - Channel is attached to the current buffer
+--- - Current buffer is a terminal buffer
+---
+--- @return string
+function M.term_exitcode()
+  local chan_id = vim.bo.channel
+  if chan_id == 0 or vim.bo.buftype ~= 'terminal' then
+    return ''
+  end
+
+  local info = vim.api.nvim_get_chan_info(chan_id)
+  if info.exitcode and info.exitcode >= 0 then
+    return string.format('[Exit: %d]', info.exitcode)
+  end
+  return ''
 end
 
 return M

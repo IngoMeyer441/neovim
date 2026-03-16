@@ -563,8 +563,8 @@ function lsp.enable(name, enable)
     lsp_enable_autocmd_id = lsp_enable_autocmd_id
       or api.nvim_create_autocmd('FileType', {
         group = api.nvim_create_augroup('nvim.lsp.enable', {}),
-        callback = function(args)
-          lsp_enable_callback(args.buf)
+        callback = function(ev)
+          lsp_enable_callback(ev.buf)
         end,
       })
   end
@@ -1046,13 +1046,11 @@ end
 --- ```
 ---
 --- By default asks the server to shutdown, unless stop was requested already for this client (then
---- force-shutdown is attempted, unless `exit_timeout=false`).
+--- force-stop is attempted, unless `exit_timeout=false`).
 ---
 ---@deprecated
 ---@param client_id integer|integer[]|vim.lsp.Client[] id, list of id's, or list of |vim.lsp.Client| objects
----@param force? boolean|integer Whether to shutdown forcefully.
---- If `force` is a number, it will be treated as the time in milliseconds to
---- wait before forcing the shutdown.
+---@param force? boolean|integer See |Client:stop()|
 function lsp.stop_client(client_id, force)
   vim.deprecate('vim.lsp.stop_client()', 'vim.lsp.Client:stop()', '0.13')
   --- @type integer[]|vim.lsp.Client[]
@@ -1138,7 +1136,7 @@ api.nvim_create_autocmd('VimLeavePre', {
 
     local max_timeout = 0
     for _, client in pairs(active_clients) do
-      max_timeout = math.max(max_timeout, tonumber(client.exit_timeout) or 0)
+      max_timeout = math.max(max_timeout, vim._tointeger(client.exit_timeout) or 0)
       client:stop(client.exit_timeout)
     end
 
@@ -1433,8 +1431,8 @@ end
 --- vim.o.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
 --- -- Prefer LSP folding if client supports it
 --- vim.api.nvim_create_autocmd('LspAttach', {
----   callback = function(args)
----     local client = vim.lsp.get_client_by_id(args.data.client_id)
+---   callback = function(ev)
+---     local client = vim.lsp.get_client_by_id(ev.data.client_id)
 ---     if client:supports_method('textDocument/foldingRange') then
 ---       local win = vim.api.nvim_get_current_win()
 ---       vim.wo[win][0].foldexpr = 'v:lua.vim.lsp.foldexpr()'
@@ -1454,9 +1452,9 @@ end
 ---
 --- ```lua
 --- vim.api.nvim_create_autocmd('LspNotify', {
----   callback = function(args)
----     if args.data.method == 'textDocument/didOpen' then
----       vim.lsp.foldclose('imports', vim.fn.bufwinid(args.buf))
+---   callback = function(ev)
+---     if ev.data.method == 'textDocument/didOpen' then
+---       vim.lsp.foldclose('imports', vim.fn.bufwinid(ev.buf))
 ---     end
 ---   end,
 --- })

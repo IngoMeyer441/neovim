@@ -2519,8 +2519,8 @@ describe('TUI', function()
     exec_lua([[vim.uv.kill(vim.fn.jobpid(vim.bo.channel), 'sigterm')]])
     screen:expect(is_os('win') and { any = '%[Process exited 1%]' } or [[
       Nvim: Caught deadly signal 'SIGTERM'              |
-                                                        |
-      [Process exited 1]^                                |
+      ^                                                  |
+      [Process exited 1]                                |
                                                         |*3
       {5:-- TERMINAL --}                                    |
     ]])
@@ -2554,8 +2554,8 @@ describe('TUI', function()
     ]]
     child_session:notify('nvim_exec_lua', code, {})
     screen:expect([[
-                                                        |
-      [Process exited 0]^                                |
+      ^                                                  |
+      [Process exited 0]                                |
                                                         |*4
       {5:-- TERMINAL --}                                    |
     ]])
@@ -2672,8 +2672,8 @@ describe('TUI', function()
       _G.urls = {}
       vim.api.nvim_create_autocmd('TermRequest', {
         buffer = buf,
-        callback = function(args)
-          local req = args.data.sequence
+        callback = function(ev)
+          local req = ev.data.sequence
           if not req then
             return
           end
@@ -2970,8 +2970,8 @@ describe('TUI', function()
       :w testF                                          |
       :q                                                |
       abc                                               |
-                                                        |
-      [Process exited 0]^                                |
+      ^                                                  |
+      [Process exited 0]                                |
                                                         |
       {5:-- TERMINAL --}                                    |
     ]])
@@ -3313,10 +3313,10 @@ describe('TUI FocusGained/FocusLost', function()
     ]])
   end)
 
-  it('in press-enter prompt', function()
+  it('in hit-enter prompt', function()
     t.skip(is_os('win'), 'FIXME: some spaces have wrong attrs on Windows')
     feed_data(":echom 'msg1'|echom 'msg2'|echom 'msg3'|echom 'msg4'|echom 'msg5'\n")
-    -- Execute :messages to provoke the press-enter prompt.
+    -- Execute :messages to provoke the hit-enter prompt.
     feed_data(':messages\n')
     screen:expect([[
       msg1                                              |
@@ -3733,14 +3733,14 @@ describe('TUI', function()
     clear()
     exec_lua([[
       vim.api.nvim_create_autocmd('TermRequest', {
-        callback = function(args)
-          local req = args.data.sequence
+        callback = function(ev)
+          local req = ev.data.sequence
           local sequence = req:match('^\027P%+q([%x;]+)$')
           if sequence then
             local t = {}
             for cap in vim.gsplit(sequence, ';') do
               local resp = string.format('\027P1+r%s\027\\', sequence)
-              vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
+              vim.api.nvim_chan_send(vim.bo[ev.buf].channel, resp)
               t[vim.text.hexdecode(cap)] = true
             end
             vim.g.xtgettcap = t
@@ -3784,15 +3784,15 @@ describe('TUI', function()
     clear()
     exec_lua([[
       vim.api.nvim_create_autocmd('TermRequest', {
-        callback = function(args)
-          local req = args.data.sequence
+        callback = function(ev)
+          local req = ev.data.sequence
           vim.g.termrequest = req
           local xtgettcap = req:match('^\027P%+q([%x;]+)$')
           if xtgettcap then
             local t = {}
             for cap in vim.gsplit(xtgettcap, ';') do
               local resp = string.format('\027P1+r%s\027\\', xtgettcap)
-              vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
+              vim.api.nvim_chan_send(vim.bo[ev.buf].channel, resp)
               t[vim.text.hexdecode(cap)] = true
             end
             vim.g.xtgettcap = t
@@ -3852,12 +3852,12 @@ describe('TUI', function()
     exec_lua([[
       _G.query = false
       vim.api.nvim_create_autocmd('TermRequest', {
-        callback = function(args)
-          local req = args.data.sequence
+        callback = function(ev)
+          local req = ev.data.sequence
           local sequence = req:match('^\027P%+q([%x;]+)$')
           if sequence and vim.text.hexdecode(sequence) == 'Ms' then
             local resp = string.format('\027P1+r%s=%s\027\\', sequence, vim.text.hexencode('\027]52;;\027\\'))
-            vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
+            vim.api.nvim_chan_send(vim.bo[ev.buf].channel, resp)
             _G.query = true
             return true
           end
@@ -3908,8 +3908,8 @@ describe('TUI', function()
       -- Check that we do not emit an XTGETTCAP request when DA1 indicates support
       _G.query = false
       vim.api.nvim_create_autocmd('TermRequest', {
-        callback = function(args)
-          local req = args.data.sequence
+        callback = function(ev)
+          local req = ev.data.sequence
           local sequence = req:match('^\027P%+q([%x;]+)$')
           if sequence and vim.text.hexdecode(sequence) == 'Ms' then
             _G.query = true
@@ -3944,8 +3944,8 @@ describe('TUI', function()
     exec_lua([[
       _G.query = false
       vim.api.nvim_create_autocmd('TermRequest', {
-        callback = function(args)
-          local req = args.data.sequence
+        callback = function(ev)
+          local req = ev.data.sequence
           local sequence = req:match('^\027P%+q([%x;]+)$')
           if sequence and vim.text.hexdecode(sequence) == 'Ms' then
             _G.query = true
@@ -4026,8 +4026,8 @@ describe('TUI bg color', function()
   it('queries the terminal for background color', function()
     exec_lua([[
       vim.api.nvim_create_autocmd('TermRequest', {
-        callback = function(args)
-          local req = args.data.sequence
+        callback = function(ev)
+          local req = ev.data.sequence
           if req == '\027]11;?' then
             vim.g.oscrequest = true
             return true
@@ -4237,8 +4237,8 @@ describe('TUI client', function()
     exec_lua([[vim.uv.kill(vim.fn.jobpid(vim.bo.channel), 'sigterm')]])
     screen_client:expect(is_os('win') and { any = '%[Process exited 1%]' } or [[
       Nvim: Caught deadly signal 'SIGTERM'              |
-                                                        |
-      [Process exited 1]^                                |
+      ^                                                  |
+      [Process exited 1]                                |
                                                         |*3
       {5:-- TERMINAL --}                                    |
     ]])
@@ -4362,8 +4362,8 @@ describe('TUI client', function()
 
     screen:expect([[
       Remote ui failed to start: {MATCH:.*}|
-                                                                  |
-      [Process exited 1]^                                          |
+      ^                                                            |
+      [Process exited 1]                                          |
                                                                   |*3
       {5:-- TERMINAL --}                                              |
     ]])

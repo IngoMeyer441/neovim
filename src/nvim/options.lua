@@ -3985,6 +3985,7 @@ local options = {
 
         Examples of cursor highlighting: >vim
             highlight Cursor gui=reverse guifg=NONE guibg=NONE
+            " Note: gui=reverse overrides colors.
             highlight Cursor gui=NONE guifg=bg guibg=fg
         <
       ]=],
@@ -4000,10 +4001,11 @@ local options = {
       abbreviation = 'gfn',
       defaults = {
         if_true = macros('DFLT_GFN', 'string'),
-        doc = [[(MS-Windows) "Cascadia Code,Cascadia Mono,Consolas,Courier New,monospace"
-                     (Mac) "SF Mono,Menlo,Monaco,Courier New,monospace"
-                   (Linux) "Source Code Pro,DejaVu Sans Mono,Courier New,monospace"
-                  (others) "DejaVu Sans Mono,Courier New,monospace"]],
+        doc = [["DejaVu Sans Mono,Courier New,monospace"
+          Mac: "SF Mono,Menlo,Monaco,Courier New,monospace"
+          Linux: "Source Code Pro,DejaVu Sans Mono,Courier New,monospace"
+          MS-Windows: "Cascadia Code,Cascadia Mono,Consolas,Courier New,monospace"]],
+        meta = 'DFLT_GFN',
       },
       desc = [=[
         This is a list of fonts which will be used for the GUI version of Vim.
@@ -5056,24 +5058,31 @@ local options = {
       abbreviation = 'kp',
       defaults = {
         condition = 'MSWIN',
-        if_true = ':help',
+        if_true = ':help!',
         if_false = ':Man',
         doc = '":Man", Windows: ":help"',
       },
       desc = [=[
         Program to use for the |K| command.  Environment variables are
-        expanded |:set_env|.  ":help" may be used to access the Vim internal
-        help.  (Note that previously setting the global option to the empty
-        value did this, which is now deprecated.)
-        When the first character is ":", the command is invoked as a Vim
-        Ex command prefixed with [count].
-        When "man" or "man -s" is used, Vim will automatically translate
-        a [count] for the "K" command to a section number.
+        expanded |:set_env|.
+
+        Special cases:
+        - ":help" opens the |word| at cursor using |:help|.  (Note that
+          previously setting the global option to the empty value did this,
+          which is now deprecated.)
+        - ":help!" performs |:help!| (DWIM) on the |WORD| at cursor.
+        - If the value starts with ":", it is invoked as an Ex command
+          prefixed with [count].
+        - If "man" or "man -s", [count] is the manpage section number.
+
         See |option-backslash| about including spaces and backslashes.
+
         Example: >vim
+        	set keywordprg=:help!
         	set keywordprg=man\ -s
         	set keywordprg=:Man
-        <	This option cannot be set from a |modeline| or in the |sandbox|, for
+        <
+        This option cannot be set from a |modeline| or in the |sandbox|, for
         security reasons.
       ]=],
       expand = true,
@@ -5933,8 +5942,13 @@ local options = {
         result of a BufNewFile, BufRead/BufReadPost, BufWritePost,
         FileAppendPost or VimLeave autocommand event.  See |gzip-example| for
         an explanation.
-        When 'buftype' is "nowrite" or "nofile" this option may be set, but
+
+        When 'buftype' is "prompt", 'modified' is not implicitly set when the
+        buffer is changed, but a user or plugin may explicitly set it.
+
+        When 'buftype' is "nowrite" or "nofile", this option may be set, but
         will be ignored.
+
         Note that the text may actually be the same, e.g. 'modified' is set
         when using "rA" on an "A".
       ]=],
@@ -8774,11 +8788,12 @@ local options = {
         if_true = table.concat({
           '%<',
           '%f %h%w%m%r ',
+          "%{% v:lua.require('vim._core.util').term_exitcode() %}",
           '%=',
           "%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}",
           "%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}",
           "%{% &busy > 0 ? '◐ ' : '' %}",
-          "%{% luaeval('(package.loaded[''vim.diagnostic''] and #vim.diagnostic.count() ~= 0 and vim.diagnostic.status() .. '' '') or '''' ') %}",
+          "%{% luaeval('(package.loaded[''vim.diagnostic''] and next(vim.diagnostic.count()) and vim.diagnostic.status() .. '' '') or '''' ') %}",
           "%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}",
         }),
         doc = 'is very long',

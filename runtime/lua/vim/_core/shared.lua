@@ -360,7 +360,7 @@ local function key_fn(v, key)
   return key and key(v) or v
 end
 
---- Removes duplicate values from a list-like table in-place.
+--- Removes duplicate values from a |lua-list| in-place.
 ---
 --- Only the first occurrence of each value is kept.
 --- The operation is performed in-place and the input table is modified.
@@ -383,6 +383,7 @@ end
 --- -- t is now { {id=1}, {id=2} }
 --- ```
 ---
+--- @since 14
 --- @generic T
 --- @param t T[]
 --- @param key? fun(x: T): any Optional hash function to determine uniqueness of values
@@ -482,8 +483,8 @@ local function upper_bound(t, val, lo, hi, key)
   return lo
 end
 
---- Search for a position in a sorted list {t}
---- where {val} can be inserted while keeping the list sorted.
+--- Search for a position in a sorted |lua-list| {t} where {val} can be inserted while keeping the
+--- list sorted.
 ---
 --- Use {bound} to determine whether to return the first or the last position,
 --- defaults to "lower", i.e., the first position.
@@ -514,6 +515,7 @@ end
 ---   print(t[i]) -- { 3, 3, 3 }
 --- end
 --- ```
+---@since 14
 ---@generic T
 ---@param t T[] A comparable list.
 ---@param val T The value to search.
@@ -1616,6 +1618,35 @@ function vim._ensure_list(x)
     return x
   end
   return { x }
+end
+
+--- Coerces {x} to an integer, like `tonumber()`, but rejects fractional values.
+---
+--- Returns `nil` if {x} cannot be converted with `tonumber()`, or if the
+--- resulting number is not integral.
+---
+--- @param x any Value to convert.
+--- @param base? integer Numeric base passed to `tonumber()`.
+--- @return integer? integer Converted integer value, or `nil`.
+function vim._tointeger(x, base)
+  --- @diagnostic disable-next-line:param-type-mismatch optional `base` is equivalent to `tonumber(x)`
+  local nx = tonumber(x, base)
+  if nx and nx == math.floor(nx) then
+    --- @cast nx integer
+    return nx
+  end
+end
+
+--- Coerces {x} to an integer and errors if conversion fails.
+---
+--- This is the throwing counterpart to |vim._tointeger()| and should be used
+--- when non-integer input is a programming error.
+---
+--- @param x any Value to convert.
+--- @param base? integer Numeric base passed to `tonumber()`.
+--- @return integer integer Converted integer value.
+function vim._assert_integer(x, base)
+  return vim._tointeger(x, base) or error(('Cannot convert %s to integer'):format(x))
 end
 
 -- Use max 32-bit signed int value to avoid overflow on 32-bit systems. #31633
