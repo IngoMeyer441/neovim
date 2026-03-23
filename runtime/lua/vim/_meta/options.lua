@@ -1873,7 +1873,10 @@ vim.go.dex = vim.go.diffexpr
 --- 				difference.  Non-alphanumeric
 --- 				multi-byte characters such as emoji
 --- 				and CJK characters are considered
---- 				individual words.
+--- 				individual words.  Small gaps of
+--- 				non-word characters (5 bytes or less)
+--- 				between changes are merged into a
+--- 				single highlight block.
 ---
 --- 	internal	Use the internal diff library.  This is
 --- 			ignored when 'diffexpr' is set.  *E960*
@@ -3026,7 +3029,7 @@ vim.go.fs = vim.go.fsync
 --- This is a scanf-like string that uses the same format as the
 --- 'errorformat' option: see `errorformat`.
 ---
---- If ripgrep ('grepprg') is available, this option defaults to `%f:%l:%c:%m`.
+--- Defaults to "%f:%l:%c:%m" if ripgrep ('grepprg') is available.
 ---
 --- @type string
 vim.o.grepformat = "%f:%l:%m,%f:%l%m,%f  %l%m"
@@ -3036,28 +3039,34 @@ vim.bo.gfm = vim.bo.grepformat
 vim.go.grepformat = vim.o.grepformat
 vim.go.gfm = vim.go.grepformat
 
---- Program to use for the `:grep` command.  This option may contain '%'
---- and '#' characters, which are expanded like when used in a command-
---- line.  The placeholder "$*" is allowed to specify where the arguments
---- will be included.  Environment variables are expanded `:set_env`.  See
---- `option-backslash` about including spaces and backslashes.
+--- Program to use for the `:grep` command.
+--- Note: if you change this then you must also update 'grepformat'.
+---
+--- May contain "%" and "#" characters, are expanded per `cmdline-special`.
+--- The placeholder "$*" specifies where the arguments will be included.
+--- Environment variables are expanded `:set_env`.  See `option-backslash`
+--- about including spaces and backslashes.
+---
 --- Special value: When 'grepprg' is set to "internal" the `:grep` command
 --- works like `:vimgrep`, `:lgrep` like `:lvimgrep`, `:grepadd` like
 --- `:vimgrepadd` and `:lgrepadd` like `:lvimgrepadd`.
---- See also the section `:make_makeprg`, since most of the comments there
---- apply equally to 'grepprg'.
+---
+--- See also `:make_makeprg`, most of the comments there apply to 'grepprg'.
+---
+--- Defaults to:
+--- - "rg --vimgrep -uu " if ripgrep is available (`:checkhealth`),
+--- - "grep -HIn $* /dev/null" on Unix,
+--- - "findstr /n $* nul" on Windows.
+---
+--- Ripgrep may perform additional filtering such as using .gitignore rules
+--- and skipping hidden files. This is disabled by default (via "-u") to
+--- more closely match the behaviour of standard grep.
+--- You can make ripgrep match Vim's case handling using the
+--- -i/--ignore-case and -S/--smart-case options. Handle `OptionSet` to
+--- dynamically update 'grepprg' when e.g. 'ignorecase' is changed.
+---
 --- This option cannot be set from a `modeline` or in the `sandbox`, for
 --- security reasons.
---- This option defaults to:
---- - `rg --vimgrep -uu ` if ripgrep is available (`:checkhealth`),
---- - `grep -HIn $* /dev/null` on Unix,
---- - `findstr /n $* nul` on Windows.
---- Ripgrep can perform additional filtering such as using .gitignore rules
---- and skipping hidden files. This is disabled by default (see the -u option)
---- to more closely match the behaviour of standard grep.
---- You can make ripgrep match Vim's case handling using the
---- -i/--ignore-case and -S/--smart-case options.
---- An `OptionSet` autocmd can be used to set it up to match automatically.
 ---
 --- @type string
 vim.o.grepprg = "grep -HIn $* /dev/null"
@@ -4443,24 +4452,29 @@ vim.go.mis = vim.go.menuitems
 --- Option settings for outputting messages.  It can consist of the
 --- following items.  Items must be separated by a comma.
 ---
---- hit-enter	Use a `hit-enter` prompt when the message is longer than
---- 		'cmdheight' size.
----
---- wait:{n}	Instead of using a `hit-enter` prompt, simply wait for
---- 		{n} milliseconds so that the user has a chance to read
---- 		the message.  The maximum value of {n} is 10000.  Use
---- 		0 to disable the wait (but then the user may miss an
---- 		important message).
---- 		This item is ignored when "hit-enter" is present, but
---- 		required when "hit-enter" is not present.
----
 --- history:{n}	Determines how many entries are remembered in the
 --- 		`:messages` history.  The maximum value is 10000.
 --- 		Setting it to zero clears the message history.
 --- 		This item must always be present.
 ---
+--- hit-enter	Use a `hit-enter` prompt when the message is longer than
+--- 		'cmdheight' size.
+---
+--- progress:{s}	Determines where to show progress messages.
+--- 		Valid values are:
+--- 		  - empty: Progress messages not shown in cmdline.
+--- 		  - "c": Progress messages are shown in cmdline.
+---
+--- wait:{n}	Deprecated with `ui2`.
+--- 		Instead of a `hit-enter` prompt, simply wait for {n}
+--- 		milliseconds so the user has a chance to read the
+--- 		message.  Maximum {n} is 10000.  Use 0 to disable the
+--- 		wait (user won't see any "hit-enter" messages).
+--- 		Ignored when "hit-enter" is present, but required when
+--- 		"hit-enter" is not present.
+---
 --- @type string
-vim.o.messagesopt = "hit-enter,history:500"
+vim.o.messagesopt = "hit-enter,history:500,progress:c"
 vim.o.mopt = vim.o.messagesopt
 vim.go.messagesopt = vim.o.messagesopt
 vim.go.mopt = vim.go.messagesopt
@@ -5093,6 +5107,9 @@ vim.go.pb = vim.go.pumblend
 --- Defines the default border style of popupmenu windows. See 'winborder' for
 --- valid values. `hl-PmenuBorder` is used for highlighting the border, and when
 --- style is "shadow" the `hl-PmenuShadow` and `hl-PmenuShadowThrough` groups are used.
+---
+--- This option also applies to mouse popup menus when 'mousemodel' is set to
+--- "popup" or "popup_setpos", which will display borders using the same style.
 ---
 --- @type string
 vim.o.pumborder = ""
@@ -6977,7 +6994,7 @@ vim.wo.stc = vim.wo.statuscolumn
 ---
 ---
 --- @type string
-vim.o.statusline = "%<%f %h%w%m%r %{% v:lua.require('vim._core.util').term_exitcode() %}%=%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &busy > 0 ? '◐ ' : '' %}%{% luaeval('(package.loaded[''vim.diagnostic''] and next(vim.diagnostic.count()) and vim.diagnostic.status() .. '' '') or '''' ') %}%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}"
+vim.o.statusline = "%<%f %h%w%m%r %{% v:lua.require('vim._core.util').term_exitcode() %}%=%{% luaeval('(package.loaded[''vim.ui''] and vim.ui.progress_status()) or '''' ')%}%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &busy > 0 ? '◐ ' : '' %}%{% luaeval('(package.loaded[''vim.diagnostic''] and next(vim.diagnostic.count()) and vim.diagnostic.status() .. '' '') or '''' ') %}%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}"
 vim.o.stl = vim.o.statusline
 vim.wo.statusline = vim.o.statusline
 vim.wo.stl = vim.wo.statusline
@@ -7479,10 +7496,14 @@ vim.o.tm = vim.o.timeoutlen
 vim.go.timeoutlen = vim.o.timeoutlen
 vim.go.tm = vim.go.timeoutlen
 
---- When on, the title of the window will be set to the value of
---- 'titlestring' (if it is not empty), or to:
+--- If enabled, Nvim will update the (GUI or terminal) window title. The
+--- format is configured by 'titlestring'. By default it looks like:
+--- ```
 --- 	filename [+=-] (path) - Nvim
---- Where:
+--- ```
+---
+--- where:
+--- ```
 --- 	filename	the name of the file being edited
 --- 	-		indicates the file cannot be modified, 'ma' off
 --- 	+		indicates the file was modified
@@ -7490,6 +7511,8 @@ vim.go.tm = vim.go.timeoutlen
 --- 	=+		indicates the file is read-only and modified
 --- 	(path)		is the path of the file being edited
 --- 	- Nvim		the server name `v:servername` or "Nvim"
+--- ```
+---
 ---
 --- @type boolean
 vim.o.title = false
@@ -7518,21 +7541,17 @@ vim.go.titlelen = vim.o.titlelen
 vim.o.titleold = ""
 vim.go.titleold = vim.o.titleold
 
---- When this option is not empty, it will be used for the title of the
---- window.  This happens only when the 'title' option is on.
+--- Formats the window title, enabled by the 'title' option.
 ---
---- When this option contains printf-style '%' items, they will be
---- expanded according to the rules used for 'statusline'.  If it contains
---- an invalid '%' format, the value is used as-is and no error or warning
---- will be given when the value is set.
+--- Contains printf-style "%" items, expanded according to the rules of
+--- 'statusline'.  If a "%" format is invalid, it is used as-is and no
+--- error will be given.
 ---
---- The default behaviour is equivalent to:
+--- The default (empty) behaviour is equivalent to:
 ---
 --- ```vim
 ---     set titlestring=%t%(\ %M%)%(\ \(%{expand(\"%:~:h\")}\)%)%a\ -\ Nvim
 --- ```
----
---- This option cannot be set in a modeline when 'modelineexpr' is off.
 ---
 --- Example:
 ---
@@ -7540,18 +7559,22 @@ vim.go.titleold = vim.o.titleold
 ---     auto BufEnter * let &titlestring = hostname() .. "/" .. expand("%:p")
 ---     set title titlestring=%<%F%=%l/%L-%P titlelen=70
 --- ```
---- The value of 'titlelen' is used to align items in the middle or right
---- of the available space.
---- Some people prefer to have the file name first:
+--- The value of 'titlelen' is used to align items in the middle
+--- or right of the available space.
+---
+--- Example: to have the file name first:
 ---
 --- ```vim
 ---     set titlestring=%t%(\ %M%)%(\ (%{expand(\"%:~:.:h\")})%)%(\ %a%)
 --- ```
---- Note the use of "%{ }" and an expression to get the path of the file,
---- without the file name.  The "%( %)" constructs are used to add a
+--- Note the use of "%{ }" and an expression to get the path of
+--- the file, without the file name.  The "%( %)" constructs add a
 --- separating space only when needed.
+---
 --- NOTE: Use of special characters in 'titlestring' may cause the display
 --- to be garbled (e.g., when it contains a CR or NL character).
+---
+--- This option cannot be set in a modeline when 'modelineexpr' is off.
 ---
 --- @type string
 vim.o.titlestring = ""

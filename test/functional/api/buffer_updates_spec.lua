@@ -119,6 +119,11 @@ end
 describe('API: buffer events:', function()
   before_each(clear)
 
+  it('validation', function()
+    local b = editoriginal(false)
+    eq("Invalid key: 'builtin'", pcall_err(api.nvim_buf_attach, b, false, { builtin = 'asfd' }))
+  end)
+
   it('when lines are added', function()
     local b, tick = editoriginal(true)
 
@@ -798,11 +803,6 @@ describe('API: buffer events:', function()
     expectn('nvim_buf_changedtick_event', { b, tick })
   end)
 
-  it('returns a proper error on nonempty options dict', function()
-    local b = editoriginal(false)
-    eq("Invalid key: 'builtin'", pcall_err(api.nvim_buf_attach, b, false, { builtin = 'asfd' }))
-  end)
-
   it('nvim_buf_attach returns response after delay #8634', function()
     sleep(250)
     -- response
@@ -916,6 +916,14 @@ describe('API: buffer events:', function()
     local s = string.rep('\nxyz', 30)
     sendkeys(s)
     assert_match_somewhere(expected_lines, buffer_lines)
+
+    -- Trigger synchronized output in child Nvim, and then exit parent Nvim after
+    -- blocking its event loop for a while. This should not cause an error log.
+    n.expect_exit(n.exec_lua, function()
+      vim.api.nvim_chan_send(vim.bo.channel, 'aaa')
+      vim.uv.sleep(5)
+      vim.cmd('qall!')
+    end)
   end)
 
   it('no spurious event with nvim_open_term() on empty buffer', function()

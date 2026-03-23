@@ -187,6 +187,21 @@ describe('vim.lsp.completion: item conversion', function()
     eq({ { word = 'text-red-300', kind_hlgroup = '@lsp.color.fca5a5', kind = '■' } }, result)
   end)
 
+  it('uses labelDetails for abbr and menu', function()
+    local completion_list = {
+      {
+        label = 'printf',
+        kind = 3,
+        detail = 'int',
+        labelDetails = { detail = '(const char *restrict, ...)', description = 'stdio.h' },
+      },
+    }
+    local result = complete('|', completion_list)
+    local item = result.items[1]
+    eq('printf(const char *restrict, ...)', item.abbr)
+    eq('stdio.h', item.menu)
+  end)
+
   ---@param prefix string
   ---@param items lsp.CompletionItem[]
   ---@param expected table[]
@@ -780,8 +795,10 @@ describe('vim.lsp.completion: item conversion', function()
     local result = complete('|', completion_list)
     eq('for .. ipairs', result.items[1].word)
     eq('```lua\nfor index, value in ipairs(t) do\n\t\nend\n```', result.items[1].info)
+    eq('markdown', result.items[1].user_data.nvim.lsp.completion_item.documentation.kind)
     eq('for .. ipairs 2', result.items[2].word)
     eq('```lua\nfor i, v in ipairs(t) do\n\t\nend\n```', result.items[2].info)
+    eq('markdown', result.items[2].user_data.nvim.lsp.completion_item.documentation.kind)
   end)
 end)
 

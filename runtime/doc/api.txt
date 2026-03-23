@@ -261,7 +261,6 @@ Call |nvim_buf_attach()| to receive these events on the channel:
 
                                                         *nvim_buf_lines_event*
 nvim_buf_lines_event[{buf}, {changedtick}, {firstline}, {lastline}, {linedata}, {more}]
-
     When the buffer text between {firstline} and {lastline} (end-exclusive,
     zero-indexed) were changed to the new text in the {linedata} list. The
     granularity is a line, i.e. if a single character is changed in the
@@ -271,45 +270,41 @@ nvim_buf_lines_event[{buf}, {changedtick}, {firstline}, {lastline}, {linedata}, 
     changed but not the buffer contents. {linedata} contains the changed
     screen lines. This happens when 'inccommand' shows a buffer preview.
 
-    Properties: ~
-        {buf} API buffer handle (buffer number)
-
-        {changedtick} value of |b:changedtick| for the buffer. If you send an
-        API command back to nvim you can check the value of |b:changedtick| as
-        part of your request to ensure that no other changes have been made.
-
-        {firstline} integer line number of the first line that was replaced.
-        Zero-indexed: if line 1 was replaced then {firstline} will be zero,
-        not one. {firstline} is always less than or equal to the number of
-        lines that were in the buffer before the lines were replaced.
-
-        {lastline} integer line number of the first line that was not replaced
-        (i.e. the range {firstline}, {lastline} is end-exclusive).
-        Zero-indexed: if line numbers 2 to 5 were replaced, this will be 5
-        instead of 6. {lastline} is always be less than or equal to the number
-        of lines that were in the buffer before the lines were replaced.
-        {lastline} will be -1 if the event is part of the initial update after
-        attaching.
-
-        {linedata} list of strings containing the contents of the new buffer
-        lines. Newline characters are omitted; empty lines are sent as empty
-        strings.
-
-        {more} boolean, true for a "multipart" change notification: the
-        current change was chunked into multiple |nvim_buf_lines_event|
-        notifications (e.g. because it was too big).
+    Parameters: ~
+      • {buf}         (`integer`) Buffer id
+      • {changedtick} (`integer`) Value of |b:changedtick|. If you send an API
+                      command back to Nvim you can check |b:changedtick| as
+                      part of your request to ensure that no other changes
+                      have been made.
+      • {firstline}   (`integer`) The first line that was replaced.
+                      Zero-indexed: if line 1 was replaced then {firstline}
+                      will be zero, not one. Always less than or equal to
+                      the number of lines that were in the buffer before the
+                      lines were replaced.
+      • {lastline}    (`integer`) The first line that was not replaced (i.e.
+                      the range {firstline}, {lastline} is end-exclusive).
+                      Zero-indexed: if line numbers 2 to 5 were replaced,
+                      this will be 5 instead of 6. Always less than or equal
+                      to the number of lines that were in the buffer before
+                      the lines were replaced. Will be -1 if the event is
+                      part of the initial update after attaching.
+      • {linedata}    (`string[]`) Contents of the new buffer lines. Newline
+                      characters are omitted; empty lines are sent as empty
+                      strings.
+      • {more}        (`boolean`) true for a "multipart" change notification:
+                      the current change was chunked into multiple
+                      |nvim_buf_lines_event| notifications (e.g. because it
+                      was too big).
 
 nvim_buf_changedtick_event[{buf}, {changedtick}]  *nvim_buf_changedtick_event*
-
     When |b:changedtick| was incremented but no text was changed. Relevant for
     undo/redo.
 
-    Properties: ~
-        {buf} API buffer handle (buffer number)
-        {changedtick} new value of |b:changedtick| for the buffer
+    Parameters: ~
+      • {buf}         (`integer`) Buffer id
+      • {changedtick} (`integer`) New value of |b:changedtick|.
 
 nvim_buf_detach_event[{buf}]                           *nvim_buf_detach_event*
-
     When buffer is detached (i.e. updates are disabled). Triggered explicitly by
     |nvim_buf_detach()| or implicitly in these cases:
     - Buffer was |abandon|ed and 'hidden' is not set.
@@ -317,8 +312,8 @@ nvim_buf_detach_event[{buf}]                           *nvim_buf_detach_event*
       |:checktime| or 'autoread'.
     - Generally: whenever the buffer contents are unloaded from memory.
 
-    Properties: ~
-        {buf} API buffer handle (buffer number)
+    Parameters: ~
+      • {buf}         (`integer`) Buffer id
 
 
 EXAMPLE ~
@@ -409,7 +404,7 @@ after adding them, the returned |extmark| id can be used. >lua
 See also |vim.hl.range()|.
 
 ==============================================================================
-Floating windows				*api-floatwin* *floating-windows*
+Floating windows                                *api-floatwin* *floating-windows*
 
 Floating windows ("floats") are displayed on top of normal windows.  This is
 useful to implement simple widgets, such as tooltips displayed next to the
@@ -663,7 +658,14 @@ nvim_del_var({name})                                          *nvim_del_var()*
       • {name}  (`string`) Variable name
 
 nvim_echo({chunks}, {history}, {opts})                           *nvim_echo()*
-    Prints a message given by a list of `[text, hl_group]` "chunks".
+    Prints a message given by a list of `[text, hl_group]` "chunks". Emits a
+    |Progress| event if `kind='progress'`.
+
+    Returns a message-id, which can be given in later calls to update an
+    existing message. The message-id is an autogenerated integer, or a
+    user-defined string. The id "address space" is global, so plugins
+    specifying a string id should use qualified names such as "my.msg.id" to
+    avoid unintentional conflicts.
 
     Example: >lua
         vim.api.nvim_echo({ { 'chunk1-line1\nchunk1-line2\n' }, { 'chunk2-line1' } }, true, {})
@@ -678,30 +680,33 @@ nvim_echo({chunks}, {history}, {opts})                           *nvim_echo()*
                    (optional) name or ID `hl_group`.
       • {history}  (`boolean`) if true, add to |message-history|.
       • {opts}     (`vim.api.keyset.echo_opts`) Optional parameters.
-                   • id: message id for updating existing message.
-                   • err: Treat the message like `:echoerr`. Sets `hl_group`
-                     to |hl-ErrorMsg| by default.
-                   • kind: Set the |ui-messages| kind with which this message
-                     will be emitted.
-                   • verbose: Message is controlled by the 'verbose' option.
-                     Nvim invoked with `-V3log` will write the message to the
-                     "log" file instead of standard output.
-                   • title: The title for |progress-message|.
-                   • status: Current status of the |progress-message|. Can be
-                     one of the following values
-                     • success: The progress item completed successfully
-                     • running: The progress is ongoing
-                     • failed: The progress item failed
-                     • cancel: The progressing process should be canceled.
-                       NOTE: Cancel must be handled by progress initiator by
-                       listening for the `Progress` event
-                   • percent: How much progress is done on the progress
-                     message
-                   • data: dictionary containing additional information
+                   • data (`table?`) Dict of arbitrary data, available in
+                     |Progress| |event-data|.
+                   • err (`boolean?`) Treat the message like `:echoerr`. Sets
+                     `hl_group` to |hl-ErrorMsg| by default.
+                   • id (`integer|string?`) Message-id returned by a previous
+                     `nvim_echo` call, or a user-defined id (string). If
+                     existing message has this id, it will be updated instead
+                     of creating a new message.
+                   • kind (`string?`) Decides the |ui-messages| kind in the
+                     emitted message. Set "progress" to emit a
+                     |progress-message|.
+                   • percent (`integer?`) |progress-message| percentage.
+                   • status (`string?`) |progress-message| status:
+                     • "success": Process completed successfully.
+                     • "running": Process is ongoing.
+                     • "failed": Process failed.
+                     • "cancel": Process should be cancelled. Progress owner
+                       must handle the |Progress| event to perform the
+                       cancellation.
+                   • title (`string?`) Message title. Only for
+                     |progress-message| currently.
+                   • verbose (`boolean?`) Message is controlled by the
+                     'verbose' option. `nvim -V3log` will write the message to
+                     the "log" file instead of standard output.
 
     Return: ~
-        (`integer|string`) Message id.
-        • -1 means nvim_echo didn't show a message
+        (`integer|string`) Message-id, or -1 if message wasn't shown.
 
 nvim_eval_statusline({str}, {opts})                   *nvim_eval_statusline()*
     Evaluates statusline string.
@@ -1310,7 +1315,7 @@ nvim_paste({data}, {crlf}, {phase})                             *nvim_paste()*
             line2
             line3
           ]], false, -1)
-        end, { buffer = true })
+        end, { buf = true })
 <
 
     Attributes: ~
@@ -2012,39 +2017,35 @@ nvim_parse_expression({expr}, {flags}, {highlight})
 Autocmd Functions                                                *api-autocmd*
 
 nvim_clear_autocmds({opts})                            *nvim_clear_autocmds()*
-    Clears all autocommands selected by {opts}. To delete autocmds see
+    Clears all autocommands matching the {opts} query. To delete autocmds see
     |nvim_del_autocmd()|.
 
     Attributes: ~
         Since: 0.7.0
 
     Parameters: ~
-      • {opts}  (`vim.api.keyset.clear_autocmds`) Parameters
-                • event: (vim.api.keyset.events|vim.api.keyset.events[])
+      • {opts}  (`vim.api.keyset.clear_autocmds`) Optional parameters:
+                • event: (`vim.api.keyset.events|vim.api.keyset.events[]?`)
                   Examples:
                   • event: "pat1"
                   • event: { "pat1" }
                   • event: { "pat1", "pat2", "pat3" }
-                • pattern: (string|table)
-                  • pattern or patterns to match exactly.
-                    • For example, if you have `*.py` as that pattern for the
-                      autocmd, you must pass `*.py` exactly to clear it.
-                      `test.py` will not match the pattern.
-                  • defaults to clearing all patterns.
-                  • NOTE: Cannot be used with {buffer}
-                • buffer: (bufnr)
-                  • clear only |autocmd-buflocal| autocommands.
-                  • NOTE: Cannot be used with {pattern}
-                • group: (string|int) The augroup name or id.
-                  • NOTE: If not passed, will only delete autocmds not in any
-                    group.
+                • pattern: (`string|table?`) Filter by patterns (exact match).
+                  Not allowed with {buffer}.
+                  • Example: if you have `*.py` as that pattern for the
+                    autocmd, you must pass `*.py` exactly to clear it.
+                    `test.py` will not match the pattern.
+                • buffer: (`integer?`) Select |autocmd-buflocal| autocommands.
+                  Not allowed with {pattern}.
+                • group: (`string|int?`) Group name or id.
+                  • NOTE: If not given, matches autocmds not in any group.
 
 nvim_create_augroup({name}, {opts})                    *nvim_create_augroup()*
     Create or get an autocommand group |autocmd-groups|.
 
     To get an existing group id, do: >lua
         local id = vim.api.nvim_create_augroup('my.lsp.config', {
-            clear = false
+          clear = false
         })
 <
 
@@ -2052,13 +2053,13 @@ nvim_create_augroup({name}, {opts})                    *nvim_create_augroup()*
         Since: 0.7.0
 
     Parameters: ~
-      • {name}  (`string`) String: The name of the group
-      • {opts}  (`vim.api.keyset.create_augroup`) Dict Parameters
-                • clear (bool) optional: defaults to true. Clear existing
-                  commands if the group already exists |autocmd-groups|.
+      • {name}  (`string`) Group name
+      • {opts}  (`vim.api.keyset.create_augroup`) Optional parameters:
+                • clear (`boolean?`, default: true) Clear existing commands in
+                  the group |autocmd-groups|.
 
     Return: ~
-        (`integer`) Integer id of the created group.
+        (`integer`) Group id.
 
     See also: ~
       • |autocmd-groups|
@@ -2096,36 +2097,34 @@ nvim_create_autocmd({event}, {opts})                   *nvim_create_autocmd()*
       • {event}  (`vim.api.keyset.events|vim.api.keyset.events[]`) Event(s)
                  that will trigger the handler (`callback` or `command`).
       • {opts}   (`vim.api.keyset.create_autocmd`) Options dict:
-                 • group (string|integer) optional: autocommand group name or
-                   id to match against.
-                 • pattern (string|array) optional: pattern(s) to match
-                   literally |autocmd-pattern|.
-                 • buffer (integer) optional: buffer number for buffer-local
-                   autocommands |autocmd-buflocal|. Cannot be used with
-                   {pattern}.
-                 • desc (string) optional: description (for documentation and
-                   troubleshooting).
-                 • callback (function|string) optional: Lua function (or
-                   Vimscript function name, if string) called when the
-                   event(s) is triggered. Lua callback can return a truthy
-                   value (not `false` or `nil`) to delete the autocommand, and
-                   receives one argument, a table with these keys:
-                                                                  *event-args*
-                   • id: (number) autocommand id
-                   • event: (vim.api.keyset.events) name of the triggered
+                 • buffer (`integer?`) Buffer id for buffer-local autocommands
+                   |autocmd-buflocal|. Not allowed with {pattern}.
+                 • callback (`function|string?`) Lua function (or Vimscript
+                   function name, if string) called when the event(s) is
+                   triggered. Lua callback can return |lua-truthy| to delete
+                   the autocommand. Callback receives one argument, a table
+                   with keys:                                     *event-args*
+                   • id: (`number`) Autocommand id
+                   • event: (`vim.api.keyset.events`) Name of the triggered
                      event |autocmd-events|
-                   • group: (number|nil) autocommand group id, if any
-                   • file: (string) <afile> (not expanded to a full path)
-                   • match: (string) <amatch> (expanded to a full path)
-                   • buf: (number) <abuf>
-                   • data: (any) arbitrary data passed from
+                   • group: (`number?`) Group id, if any
+                   • file: (`string`) <afile> (not expanded to a full path)
+                   • match: (`string`) <amatch> (expanded to a full path)
+                   • buf: (`number`) <abuf>
+                   • data: (`any`) Arbitrary data passed from
                      |nvim_exec_autocmds()|                       *event-data*
-                 • command (string) optional: Vim command to execute on event.
-                   Cannot be used with {callback}
-                 • once (boolean) optional: defaults to false. Run the
-                   autocommand only once |autocmd-once|.
-                 • nested (boolean) optional: defaults to false. Run nested
-                   autocommands |autocmd-nested|.
+                 • command (string?) Vim command executed on event. Not
+                   allowed with {callback}.
+                 • desc (`string?`) Description (for documentation and
+                   troubleshooting).
+                 • group (`string|integer?`) Group name or id to match
+                   against.
+                 • nested (`boolean?`, default: false) Run nested autocommands
+                   |autocmd-nested|.
+                 • once (`boolean?`, default: false) Handle the event only
+                   once |autocmd-once|.
+                 • pattern (`string|array?`) Pattern(s) to match literally
+                   |autocmd-pattern|.
 
     Return: ~
         (`integer`) Autocommand id (number)
@@ -2147,7 +2146,7 @@ nvim_del_augroup_by_id({id})                        *nvim_del_augroup_by_id()*
         Since: 0.7.0
 
     Parameters: ~
-      • {id}  (`integer`) Integer The id of the group.
+      • {id}  (`integer`) Group id.
 
     See also: ~
       • |nvim_del_augroup_by_name()|
@@ -2164,7 +2163,7 @@ nvim_del_augroup_by_name({name})                  *nvim_del_augroup_by_name()*
         Since: 0.7.0
 
     Parameters: ~
-      • {name}  (`string`) String The name of the group.
+      • {name}  (`string`) Group name.
 
     See also: ~
       • |autocmd-groups|
@@ -2176,38 +2175,40 @@ nvim_del_autocmd({id})                                    *nvim_del_autocmd()*
         Since: 0.7.0
 
     Parameters: ~
-      • {id}  (`integer`) Integer Autocommand id returned by
-              |nvim_create_autocmd()|
+      • {id}  (`integer`) Autocommand id returned by |nvim_create_autocmd()|
 
 nvim_exec_autocmds({event}, {opts})                     *nvim_exec_autocmds()*
-    Execute all autocommands for {event} that match the corresponding {opts}
-    |autocmd-execute|.
+    Executes handlers for {event} that match the corresponding {opts} query.
+    |autocmd-execute|
 
     Attributes: ~
         Since: 0.7.0
 
     Parameters: ~
-      • {event}  (`vim.api.keyset.events|vim.api.keyset.events[]`) The event
-                 or events to execute
-      • {opts}   (`vim.api.keyset.exec_autocmds`) Dict of autocommand options:
-                 • group (string|integer) optional: the autocommand group name
-                   or id to match against. |autocmd-groups|.
-                 • pattern (string|array) optional: defaults to "*"
-                   |autocmd-pattern|. Cannot be used with {buffer}.
-                 • buffer (integer) optional: buffer number
-                   |autocmd-buflocal|. Cannot be used with {pattern}.
-                 • modeline (bool) optional: defaults to true. Process the
-                   modeline after the autocommands <nomodeline>.
-                 • data (any): arbitrary data to send to the autocommand
-                   callback. See |nvim_create_autocmd()| for details.
+      • {event}  (`vim.api.keyset.events|vim.api.keyset.events[]`) Event(s) to
+                 execute.
+      • {opts}   (`vim.api.keyset.exec_autocmds`) Optional filters:
+                 • group (`string|integer?`) Group name or id to match
+                   against. |autocmd-groups|.
+                 • pattern (`string|array?`, default: "*") |autocmd-pattern|.
+                   Not allowed with {buffer}.
+                 • buffer (`integer?`) Buffer id |autocmd-buflocal|. Not
+                   allowed with {pattern}.
+                 • modeline (`boolean?`, default: true) Process the modeline
+                   after the autocommands <nomodeline>.
+                 • data (`any`): Arbitrary data passed to the callback. See
+                   |nvim_create_autocmd()|.
 
     See also: ~
       • |:doautocmd|
 
 nvim_get_autocmds({opts})                                *nvim_get_autocmds()*
-    Get all autocommands that match the corresponding {opts}.
+    Gets all autocommands matching ALL criteria in the {opts} query.
 
-    These examples will get autocommands matching ALL the given criteria: >lua
+    Note: When multiple patterns or events are provided they have "OR"
+    semantics (any combination is matched).
+
+    Examples: >lua
         -- Matches all criteria
         autocommands = vim.api.nvim_get_autocmds({
           group = 'MyGroup',
@@ -2221,44 +2222,39 @@ nvim_get_autocmds({opts})                                *nvim_get_autocmds()*
         })
 <
 
-    NOTE: When multiple patterns or events are provided, it will find all the
-    autocommands that match any combination of them.
-
     Attributes: ~
         Since: 0.7.0
 
     Parameters: ~
-      • {opts}  (`vim.api.keyset.get_autocmds`) Dict with at least one of the
-                following:
-                • buffer: (integer) Buffer number or list of buffer numbers
-                  for buffer local autocommands |autocmd-buflocal|. Cannot be
-                  used with {pattern}
-                • event: (vim.api.keyset.events|vim.api.keyset.events[]) event
-                  or events to match against |autocmd-events|.
-                • id: (integer) Autocommand ID to match.
-                • group: (string|table) the autocommand group name or id to
-                  match against.
-                • pattern: (string|table) pattern or patterns to match against
-                  |autocmd-pattern|. Cannot be used with {buffer}
+      • {opts}  (`vim.api.keyset.get_autocmds`) Dict with at least one of
+                these keys:
+                • buffer: (`integer[]|integer?`) Buffer id or list of buffer
+                  ids, for buffer-local autocommands |autocmd-buflocal|. Not
+                  allowed with {pattern}.
+                • event: (`vim.api.keyset.events|vim.api.keyset.events[]?`)
+                  Event(s) to match |autocmd-events|.
+                • group: (`string|table?`) Group name or id to match.
+                • id: (`integer?`) Autocommand ID to match.
+                • pattern: (`string|table?`) Pattern(s) to match
+                  |autocmd-pattern|. Not allowed with {buffer}.
 
     Return: ~
-        (`vim.api.keyset.get_autocmds.ret[]`) Array of autocommands matching
-        the criteria, with each item containing the following fields:
-        • buffer: (integer) the buffer number.
-        • buflocal: (boolean) true if the autocommand is buffer local.
-        • command: (string) the autocommand command. Note: this will be empty
-          if a callback is set.
-        • callback: (function|string|nil): Lua function or name of a Vim
-          script function which is executed when this autocommand is
-          triggered.
-        • desc: (string) the autocommand description.
-        • event: (vim.api.keyset.events) the autocommand event.
-        • id: (integer) the autocommand id (only when defined with the API).
-        • group: (integer) the autocommand group id.
-        • group_name: (string) the autocommand group name.
-        • once: (boolean) whether the autocommand is only run once.
-        • pattern: (string) the autocommand pattern. If the autocommand is
-          buffer local |autocmd-buffer-local|:
+        (`vim.api.keyset.get_autocmds.ret[]`) Array of matching autocommands,
+        where each item has:
+        • buffer (`integer?`): Buffer id (only for |autocmd-buffer-local|).
+        • buflocal (`boolean?`): true if the autocommand is buffer-local
+          |autocmd-buffer-local|.
+        • callback: (`function|string?`): Event handler: a Lua function or
+          Vimscript function name.
+        • command: (`string`) Event handler: an Ex-command. Empty if a
+          `callback` is set.
+        • desc: (`string`) Description.
+        • event: (`vim.api.keyset.events`) Event name(s).
+        • group: (`integer`) Group id.
+        • group_name: (`string`) Group name.
+        • id: (`integer`) Autocommand id (only when defined with the API).
+        • once: (`boolean`) true if |autocmd-once| was set.
+        • pattern: (`string`) Autocommand pattern.
 
 
 ==============================================================================
@@ -3544,6 +3540,25 @@ nvim_set_option_value({name}, {value}, {opts})
 ==============================================================================
 Tabpage Functions                                                *api-tabpage*
 
+nvim_open_tabpage({buffer}, {enter}, {config})           *nvim_open_tabpage()*
+    Opens a new tabpage.
+
+    Attributes: ~
+        not allowed when |textlock| is active
+        Since: 0.12.0
+
+    Parameters: ~
+      • {buffer}  (`integer`) Buffer to open in the first window of the new
+                  tabpage. Use 0 for current buffer.
+      • {enter}   (`boolean`) Enter the tabpage (make it the current tabpage).
+      • {config}  (`vim.api.keyset.tabpage_config`) Configuration for the new
+                  tabpage. Keys:
+                  • after: Position to insert tabpage (default: -1; after
+                    current). 0 = first, N = after Nth.
+
+    Return: ~
+        (`integer`) |tab-ID| of the new tabpage
+
 nvim_tabpage_del_var({tabpage}, {name})               *nvim_tabpage_del_var()*
     Removes a tab-scoped (t:) variable
 
@@ -3963,6 +3978,8 @@ nvim_win_set_config({window}, {config})                *nvim_win_set_config()*
     Reconfigures the layout and properties of a window.
     • Updates only the given keys; unspecified (`nil`) keys will not be
       changed.
+    • Can move a window to another tabpage.
+    • Can transform a window to/from a float.
     • Keys `row` / `col` / `relative` must be specified together.
     • Cannot move the last window in a tabpage to a different one.
 
@@ -4172,8 +4189,8 @@ nvim_win_set_buf({window}, {buffer})                      *nvim_win_set_buf()*
       • {buffer}  (`integer`) Buffer id
 
 nvim_win_set_cursor({window}, {pos})                   *nvim_win_set_cursor()*
-    Sets the (1,0)-indexed cursor position in the window. |api-indexing| This
-    scrolls the window even if it is not the current one.
+    Sets the (1,0)-indexed cursor position (byte offset) in the window.
+    |api-indexing| This scrolls the window even if it is not the current one.
 
     Attributes: ~
         Since: 0.1.0

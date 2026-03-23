@@ -64,7 +64,6 @@
 #include "nvim/event/multiqueue.h"
 #include "nvim/event/time.h"
 #include "nvim/ex_docmd.h"
-#include "nvim/extmark.h"
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
@@ -199,6 +198,8 @@ struct terminal {
   } pending;
 
   bool theme_updates;  ///< Send a theme update notification when 'bg' changes
+  bool synchronized_output;  ///< Mode 2026: suppress redraws until end of synchronized update
+  bool sync_flush_pending;   ///< Set when mode 2026 ends; triggers immediate buffer refresh
 
   bool color_set[16];
 
@@ -209,7 +210,6 @@ struct terminal {
   VTermTerminator termrequest_terminator;  ///< Terminator (BEL or ST) used in the termrequest
 
   size_t refcount;                  // reference count
-  uint32_t exitmsg_id;
 };
 
 static VTermScreenCallbacks vterm_screen_callbacks = {
@@ -679,10 +679,6 @@ void terminal_close(Terminal **termpp, int status)
     // If called from buf_close_terminal() after the process has already exited, we
     // only need to call the close callback to clean up the terminal object.
     only_destroy = true;
-    // Buffer may be reused so delete the "[Process exited]" msg
-    if (buf) {
-      extmark_del_id(buf, (uint32_t)-1, term->exitmsg_id);
-    }
   } else {
     // flush any pending changes to the buffer
     if (!exiting) {
@@ -693,6 +689,7 @@ void terminal_close(Terminal **termpp, int status)
     term->closed = true;
   }
 
+  int pos = buf ? buf->b_ml.ml_line_count - 1 : 0;
   if (status == -1 || exiting) {
     // If this was called by buf_close_terminal() (status is -1), or if exiting, we
     // must inform the buffer the terminal no longer exists so that buf_freeall()
@@ -712,37 +709,15 @@ void terminal_close(Terminal **termpp, int status)
   } else if (!only_destroy) {
     // Associated channel has been closed and the editor is not exiting.
     // Do not call the close callback now. Wait for the user to press a key.
-    char msg[sizeof("[Process exited ]") + NUMBUFLEN];
-    if (((Channel *)term->opts.data)->streamtype == kChannelStreamInternal) {
-      snprintf(msg, sizeof msg, "[Terminal closed]");
-    } else {
-      snprintf(msg, sizeof msg, "[Process exited %d]", status);
-    }
-
-    // Show the msg as virtual text instead of adding it to buffer
-    VirtTextChunk *chunk = xmalloc(sizeof(VirtTextChunk));
-    *chunk = (VirtTextChunk) { .text = xstrdup(msg), .hl_id = -1 };
-    DecorVirtText *virt_text = xmalloc(sizeof(DecorVirtText));
-    *virt_text = (DecorVirtText) {
-      .priority = DECOR_PRIORITY_BASE,
-      .pos = kVPosWinCol,
-      .data.virt_text = { .items = chunk, .size = 1 }
-    };
-    DecorInline decor = {
-      .ext = true, .data.ext = { .sh_idx = DECOR_ID_INVALID, .vt = virt_text }
-    };
-
-    int pos = MIN(row_to_linenr(term, term->cursor.row),
-                  buf->b_ml.ml_line_count - 1);
-    extmark_set(buf, (uint32_t)-1, &term->exitmsg_id, pos, 0, -1, 0,
-                decor, 0, true, false, true, false, NULL);
-
     // Redraw statusline to show the exit code.
     FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
       if (wp->w_buffer == buf) {
         wp->w_redr_status = true;
       }
     }
+
+    // Gets the line number to display "[Process exited]" virt text
+    pos = MIN(row_to_linenr(term, term->cursor.row), pos);
   }
 
   if (only_destroy) {
@@ -754,7 +729,13 @@ void terminal_close(Terminal **termpp, int status)
     dict_T *dict = get_v_event(&save_v_event);
     tv_dict_add_nr(dict, S_LEN("status"), status);
     tv_dict_set_keys_readonly(dict);
-    apply_autocmds(EVENT_TERMCLOSE, NULL, NULL, false, buf);
+
+    MAXSIZE_TEMP_DICT(data, 1);
+    PUT_C(data, "pos", INTEGER_OBJ(pos));
+
+    apply_autocmds_group(EVENT_TERMCLOSE, NULL, NULL, status >= 0, AUGROUP_ALL,
+                         buf, NULL, &DICT_OBJ(data));
+
     restore_v_event(dict, &save_v_event);
   }
 }
@@ -951,12 +932,12 @@ bool terminal_enter(void)
   may_trigger_modechanged();
   s->term->refcount--;
   if (s->term->buf_handle == 0) {
-    s->close = true;  // skip entering and close
-  } else {
-    s->state.execute = terminal_execute;
-    s->state.check = terminal_check;
-    state_enter(&s->state);
+    s->close = true;
   }
+
+  s->state.execute = terminal_execute;
+  s->state.check = terminal_check;
+  state_enter(&s->state);
 
   if (!s->got_bsl_o) {
     restart_edit = 0;
@@ -1361,6 +1342,23 @@ static void terminal_send_key(Terminal *term, int c)
   }
 }
 
+/// Callback scheduled on the main loop when a synchronized update ends.
+/// Refreshes a single terminal with full-screen damage.
+static void on_sync_flush(void **argv)
+{
+  if (exiting) {
+    return;
+  }
+  handle_T buf_handle = (handle_T)(intptr_t)argv[0];
+  buf_T *buf = handle_get_buffer(buf_handle);
+  if (!buf || !buf->terminal) {
+    return;
+  }
+  block_autocmds();
+  refresh_terminal(buf->terminal);
+  unblock_autocmds();
+}
+
 void terminal_receive(Terminal *term, const char *data, size_t len)
 {
   if (!data) {
@@ -1383,6 +1381,22 @@ void terminal_receive(Terminal *term, const char *data, size_t len)
     vterm_input_write(term->vt, data, len);
   }
   vterm_screen_flush_damage(term->vts);
+
+  // When a synchronized update just ended, refresh the buffer immediately
+  // instead of waiting for the 10ms timer.  This eliminates the window where
+  // neovim's UI could repaint showing stale buffer content.
+  if (term->sync_flush_pending) {
+    term->sync_flush_pending = false;
+    // Schedule a full-screen refresh for this terminal on the main loop.
+    // Force full-screen damage so every row is updated, not just
+    // the rows with accumulated damage from individual callbacks.
+    int height;
+    vterm_get_size(term->vt, &height, NULL);
+    term->invalid_start = 0;
+    term->invalid_end = height;
+    multiqueue_put(main_loop.events, on_sync_flush,
+                   (void *)(intptr_t)term->buf_handle);
+  }
 }
 
 static int get_rgb(VTermState *state, VTermColor color)
@@ -1627,6 +1641,15 @@ static int term_settermprop(VTermProp prop, VTermValue *val, void *data)
     term->theme_updates = val->boolean;
     break;
 
+  case VTERM_PROP_SYNCOUTPUT:
+    term->synchronized_output = val->boolean;
+    if (!val->boolean) {
+      // Mark that sync just ended; terminal_receive() will flush
+      // the buffer immediately rather than waiting for the 10ms timer.
+      term->sync_flush_pending = true;
+    }
+    break;
+
   default:
     return 0;
   }
@@ -1699,7 +1722,9 @@ static int term_sb_push(int cols, const VTermScreenCell *cells, void *data)
   }
 
   memcpy(sbrow->cells, cells, sizeof(cells[0]) * c);
-  set_put(ptr_t, &invalidated_terminals, term);
+  if (!term->synchronized_output) {
+    set_put(ptr_t, &invalidated_terminals, term);
+  }
 
   return 1;
 }
@@ -1739,7 +1764,9 @@ static int term_sb_pop(int cols, VTermScreenCell *cells, void *data)
   }
 
   xfree(sbrow);
-  set_put(ptr_t, &invalidated_terminals, term);
+  if (!term->synchronized_output) {
+    set_put(ptr_t, &invalidated_terminals, term);
+  }
 
   return 1;
 }
@@ -2321,6 +2348,12 @@ static void invalidate_terminal(Terminal *term, int start_row, int end_row)
     term->invalid_end = MAX(term->invalid_end, end_row);
   }
 
+  // During synchronized output (mode 2026), accumulate damage but defer
+  // the actual refresh until the synchronized update ends.
+  if (term->synchronized_output) {
+    return;
+  }
+
   set_put(ptr_t, &invalidated_terminals, term);
   if (!refresh_pending) {
     time_watcher_start(&refresh_timer, refresh_timer_cb, REFRESH_DELAY, 0);
@@ -2422,14 +2455,24 @@ static void refresh_timer_cb(TimeWatcher *watcher, void *data)
   if (exiting) {  // Cannot redraw (requires event loop) during teardown/exit.
     return;
   }
-  Terminal *term;
-  void *stub; (void)(stub);
-  // don't process autocommands while updating terminal buffers
+
+  // Don't process autocommands while updating terminal buffers.
   block_autocmds();
-  set_foreach(&invalidated_terminals, term, {
-    refresh_terminal(term);
+  // Refreshing one terminal may poll for output to another, which should not
+  // interfere with the set_foreach() below.
+  Set(ptr_t) to_refresh = invalidated_terminals;
+  invalidated_terminals = (Set(ptr_t)) SET_INIT;
+
+  Terminal *term;
+  set_foreach(&to_refresh, term, {
+    // Skip terminals in synchronized output — they will be refreshed
+    // when the synchronized update ends (mode 2026 reset).
+    if (!term->synchronized_output) {
+      refresh_terminal(term);
+    }
   });
-  set_clear(ptr_t, &invalidated_terminals);
+
+  set_destroy(ptr_t, &to_refresh);
   unblock_autocmds();
 }
 
@@ -2493,6 +2536,10 @@ static void adjust_scrollback(Terminal *term, buf_T *buf)
 // Refresh the scrollback of an invalidated terminal.
 static void refresh_scrollback(Terminal *term, buf_T *buf)
 {
+  // Buffer update callbacks may poll for uv events.
+  // Avoid polling for output to the same terminal as the one being refreshed.
+  term->opts.read_pause_cb(true, term->opts.data);
+
   linenr_T deleted = (linenr_T)(term->sb_deleted - term->old_sb_deleted);
   deleted = MIN(deleted, buf->b_ml.ml_line_count);
   mark_adjust_buf(buf, 1, deleted, MAXLNUM, -deleted, true, kMarkAdjustTerm, kExtmarkUndo);
@@ -2532,6 +2579,8 @@ static void refresh_scrollback(Terminal *term, buf_T *buf)
   }
 
   adjust_scrollback(term, buf);
+
+  term->opts.read_pause_cb(false, term->opts.data);
 }
 
 // Refresh the screen (visible part of the buffer when the terminal is
@@ -2569,9 +2618,11 @@ static void refresh_screen(Terminal *term, buf_T *buf)
 
   int change_start = row_to_linenr(term, term->invalid_start);
   int change_end = change_start + changed;
-  changed_lines(buf, change_start, 0, change_end, added, true);
   term->invalid_start = INT_MAX;
   term->invalid_end = -1;
+  // Call this after resetting the invalid region, as buffer update callbacks may
+  // poll for terminal output and lead to new invalidations.
+  changed_lines(buf, change_start, 0, change_end, added, true);
 }
 
 static void adjust_topline_cursor(Terminal *term, buf_T *buf, int added)

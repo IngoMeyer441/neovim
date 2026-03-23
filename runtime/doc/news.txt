@@ -157,17 +157,16 @@ API
 • |vim.secure.read()| now returns `true` for trusted directories. Previously
   it would return `nil`, thus impossible to tell if the directory was actually
   trusted.
-• Added |vim.lsp.is_enabled()| to check if a given LSP config has been enabled
-  by |vim.lsp.enable()|.
 • |nvim_ui_send()| writes arbitrary data to a UI's stdout. Use this to write
   escape sequences to the terminal when Nvim is running in the |TUI|.
 • |nvim_echo()| can set the |ui-messages| kind with which to emit the message.
 • |nvim_echo()| can create |Progress| messages
 • |nvim_get_commands()| returns `preview` and `callback` as Lua functions if
   they were so specified in `nvim_create_user_command()`.
+• |nvim_open_tabpage()| can open a new |tab-page|.
 • |nvim_open_win()| floating windows can show a 'statusline'. Plugins can use
   `style='minimal'` or `:setlocal statusline=` to hide the statusline.
-• |nvim_win_set_config()| can move windows to other tab pages as floats.
+• |nvim_win_set_config()| can move |floating-windows| to other tabpages.
 • Added experimental |nvim__exec_lua_fast()| to allow remote API clients to
   execute code while nvim is blocking for input.
 • |vim.secure.trust()| accepts `path` for the `allow` action.
@@ -198,6 +197,7 @@ DEFAULTS
   Unset 'exrc' to stop further search.
 • Mappings:
   • |grt| in Normal mode maps to |vim.lsp.buf.type_definition()|
+  • |grx| in Normal mode maps to |vim.lsp.codelens.run()|
 • 'shada' default now excludes "/tmp/" and "/private/" paths to reduce clutter in |:oldfiles|.
 • Enabled treesitter highlighting for Markdown files
 
@@ -279,6 +279,7 @@ LSP
   non-applicable LSP clients.
 • |vim.lsp.is_enabled()| checks if a LSP config is enabled (without
   "resolving" it).
+• |vim.lsp.get_configs()| gets all LSP configs matching an optional filter.
 • Support for `workspace/diagnostic`: |vim.lsp.buf.workspace_diagnostics()|
   https://microsoft.github.io/language-server-protocol/specifications/specification-current/#workspace_dagnostics
 • Incremental selection is now supported via `textDocument/selectionRange`.
@@ -351,6 +352,7 @@ LUA
 • |vim.json.encode()| has an `sort_keys` option.
 • |Range:is_empty()| to check if a |vim.Range| is empty.
 • |vim.json.decode()| has an `skip_comments` option.
+• |vim.fs.ext()| returns the last extension of a file.
 
 OPTIONS
 
@@ -365,6 +367,8 @@ OPTIONS
 • 'completeopt' flag "nearest" sorts completion results by distance to cursor.
 • 'diffanchors' specifies addresses to anchor a diff.
 • 'diffopt' `inline:` configures diff highlighting for changes within a line.
+• 'diffopt' with `inline:word` now automatically merges adjacent diff blocks
+  separated by gaps and punctuation by 5 bytes to improve readability.
 • 'fillchars' has new flag "foldinner".
 • 'fsync' and 'grepformat' are now |global-local| options.
 • 'listchars' has new flag "leadtab".
@@ -375,9 +379,13 @@ OPTIONS
 • |g:clipboard| accepts a string name to force any builtin clipboard tool.
 • 'busy' sets a buffer "busy" status. Indicated in the default statusline.
 • 'pumborder' adds a border to the popup menu.
-• |g:clipboard| autodetection only selects tmux when running inside tmux
+• |g:clipboard| autodetection only selects tmux when running inside tmux.
 • 'statusline' allows "stacking" highlight groups (groups inherit from
   previous highlight attributes)
+• 'messagesopt' added progress:c to control if progress messages are shown in
+  cmdline.
+• Improved |:set+=|, |:set^=| and |:set-=| handling of comma-separated "key:value"
+  pairs (e.g. 'listchars', 'fillchars', 'diffopt').
 
 PERFORMANCE
 
@@ -414,10 +422,13 @@ TERMINAL
 • |nvim_open_term()| can be called with a non-empty buffer. The buffer
   contents are piped to the PTY and displayed as terminal output.
 • CSI 3 J (the sequence to clear terminal scrollback) is now supported.
+• DEC private mode 2026 (synchronized output) is now supported. Applications
+  running in |:terminal| can batch screen updates to avoid tearing.
 • A suspended PTY process is now indicated by "[Process suspended]" at the
   bottom-left of the buffer and can be resumed by pressing a key.
 • On terminal exit, "[Process exited]" is shown as virtual text (instead of
   modifying buffer contents), and exit code is shown in statusline.
+  • You can disable "[Process exited]" entirely, see |terminal-config|.
 
 TREESITTER
 
@@ -455,12 +466,15 @@ UI
 • Cursor shape indicates when it is behind an unfocused floating window.
 • Improved LSP signature help rendering.
 • Multigrid UIs can call nvim_input_mouse with grid 0 to let Nvim decide the grid.
+• |vim.ui.progress_status()| returns a status description of currently running
+  |progress-message|s.
 
 VIMSCRIPT
 
 • |chdir()| allows optionally specifying a scope argument.
 • |cmdcomplete_info()| gets current cmdline completion info.
 • |getcompletiontype()| gets command-line completion type for any string.
+• |has()| gained two new system dependent feature flags, |android| and |termux|.
 • |prompt_getinput()| gets current user-input in prompt-buffer.
 • |wildtrigger()| triggers command-line expansion.
 • |v:vim_did_init| is set after sourcing |init.vim| but before |load-plugins|.
@@ -486,7 +500,7 @@ These existing features changed their behavior.
   absolute paths (to the current drive) and no longer relative.
 • When 'shelltemp' is off, shell commands now use `pipe()` and not `socketpair()`
   for input and output. This matters mostly for Linux where some command lines
-  using "/dev/stdin" and similiar would break as these special files can be
+  using "/dev/stdin" and similar would break as these special files can be
   reopened when backed by pipes but not when backed by socket pairs.
 
 ==============================================================================

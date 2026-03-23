@@ -180,6 +180,7 @@ nvim.terminal:
 - BufReadCmd: Treats "term://" buffers as |terminal| buffers. |terminal-start|
 - TermClose: A |terminal| buffer started with no arguments (which thus uses
   'shell') and which exits with no error is closed automatically.
+- TermClose: Displays the "[Process exited]" virtual text.
 - TermRequest: The terminal emulator responds to OSC background and foreground
   requests, indicating (1) a black background and white foreground when Nvim
   option 'background' is "dark" or (2) a white background and black foreground
@@ -427,6 +428,8 @@ Options:
 - 'winblend'    pseudo-transparency in floating windows |api-floatwin|
 - 'winhighlight' window-local highlights
 - 'busy' busy status for buffers
+- 'messagesopt' added progress:c to control if progress messages are shown in
+  cmdline
 
 Performance:
 - Signs are implemented using Nvim's internal "marktree" (btree) structure.

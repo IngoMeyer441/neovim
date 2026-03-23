@@ -158,7 +158,7 @@ describe(':help', function()
     -- Failure modes:
     set_lines 'xxxxxxxxx'
     cursor(0, { 1, 4 })
-    t.matches('E149: Sorry, no help for xxxxxxxxx', t.pcall_err(n.exec, [[:help!]]))
+    t.matches('E149: No help for xxxxxxxxx', t.pcall_err(n.exec, [[:help!]]))
 
     -- Success:
 
@@ -273,7 +273,7 @@ describe(':help', function()
 
     n.command(':help lsp')
     n.feed('gg/codelens.run()|<cr>')
-    eq({ '|vim.lsp.codelens.run()|.', 'lsp.txt' }, buf_word())
+    eq({ '|vim.lsp.codelens.run()|', 'lsp.txt' }, buf_word())
     --             ^ cursor on "codelens"
     n.command(':help!')
     eq({ '*vim.lsp.codelens.run()*', 'lsp.txt' }, buf_word())

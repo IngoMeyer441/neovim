@@ -106,10 +106,14 @@ static int msg_hist_max = 500;  // The default max value is 500
 #define MESSAGES_OPT_HIT_ENTER "hit-enter"
 #define MESSAGES_OPT_WAIT "wait:"
 #define MESSAGES_OPT_HISTORY "history:"
+#define MESSAGES_OPT_PROGRESS "progress:"
 
-// The default is "hit-enter,history:500"
-static int msg_flags = kOptMoptFlagHitEnter | kOptMoptFlagHistory;
+#define PROGRESS_TARGET_CMD          0x01
+
+// The default is "hit-enter,history:500,progress:c"
+static int msg_flags = kOptMoptFlagHitEnter | kOptMoptFlagHistory | kOptMoptFlagProgress;
 static int msg_wait = 0;
+static int progress_msg_target = PROGRESS_TARGET_CMD;
 
 static FILE *verbose_fd = NULL;
 static bool verbose_did_open = false;
@@ -164,6 +168,12 @@ static bool msg_ext_history = false;  ///< message was added to history
 static int msg_grid_pos_at_flush = 0;
 
 static int64_t msg_id_next = 1;           ///< message id to be allocated to next message
+
+/// Returns true if the given integer message-id was previously generated.
+bool msg_id_exists(int64_t id)
+{
+  return id > 0 && id < msg_id_next;
+}
 
 static void ui_ext_msg_set_pos(int row, bool scrolled)
 {
@@ -352,6 +362,22 @@ static HlMessage format_progress_message(HlMessage hl_msg, MessageData *msg_data
 MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bool err,
                   MessageData *msg_data, bool *needs_msg_clear)
 {
+  // Message `id`:
+  // - Nil: Generate a new Integer id.
+  // - Integer: Existing id.
+  // - String: User-defined id (new or existing).
+  if (id.type == kObjectTypeNil) {
+    id = INTEGER_OBJ(msg_id_next++);
+  } else if (id.type == kObjectTypeInteger && !msg_id_exists(id.data.integer)) {
+    abort();
+  }
+
+  // don't display progress message in cmd when target doesn't have cmd
+  if (strequal(kind, "progress") && (progress_msg_target & PROGRESS_TARGET_CMD) == 0) {
+    *needs_msg_clear = true;
+    return id;
+  }
+
   no_wait_return++;
   msg_start();
   msg_clr_eos();
@@ -362,14 +388,6 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
     msg_ext_set_kind(kind);
   }
   msg_ext_skip_flush = true;
-
-  // provide a new id if not given
-  if (id.type == kObjectTypeNil) {
-    id = INTEGER_OBJ(msg_id_next++);
-  } else if (id.type == kObjectTypeInteger) {
-    id = id.data.integer > 0 ? id : INTEGER_OBJ(msg_id_next++);
-    msg_id_next = MAX(msg_id_next, id.data.integer + 1);
-  }
   msg_ext_id = id;
 
   // progress message are special displayed as "title: percent% msg"
@@ -1224,6 +1242,7 @@ int messagesopt_changed(void)
   int messages_flags_new = 0;
   int messages_wait_new = 0;
   int messages_history_new = 0;
+  int progress_target_flag = 0;
 
   char *p = p_mopt;
   while (*p != NUL) {
@@ -1240,6 +1259,13 @@ int messagesopt_changed(void)
       p += STRLEN_LITERAL(MESSAGES_OPT_HISTORY);
       messages_history_new = getdigits_int(&p, false, INT_MAX);
       messages_flags_new |= kOptMoptFlagHistory;
+    } else if (strnequal(p, S_LEN(MESSAGES_OPT_PROGRESS))) {
+      p += STRLEN_LITERAL(MESSAGES_OPT_PROGRESS);
+      messages_flags_new |= kOptMoptFlagProgress;
+      if (*p == 'c') {
+        progress_target_flag |= PROGRESS_TARGET_CMD;
+        p++;
+      }
     }
 
     if (*p != ',' && *p != NUL) {
@@ -1274,6 +1300,7 @@ int messagesopt_changed(void)
 
   msg_flags = messages_flags_new;
   msg_wait = messages_wait_new;
+  progress_msg_target = progress_target_flag;
 
   msg_hist_max = messages_history_new;
   msg_hist_clear(msg_hist_max);
@@ -1322,7 +1349,7 @@ void ex_messages(exarg_T *eap)
     if (redirecting() || !ui_has(kUIMessages)) {
       msg_silent += ui_has(kUIMessages);
       bool needs_clear = false;
-      msg_multihl(INTEGER_OBJ(0), p->msg, p->kind, false, false, NULL, &needs_clear);
+      msg_multihl(NIL, p->msg, p->kind, false, false, NULL, &needs_clear);
       msg_silent -= ui_has(kUIMessages);
     }
   }

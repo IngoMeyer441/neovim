@@ -1768,11 +1768,12 @@ describe('ui/builtin messages', function()
     -- ignore final whitespace inside string
     -- luacheck: push ignore
     eq(
-      [[--- Syntax items ---
-vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vimCommentGroup,vimCommentString 
-                   match /\<endif\s\+".*$/ms=s+5,lc=5  contains=@vimCommentGroup,vimCommentString 
-                   match /\<else\s\+".*$/ms=s+4,lc=4  contains=@vimCommentGroup,vimCommentString 
-                   links to Comment]],
+      t.dedent [[
+        --- Syntax items ---
+        vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vimCommentGroup,vimCommentString 
+                           match /\<endif\s\+".*$/ms=s+5,lc=5  contains=@vimCommentGroup,vimCommentString 
+                           match /\<else\s\+".*$/ms=s+4,lc=4  contains=@vimCommentGroup,vimCommentString 
+                           links to Comment]],
       exec_capture('syntax list vimComment')
     )
     -- luacheck: pop
@@ -2150,24 +2151,36 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
     command('set cmdheight=0')
     feed(':intro<CR>')
     screen:expect([[
-                                                                                      |*5
-      {MATCH:.*}|
+                                                                                      |*3
+                                           {16:│} {26:╲} {26:││}                                     |
+                                           {16:││}{26:╲╲││}                                     |
+                                           {16:││} {26:╲} {26:│}                                     |
                                                                                       |
+      {MATCH:.*}|
+                        {1:────────────────────────────────────────────}                  |
                         Nvim is open source and freely distributable                  |
                                   https://neovim.io/#chat                             |
-                                                                                      |
-                       type  :help nvim{18:<Enter>}       if you are new!                  |
-                       type  :checkhealth{18:<Enter>}     to optimize Nvim                 |
-                       type  :q{18:<Enter>}               to exit                          |
-                       type  :help{18:<Enter>}            for help                         |
-                                                                                      |
-      {MATCH: +}type  :help news{18:<Enter>} to see changes in v{MATCH:%d+%.%d+ +}|
-                                                                                      |
+                        {1:────────────────────────────────────────────}                  |
+                        type  {18::}{25:help nvim}{18:<Enter>}     if you are new!                   |
+                        type  {18::}{25:checkhealth}{18:<Enter>}   to optimize Nvim                  |
+                        type  {18::}{25:q}{18:<Enter>}             to exit                           |
+                        type  {18::}{25:help}{18:<Enter>}          for help                          |
+                        {1:────────────────────────────────────────────}                  |
+                        type  {18::}{25:help news}{18:<Enter>}     for v{MATCH:%d+%.%d+} notes{MATCH: *}|
+                        {1:────────────────────────────────────────────}                  |
                                Help poor children in Uganda!                          |
-                       type  :help Kuwasha{18:<Enter>}    for information                  |
-                                                                                      |*4
+                        type  {18::}{25:help Kuwasha}{18:<Enter>}  for information                   |
+                                                                                      |*2
       ^                                                                                |
     ]])
+    feed('<CR>')
+    assert_alive()
+  end)
+
+  it(':intro with small screen #38396', function()
+    screen:try_resize(80, 6)
+    feed(':intro<CR>')
+    screen:expect({ any = 'NVIM' })
     feed('<CR>')
     assert_alive()
   end)
@@ -2208,22 +2221,26 @@ describe('ui/ext_messages', function()
     -- Note parts of it depends on version or is indeterministic. We ignore those parts.
     local introscreen = [[
       ^                                                                                |
-      {1:~                                                                               }|*4
-      {MATCH:.*}|
+      {1:~                                                                               }|*2
+      {1:~                                    }{16:│} {26:╲} {26:││}{1:                                     }|
+      {1:~                                    }{16:││}{26:╲╲││}{1:                                     }|
+      {1:~                                    }{16:││} {26:╲} {26:│}{1:                                     }|
       {1:~                                                                               }|
+      {1:~{MATCH: +}}{26:NVIM {MATCH:%S+}}{1:{MATCH: +}}|
+      {1:~                 ────────────────────────────────────────────                  }|
       {1:~                 }Nvim is open source and freely distributable{1:                  }|
       {1:~                           }https://neovim.io/#chat{1:                             }|
-      {1:~                                                                               }|
-      {1:~                }type  :help nvim{18:<Enter>}       if you are new! {1:                 }|
-      {1:~                }type  :checkhealth{18:<Enter>}     to optimize Nvim{1:                 }|
-      {1:~                }type  :q{18:<Enter>}               to exit         {1:                 }|
-      {1:~                }type  :help{18:<Enter>}            for help        {1:                 }|
-      {1:~                                                                               }|
-      {1:~{MATCH: +}}type  :help news{18:<Enter>} to see changes in v{MATCH:%d+%.%d+}{1:{MATCH: +}}|
-      {1:~                                                                               }|
+      {1:~                 ────────────────────────────────────────────                  }|
+      {1:~                 }type  {18::}{25:help nvim}{18:<Enter>}     if you are new! {1:                  }|
+      {1:~                 }type  {18::}{25:checkhealth}{18:<Enter>}   to optimize Nvim{1:                  }|
+      {1:~                 }type  {18::}{25:q}{18:<Enter>}             to exit         {1:                  }|
+      {1:~                 }type  {18::}{25:help}{18:<Enter>}          for help        {1:                  }|
+      {1:~                 ────────────────────────────────────────────                  }|
+      {1:~                 }type  {18::}{25:help news}{18:<Enter>}     for v{MATCH:%d+%.%d+} notes {1:{MATCH: +}}|
+      {1:~                 ────────────────────────────────────────────                  }|
       {1:~                        }Help poor children in Uganda!{1:                          }|
-      {1:~                }type  :help Kuwasha{18:<Enter>}    for information {1:                 }|
-      {1:~                                                                               }|*5
+      {1:~                 }type  {18::}{25:help Kuwasha}{18:<Enter>}  for information {1:                  }|
+      {1:~                                                                               }|*3
     ]]
     local showmode = { { '-- INSERT --', 5, 'ModeMsg' } }
     screen:expect(introscreen)
@@ -2244,22 +2261,26 @@ describe('ui/ext_messages', function()
       grid = [[
         ^                                                                                |
         {1:~    }{4:     }{1:                                                                      }|
-        {1:~                                                                               }|*3
-        {MATCH:.*}|
         {1:~                                                                               }|
+        {1:~                                    }{16:│} {26:╲} {26:││}{1:                                     }|
+        {1:~                                    }{16:││}{26:╲╲││}{1:                                     }|
+        {1:~                                    }{16:││} {26:╲} {26:│}{1:                                     }|
+        {1:~                                                                               }|
+        {1:~{MATCH: +}}{26:NVIM {MATCH:%S+}}{1:{MATCH: +}}|
+        {1:~                 ────────────────────────────────────────────                  }|
         {1:~                 }Nvim is open source and freely distributable{1:                  }|
         {1:~                           }https://neovim.io/#chat{1:                             }|
-        {1:~                                                                               }|
-        {1:~                }type  :help nvim{18:<Enter>}       if you are new! {1:                 }|
-        {1:~                }type  :checkhealth{18:<Enter>}     to optimize Nvim{1:                 }|
-        {1:~                }type  :q{18:<Enter>}               to exit         {1:                 }|
-        {1:~                }type  :help{18:<Enter>}            for help        {1:                 }|
-        {1:~                                                                               }|
-        {1:~{MATCH: +}}type  :help news{18:<Enter>} to see changes in v{MATCH:%d+%.%d+}{1:{MATCH: +}}|
-        {1:~                                                                               }|
+        {1:~                 ────────────────────────────────────────────                  }|
+        {1:~                 }type  {18::}{25:help nvim}{18:<Enter>}     if you are new! {1:                  }|
+        {1:~                 }type  {18::}{25:checkhealth}{18:<Enter>}   to optimize Nvim{1:                  }|
+        {1:~                 }type  {18::}{25:q}{18:<Enter>}             to exit         {1:                  }|
+        {1:~                 }type  {18::}{25:help}{18:<Enter>}          for help        {1:                  }|
+        {1:~                 ────────────────────────────────────────────                  }|
+        {1:~                 }type  {18::}{25:help news}{18:<Enter>}     for v{MATCH:%d+%.%d+} notes {1:{MATCH: +}}|
+        {1:~                 ────────────────────────────────────────────                  }|
         {1:~                        }Help poor children in Uganda!{1:                          }|
-        {1:~                }type  :help Kuwasha{18:<Enter>}    for information {1:                 }|
-        {1:~                                                                               }|*5
+        {1:~                 }type  {18::}{25:help Kuwasha}{18:<Enter>}  for information {1:                  }|
+        {1:~                                                                               }|*3
       ]],
       showmode = showmode,
     }
@@ -2281,22 +2302,26 @@ describe('ui/ext_messages', function()
     screen:expect {
       grid = [[
         ^                                                                                |
-                                                                                        |*4
-        {MATCH:.*}|
+                                                                                        |*2
+                                             {16:│} {26:╲} {26:││}                                     |
+                                             {16:││}{26:╲╲││}                                     |
+                                             {16:││} {26:╲} {26:│}                                     |
                                                                                         |
+        {MATCH: +}{26:NVIM {MATCH:%S+}}{MATCH: +}|
+                          {1:────────────────────────────────────────────}                  |
                           Nvim is open source and freely distributable                  |
                                     https://neovim.io/#chat                             |
-                                                                                        |
-                         type  :help nvim{18:<Enter>}       if you are new!                  |
-                         type  :checkhealth{18:<Enter>}     to optimize Nvim                 |
-                         type  :q{18:<Enter>}               to exit                          |
-                         type  :help{18:<Enter>}            for help                         |
-                                                                                        |
-        {MATCH: +}type  :help news{18:<Enter>} to see changes in v{MATCH:%d+%.%d+ +}|
-                                                                                        |
+                          {1:────────────────────────────────────────────}                  |
+                          type  {18::}{25:help nvim}{18:<Enter>}     if you are new!                   |
+                          type  {18::}{25:checkhealth}{18:<Enter>}   to optimize Nvim                  |
+                          type  {18::}{25:q}{18:<Enter>}             to exit                           |
+                          type  {18::}{25:help}{18:<Enter>}          for help                          |
+                          {1:────────────────────────────────────────────}                  |
+                          type  {18::}{25:help news}{18:<Enter>}     for v{MATCH:%d+%.%d+} notes {MATCH: +}|
+                          {1:────────────────────────────────────────────}                  |
                                  Help poor children in Uganda!                          |
-                         type  :help Kuwasha{18:<Enter>}    for information                  |
-                                                                                        |*5
+                          type  {18::}{25:help Kuwasha}{18:<Enter>}  for information                   |
+                                                                                        |*3
       ]],
     }
 
@@ -2411,22 +2436,26 @@ it('ui/ext_multigrid supports intro screen', function()
       [3:--------------------------------------------------------------------------------]|
     ## grid 2
       ^                                                                                |
-      {1:~                                                                               }|*4
-      {MATCH:.*}|
+      {1:~                                                                               }|*2
+      {1:~                                    }{16:│} {26:╲} {26:││}{1:                                     }|
+      {1:~                                    }{16:││}{26:╲╲││}{1:                                     }|
+      {1:~                                    }{16:││} {26:╲} {26:│}{1:                                     }|
       {1:~                                                                               }|
+      {1:~{MATCH: +}}{26:NVIM {MATCH:%S+}}{1:{MATCH: +}}|
+      {1:~                 ────────────────────────────────────────────                  }|
       {1:~                 }Nvim is open source and freely distributable{1:                  }|
       {1:~                           }https://neovim.io/#chat{1:                             }|
-      {1:~                                                                               }|
-      {1:~                }type  :help nvim{18:<Enter>}       if you are new! {1:                 }|
-      {1:~                }type  :checkhealth{18:<Enter>}     to optimize Nvim{1:                 }|
-      {1:~                }type  :q{18:<Enter>}               to exit         {1:                 }|
-      {1:~                }type  :help{18:<Enter>}            for help        {1:                 }|
-      {1:~                                                                               }|
-      {1:~{MATCH: +}}type  :help news{18:<Enter>} to see changes in v{MATCH:%d+%.%d+}{1:{MATCH: +}}|
-      {1:~                                                                               }|
+      {1:~                 ────────────────────────────────────────────                  }|
+      {1:~                 }type  {18::}{25:help nvim}{18:<Enter>}     if you are new! {1:                  }|
+      {1:~                 }type  {18::}{25:checkhealth}{18:<Enter>}   to optimize Nvim{1:                  }|
+      {1:~                 }type  {18::}{25:q}{18:<Enter>}             to exit         {1:                  }|
+      {1:~                 }type  {18::}{25:help}{18:<Enter>}          for help        {1:                  }|
+      {1:~                 ────────────────────────────────────────────                  }|
+      {1:~                 }type  {18::}{25:help news}{18:<Enter>}     for v{MATCH:%d+%.%d+} notes {1:{MATCH: +}}|
+      {1:~                 ────────────────────────────────────────────                  }|
       {1:~                        }Help poor children in Uganda!{1:                          }|
-      {1:~                }type  :help Kuwasha{18:<Enter>}    for information {1:                 }|
-      {1:~                                                                               }|*4
+      {1:~                 }type  {18::}{25:help Kuwasha}{18:<Enter>}  for information {1:                  }|
+      {1:~                                                                               }|*2
     ## grid 3
                                                                                       |
     ]],
@@ -2545,13 +2574,14 @@ describe('pager', function()
 
     exec_lua(
       '_G.x = ...',
-      [[
-Lorem ipsum dolor sit amet, consectetur
-adipisicing elit, sed do eiusmod tempor
-incididunt ut labore et dolore magna aliqua.
-Ut enim ad minim veniam, quis nostrud xercitation
-ullamco laboris nisi ut
-aliquip ex ea commodo consequat.]]
+      t.dedent [[
+        Lorem ipsum dolor sit amet, consectetur
+        adipisicing elit, sed do eiusmod tempor
+        incididunt ut labore et dolore magna aliqua.
+        Ut enim ad minim veniam, quis nostrud xercitation
+        ullamco laboris nisi ut
+        aliquip ex ea commodo consequat.
+      ]]
     )
   end)
 
@@ -3504,7 +3534,7 @@ describe('progress-message', function()
     }, 'Progress autocmd receives progress update')
   end)
 
-  it('user-defined data in `data` field', function()
+  it('user-defined data', function()
     api.nvim_echo({ { 'test-message' } }, true, {
       kind = 'progress',
       title = 'TestSuit',
@@ -3542,25 +3572,25 @@ describe('progress-message', function()
     }, 'Progress autocmd receives progress messages')
   end)
 
-  it('validates', function()
+  it('validation', function()
     -- throws error if title, status, percent, data is used in non progress message
     eq(
-      'title, status, percent and data fields can only be used with progress messages',
+      "Conflict: title/status/percent/data not allowed with kind='echo'",
       t.pcall_err(api.nvim_echo, { { 'test-message' } }, false, { title = 'TestSuit' })
     )
 
     eq(
-      'title, status, percent and data fields can only be used with progress messages',
+      "Conflict: title/status/percent/data not allowed with kind='echo'",
       t.pcall_err(api.nvim_echo, { { 'test-message' } }, false, { status = 'running' })
     )
 
     eq(
-      'title, status, percent and data fields can only be used with progress messages',
+      "Conflict: title/status/percent/data not allowed with kind='echo'",
       t.pcall_err(api.nvim_echo, { { 'test-message' } }, false, { percent = 10 })
     )
 
     eq(
-      'title, status, percent and data fields can only be used with progress messages',
+      "Conflict: title/status/percent/data not allowed with kind='echo'",
       t.pcall_err(api.nvim_echo, { { 'test-message' } }, false, { data = { tag = 'test' } })
     )
 
@@ -3673,9 +3703,9 @@ describe('progress-message', function()
     local id5 = api.nvim_echo(
       { { 'test-message 30' } },
       true,
-      { id = 10, kind = 'progress', title = 'TestSuit', percent = 30, status = 'running' }
+      { kind = 'progress', title = 'TestSuit', percent = 30, status = 'running' }
     )
-    eq(10, id5)
+    eq(5, id5)
 
     -- updating progress message does not create new msg-id
     local id5_update = api.nvim_echo(
@@ -3690,7 +3720,7 @@ describe('progress-message', function()
       true,
       { kind = 'progress', title = 'TestSuit', percent = 30, status = 'running' }
     )
-    eq(11, id6)
+    eq(6, id6)
 
     local id7 = api.nvim_echo(
       { { 'supports str-id' } },
@@ -3706,10 +3736,10 @@ describe('progress-message', function()
       true,
       { kind = 'progress', title = 'TestSuit', percent = 30, status = 'running' }
     )
-    eq(13, id8)
+    eq(8, id8)
   end)
 
-  it('supports string ids', function()
+  it('accepts caller-defined id (string)', function()
     -- string id works
     local id = api.nvim_echo(
       { { 'supports str-id' } },
@@ -3804,5 +3834,62 @@ describe('progress-message', function()
       id = 1,
       data = {},
     }, 'progress autocmd receives progress messages')
+  end)
+
+  it('can be hidden from cmdline with messagesopt-=progress:c', function()
+    exec('set messagesopt-=progress:c')
+    api.nvim_echo(
+      { { 'test-message: not shown in cmdline' } },
+      true,
+      { kind = 'progress', title = 'TestSuite', percent = 10, status = 'running' }
+    )
+    screen:expect([[
+      ^                         |
+      {1:~                        }|*4
+    ]])
+
+    assert_progress_autocmd({
+      text = { 'test-message: not shown in cmdline' },
+      percent = 10,
+      status = 'running',
+      title = 'TestSuite',
+      id = 1,
+      data = {},
+    }, 'progress autocmd still receives progress even with progress messages hidden from cmd')
+
+    exec('set messagesopt+=progress:c')
+    api.nvim_echo(
+      { { 'test-message: shown in cmdline' } },
+      true,
+      { kind = 'progress', title = 'TestSuite', percent = 10, status = 'running' }
+    )
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+      messages = {
+        {
+          content = {
+            { 'TestSuite', 6, 'MoreMsg' },
+            { ': ' },
+            { ' 10% ', 19, 'WarningMsg' },
+            { 'test-message: shown in cmdline' },
+          },
+          history = true,
+          id = 2,
+          kind = 'progress',
+        },
+      },
+    })
+
+    assert_progress_autocmd({
+      text = { 'test-message: shown in cmdline' },
+      percent = 10,
+      status = 'running',
+      title = 'TestSuite',
+      id = 2,
+      data = {},
+    }, 'progress autocmd still receives progresswith progress messages shown in cmd')
   end)
 end)

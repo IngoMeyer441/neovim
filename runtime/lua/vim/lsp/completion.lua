@@ -267,7 +267,10 @@ local function get_doc(item)
   then
     -- Shows snippet preview in doc popup if completeopt=popup.
     local text = parse_snippet(item.insertText or item.textEdit.newText)
-    return ('```%s\n%s\n```'):format(vim.bo.filetype, text)
+    item.documentation = {
+      kind = lsp.protocol.MarkupKind.Markdown,
+      value = ('```%s\n%s\n```'):format(vim.bo.filetype, text),
+    }
   end
 
   local doc = item.documentation
@@ -440,9 +443,9 @@ function M._lsp_to_complete_items(
       local kind, kind_hlgroup = generate_kind(item)
       local completion_item = {
         word = word,
-        abbr = item.label,
+        abbr = ('%s%s'):format(item.label, vim.tbl_get(item, 'labelDetails', 'detail') or ''),
         kind = kind,
-        menu = item.detail or '',
+        menu = vim.tbl_get(item, 'labelDetails', 'description') or item.detail or '',
         info = get_doc(item),
         icase = 1,
         dup = 1,
@@ -778,7 +781,20 @@ local function on_completechanged(group, bufnr)
       local completed_item = vim.v.event.completed_item or {}
       if (completed_item.info or '') ~= '' then
         local data = vim.fn.complete_info({ 'selected' })
-        update_popup_window(data.preview_winid, data.preview_bufnr)
+        local kind = vim.tbl_get(
+          completed_item,
+          'user_data',
+          'nvim',
+          'lsp',
+          'completion_item',
+          'documentation',
+          'kind'
+        )
+        update_popup_window(
+          data.preview_winid,
+          data.preview_bufnr,
+          kind or lsp.protocol.MarkupKind.PlainText
+        )
         return
       end
 
@@ -834,6 +850,10 @@ local function on_complete_done()
   local position_encoding = client.offset_encoding or 'utf-16'
   local resolve_provider = (client.server_capabilities.completionProvider or {}).resolveProvider
 
+  -- Keep reference to avoid race where completion/resolve response arrives after on_insert_leave
+  -- and Context.cursor got cleared before clear_word() gets called
+  local context_cursor = assert(Context.cursor)
+
   local function clear_word()
     if not expand_snippet then
       return nil
@@ -842,8 +862,8 @@ local function on_complete_done()
     -- Remove the already inserted word.
     api.nvim_buf_set_text(
       bufnr,
-      Context.cursor[1] - 1,
-      Context.cursor[2] - 1,
+      context_cursor[1] - 1,
+      context_cursor[2] - 1,
       cursor_row,
       cursor_col,
       { '' }
@@ -1246,8 +1266,8 @@ end
 --- @param base integer findstart=0, text to match against
 ---
 --- @return integer|table Decided by {findstart}:
---- - findstart=0: column where the completion starts, or -2 or -3
---- - findstart=1: list of matches (actually just calls |complete()|)
+--- - findstart=1: column where the completion starts, or -2 or -3
+--- - findstart=0: list of matches (actually just calls |complete()|)
 function M._omnifunc(findstart, base)
   lsp.log.debug('omnifunc.findstart', { findstart = findstart, base = base })
   local bufnr = api.nvim_get_current_buf()

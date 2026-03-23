@@ -209,6 +209,10 @@ do
       vim.lsp.buf.code_action()
     end, { desc = 'vim.lsp.buf.code_action()' })
 
+    vim.keymap.set('n', 'grx', function()
+      vim.lsp.codelens.run()
+    end, { desc = 'vim.lsp.codelens.run()' })
+
     vim.keymap.set('n', 'grr', function()
       vim.lsp.buf.references()
     end, { desc = 'vim.lsp.buf.references()' })
@@ -578,6 +582,53 @@ do
     end,
   })
 
+  local nvim_terminal_exitmsg_ns = vim.api.nvim_create_namespace('nvim.terminal.exitmsg')
+
+  --- @param buf integer
+  --- @param msg string
+  --- @param pos integer
+  local function set_terminal_exitmsg(buf, msg, pos)
+    vim.api.nvim_buf_set_extmark(buf, nvim_terminal_exitmsg_ns, pos, 0, {
+      virt_text = { { msg, nil } },
+      virt_text_pos = 'overlay',
+    })
+  end
+
+  vim.api.nvim_create_autocmd('TermClose', {
+    group = nvim_terminal_augroup,
+    nested = true,
+    desc = 'Displays the "[Process exited]" virtual text',
+    callback = function(ev)
+      if not vim.api.nvim_buf_is_valid(ev.buf) then
+        return
+      end
+
+      local buf = vim.bo[ev.buf]
+      local pos = ev.data.pos ---@type integer
+      local buf_has_exitmsg = #(
+          vim.api.nvim_buf_get_extmarks(ev.buf, nvim_terminal_exitmsg_ns, 0, -1, {})
+        ) > 0
+
+      -- `nvim_open_term` buffers do not have an attached 'channel'.
+      local msg = buf.channel == 0 and '[Terminal closed]'
+        or ('[Process exited %d]'):format(vim.v.event.status)
+
+      if buf.buftype ~= 'terminal' or buf_has_exitmsg then
+        -- TermClose may be queued before TermOpen if process exits before `terminal_open` is called.
+        -- Don't display the msg now, let TermOpen display it.
+        vim.api.nvim_create_autocmd('TermOpen', {
+          buffer = ev.buf,
+          once = true,
+          callback = function()
+            set_terminal_exitmsg(ev.buf, msg, pos)
+          end,
+        })
+        return
+      end
+      set_terminal_exitmsg(ev.buf, msg, pos)
+    end,
+  })
+
   vim.api.nvim_create_autocmd('TermRequest', {
     group = nvim_terminal_augroup,
     desc = 'Handles OSC foreground/background color requests',
@@ -690,10 +741,13 @@ do
 
       vim.keymap.set({ 'n', 'x', 'o' }, '[[', function()
         jump_to_prompt(nvim_terminal_prompt_ns, 0, ev.buf, -vim.v.count1)
-      end, { buffer = ev.buf, desc = 'Jump [count] shell prompts backward' })
+      end, { buf = ev.buf, desc = 'Jump [count] shell prompts backward' })
       vim.keymap.set({ 'n', 'x', 'o' }, ']]', function()
         jump_to_prompt(nvim_terminal_prompt_ns, 0, ev.buf, vim.v.count1)
-      end, { buffer = ev.buf, desc = 'Jump [count] shell prompts forward' })
+      end, { buf = ev.buf, desc = 'Jump [count] shell prompts forward' })
+
+      -- If the terminal buffer is being reused, clear the previous exit msg
+      vim.api.nvim_buf_clear_namespace(ev.buf, nvim_terminal_exitmsg_ns, 0, -1)
     end,
   })
 

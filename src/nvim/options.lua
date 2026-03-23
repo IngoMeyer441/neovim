@@ -2459,7 +2459,10 @@ local options = {
         				difference.  Non-alphanumeric
         				multi-byte characters such as emoji
         				and CJK characters are considered
-        				individual words.
+        				individual words.  Small gaps of
+        				non-word characters (5 bytes or less)
+        				between changes are merged into a
+        				single highlight block.
 
         	internal	Use the internal diff library.  This is
         			ignored when 'diffexpr' is set.  *E960*
@@ -3284,7 +3287,7 @@ local options = {
       ]=],
       expand_cb = 'expand_set_chars_option',
       full_name = 'fillchars',
-      list = 'onecomma',
+      list = 'onecommacolon',
       redraw = { 'current_window' },
       scope = { 'global', 'win' },
       short_desc = N_('characters to use for displaying special items'),
@@ -3847,7 +3850,7 @@ local options = {
         This is a scanf-like string that uses the same format as the
         'errorformat' option: see |errorformat|.
 
-        If ripgrep ('grepprg') is available, this option defaults to `%f:%l:%c:%m`.
+        Defaults to "%f:%l:%c:%m" if ripgrep ('grepprg') is available.
       ]=],
       full_name = 'grepformat',
       list = 'onecomma',
@@ -3865,28 +3868,34 @@ local options = {
         doc = [[see below]],
       },
       desc = [=[
-        Program to use for the |:grep| command.  This option may contain '%'
-        and '#' characters, which are expanded like when used in a command-
-        line.  The placeholder "$*" is allowed to specify where the arguments
-        will be included.  Environment variables are expanded |:set_env|.  See
-        |option-backslash| about including spaces and backslashes.
+        Program to use for the |:grep| command.
+        Note: if you change this then you must also update 'grepformat'.
+
+        May contain "%" and "#" characters, are expanded per |cmdline-special|.
+        The placeholder "$*" specifies where the arguments will be included.
+        Environment variables are expanded |:set_env|.  See |option-backslash|
+        about including spaces and backslashes.
+
         Special value: When 'grepprg' is set to "internal" the |:grep| command
         works like |:vimgrep|, |:lgrep| like |:lvimgrep|, |:grepadd| like
         |:vimgrepadd| and |:lgrepadd| like |:lvimgrepadd|.
-        See also the section |:make_makeprg|, since most of the comments there
-        apply equally to 'grepprg'.
+
+        See also |:make_makeprg|, most of the comments there apply to 'grepprg'.
+
+        Defaults to:
+        - "rg --vimgrep -uu " if ripgrep is available (|:checkhealth|),
+        - "grep -HIn $* /dev/null" on Unix,
+        - "findstr /n $* nul" on Windows.
+
+        Ripgrep may perform additional filtering such as using .gitignore rules
+        and skipping hidden files. This is disabled by default (via "-u") to
+        more closely match the behaviour of standard grep.
+        You can make ripgrep match Vim's case handling using the
+        -i/--ignore-case and -S/--smart-case options. Handle |OptionSet| to
+        dynamically update 'grepprg' when e.g. 'ignorecase' is changed.
+
         This option cannot be set from a |modeline| or in the |sandbox|, for
         security reasons.
-        This option defaults to:
-        - `rg --vimgrep -uu ` if ripgrep is available (|:checkhealth|),
-        - `grep -HIn $* /dev/null` on Unix,
-        - `findstr /n $* nul` on Windows.
-        Ripgrep can perform additional filtering such as using .gitignore rules
-        and skipping hidden files. This is disabled by default (see the -u option)
-        to more closely match the behaviour of standard grep.
-        You can make ripgrep match Vim's case handling using the
-        -i/--ignore-case and -S/--smart-case options.
-        An |OptionSet| autocmd can be used to set it up to match automatically.
       ]=],
       expand = true,
       full_name = 'grepprg',
@@ -5522,7 +5531,7 @@ local options = {
       ]=],
       expand_cb = 'expand_set_chars_option',
       full_name = 'listchars',
-      list = 'onecomma',
+      list = 'onecommacolon',
       redraw = { 'current_window' },
       scope = { 'global', 'win' },
       short_desc = N_('characters for displaying in list mode'),
@@ -5774,29 +5783,34 @@ local options = {
     {
       abbreviation = 'mopt',
       cb = 'did_set_messagesopt',
-      defaults = 'hit-enter,history:500',
-      values = { 'hit-enter', 'wait:', 'history:' },
+      defaults = 'hit-enter,history:500,progress:c',
+      values = { 'hit-enter', 'wait:', 'history:', 'progress:' },
       flags = true,
       deny_duplicates = true,
       desc = [=[
         Option settings for outputting messages.  It can consist of the
         following items.  Items must be separated by a comma.
 
-        hit-enter	Use a |hit-enter| prompt when the message is longer than
-        		'cmdheight' size.
-
-        wait:{n}	Instead of using a |hit-enter| prompt, simply wait for
-        		{n} milliseconds so that the user has a chance to read
-        		the message.  The maximum value of {n} is 10000.  Use
-        		0 to disable the wait (but then the user may miss an
-        		important message).
-        		This item is ignored when "hit-enter" is present, but
-        		required when "hit-enter" is not present.
-
         history:{n}	Determines how many entries are remembered in the
         		|:messages| history.  The maximum value is 10000.
         		Setting it to zero clears the message history.
         		This item must always be present.
+
+        hit-enter	Use a |hit-enter| prompt when the message is longer than
+        		'cmdheight' size.
+
+        progress:{s}	Determines where to show progress messages.
+        		Valid values are:
+        		  - empty: Progress messages not shown in cmdline.
+        		  - "c": Progress messages are shown in cmdline.
+
+        wait:{n}	Deprecated with |ui2|.
+        		Instead of a |hit-enter| prompt, simply wait for {n}
+        		milliseconds so the user has a chance to read the
+        		message.  Maximum {n} is 10000.  Use 0 to disable the
+        		wait (user won't see any "hit-enter" messages).
+        		Ignored when "hit-enter" is present, but required when
+        		"hit-enter" is not present.
       ]=],
       full_name = 'messagesopt',
       list = 'onecommacolon',
@@ -6685,6 +6699,9 @@ local options = {
         Defines the default border style of popupmenu windows. See 'winborder' for
         valid values. |hl-PmenuBorder| is used for highlighting the border, and when
         style is "shadow" the |hl-PmenuShadow| and |hl-PmenuShadowThrough| groups are used.
+
+        This option also applies to mouse popup menus when 'mousemodel' is set to
+        "popup" or "popup_setpos", which will display borders using the same style.
       ]=],
       short_desc = N_('border of popupmenu'),
       type = 'string',
@@ -8790,6 +8807,7 @@ local options = {
           '%f %h%w%m%r ',
           "%{% v:lua.require('vim._core.util').term_exitcode() %}",
           '%=',
+          "%{% luaeval('(package.loaded[''vim.ui''] and vim.ui.progress_status()) or '''' ')%}",
           "%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}",
           "%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}",
           "%{% &busy > 0 ? '◐ ' : '' %}",
@@ -9677,10 +9695,11 @@ local options = {
       cb = 'did_set_title_icon',
       defaults = false,
       desc = [=[
-        When on, the title of the window will be set to the value of
-        'titlestring' (if it is not empty), or to:
+        If enabled, Nvim will update the (GUI or terminal) window title. The
+        format is configured by 'titlestring'. By default it looks like: >
         	filename [+=-] (path) - Nvim
-        Where:
+        <
+        where: >
         	filename	the name of the file being edited
         	-		indicates the file cannot be modified, 'ma' off
         	+		indicates the file was modified
@@ -9688,6 +9707,7 @@ local options = {
         	=+		indicates the file is read-only and modified
         	(path)		is the path of the file being edited
         	- Nvim		the server name |v:servername| or "Nvim"
+        <
       ]=],
       full_name = 'title',
       scope = { 'global' },
@@ -9735,31 +9755,31 @@ local options = {
       cb = 'did_set_titlestring',
       defaults = '',
       desc = [=[
-        When this option is not empty, it will be used for the title of the
-        window.  This happens only when the 'title' option is on.
+        Formats the window title, enabled by the 'title' option.
 
-        When this option contains printf-style '%' items, they will be
-        expanded according to the rules used for 'statusline'.  If it contains
-        an invalid '%' format, the value is used as-is and no error or warning
-        will be given when the value is set.
+        Contains printf-style "%" items, expanded according to the rules of
+        'statusline'.  If a "%" format is invalid, it is used as-is and no
+        error will be given.
 
-        The default behaviour is equivalent to: >vim
+        The default (empty) behaviour is equivalent to: >vim
             set titlestring=%t%(\ %M%)%(\ \(%{expand(\"%:~:h\")}\)%)%a\ -\ Nvim
         <
-        This option cannot be set in a modeline when 'modelineexpr' is off.
-
         Example: >vim
             auto BufEnter * let &titlestring = hostname() .. "/" .. expand("%:p")
             set title titlestring=%<%F%=%l/%L-%P titlelen=70
-        <	The value of 'titlelen' is used to align items in the middle or right
-        of the available space.
-        Some people prefer to have the file name first: >vim
+        <	The value of 'titlelen' is used to align items in the middle
+        or right of the available space.
+
+        Example: to have the file name first: >vim
             set titlestring=%t%(\ %M%)%(\ (%{expand(\"%:~:.:h\")})%)%(\ %a%)
-        <	Note the use of "%{ }" and an expression to get the path of the file,
-        without the file name.  The "%( %)" constructs are used to add a
+        <	Note the use of "%{ }" and an expression to get the path of
+        the file, without the file name.  The "%( %)" constructs add a
         separating space only when needed.
+
         NOTE: Use of special characters in 'titlestring' may cause the display
         to be garbled (e.g., when it contains a CR or NL character).
+
+        This option cannot be set in a modeline when 'modelineexpr' is off.
       ]=],
       full_name = 'titlestring',
       modelineexpr = true,
