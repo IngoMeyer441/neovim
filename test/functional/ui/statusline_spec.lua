@@ -965,7 +965,7 @@ describe('default statusline', function()
       '%f %h%w%m%r ',
       "%{% v:lua.require('vim._core.util').term_exitcode() %}",
       '%=',
-      "%{% luaeval('(package.loaded[''vim.ui''] and vim.ui.progress_status()) or '''' ')%}",
+      "%{% luaeval('(package.loaded[''vim.ui''] and vim.api.nvim_get_current_win() == tonumber(vim.g.actual_curwin or -1) and vim.ui.progress_status()) or '''' ')%}",
       "%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}",
       "%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}",
       "%{% &busy > 0 ? '◐ ' : '' %}",
@@ -1057,38 +1057,67 @@ describe('default statusline', function()
     local id1 = api.nvim_echo(
       { { 'searching...' } },
       true,
-      { kind = 'progress', title = 'test', status = 'running', percent = 10 }
+      { kind = 'progress', source = 'tests', title = 'test', status = 'running', percent = 10 }
     )
-    eq('test: 10% ', get_progress())
-
-    api.nvim_echo(
-      { { 'searching' } },
-      true,
-      { id = id1, kind = 'progress', percent = 50, status = 'running', title = 'terminal(ripgrep)' }
-    )
-    eq('terminal(ripgrep): 50% ', get_progress())
-
-    api.nvim_echo(
-      { { 'searching...' } },
-      true,
-      { kind = 'progress', title = 'second-item', status = 'running', percent = 20 }
-    )
-    eq('Progress: 2 items 35% ', get_progress())
+    eq('10%(1) ', get_progress())
 
     api.nvim_echo({ { 'searching' } }, true, {
       id = id1,
       kind = 'progress',
+      source = 'tests',
+      percent = 50,
+      status = 'running',
+      title = 'terminal(ripgrep)',
+    })
+    eq('50%(1) ', get_progress())
+
+    api.nvim_echo({ { 'searching...' } }, true, {
+      kind = 'progress',
+      source = 'tests',
+      title = 'second-item',
+      status = 'running',
+      percent = 20,
+    })
+    eq('35%(2) ', get_progress())
+
+    api.nvim_echo({ { 'searching' } }, true, {
+      id = id1,
+      kind = 'progress',
+      source = 'tests',
       percent = 100,
       status = 'success',
       title = 'terminal(ripgrep)',
     })
-    eq('second-item: 20% ', get_progress())
+    eq('20%(1) ', get_progress())
 
     exec('redrawstatus')
     screen:expect([[
       ^                                                            |
       {1:~                                                           }|*13
-      {3:[No Name]                second-item: 20% 0,0-1          All}|
+      {3:[No Name]                          20%(1) 0,0-1          All}|
+      {131:terminal(ripgrep)}: {19:100% }searching                           |
+    ]])
+
+    -- Progress_status only shown on active window
+    exec('split')
+    screen:expect([[
+      ^                                                            |
+      {1:~                                                           }|*6
+      {3:[No Name]                          20%(1) 0,0-1          All}|
+                                                                  |
+      {1:~                                                           }|*5
+      {2:[No Name]                                 0,0-1          All}|
+      {131:terminal(ripgrep)}: {19:100% }searching                           |
+    ]])
+
+    exec('wincmd w')
+    screen:expect([[
+                                                                  |
+      {1:~                                                           }|*6
+      {2:[No Name]                                 0,0-1          All}|
+      ^                                                            |
+      {1:~                                                           }|*5
+      {3:[No Name]                          20%(1) 0,0-1          All}|
       {131:terminal(ripgrep)}: {19:100% }searching                           |
     ]])
   end)

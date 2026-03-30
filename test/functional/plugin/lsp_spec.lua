@@ -5494,6 +5494,7 @@ describe('LSP', function()
 
     it('connects to lsp server via rpc.connect using hostname', function()
       skip(is_os('bsd'), 'issue with host resolution in ci')
+      skip(t.is_arch('s390x'), 'issue with host resolution in ci')
       exec_lua(create_tcp_echo_server)
       exec_lua(function()
         local port = _G._create_tcp_server('::1')
@@ -6017,6 +6018,7 @@ describe('LSP', function()
               not is_ci() and fn.executable('inotifywait') == 0,
               'inotify-tools not installed and not on CI'
             )
+            skip(t.is_arch('s390x'), 'inotifywait not available on s390x CI')
           end
 
           if watchfunc == 'watch' then
@@ -6579,6 +6581,18 @@ describe('LSP', function()
   end)
 
   describe('vim.lsp.config() and vim.lsp.enable()', function()
+    ---@param names string[]
+    local function get_resolved(names)
+      return exec_lua(function(names_)
+        local rv = {}
+        local cs = vim.lsp._enabled_configs
+        for _, k in ipairs(names_) do
+          rv[k] = not not (cs[k] and cs[k].resolved_config)
+        end
+        return rv
+      end, names)
+    end
+
     it('merges settings from "*"', function()
       eq(
         {
@@ -7151,12 +7165,14 @@ describe('LSP', function()
         return config_names
       end
 
+      eq({ 'foo' }, names(exec_lua([[return vim.lsp.get_configs { enabled = true }]])))
+      -- Does NOT resolve non-enabled configs.
+      eq({ foo = true, bar = false }, get_resolved({ 'bar', 'foo' }))
+
+      eq({ 'bar' }, names(exec_lua([[return vim.lsp.get_configs { enabled = false }]])))
+
       -- With no filter, return all configs
       eq({ 'bar', 'foo' }, names(exec_lua([[return vim.lsp.get_configs()]])))
-
-      -- Confirm `enabled` works
-      eq({ 'foo' }, names(exec_lua([[return vim.lsp.get_configs { enabled = true }]])))
-      eq({ 'bar' }, names(exec_lua([[return vim.lsp.get_configs { enabled = false }]])))
 
       -- Confirm `filetype` works
       eq({ 'foo' }, names(exec_lua([[return vim.lsp.get_configs { filetype = 'foofile' }]])))
@@ -7170,6 +7186,8 @@ describe('LSP', function()
         {},
         names(exec_lua([[return vim.lsp.get_configs { filetype = 'foofile', enabled = false }]]))
       )
+      -- Does NOT resolve non-enabled configs.
+      eq({ foo = true, bar = false }, get_resolved({ 'bar', 'foo' }))
     end)
   end)
 

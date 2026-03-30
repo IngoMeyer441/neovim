@@ -5,7 +5,6 @@
 #include <uv.h>
 
 #include "klib/kvec.h"
-#include "nvim/channel.h"
 #include "nvim/event/libuv_proc.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
@@ -46,16 +45,6 @@ int proc_spawn(Proc *proc, bool in, bool out, bool err)
   // forwarding stderr contradicts with processing it internally
   assert(!(err && proc->fwd_err));
 
-#ifdef MSWIN
-  const bool out_use_poll = false;
-#else
-  // Using uv_pipe_t to read from PTY master may drop data if the PTY process exits
-  // immediately after output, as libuv treats a partial read after POLLHUP as EOF,
-  // which isn't true for PTY master on Linux. Therefore use uv_poll_t instead. #3030
-  // Ref: https://github.com/libuv/libuv/issues/4992
-  const bool out_use_poll = proc->type == kProcTypePty;
-#endif
-
   if (in) {
     uv_pipe_init(&proc->loop->uv, &proc->in.uv.pipe, 0);
   } else {
@@ -63,9 +52,7 @@ int proc_spawn(Proc *proc, bool in, bool out, bool err)
   }
 
   if (out) {
-    if (!out_use_poll) {
-      uv_pipe_init(&proc->loop->uv, &proc->out.s.uv.pipe, 0);
-    }
+    uv_pipe_init(&proc->loop->uv, &proc->out.s.uv.pipe, 0);
   } else {
     proc->out.s.closed = true;
   }
@@ -95,7 +82,7 @@ int proc_spawn(Proc *proc, bool in, bool out, bool err)
     if (in) {
       uv_close((uv_handle_t *)&proc->in.uv.pipe, NULL);
     }
-    if (out && !out_use_poll) {
+    if (out) {
       uv_close((uv_handle_t *)&proc->out.s.uv.pipe, NULL);
     }
     if (err) {
@@ -113,29 +100,21 @@ int proc_spawn(Proc *proc, bool in, bool out, bool err)
   }
 
   if (in) {
-    stream_init(NULL, &proc->in, -1, false, (uv_stream_t *)&proc->in.uv.pipe);
+    stream_init(NULL, &proc->in, -1, (uv_stream_t *)&proc->in.uv.pipe);
     proc->in.internal_data = proc;
     proc->in.internal_close_cb = on_proc_stream_close;
     proc->refcount++;
   }
 
   if (out) {
-    if (out_use_poll) {
-#ifdef MSWIN
-      abort();
-#else
-      stream_init(proc->loop, &proc->out.s, ((PtyProc *)proc)->tty_fd, true, NULL);
-#endif
-    } else {
-      stream_init(NULL, &proc->out.s, -1, false, (uv_stream_t *)&proc->out.s.uv.pipe);
-    }
+    stream_init(NULL, &proc->out.s, -1, (uv_stream_t *)&proc->out.s.uv.pipe);
     proc->out.s.internal_data = proc;
     proc->out.s.internal_close_cb = on_proc_stream_close;
     proc->refcount++;
   }
 
   if (err) {
-    stream_init(NULL, &proc->err.s, -1, false, (uv_stream_t *)&proc->err.s.uv.pipe);
+    stream_init(NULL, &proc->err.s, -1, (uv_stream_t *)&proc->err.s.uv.pipe);
     proc->err.s.internal_data = proc;
     proc->err.s.internal_close_cb = on_proc_stream_close;
     proc->refcount++;
@@ -466,26 +445,6 @@ static void on_proc_exit(Proc *proc)
 {
   Loop *loop = proc->loop;
   ILOG("child exited: pid=%d status=%d" PRIu64, proc->pid, proc->status);
-
-  // TODO(justinmk): figure out why rpc_close sometimes(??) isn't called.
-  // Theories:
-  // - EOF not received in receive_msgpack, then doesn't call chan_close_on_err().
-  // - proc_close_handles not tickled by ui_client.c's LOOP_PROCESS_EVENTS?
-  if (ui_client_channel_id) {
-    uint64_t server_chan_id = ui_client_channel_id;
-    Channel *server_chan = find_channel(server_chan_id);
-    if (server_chan != NULL && server_chan->streamtype == kChannelStreamProc
-        && proc == &server_chan->stream.proc) {
-      // Need to call ui_client_may_restart_server() here as well, as sometimes
-      // rpc_close_event() hasn't been called yet (also see comments above).
-      ui_client_may_restart_server();
-      if (ui_client_channel_id == server_chan_id) {
-        // If the current embedded server has exited and no new server is started,
-        // the client should exit with the same status.
-        exit_on_closed_chan(proc->status);
-      }
-    }
-  }
 
   // Process has terminated, but there could still be data to be read from the
   // OS. We are still in the libuv loop, so we cannot call code that polls for

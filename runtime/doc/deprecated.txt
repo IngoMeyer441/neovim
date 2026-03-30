@@ -13,16 +13,21 @@ They should not be used in new scripts, and old scripts should be updated.
 Deprecated features
 
 ------------------------------------------------------------------------------
+DEPRECATED IN 0.13					*deprecated-0.13*
+
+• todo
+
+------------------------------------------------------------------------------
 DEPRECATED IN 0.12					*deprecated-0.12*
 
 API
 
-• todo
+• nvim_set_decoration_provider `on_line`	Use `on_range` instead.
 
 DIAGNOSTICS
 
-• "float" in |vim.diagnostic.JumpOpts|.		Use "on_jump" instead.
-• "float" in |vim.diagnostic.Opts.Jump|.	Use "on_jump" instead.
+• "float" in |vim.diagnostic.JumpOpts|.		Use `on_jump` instead.
+• "float" in |vim.diagnostic.Opts.Jump|.	Use `on_jump` instead.
 
 HIGHLIGHTS
 
@@ -57,10 +62,6 @@ UI
 
 • *hit-enter* *hit-enter-prompt*	With |ui2|, the legacy "Press ENTER"
   *press-enter				prompt is never triggered.
-
-VIMSCRIPT
-
-• todo
 
 ------------------------------------------------------------------------------
 DEPRECATED IN 0.11					*deprecated-0.11*

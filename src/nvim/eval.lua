@@ -161,7 +161,7 @@ M.funcs = {
     args = 3,
     base = 3,
     desc = [=[
-      Like |append()| but append the text in buffer {expr}.
+      Like |append()| but append the text in buffer {buf}.
 
       This function works only for loaded buffers.  First call
       |bufload()| if needed.
@@ -8371,6 +8371,32 @@ M.funcs = {
     signature = 'printf({fmt}, {expr1} ...)',
     returns = 'string',
   },
+  prompt_appendbuf = {
+    args = 2,
+    base = 2,
+    desc = [=[
+      Appends text to prompt buffer before current prompt. When {text} is
+      a |List|: Append each item of the |List| as a text line above
+      prompt-line in the buffer. Any type of item is accepted and converted
+      to a String. Returns 1 for failure ({buf} not a prmopt buffer),
+      0 for success.  When {text} is an empty list zero is returned.
+
+      Example: >vim
+        func TextEntered(text)
+          call prompt_appendbuf(bufnr(''), split('Entered: "' . a:text . '"', '\n'))
+        endfunc
+
+        set buftype=prompt
+        call prompt_setcallback(bufnr(''), function("TextEntered"))
+        eval bufnr("")->prompt_setprompt("cmd: ")
+        startinsert
+      <
+    ]=],
+    name = 'prompt_appendbuf',
+    params = { { 'buf', 'integer|string' }, { 'text', 'string|string[]' } },
+    returns = '0|1',
+    signature = 'prompt_appendbuf({buf}, {text})',
+  },
   prompt_getinput = {
     args = 1,
     base = 1,
@@ -11713,7 +11739,7 @@ M.funcs = {
       parsed back with |eval()|.
 
       	{expr} type	result ~
-      	String		"string"
+      	String		`'string'`
       	Number		123
       	Float		123.123456 or 1.123456e8 or
       			`str2float('inf')`

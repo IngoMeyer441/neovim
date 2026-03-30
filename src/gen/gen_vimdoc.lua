@@ -431,10 +431,10 @@ local config = {
     },
     files = {
       'runtime/lua/editorconfig.lua',
-      'runtime/lua/tohtml.lua',
+      'runtime/lua/nvim/spellfile.lua',
+      'runtime/pack/dist/opt/nvim.tohtml/lua/tohtml.lua',
       'runtime/pack/dist/opt/nvim.undotree/lua/undotree.lua',
       'runtime/pack/dist/opt/nvim.difftool/lua/difftool.lua',
-      'runtime/lua/nvim/spellfile.lua',
     },
     fn_xform = function(fun)
       if fun.module == 'editorconfig' then
@@ -451,10 +451,8 @@ local config = {
     end,
     helptag_fmt = function(name)
       name = name:lower()
-      if name == 'spellfile' then
-        name = 'spellfile.lua'
-      elseif name == 'undotree' then
-        name = 'undotree-plugin'
+      if vim.tbl_contains({ 'spellfile', 'tohtml', 'undotree' }, name) then
+        name = ('package-%s'):format(name)
       end
       return name
     end,
@@ -793,22 +791,27 @@ local function render_fun(fun, classes, cfg)
     return
   end
 
+  if not fun.name then
+    error(('fun.name is nil, check fn_xform(). fun: %s'):format(vim.inspect(fun)))
+  end
+
   if vim.startswith(fun.name, '_') or fun.name:find('[:.]_') then
     return
   end
 
+  local internal = vim.startswith(fun.name, 'nvim__')
   local ret = {} --- @type string[]
 
   table.insert(ret, render_fun_header(fun, cfg))
   table.insert(ret, '\n')
 
-  if fun.since then
-    local since = assert(tonumber(fun.since), 'invalid @since on ' .. fun.name)
-    local nvim_api = nvim_api_info()
+  if internal or fun.since then
+    local since = assert(tonumber(fun.since or (internal and 0)), 'invalid @since on ' .. fun.name)
+    local nvim_api = false and nvim_api_info()
     _ = nvim_api -- Disable prerelease "WARNING" doc, in preparation for for upcoming release.
 
     if
-      since == 0 --[[or (nvim_api.prerelease and since == nvim_api.level)]]
+      internal or since == 0 --[[or (nvim_api.prerelease and since == nvim_api.level)]]
     then
       -- Experimental = (since==0 or current prerelease)
       local s = 'WARNING: This feature is experimental/unstable.'
@@ -996,6 +999,10 @@ end
 --- @param add_header? boolean
 local function render_section(section, add_header)
   local doc = {} --- @type string[]
+
+  if not section.title then
+    error(('section.title is nil, check section_fmt(). section: %s'):format(vim.inspect(section)))
+  end
 
   if add_header ~= false then
     vim.list_extend(doc, {

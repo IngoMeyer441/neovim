@@ -68,7 +68,6 @@ local M = {}
 -- All other files are "legacy" files which require fixed-width layout.
 local new_layout = {
   ['api.txt'] = true,
-  ['lsp.txt'] = true,
   ['channel.txt'] = true,
   ['deprecated.txt'] = true,
   ['dev.txt'] = true,
@@ -79,19 +78,22 @@ local new_layout = {
   ['dev_tools.txt'] = true,
   ['dev_vimpatch.txt'] = true,
   ['diagnostic.txt'] = true,
-  ['help.txt'] = true,
   ['faq.txt'] = true,
   ['gui.txt'] = true,
+  ['help.txt'] = true,
   ['intro.txt'] = true,
-  ['lua.txt'] = true,
+  ['job_control.txt'] = true,
+  ['lsp.txt'] = true,
+  ['lua-bit.txt'] = true,
   ['lua-guide.txt'] = true,
   ['lua-plugin.txt'] = true,
+  ['lua.txt'] = true,
   ['luaref.txt'] = true,
-  ['news.txt'] = true,
-  ['news-0.9.txt'] = true,
   ['news-0.10.txt'] = true,
   ['news-0.11.txt'] = true,
   ['news-0.12.txt'] = true,
+  ['news-0.9.txt'] = true,
+  ['news.txt'] = true,
   ['nvim.txt'] = true,
   ['pack.txt'] = true,
   ['provider.txt'] = true,
@@ -130,8 +132,12 @@ local exclude_invalid_urls = {
   ['http://wiki.services.openoffice.org/wiki/Dictionaries'] = 'spell.txt',
   ['http://www.adapower.com'] = 'ft_ada.txt',
   ['http://www.jclark.com/'] = 'quickfix.txt',
-  ['https://cacm.acm.org/research/a-look-at-the-design-of-lua/'] = 'faq.txt', -- blocks GHA?
-  ['https://linux.die.net/man/2/poll'] = 'luvref.txt', -- blocks GHA?
+
+  -- Can't be accessed by GitHub runners:
+  ['https://cacm.acm.org/research/a-look-at-the-design-of-lua/'] = 'faq.txt',
+  ['https://linux.die.net/man/2/poll'] = 'luvref.txt',
+  ['https://www.kuwasha.net'] = 'uganda.txt',
+  ['https://www.kuwasha.net/'] = 'uganda.txt',
 }
 
 -- Deprecated, brain-damaged files that I don't care about.

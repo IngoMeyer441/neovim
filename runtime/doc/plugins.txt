@@ -28,7 +28,10 @@ Help-link		Loaded	Short description ~
 |package-cfilter|	No	Filtering quickfix/location list
 |package-justify|	No	Justify text
 |package-nohlsearch|	No	Automatically run :nohlsearch
+|package-spellfile|	Yes	Install spellfile if missing
 |package-termdebug|	No	Debug inside Nvim with gdb
+|package-tohtml|	No	Convert buffer to html, syntax included
+|package-undotree|	No	Interactive textual undotree
 |pi_gzip.txt|		Yes	Reading and writing compressed files
 |pi_msgpack.txt|	No	msgpack utilities
 |pi_paren.txt|		Yes	Highlight matching parens
@@ -37,9 +40,6 @@ Help-link		Loaded	Short description ~
 |pi_tar.txt|		Yes	Tar file explorer
 |pi_tutor.txt|		Yes	Interactive tutorial
 |pi_zip.txt|		Yes	Zip archive explorer
-|spellfile.lua|		Yes	Install spellfile if missing
-|tohtml|		Yes	Convert buffer to html, syntax included
-|undotree-plugin|	No	Interactive textual undotree
 
 ==============================================================================
 Builtin plugin: difftool                                            *difftool*
@@ -50,8 +50,9 @@ Compares two directories or files side-by-side.
 Supports directory diffing, rename detection, and highlights changes
 in quickfix list. Replaces the built-in `nvim -d` diff mode with this interface.
 
-The plugin is not loaded by default; use `:packadd nvim.difftool` before
-invoking `:DiffTool`.
+The plugin is not loaded by default; use `:packadd` to activate it: >
+    :packadd nvim.difftool
+<
 
 Example `git difftool -d` integration using `nvim -d` replacement: >ini
     [difftool "nvim_difftool"]
@@ -182,7 +183,7 @@ trim_trailing_whitespace               *editorconfig.trim_trailing_whitespace*
 
 
 ==============================================================================
-Builtin plugin: spellfile                                      *spellfile.lua*
+Builtin plugin: spellfile                                  *package-spellfile*
 
 Asks the user to download missing spellfiles. The spellfile is written to
 `stdpath('data') .. 'site/spell'` or the first writable directory in the
@@ -232,13 +233,17 @@ get({lang})                                                  *spellfile.get()*
 
 
 ==============================================================================
-Builtin plugin: tohtml                                                *tohtml*
+Builtin plugin: tohtml                                        *package-tohtml*
 
 
 :[range]TOhtml {file}                                                *:TOhtml*
 Converts the buffer shown in the current window to HTML, opens the generated
 HTML in a new split window, and saves its contents to {file}. If {file} is not
 given, a temporary file (created by |tempname()|) is used.
+
+The plugin is not loaded by default; use `:packadd` to activate it: >
+    :packadd nvim.tohtml
+<
 
 
 tohtml({winid}, {opt})                                       *tohtml.tohtml()*
@@ -265,20 +270,18 @@ tohtml({winid}, {opt})                                       *tohtml.tohtml()*
 
 
 ==============================================================================
-Builtin plugin: undotree                                     *undotree-plugin*
+Builtin plugin: undotree                                    *package-undotree*
 
 open({opts})                                                 *undotree.open()*
-    Open a window that displays a textual representation of the |undo-tree|.
+    Open a window that displays a textual representation of the |undo-tree|,
+    or closes the window if it is already open. Can also be shown with
+    `:Undotree`.                                                   *:Undotree*
 
     While in the window, moving the cursor changes the undo.
 
-    Closes the window if it is already open
-
-    Load the plugin with this command: >
-                packadd nvim.undotree
+    The plugin is not loaded by default; use `:packadd` to activate it: >
+        :packadd nvim.undotree
 <
-
-    Can also be shown with `:Undotree`.                            *:Undotree*
 
     Parameters: ~
       • {opts}  (`table?`) A table with the following fields:

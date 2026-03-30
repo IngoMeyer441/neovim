@@ -23,16 +23,13 @@ local M = {}
 ---
 --- ```lua
 --- vim.ui.select({ 'tabs', 'spaces' }, {
----     prompt = 'Select tabs or spaces:',
----     format_item = function(item)
----         return "I'd like to choose " .. item
----     end,
+---   prompt = 'Select tabs or spaces:',
+---   format_item = function(item)
+---     return ('I choose %s!'):format(item)
+---   end,
 --- }, function(choice)
----     if choice == 'spaces' then
----         vim.o.expandtab = true
----     else
----         vim.o.expandtab = false
----     end
+---   vim.o.expandtab = choice == 'spaces'
+---   vim.print(('Selected "%s" => expandtab=%s'):format(choice, vim.o.expandtab))
 --- end)
 --- ```
 ---
@@ -352,26 +349,20 @@ do
   --- Gets a status description summarizing currently running progress messages.
   --- - If none: returns empty string
   --- - If one running item: "title: 42%"
-  --- - If multiple running items: "Progress: N items AVG%"
+  --- - If multiple running items: "Progress: AVG%(N)"
   ---@param running ProgressMessage[]
   ---@return string
   local function progress_status_fmt(running)
     local count = #running
     if count == 0 then
       return '' -- nothing to show
-    elseif count == 1 then
-      local progress_item = running[1]
-      if progress_item.title == nil then
-        return string.format('%d%%%% ', progress_item.percent or 0)
-      end
-      return string.format('%s: %d%%%% ', progress_item.title, progress_item.percent or 0)
     else
       local sum = 0 ---@type integer
       for _, progress_item in ipairs(running) do
         sum = sum + (progress_item.percent or 0)
       end
       local avg = math.floor(sum / count)
-      return string.format('Progress: %d items %d%%%% ', count, avg)
+      return string.format('%d%%%%(%d) ', avg, count)
     end
   end
 

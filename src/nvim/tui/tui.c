@@ -37,8 +37,8 @@
 #include "nvim/tui/input.h"
 #include "nvim/tui/terminfo.h"
 #include "nvim/tui/tui.h"
+#include "nvim/tui/ugrid.h"
 #include "nvim/types_defs.h"
-#include "nvim/ugrid.h"
 #include "nvim/ui_client.h"
 #include "nvim/ui_defs.h"
 #include "nvim/vim_defs.h"
@@ -2023,7 +2023,7 @@ static void terminfo_set_str(TUIData *tui, TerminfoDef str, const char *val)
 /// Determine if the terminal supports truecolor or not.
 ///
 /// note: We get another chance at detecting these in the nvim server process, see
-/// the use of vim.termcap in runtime/lua/vim/_core/defaults.lua
+/// the use of vim.tty in runtime/lua/vim/_core/defaults.lua
 ///
 /// If terminfo contains Tc, RGB, or both setrgbf and setrgbb capabilities, return true.
 static bool term_has_truecolor(TUIData *tui, const char *colorterm)

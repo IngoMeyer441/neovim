@@ -117,7 +117,7 @@ append({lnum}, {text})                                                *append()*
                   (`0|1`)
 
 appendbufline({buf}, {lnum}, {text})                           *appendbufline()*
-		Like |append()| but append the text in buffer {expr}.
+		Like |append()| but append the text in buffer {buf}.
 
 		This function works only for loaded buffers.  First call
 		|bufload()| if needed.
@@ -7575,6 +7575,31 @@ printf({fmt}, {expr1} ...)                                            *printf()*
                 Return: ~
                   (`string`)
 
+prompt_appendbuf({buf}, {text})                             *prompt_appendbuf()*
+		Appends text to prompt buffer before current prompt. When {text} is
+		a |List|: Append each item of the |List| as a text line above
+		prompt-line in the buffer. Any type of item is accepted and converted
+		to a String. Returns 1 for failure ({buf} not a prmopt buffer),
+		0 for success.  When {text} is an empty list zero is returned.
+
+		Example: >vim
+		  func TextEntered(text)
+		    call prompt_appendbuf(bufnr(''), split('Entered: "' . a:text . '"', '\n'))
+		  endfunc
+
+		  set buftype=prompt
+		  call prompt_setcallback(bufnr(''), function("TextEntered"))
+		  eval bufnr("")->prompt_setprompt("cmd: ")
+		  startinsert
+<
+
+                Parameters: ~
+                  • {buf} (`integer|string`)
+                  • {text} (`string|string[]`)
+
+                Return: ~
+                  (`0|1`)
+
 prompt_getinput({buf})                                       *prompt_getinput()*
 		Gets the current user-input in |prompt-buffer| {buf} without invoking
 		prompt_callback. {buf} can be a buffer name or number.
@@ -10650,7 +10675,7 @@ string({expr})                                                        *string()*
 		parsed back with |eval()|.
 
 			{expr} type	result ~
-			String		"string"
+			String		`'string'`
 			Number		123
 			Float		123.123456 or 1.123456e8 or
 					`str2float('inf')`

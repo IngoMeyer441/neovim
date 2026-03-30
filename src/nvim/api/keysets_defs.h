@@ -206,6 +206,7 @@ typedef struct {
   Boolean fg_indexed;
   Boolean bg_indexed;
   Boolean force;
+  Boolean update;
   String url;
 } Dict(highlight);
 
@@ -357,6 +358,7 @@ typedef struct {
   String title;
   String status;
   Integer percent;
+  String source;
   DictOf(Object) data;
 } Dict(echo_opts);
 

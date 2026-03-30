@@ -154,6 +154,7 @@ DictAs(get_hl_info) nvim_get_hl(Integer ns_id, Dict(get_highlight) *opts, Arena 
 ///                - force: if true force update the highlight group when it exists.
 ///                - link: Name of highlight group to link to. |:hi-link|
 ///                - sp: color name or "#RRGGBB"
+///                - update: boolean (default false) Update specified attributes only, leave others unchanged.
 ///                - altfont: boolean
 ///                - blink: boolean
 ///                - bold: boolean
@@ -171,8 +172,6 @@ DictAs(get_hl_info) nvim_get_hl(Integer ns_id, Dict(get_highlight) *opts, Arena 
 ///                - underdouble: boolean
 ///                - underline: boolean
 /// @param[out] err Error details, if any
-///
-// TODO(bfredl): val should take update vs reset flag
 void nvim_set_hl(uint64_t channel_id, Integer ns_id, String name, Dict(highlight) *val, Error *err)
   FUNC_API_SINCE(7)
 {
@@ -188,7 +187,14 @@ void nvim_set_hl(uint64_t channel_id, Integer ns_id, String name, Dict(highlight
     return;
   }
 
-  HlAttrs attrs = dict2hlattrs(val, true, &link_id, err);
+  bool update = HAS_KEY(val, highlight, update) && val->update;
+  HlAttrs *base = NULL;
+  HlAttrs base_attrs;
+  if (update && hl_ns_get_attrs((int)ns_id, hl_id, NULL, &base_attrs)) {
+    base = &base_attrs;
+  }
+
+  HlAttrs attrs = dict2hlattrs(val, true, &link_id, base, err);
   if (!ERROR_SET(err)) {
     WITH_SCRIPT_CONTEXT(channel_id, {
       ns_hl_def((NS)ns_id, hl_id, attrs, link_id, val);
@@ -534,8 +540,6 @@ Object nvim_exec_lua(String code, Array args, Arena *arena, Error *err)
   return nlua_exec(code, NULL, args, kRetObject, arena, err);
 }
 
-/// EXPERIMENTAL: this API may change or be removed in the future.
-///
 /// Like |nvim_exec_lua()|, but can be called during |api-fast| contexts.
 ///
 /// Execute Lua code. Parameters (if any) are available as `...` inside the
@@ -814,6 +818,7 @@ void nvim_set_vvar(String name, Object value, Error *err)
 ///          - kind (`string?`) Decides the |ui-messages| kind in the emitted message. Set "progress"
 ///            to emit a |progress-message|.
 ///          - percent (`integer?`) |progress-message| percentage.
+///          - source (`string?`) |progress-message| source.
 ///          - status (`string?`) |progress-message| status:
 ///            - "success": Process completed successfully.
 ///            - "running": Process is ongoing.
@@ -846,8 +851,8 @@ Union(Integer, String) nvim_echo(ArrayOf(Tuple(String, *HLGroupID)) chunks, Bool
 
   VALIDATE(is_progress
            || (opts->status.size == 0 && opts->title.size == 0 && opts->percent == 0
-               && opts->data.size == 0),
-           "Conflict: title/status/percent/data not allowed with kind='%s'", kind,
+               && opts->data.size == 0 && opts->source.size == 0),
+           "Conflict: title/source/status/percent/data not allowed with kind='%s'", kind,
   {
     goto error;
   });
@@ -865,6 +870,10 @@ Union(Integer, String) nvim_echo(ArrayOf(Tuple(String, *HLGroupID)) chunks, Bool
     goto error;
   });
 
+  VALIDATE_R((!is_progress || opts->source.size != 0), "opts.source", {
+    goto error;
+  });
+
   // Message-id may be user-defined only if String, not Integer.
   VALIDATE(opts->id.type != kObjectTypeInteger || msg_id_exists(opts->id.data.integer),
            "Invalid 'id': %" PRId64, opts->id.data.integer, {
@@ -872,7 +881,8 @@ Union(Integer, String) nvim_echo(ArrayOf(Tuple(String, *HLGroupID)) chunks, Bool
   });
 
   MessageData msg_data = { .title = opts->title, .status = opts->status,
-                           .percent = opts->percent, .data = opts->data };
+                           .percent = opts->percent, .data = opts->data,
+                           .source = opts->source };
 
   id = msg_multihl(opts->id, hl_msg, kind, history, opts->err, &msg_data, &needs_clear);
 
@@ -1320,7 +1330,7 @@ void nvim_set_current_tabpage(Tabpage tabpage, Error *err)
 ///     line2
 ///     line3
 ///   ]], false, -1)
-/// end, { buf = true })
+/// end, { buf = 0 })
 /// ```
 ///
 /// @param data  Multiline input. Lines break at LF ("\n"). May be binary (containing NUL bytes).
@@ -1581,7 +1591,7 @@ ArrayOf(DictAs(get_keymap)) nvim_get_keymap(String mode, Arena *arena)
 /// nmap <nowait> <Space><NL> <Nop>
 /// ```
 ///
-/// @param channel_id
+/// @param channel_id Channel id (implicit dispatcher arg)
 /// @param  mode  Mode short-name (map command prefix: "n", "i", "v", "x", …)
 ///               or "!" for |:map!|, or empty string for |:map|.
 ///               "ia", "ca" or "!a" for abbreviation in Insert mode, Cmdline mode, or both, respectively
@@ -1640,7 +1650,7 @@ ArrayOf(Object, 2) nvim_get_api_info(uint64_t channel_id, Arena *arena)
 /// Can be called more than once; caller should merge old info if appropriate. Example: a library
 /// first identifies the channel, then a plugin using that library later identifies itself.
 ///
-/// @param channel_id
+/// @param channel_id Channel id (implicit dispatcher arg)
 /// @param name Client short-name. Sets the `client.name` field of |nvim_get_chan_info()|.
 /// @param version  Dict describing the version, with these
 ///     (optional) keys:
@@ -1711,6 +1721,24 @@ void nvim_set_client_info(uint64_t channel_id, String name, Dict version, String
   PUT_C(info, "attributes", DICT_OBJ(attributes));
 
   rpc_set_client_info(channel_id, copy_dict(info, NULL));
+}
+
+/// Sets the detach flag for the channel.
+///
+/// Detached channels do not trigger self-exit when they are closed.
+///
+/// @param channel_id
+/// @param detach   New detach value for the channel.
+/// @param[out] err Error details, if any.
+void nvim__chan_set_detach(uint64_t channel_id, Boolean detach, Error *err)
+  FUNC_API_SINCE(14) FUNC_API_REMOTE_ONLY
+{
+  Channel *chan = find_channel(channel_id);
+  VALIDATE(chan != NULL, "%s", e_invchan, {
+    return;
+  });
+
+  chan->detach = (bool)detach;
 }
 
 /// Gets information about a channel.
@@ -2302,8 +2330,6 @@ DictAs(eval_statusline_ret) nvim_eval_statusline(String str, Dict(eval_statuslin
   return result;
 }
 
-/// EXPERIMENTAL: this API may change in the future.
-///
 /// Sets info for the completion item at the given index. If the info text was shown in a window,
 /// returns the window and buffer ids, or empty dict if not shown.
 ///
@@ -2361,8 +2387,6 @@ static void redraw_status(win_T *wp, Dict(redraw) *opts, bool *flush)
   }
 }
 
-/// EXPERIMENTAL: this API may change in the future.
-///
 /// Instruct Nvim to redraw various components.
 ///
 /// @see |:redraw|

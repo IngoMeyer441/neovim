@@ -79,6 +79,7 @@
 #include "nvim/strings.h"
 #include "nvim/tag.h"
 #include "nvim/types_defs.h"
+#include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
@@ -6190,7 +6191,9 @@ void ex_echo(exarg_T *eap)
     emsg_skip--;
   } else {
     // remove text that may still be there from the command
-    if (need_clear) {
+    if (ui_has(kUIMessages) && (*eap->arg == NUL || *eap->arg == '|' || *eap->arg == '\n')) {
+      msg_puts_len("", 0, 0, false);  // emit "empty" kind msg_show
+    } else if (need_clear) {
       msg_clr_eos();
     }
     if (eap->cmdidx == CMD_echo) {
@@ -6722,6 +6725,7 @@ theend:
   u_clearallandblockfree(curbuf);
 
   curbuf->b_prompt_start.mark.lnum = curbuf->b_ml.ml_line_count;
+  curbuf->b_prompt_append_new_line = true;
 }
 
 /// @return  true when the interrupt callback was invoked.

@@ -75,6 +75,7 @@ Defaults                                            *defaults* *nvim-defaults*
 - 'nrformats' defaults to "bin,hex"
 - 'path' defaults to ".,,". The C ftplugin adds "/usr/include" if it exists.
 - 'sessionoptions' includes "unix,slash", excludes "options"
+- 'shelltemp' is disabled
 - 'shortmess' includes "CF", excludes "S"
 - 'sidescroll' defaults to 1
 - 'smarttab' is enabled
@@ -97,8 +98,8 @@ Defaults                                            *defaults* *nvim-defaults*
 - |man.lua| plugin is enabled, so |:Man| is available by default.
 - |matchit| plugin is enabled. To disable it in your config: >vim
     :let loaded_matchit = 1
-- |spellfile.lua| plugin is enabled, spellfiles are installed by default if
-  missing.
+- |package-spellfile| plugin is enabled, spellfiles are installed by default
+  if missing.
 
 - |g:vimsyn_embed| defaults to "l" to enable Lua highlighting
 
@@ -355,6 +356,7 @@ Functions:
 - |tempname()| tries to recover if the Nvim |tempdir| disappears.
 - |writefile()| with "p" flag creates parent directories.
 - |prompt_getinput()|
+- |prompt_appendbuf()|
 
 Highlight groups:
 - |highlight-blend| controls blend level for a highlight group
@@ -749,7 +751,7 @@ Editor:
 - *cscope* support was removed in favour of plugin-based solutions such as:
   https://github.com/dhananjaylatkar/cscope_maps.nvim
 - *popup-window* : Use |floating-windows| instead.
-- *spellfile.vim* : Replaced by |spellfile.lua|.
+- *spellfile.vim* : Replaced by |package-spellfile|.
 - *textprop* : Use |extmarks| instead.
 
 Eval:

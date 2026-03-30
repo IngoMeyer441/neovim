@@ -483,7 +483,7 @@ end
 --- @param action string
 --- @return fun(kind: 'begin'|'report'|'end', percent: integer, fmt: string, ...:any): nil
 local function new_progress_report(action)
-  local progress = { kind = 'progress', title = 'vim.pack' }
+  local progress = { kind = 'progress', source = 'vim.pack', title = 'vim.pack' }
   local headless = #api.nvim_list_uis() == 0
 
   return vim.schedule_wrap(function(kind, percent, fmt, ...)
@@ -819,7 +819,7 @@ local function lock_write()
   local fd = assert(uv.fs_open(path, 'w', 438))
 
   local data = vim.json.encode(lock, { indent = '  ', sort_keys = true })
-  assert(uv.fs_write(fd, data))
+  assert(uv.fs_write(fd, data .. '\n'))
   assert(uv.fs_close(fd))
 end
 

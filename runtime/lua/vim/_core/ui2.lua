@@ -32,7 +32,7 @@
 ---
 --- There are four special windows/buffers for presenting messages and cmdline:
 --- - "cmd": Cmdline. Also used for 'showcmd', 'showmode', 'ruler', and messages by default.
---- - "msg": Message window, shows fleeting messages useful for 'cmdheight' == 0.
+--- - "msg": Message window, shows ephemeral messages useful for 'cmdheight' == 0.
 --- - "pager": Pager window, shows |:messages| and certain messages that are never "collapsed".
 --- - "dialog": Dialog window, shows modal prompts that expect user input.
 ---
@@ -43,7 +43,7 @@
 --- Unlike the legacy |hit-enter| prompt, messages exceeding 'cmdheight' are
 --- instead "collapsed", followed by a `[+x]` "spill" indicator, where `x`
 --- indicates the spilled lines. To see the full messages, do either:
---- - ENTER immediately after a message from interactive |:| cmdline.
+--- - ENTER immediately after interactive |:| cmdline shows a message and returns to |Normal-mode|.
 --- - |g<| at any time.
 
 local api = vim.api

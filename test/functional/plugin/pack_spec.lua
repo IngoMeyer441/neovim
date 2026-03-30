@@ -102,6 +102,10 @@ local function init_test_repo(repo_name)
   repos_src[repo_name] = 'file://' .. path
 
   git_cmd({ 'init' }, repo_name)
+  if t.is_arch('s390x') then
+    -- Ensure default branch is 'main' even if git is too old for `init.defaultBranch`.
+    git_cmd({ 'symbolic-ref', 'HEAD', 'refs/heads/main' }, repo_name)
+  end
 end
 
 local function git_add_commit(msg, repo_name)
@@ -316,7 +320,8 @@ local function assert_progress_report(action, step_names)
   local n_steps = #step_names
   eq(n_steps + 2, #echo_log)
 
-  local progress = { kind = 'progress', title = 'vim.pack', status = 'running', percent = 0 }
+  local progress =
+    { kind = 'progress', source = 'vim.pack', title = 'vim.pack', status = 'running', percent = 0 }
   local init_step = { { { ('%s (0/%d)'):format(action, n_steps) } }, true, progress }
   eq(init_step, echo_log[1])
 
@@ -574,7 +579,8 @@ describe('vim.pack', function()
               "version": ">=0.0.0"
             }
           }
-        }]]):format(
+        }
+        ]]):format(
         basic_rev,
         repos_src.basic,
         defbranch_rev,
