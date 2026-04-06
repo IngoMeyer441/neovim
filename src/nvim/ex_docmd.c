@@ -1640,7 +1640,9 @@ bool parse_cmdline(char **cmdline, exarg_T *eap, CmdParseInfo *cmdinfo, const ch
     char *arg = eap->arg;
     while (*arg != NUL && *arg != '|' && *arg != '\n') {
       char *start = arg;
+      emsg_skip++;
       skip_expr(&arg, NULL);
+      emsg_skip--;
       // If skip_expr didn't advance, move forward to avoid infinite loop
       if (arg == start) {
         arg++;
@@ -2485,7 +2487,7 @@ char *ex_errmsg(const char *const msg, const char *const arg)
 
 /// The "+" string used in place of an empty command in Ex mode.
 /// This string is used in pointer comparison.
-static char exmode_plus[] = "+";
+static const char exmode_plus[] = "+";
 
 /// Handle a range without a command.
 /// Returns an error message on failure.
@@ -2568,7 +2570,7 @@ int parse_command_modifiers(exarg_T *eap, const char **errormsg, cmdmod_T *cmod,
     if (*eap->cmd == NUL && exmode_active
         && getline_equal(eap->ea_getline, eap->cookie, getexline)
         && curwin->w_cursor.lnum < curbuf->b_ml.ml_line_count) {
-      eap->cmd = exmode_plus;
+      eap->cmd = (char *)exmode_plus;
       use_plus_cmd = true;
       if (!skip_only) {
         ex_pressedreturn = true;
@@ -2825,7 +2827,7 @@ int parse_command_modifiers(exarg_T *eap, const char **errormsg, cmdmod_T *cmod,
       }
     }
   } else if (use_plus_cmd) {
-    eap->cmd = exmode_plus;
+    eap->cmd = (char *)exmode_plus;
   }
 
   return OK;
@@ -4963,6 +4965,7 @@ static void ex_quitall(exarg_T *eap)
 static void ex_restart(exarg_T *eap)
 {
   Error err = ERROR_INIT;
+  const bool no_ui = !ui_active();
   const char *exepath = get_vim_var_str(VV_PROGPATH);
   const list_T *l = get_vim_var_list(VV_ARGV);
   int argc = tv_list_len(l);
@@ -4996,14 +4999,18 @@ static void ex_restart(exarg_T *eap)
         }
       }
     }
-    // Replace `--embed` OR `--headless` with `--embed --headless` once.
+    // Replace `--embed` OR `--headless` with `--embed` or `--embed --headless` once.
     // Drop stdin ("-") argument.
     if (i == 0
         || (!strequal(arg, "--embed") && !strequal(arg, "--headless") && !strequal(arg, "-"))) {
       argv[i++] = xstrdup(arg);
       if (i == 1) {
         argv[i++] = xstrdup("--embed");
-        argv[i++] = xstrdup("--headless");
+        // Without --headless, embed waits for UI to attach.
+        // Only add --headless when there is no UI.
+        if (no_ui) {
+          argv[i++] = xstrdup("--headless");
+        }
       }
     }
   });
@@ -5016,9 +5023,13 @@ static void ex_restart(exarg_T *eap)
   }
 
   CallbackReader on_err = CALLBACK_READER_INIT;
-  // This temporary bootstrap channel is closed intentionally once we obtain
-  // the new server address. Don't forward child stderr to the current UI.
+#ifdef MSWIN
+  // On Windows, don't forward stderr as it won't work after the current server exits.
   on_err.fwd_err = false;
+#else
+  // On Unix, stderr fd is inherited, so it works even after the current server exits.
+  on_err.fwd_err = true;
+#endif
   bool detach = true;
   varnumber_T exit_status;
 
@@ -5074,15 +5085,9 @@ static void ex_restart(exarg_T *eap)
   arena_mem_free(result_mem);
   result_mem = NULL;
 
-  // Send restart event with new listen address to current UI.
-  if (!remote_ui_restart(current_ui, listen_addr, &err)) {
-    if (ERROR_SET(&err)) {
-      ELOG("%s", err.msg);  // UI disappeared already?
-      api_clear_error(&err);
-    }
-    xfree(listen_addr);
-    goto fail_2;
-  }
+  // Send restart event with new listen address to all UIs.
+  ui_call_restart(cstr_as_string(listen_addr));
+  ui_flush();
   xfree(listen_addr);
 
   char *quit_cmd = (eap->do_ecmd_cmd) ? eap->do_ecmd_cmd : "qall";
@@ -5109,8 +5114,18 @@ fail_2:
     api_clear_error(&err);
   }
   arena_mem_free(result_mem);
+  result_mem = NULL;
 
-  // Kill the new nvim server.
+#ifndef MSWIN
+  // Before killing the new server, close its stderr to avoid polluting the current UI.
+  MAXSIZE_TEMP_ARRAY(chanclose_expr_args, 1);
+  ADD_C(chanclose_expr_args, CSTR_AS_OBJ("chanclose(v:stderr)"));
+  rpc_send_call(channel->id, "nvim_eval", chanclose_expr_args, &result_mem, &err);
+  api_clear_error(&err);
+  arena_mem_free(result_mem);
+#endif
+
+  // Kill the new Nvim server.
   proc_stop(&channel->stream.proc);
   if (proc_wait(&channel->stream.proc, -1, NULL) < 0) {
     emsg("killing new nvim server failed");
@@ -8196,6 +8211,11 @@ static void ex_terminal(exarg_T *eap)
 {
   char ex_cmd[1024];
   size_t len = 0;
+  const int scroll_save = msg_scroll;
+
+  msg_scroll = false;         // don't scroll here
+  autowrite_all();
+  msg_scroll = scroll_save;
 
   if (cmdmod.cmod_tab > 0 || cmdmod.cmod_split != 0) {
     bool multi_mods = false;

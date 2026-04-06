@@ -323,10 +323,10 @@ local options = {
       defaults = false,
       desc = [=[
         Write the contents of the file, if it has been modified, on each
-        `:next`, `:rewind`, `:last`, `:first`, `:previous`, `:stop`,
-        `:suspend`, `:tag`, `:!`, `:make`, CTRL-] and CTRL-^ command; and when
-        a `:buffer`, CTRL-O, CTRL-I, '{A-Z0-9}, or `{A-Z0-9} command takes one
-        to another file.
+        `:next`, `:rewind`, `:last`, `:first`, `:previous`, `:tag`, `:stop`,
+        `:suspend`, `:!`, `:make`, `:terminal`, CTRL-] or CTRL-^ command; and
+        when a `:buffer`, CTRL-O, CTRL-I, '{A-Z0-9}, or `{A-Z0-9} command
+        switches to another file.
         A buffer is not written if it becomes hidden, e.g. when 'bufhidden' is
         set to "hide" and `:next` is used.
         Note that for some commands the 'autowrite' option is not used, see
@@ -347,8 +347,8 @@ local options = {
       abbreviation = 'awa',
       defaults = false,
       desc = [=[
-        Like 'autowrite', but also used for commands ":edit", ":enew",
-        ":quit", ":qall", ":exit", ":xit", ":recover" and closing the Vim
+        Like 'autowrite', but also used for commands `:edit`, `:enew`,
+        `:quit`, `:qall`, `:exit`, `:xit`, `:recover` and closing the Vim
         window.
         Setting this option also implies that Vim behaves like 'autowrite' has
         been set.
@@ -1543,8 +1543,11 @@ local options = {
         and from tags to 5.  Other sources remain unlimited.
         Note: The match limit takes effect only during forward completion
         (CTRL-N) and is ignored during backward completion (CTRL-P).
+
+        This option cannot be set in a modeline when 'modelineexpr' is off.
       ]=],
       full_name = 'complete',
+      modelineexpr = true,
       list = 'onecomma',
       scope = { 'buf' },
       short_desc = N_('specify how Insert mode completion works'),
@@ -4254,8 +4257,10 @@ local options = {
         You can include a line break.  Simplest method is to use |:let|: >vim
         	let &guitabtooltip = "line one\nline two"
         <
+        This option cannot be set in a modeline when 'modelineexpr' is off.
       ]=],
       full_name = 'guitabtooltip',
+      modelineexpr = true,
       redraw = { 'current_window' },
       scope = { 'global' },
       short_desc = N_('GUI: custom tooltip for a tab page'),
@@ -8815,11 +8820,13 @@ local options = {
       desc = [=[
         Sets the |status-line|.
 
-        The option consists of printf style '%' items interspersed with
-        normal text.  Each status line item is of the form:
+        Contains printf-style "%" items interspersed with normal text, where
+        each item has the form: >
           %-0{minwid}.{maxwid}{item}
-        All fields except the {item} are optional.  A single percent sign can
-        be given as "%%".
+        <
+        All fields except {item} are optional.  Use "%%" to show a literal "%"
+        char.  Setting this option to empty (`:set statusline=`) sets its
+        value to the default.
 
         						*stl-%!*
         When the option starts with "%!" then it is used as an expression,
