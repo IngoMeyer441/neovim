@@ -664,11 +664,14 @@ local function checkout(p, timestamp, skip_stash)
   infer_revisions(p)
 
   if not skip_stash then
-    local stash_cmd = { 'stash', '--quiet' }
+    local stash_cmd = { 'stash' }
     if git_version > vim.version.parse('2.13') then
+      -- Use 'push' to avoid a 'stash -m' bug in versions prior to git v2.26
+      stash_cmd[#stash_cmd + 1] = 'push'
       stash_cmd[#stash_cmd + 1] = '--message'
       stash_cmd[#stash_cmd + 1] = ('vim.pack: %s Stash before checkout'):format(timestamp)
     end
+    stash_cmd[#stash_cmd + 1] = '--quiet'
     git_cmd(stash_cmd, p.path)
   end
 
@@ -1155,7 +1158,7 @@ local function show_confirm_buf(lines, on_finish)
     delete_buffer()
   end
   -- - Use `nested` to allow other events (useful for statuslines)
-  api.nvim_create_autocmd('BufWriteCmd', { buffer = bufnr, nested = true, callback = finish })
+  api.nvim_create_autocmd('BufWriteCmd', { buf = bufnr, nested = true, callback = finish })
 
   -- Define action to cancel confirm
   --- @type integer
