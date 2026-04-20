@@ -1072,6 +1072,15 @@ describe('float window', function()
       command('close')
       assert_alive()
     end)
+
+    it('does not unload bufhidden=hide buffer', function()
+      local buf = api.nvim_create_buf(false, true)
+      command('set nohidden')
+      api.nvim_open_tabpage(0, true, {})
+      api.nvim_open_win(buf, false, { relative = 'editor', width = 1, height = 1, row = 0, col = 0 })
+      command('close!')
+      eq(true, api.nvim_buf_is_loaded(buf))
+    end)
   end)
 
   it('placed relative to tabline and laststatus', function()
@@ -11622,7 +11631,6 @@ describe('float window', function()
         row = 8,
         col = 9,
         border = 'single',
-        zindex = 1,
       })
       local buf2 = api.nvim_create_buf(false, false)
       local float_win_above = api.nvim_open_win(buf2, false, {
@@ -11631,7 +11639,7 @@ describe('float window', function()
         height = 10,
         row = 0,
         col = 0,
-        zindex = 2,
+        zindex = 100,
       })
       if multigrid then
         screen:expect({
@@ -11659,8 +11667,8 @@ describe('float window', function()
             [2] = { height = 19, startcol = 0, startrow = 0, width = 50, win = 1000 },
           },
           float_pos = {
-            [7] = { 1004, 'NW', 1, 8, 9, true, 1, 1, 8, 9 },
-            [8] = { 1005, 'NW', 1, 0, 0, true, 2, 2, 0, 0 },
+            [7] = { 1004, 'NW', 1, 8, 9, true, 50, 1, 8, 9 },
+            [8] = { 1005, 'NW', 1, 0, 0, true, 100, 2, 0, 0 },
           },
           mode = 'normal',
         })
@@ -11708,8 +11716,8 @@ describe('float window', function()
             [2] = { height = 19, startcol = 0, startrow = 0, width = 50, win = 1000 },
           },
           float_pos = {
-            [7] = { 1004, 'NW', 1, 9, 8, true, 1, 1, 9, 8 },
-            [8] = { 1005, 'NW', 1, 0, 0, true, 2, 2, 0, 0 },
+            [7] = { 1004, 'NW', 1, 9, 8, true, 50, 1, 9, 8 },
+            [8] = { 1005, 'NW', 1, 0, 0, true, 100, 2, 0, 0 },
           },
           mode = 'normal',
         })
@@ -11759,8 +11767,8 @@ describe('float window', function()
             [2] = { height = 19, startcol = 0, startrow = 0, width = 50, win = 1000 },
           },
           float_pos = {
-            [7] = { 1004, 'NW', 1, 8, 8, true, 1, 1, 8, 8 },
-            [8] = { 1005, 'NW', 1, 0, 0, true, 2, 2, 0, 0 },
+            [7] = { 1004, 'NW', 1, 8, 8, true, 50, 1, 8, 8 },
+            [8] = { 1005, 'NW', 1, 0, 0, true, 100, 2, 0, 0 },
           },
           mode = 'normal',
         })
@@ -11809,17 +11817,22 @@ describe('float window', function()
             [2] = { height = 19, startcol = 0, startrow = 0, width = 50, win = 1000 },
           },
           float_pos = {
-            [7] = { 1004, 'NW', 1, 8, 8, true, 1, 1, 8, 8 },
-            [8] = { 1005, 'NW', 1, 0, 0, true, 2, 2, 0, 0 },
+            [7] = { 1004, 'NW', 1, 8, 8, true, 50, 1, 8, 8 },
+            [8] = { 1005, 'NW', 1, 0, 0, true, 100, 2, 0, 0 },
           },
           mode = 'normal',
         })
       else
         screen:expect { mode = 'replace' }
       end
+      -- Not obscured when zindex doesn't exceed the zindex of the current grid + 50 (#37703).
+      api.nvim_win_set_config(float_win_above, { zindex = 99 })
+      if not multigrid then
+        screen:expect { mode = 'normal' }
+      end
 
       -- Not obscured by a hidden floatwin.
-      api.nvim_win_set_config(float_win_above, { hide = true })
+      api.nvim_win_set_config(float_win_above, { hide = true, zindex = 100 })
       if multigrid then
         screen:expect({
           grid = [[
@@ -11843,12 +11856,26 @@ describe('float window', function()
             {2:~         }|*9
           ]],
           float_pos = {
-            [7] = { 1004, 'NW', 1, 8, 8, true, 1, 1, 8, 8 },
+            [7] = { 1004, 'NW', 1, 8, 8, true, 50, 1, 8, 8 },
           },
           mode = 'normal',
         })
       else
-        screen:expect { mode = 'normal' }
+        screen:expect({
+          grid = [[
+            one                                               |
+            two                                               |
+            three                                             |
+            {0:~                                                 }|*5
+            {0:~       }{5:┌─────┐}{0:                                   }|
+            {0:~       }{5:│}{1:^    x}{5:│}{0:                                   }|
+            {0:~       }{5:│}{2:    ~}{5:│}{0:                                   }|*4
+            {0:~       }{5:└─────┘}{0:                                   }|
+            {0:~                                                 }|*4
+                                                              |
+          ]],
+          mode = 'normal',
+        })
       end
 
       -- Not obscured in the command-line if curwin's cursor is obscured.
@@ -11877,8 +11904,8 @@ describe('float window', function()
             {2:~         }|*9
           ]],
           float_pos = {
-            [7] = { 1004, 'NW', 1, 8, 8, true, 1, 1, 8, 8 },
-            [8] = { 1005, 'NW', 1, 0, 0, true, 2, 2, 0, 0 },
+            [7] = { 1004, 'NW', 1, 8, 8, true, 50, 1, 8, 8 },
+            [8] = { 1005, 'NW', 1, 0, 0, true, 100, 2, 0, 0 },
           },
           mode = 'cmdline_normal',
         })

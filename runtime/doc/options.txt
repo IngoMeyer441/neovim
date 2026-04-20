@@ -261,12 +261,12 @@ that was last closed are used again.  If this buffer has been edited in this
 window, the values from back then are used.  Otherwise the values from the
 last closed window where the buffer was edited last are used.
 
-It's possible to set a local window option specifically for a type of buffer.
-When you edit another buffer in the same window, you don't want to keep
-using these local window options.  Therefore Vim keeps a global value of the
-local window options, which is used when editing another buffer.  Each window
-has its own copy of these values.  Thus these are local to the window, but
-global to all buffers in the window.  With this you can do: >
+":setlocal" can be used to set a local window option specifically for a type
+of buffer.  When you edit another buffer in the same window, you don't want to
+keep using these local window options.  Meanwhile ":set" also sets a global
+value of a local window option, which is used when editing another buffer.
+Each window has its own copy of these global values, making them local to the
+window, but global to all buffers in the window.  With this you can do: >
 	:e one
 	:set list
 	:e two
@@ -296,6 +296,7 @@ created, thus they behave slightly differently:
 	'winfixbuf'	specific to existing window
 	'winfixheight'	specific to existing window
 	'winfixwidth'	specific to existing window
+	'winpinned'	specific to existing window
 
 Special local buffer options
 
@@ -609,7 +610,7 @@ backslash in front of the ':' will be removed.  Example: >
    /* vi:set fillchars=stl\:^,vert\:\|: */
 This sets the 'fillchars' option to "stl:^,vert:\|".  Only a single backslash
 before the ':' is removed.  Thus to include "\:" you have to specify "\\:".
-							*E992*
+							*E992* *no-modeline-option*
 No other commands than "set" are supported, for security reasons (somebody
 might create a Trojan horse text file with modelines).  And not all options
 can be set.  For some options a flag is set, so that when the value is used
@@ -971,6 +972,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'backupdir'* *'bdir'*
 'backupdir' 'bdir'	string	(default ".,$XDG_STATE_HOME/nvim/backup//")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	List of directories for the backup file, separated with commas.
 	- The backup file will be created in the first directory in the list
 	  where this is possible.  If none of the directories exist Nvim will
@@ -1009,8 +1011,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	The use of |:set+=| and |:set-=| is preferred when adding or removing
 	directories from the list.  This avoids problems when a future version
 	uses another default.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 					*'backupext'* *'bex'* *E589*
 'backupext' 'bex'	string	(default "~")
@@ -1290,15 +1290,15 @@ A jump table for the options with a short description can be found at |Q_op|.
 				*'cdhome'* *'cdh'* *'nocdhome'* *'nocdh'*
 'cdhome' 'cdh'		boolean	(default on on Unix, off on Windows)
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	When on, |:cd|, |:tcd| and |:lcd| without an argument changes the
 	current working directory to the |$HOME| directory like in Unix.
 	When off, those commands just print the current directory name.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 					*'cdpath'* *'cd'* *E344* *E346*
 'cdpath' 'cd'		string	(default equivalent to $CDPATH or ",,")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	This is a list of directories which will be searched when using the
 	|:cd|, |:tcd| and |:lcd| commands, provided that the directory being
 	searched for has a relative path, not an absolute part starting with
@@ -1312,8 +1312,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	override it: >vim
 	  let &cdpath = ',' .. substitute(substitute($CDPATH, '[, ]', '\\\0', 'g'), ':', ',', 'g')
 <	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 	(parts of 'cdpath' can be passed to the shell to expand file names).
 
 							*'cedit'*
@@ -1339,6 +1337,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 				*'charconvert'* *'ccv'* *E202* *E214* *E513*
 'charconvert' 'ccv'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	An expression that is used for character encoding conversion.  It is
 	evaluated when a file that is to be read or has been written has a
 	different encoding from what is desired.
@@ -1379,9 +1378,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 		set charconvert=<SID>SomeConvert()
 <	Otherwise the expression is evaluated in the context of the script
 	where the option was set, thus script-local items are available.
-
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 					*'chistory'* *'chi'* *E1542* *E1543*
 'chistory' 'chi'	number	(default 10)
@@ -1604,14 +1600,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'completefunc'* *'cfu'*
 'completefunc' 'cfu'	string	(default "")
 			local to buffer
+			Disallowed in |modeline|. |no-modeline-option|
 	This option specifies a function to be used for Insert mode completion
 	with CTRL-X CTRL-U. |i_CTRL-X_CTRL-U|
 	See |complete-functions| for an explanation of how the function is
 	invoked and what it should return.  The value can be the name of a
 	function, a |lambda| or a |Funcref|.  See |option-value-function| for
 	more information.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 					*'completeitemalign'* *'cia'*
 'completeitemalign' 'cia'	string	(default "abbr,kind,menu")
@@ -1671,8 +1666,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		    "menu" or "menuone". No effect if "longest" is present.
 
 	   noselect Same as "noinsert", except that no menu item is
-		    pre-selected.  If both "noinsert" and "noselect" are
-		    present, "noselect" takes precedence.  This is enabled
+		    pre-selected.  Takes precedence over "noinsert". Enabled
 		    automatically when 'autocomplete' is on, unless
 		    "preinsert" is also enabled.
 
@@ -1694,12 +1688,23 @@ A jump table for the options with a short description can be found at |Q_op|.
 		    'ignorecase' is set without 'infercase'.
 		    See also |preinserted()|.
 
+	   preselect
+		    When one of |complete-items| has its "preselect" field set
+		    (e.g., as indicated by an LSP server), select the first
+		    such item in the |popupmenu-completion|. Takes precedence
+		    over "noselect".
+
+		    Unlike the implicit selection behavior (when "noselect" is
+		    not set), this preserves the original sort order and
+		    navigates to the preselect item rather than always
+		    selecting the first item.
+
 	   preview  Show extra information about the currently selected
 		    completion in the preview window.  Only works in
 		    combination with "menu" or "menuone".
 
-	Only "fuzzy", "longest", "popup", "preinsert" and "preview" have an
-	effect when 'autocomplete' is enabled.
+	Only "fuzzy", "longest", "popup", "preinsert", "preselect" and
+	"preview" have an effect when 'autocomplete' is enabled.
 
 	This option does not apply to |cmdline-completion|.  See 'wildoptions'
 	for that.
@@ -2188,10 +2193,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'diffexpr'* *'dex'*
 'diffexpr' 'dex'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Expression which is evaluated to obtain a diff file (either ed-style
 	or unified-style) from two versions of a file.  See |diff-diffexpr|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'diffopt'* *'dip'*
 'diffopt' 'dip'		string	(default "internal,filler,closeoff,indent-heuristic,inline:char,linematch:40")
@@ -2339,6 +2343,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'directory'* *'dir'*
 'directory' 'dir'	string	(default "$XDG_STATE_HOME/nvim/swap//")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	List of directory names for the swap file, separated with commas.
 
 	Possible items:
@@ -2378,9 +2383,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	others on the computer may be able to see the files.
 	Use |:set+=| and |:set-=| when adding or removing directories from the
 	list, this avoids problems if the Nvim default is changed.
-
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'display'* *'dy'*
 'display' 'dy'		string	(default "lastline")
@@ -2478,13 +2480,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'equalprg'* *'ep'*
 'equalprg' 'ep'		string	(default "")
 			global or local to buffer |global-local|
+			Disallowed in |modeline|. |no-modeline-option|
 	External program to use for "=" command.  When this option is empty
 	the internal formatting functions are used; either 'lisp', 'cindent'
 	or 'indentexpr'.
 	Environment variables are expanded |:set_env|.  See |option-backslash|
 	about including spaces and backslashes.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 			*'errorbells'* *'eb'* *'noerrorbells'* *'noeb'*
 'errorbells' 'eb'	boolean	(default off)
@@ -2498,14 +2499,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'errorfile'* *'ef'*
 'errorfile' 'ef'	string	(default "errors.err")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Name of the errorfile for the QuickFix mode (see |:cf|).
 	When the "-q" command-line argument is used, 'errorfile' is set to the
 	following argument.  See |-q|.
 	NOT used for the ":make" command.  See 'makeef' for that.
 	Environment variables are expanded |:set_env|.
 	See |option-backslash| about including spaces and backslashes.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'errorformat'* *'efm'*
 'errorformat' 'efm'	string	(default is very long)
@@ -2624,6 +2624,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	*'exrc'* *'ex'* *'noexrc'* *'noex'* *project-config* *workspace-config*
 'exrc' 'ex'		boolean	(default off)
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Enables project-local configuration. Nvim will execute any .nvim.lua,
 	.nvimrc, or .exrc file found in the |current-directory| and all parent
 	directories (ordered upwards), if the files are in the |trust| list.
@@ -2645,8 +2646,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	3. Create ".nvim.lua" in your project root directory with this line: >lua
 	    vim.cmd[[set runtimepath+=.nvim]]
 <
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 					*'fileencoding'* *'fenc'* *E213*
 'fileencoding' 'fenc'	string	(default "")
@@ -2924,6 +2923,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 					*'findfunc'* *'ffu'* *E1514*
 'findfunc' 'ffu'	string	(default "")
 			global or local to buffer |global-local|
+			Disallowed in |modeline|. |no-modeline-option|
 	Function that is called to obtain the filename(s) for the |:find|
 	command.  When this option is empty, the internal |file-searching|
 	mechanism is used.
@@ -2950,8 +2950,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	It is not allowed to change text or jump to another window while
 	executing the 'findfunc' |textlock|.
 
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 	Examples:
 	>vim
@@ -3214,21 +3212,21 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'formatprg'* *'fp'*
 'formatprg' 'fp'	string	(default "")
 			global or local to buffer |global-local|
-	The name of an external program that will be used to format the lines
-	selected with the |gq| operator.  The program must take the input on
-	stdin and produce the output on stdout.  The Unix program "fmt" is
-	such a program.
-	If the 'formatexpr' option is not empty it will be used instead.
-	Otherwise, if 'formatprg' option is an empty string, the internal
-	format function will be used |C-indenting|.
-	Environment variables are expanded |:set_env|.  See |option-backslash|
-	about including spaces and backslashes.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
+			Disallowed in |modeline|. |no-modeline-option|
+	External program used to format lines with |gq|. Ignored if
+	'formatexpr' is set.
+
+	If empty, the internal |C-indenting| function will be used.
+
+	The program must take input on stdin and produce output on stdout. The
+	Unix program "fmt" is such a program. Environment variables are
+	expanded |:set_env|.  See |option-backslash| about including spaces
+	and backslashes.
 
 					*'fsync'* *'fs'* *'nofsync'* *'nofs'*
 'fsync' 'fs'		boolean	(default on)
 			global or local to buffer |global-local|
+			Disallowed in |modeline|. |no-modeline-option|
 	When on, the OS function fsync() will be called after saving a file
 	(|:write|, |writefile()|, …), |swap-file|, |undo-persistence| and |shada-file|.
 	This flushes the file to disk, ensuring that it is safely written.
@@ -3243,8 +3241,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	This is a |global-local| option, so it can be set per buffer, for
 	example when writing to a slow filesystem.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'grepformat'* *'gfm'*
 'grepformat' 'gfm'	string	(default "%f:%l:%m,%f:%l%m,%f  %l%m")
@@ -3258,6 +3254,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'grepprg'* *'gp'*
 'grepprg' 'gp'		string	(default see below)
 			global or local to buffer |global-local|
+			Disallowed in |modeline|. |no-modeline-option|
 	Program to use for the |:grep| command.
 	Note: if you change this then you must also update 'grepformat'.
 
@@ -3283,9 +3280,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	You can make ripgrep match Vim's case handling using the
 	-i/--ignore-case and -S/--smart-case options. Handle |OptionSet| to
 	dynamically update 'grepprg' when e.g. 'ignorecase' is changed.
-
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 				*'guicursor'* *'gcr'* *E545* *E546* *E548* *E549*
 'guicursor' 'gcr'	string	(default "n-v-c-sm:block,i-ci-ve:ver25,r-cr-o:hor20,t:block-blinkon500-blinkoff500-TermCursor")
@@ -3456,6 +3450,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 'helpfile' 'hf'		string	(default (MS-Windows) "$VIMRUNTIME\doc\help.txt"
                                          (others) "$VIMRUNTIME/doc/help.txt")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Name of the main help file.  All distributed help files should be
 	placed together in one directory.  Additionally, all "doc" directories
 	in 'runtimepath' will be used.
@@ -3463,8 +3458,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	"$VIMRUNTIME/doc/help.txt".  If $VIMRUNTIME is not set, $VIM is also
 	tried.  Also see |$VIMRUNTIME| and |option-backslash| about including
 	spaces and backslashes.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'helpheight'* *'hh'*
 'helpheight' 'hh'	number	(default 20)
@@ -3909,7 +3902,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	  clean         Remove unloaded buffers from the jumplist.
 
-						*'keymap'* *'kmp'*
+						*'keymap'* *'kmp'* *E544*
 'keymap' 'kmp'		string	(default "")
 			local to buffer
 	Name of a keyboard mapping.  See |mbyte-keymap|.
@@ -3933,6 +3926,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'keywordprg'* *'kp'*
 'keywordprg' 'kp'	string	(default ":Man", Windows: ":help")
 			global or local to buffer |global-local|
+			Disallowed in |modeline|. |no-modeline-option|
 	Program to use for the |K| command.  Environment variables are
 	expanded |:set_env|.
 
@@ -3952,12 +3946,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 		set keywordprg=man\ -s
 		set keywordprg=:Man
 <
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 					*'langmap'* *'lmap'* *E357* *E358*
 'langmap' 'lmap'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	This option allows switching your keyboard into a special language
 	mode.  When you are typing text in Insert mode the characters are
 	inserted directly.  When in Normal mode the 'langmap' option takes
@@ -3968,8 +3961,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	mapped in Insert mode.
 	Also consider setting 'langremap' to off, to prevent 'langmap' from
 	applying to characters resulting from a mapping.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 	Example (for Greek, in UTF-8):				*greek*  >vim
 	    set langmap=ΑA,ΒB,ΨC,ΔD,ΕE,ΦF,ΓG,ΗH,ΙI,ΞJ,ΚK,ΛL,ΜM,ΝN,ΟO,ΠP,QQ,ΡR,ΣS,ΤT,ΘU,ΩV,WW,ΧX,ΥY,ΖZ,αa,βb,ψc,δd,εe,φf,γg,ηh,ιi,ξj,κk,λl,μm,νn,οo,πp,qq,ρr,σs,τt,θu,ωv,ςw,χx,υy,ζz
@@ -4267,6 +4258,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'makeef'* *'mef'*
 'makeef' 'mef'		string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Name of the errorfile for the |:make| command (see |:make_makeprg|)
 	and the |:grep| command.
 	When it is empty, an internally generated temp file will be used.
@@ -4276,8 +4268,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	NOT used for the ":cf" command.  See 'errorfile' for that.
 	Environment variables are expanded |:set_env|.
 	See |option-backslash| about including spaces and backslashes.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'makeencoding'* *'menc'*
 'makeencoding' 'menc'	string	(default "")
@@ -4297,6 +4287,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'makeprg'* *'mp'*
 'makeprg' 'mp'		string	(default "make")
 			global or local to buffer |global-local|
+			Disallowed in |modeline|. |no-modeline-option|
 	Program to use for the ":make" command.  See |:make_makeprg|.
 	This option may contain '%' and '#' characters (see  |:_%| and |:_#|),
 	which are expanded to the current and alternate file name.  Use |::S|
@@ -4310,8 +4301,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 <	The placeholder "$*" can be given (even multiple times) to specify
 	where the arguments will be included, for example: >vim
 	    set makeprg=latex\ \\\\nonstopmode\ \\\\input\\{$*}
-<	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
+<
 
 						*'matchpairs'* *'mps'*
 'matchpairs' 'mps'	string	(default "(:),{:},[:]")
@@ -4423,6 +4413,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'mkspellmem'* *'msm'*
 'mkspellmem' 'msm'	string	(default "460000,2000,500")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Parameters for |:mkspell|.  This tunes when to start compressing the
 	word tree.  Compression can be slow when there are many words, but
 	it's needed to avoid running out of memory.  The amount of memory used
@@ -4456,8 +4447,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 <	If you have less than 512 Mbyte |:mkspell| may fail for some
 	languages, no matter what you set 'mkspellmem' to.
 	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 				*'modeline'* *'ml'* *'nomodeline'* *'noml'*
 'modeline' 'ml'		boolean	(default on (off for root))
@@ -4469,11 +4458,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 			*'modelineexpr'* *'mle'* *'nomodelineexpr'* *'nomle'*
 'modelineexpr' 'mle'	boolean	(default off)
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	When on allow some options that are an expression to be set in the
 	modeline.  Check the option for whether it is affected by
 	'modelineexpr'.  Also see |modeline|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'modelines'* *'mls'*
 'modelines' 'mls'	number	(default 5)
@@ -4481,7 +4469,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	If 'modeline' is on 'modelines' gives the number of lines that is
 	checked for set commands.  If 'modeline' is off or 'modelines' is zero
 	no lines are checked.  See |modeline|.
-
 
 			*'modifiable'* *'ma'* *'nomodifiable'* *'noma'* *E21*
 'modifiable' 'ma'	boolean	(default on)
@@ -4756,6 +4743,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'omnifunc'* *'ofu'*
 'omnifunc' 'ofu'	string	(default "")
 			local to buffer
+			Disallowed in |modeline|. |no-modeline-option|
 	This option specifies a function to be used for Insert mode omni
 	completion with CTRL-X CTRL-O. |i_CTRL-X_CTRL-O|
 	See |complete-functions| for an explanation of how the function is
@@ -4764,28 +4752,23 @@ A jump table for the options with a short description can be found at |Q_op|.
 	more information.
 	This option is usually set by a filetype plugin:
 	|:filetype-plugin-on|
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 					*'operatorfunc'* *'opfunc'*
 'operatorfunc' 'opfunc'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	This option specifies a function to be called by the |g@| operator.
 	See |:map-operator| for more info and an example.  The value can be
 	the name of a function, a |lambda| or a |Funcref|.  See
 	|option-value-function| for more information.
 
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
-
 						*'packpath'* *'pp'*
 'packpath' 'pp'		string	(default see 'runtimepath')
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Directories used to find packages.
 	See |packages| and |packages-runtimepath|.
 	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'paragraphs'* *'para'*
 'paragraphs' 'para'	string	(default "IPLPPPQPP TPHPLIPpLpItpplpipbp")
@@ -4796,10 +4779,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'patchexpr'* *'pex'*
 'patchexpr' 'pex'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Expression which is evaluated to apply a patch to a file and generate
 	the resulting new version of the file.  See |diff-patchexpr|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 					*'patchmode'* *'pm'* *E205* *E206*
 'patchmode' 'pm'	string	(default "")
@@ -4953,16 +4935,15 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'pyxversion'* *'pyx'*
 'pyxversion' 'pyx'	number	(default 3)
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Specifies the python version used for pyx* functions and commands
 	|python_x|.  As only Python 3 is supported, this always has the value
 	`3`. Setting any other value is an error.
 
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
-
 					*'quickfixtextfunc'* *'qftf'*
 'quickfixtextfunc' 'qftf'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	This option specifies a function to be used to get the text to display
 	in the quickfix and location list windows.  This can be used to
 	customize the information displayed in the quickfix or location window
@@ -4974,9 +4955,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	It is not allowed to change text or jump to another window while
 	evaluating 'qftf' |textlock|.
-
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'quoteescape'* *'qe'*
 'quoteescape' 'qe'	string	(default "\")
@@ -5182,6 +5160,7 @@ A jump table for the options with a short description can be found at |Q_op|.
                                                $XDG_CONFIG_DIRS[1]/nvim/after,
                                                $XDG_CONFIG_HOME/nvim/after")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	List of directories to be searched for these runtime files:
 	  filetype.lua	filetypes |new-filetype|
 	  autoload/	automatically loaded scripts |autoload-functions|
@@ -5247,8 +5226,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	With |--clean| the home directory entries are not included.
 	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'scroll'* *'scr'*
 'scroll' 'scr'		number	(default half the window height)
@@ -5430,6 +5407,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 					*'shada'* *'sd'* *E526* *E527* *E528*
 'shada' 'sd'		string	(default "!,'100,<50,s10,h,r/tmp/,r/private/")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	When non-empty, the shada file is read upon startup and written
 	when exiting Vim (see |shada-file|).  The string should be a comma-
 	separated list of parameters, each consisting of a single character
@@ -5538,23 +5516,20 @@ A jump table for the options with a short description can be found at |Q_op|.
 	When setting 'shada' from an empty value you can use |:rshada| to
 	load the contents of the file, this is not done automatically.
 
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
-
 						*'shadafile'* *'sdf'*
 'shadafile' 'sdf'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	When non-empty, overrides the file name used for |shada| (viminfo).
 	When equal to "NONE" no shada file will be read or written.
 	This option can be set with the |-i| command line flag.  The |--clean|
 	command line flag sets it to "NONE".
 	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'shell'* *'sh'* *E91*
 'shell' 'sh'		string	(default $SHELL or "sh", Win32: "cmd.exe")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Name of the shell to use for ! and :! commands.  When changing the
 	value also check these options: 'shellpipe', 'shellslash'
 	'shellredir', 'shellquote', 'shellxquote' and 'shellcmdflag'.
@@ -5607,12 +5582,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	   " Workaround (may not be needed in future version of pwsh):
 	   let $__SuppressAnsiEscapeSequences = 1
 <
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'shellcmdflag'* *'shcf'*
 'shellcmdflag' 'shcf'	string	(default "-c"; Windows: "/s /c")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Flag passed to the shell to execute "!" and ":!" commands; e.g.,
 	`bash.exe -c ls` or `cmd.exe /s /c "dir"`.  For MS-Windows, the
 	default is set according to the value of 'shell', to reduce the need
@@ -5622,12 +5596,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	See |option-backslash| about including spaces and backslashes.
 	See |shell-unquoting| which talks about separating this option into
 	multiple arguments.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'shellpipe'* *'sp'*
 'shellpipe' 'sp'	string	(default ">", "| tee", "|& tee" or "2>&1| tee")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	String to be used to put the output of the ":make" command in the
 	error file.  See also |:make_makeprg|.  See |option-backslash| about
 	including spaces and backslashes.
@@ -5657,13 +5630,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Note: When using a pipe like "| tee", you'll lose the exit code of the
 	shell command.  This might be configurable by your shell, look for
 	the pipefail option (for bash and zsh, use ":set -o pipefail").
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'shellquote'* *'shq'*
 'shellquote' 'shq'	string	(default ""; Windows, when 'shell'
                                         contains "sh" somewhere: "\"")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Quoting character(s), put around the command passed to the shell, for
 	the "!" and ":!" commands.  The redirection is kept outside of the
 	quoting.  See 'shellxquote' to include the redirection.  It's
@@ -5673,12 +5645,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	or bash, where it should be "\"".  The default is adjusted according
 	the value of 'shell', to reduce the need to set this option by the
 	user.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'shellredir'* *'srr'*
 'shellredir' 'srr'	string	(default ">", ">&" or ">%s 2>&1")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	String to be used to put the output of a filter command in a temporary
 	file.  See also |:!|.  See |option-backslash| about including spaces
 	and backslashes.
@@ -5698,8 +5669,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	explicitly set before.
 	In the future pipes may be used for filtering and this option will
 	become obsolete (at least for Unix).
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 			*'shellslash'* *'ssl'* *'noshellslash'* *'nossl'*
 'shellslash' 'ssl'	boolean	(default on, Windows: off)
@@ -5734,15 +5703,15 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'shellxescape'* *'sxe'*
 'shellxescape' 'sxe'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	When 'shellxquote' is set to "(" then the characters listed in this
 	option will be escaped with a '^' character.  This makes it possible
 	to execute most external commands with cmd.exe.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'shellxquote'* *'sxq'*
 'shellxquote' 'sxq'	string	(default "", Windows: "\"")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Quoting character(s), put around the command passed to the shell, for
 	the "!" and ":!" commands.  Includes the redirection.  See
 	'shellquote' to exclude the redirection.  It's probably not useful
@@ -5750,8 +5719,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	When the value is '(' then ')' is appended.  When the value is '"('
 	then ')"' is appended.
 	When the value is '(' then also see 'shellxescape'.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 			*'shiftround'* *'sr'* *'noshiftround'* *'nosr'*
 'shiftround' 'sr'	boolean	(default off)
@@ -6082,6 +6049,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'spellfile'* *'spf'*
 'spellfile' 'spf'	string	(default "")
 			local to buffer
+			Disallowed in |modeline|. |no-modeline-option|
 	Name of the word list file where words are added for the |zg| and |zw|
 	commands.  It must end in ".{encoding}.add".  You need to include the
 	path, otherwise the file is placed in the current directory.
@@ -6101,8 +6069,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	'spellfile' is set to it, for entries in 'spelllang' only files
 	without region name will be found.
 	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'spelllang'* *'spl'*
 'spelllang' 'spl'	string	(default "en")
@@ -6147,6 +6113,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'spelloptions'* *'spo'*
 'spelloptions' 'spo'	string	(default "")
 			local to buffer
+			Disallowed in |modeline|. |no-modeline-option|
 	A comma-separated list of options for spell checking:
 	camel		When a word is CamelCased, assume "Cased" is a
 			separate word: every upper-case character in a word
@@ -6157,9 +6124,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 			designated regions of the buffer are spellchecked in
 			this case.
 
-						*'spellsuggest'* *'sps'*
+					*'spellsuggest'* *'sps'* *E5700*
 'spellsuggest' 'sps'	string	(default "best")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Methods used for spelling suggestions.  Both for the |z=| command and
 	the |spellsuggest()| function.  This is a comma-separated list of
 	items:
@@ -6223,8 +6191,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	appear several times in any order.  Example: >vim
 		set sps=file:~/.config/nvim/sugg,best,expr:MySuggest()
 <	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 			*'splitbelow'* *'sb'* *'nosplitbelow'* *'nosb'*
 'splitbelow' 'sb'	boolean	(default off)
@@ -6272,6 +6238,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'statuscolumn'* *'stc'*
 'statuscolumn' 'stc'	string	(default "")
 			local to window
+			Disallowed in |modeline|. |no-modeline-option|
 	When non-empty, this option determines the content of the area to the
 	side of a window, normally containing the fold, sign and number columns.
 	The format of this option is like that of 'statusline'.
@@ -6775,6 +6742,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'tagfunc'* *'tfu'*
 'tagfunc' 'tfu'		string	(default "")
 			local to buffer
+			Disallowed in |modeline|. |no-modeline-option|
 	This option specifies a function to be used to perform tag searches
 	(including |taglist()|).
 	The function gets the tag pattern and should return a List of matching
@@ -6782,8 +6750,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	function and an example.  The value can be the name of a function, a
 	|lambda| or a |Funcref|.  See |option-value-function| for more
 	information.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'taglength'* *'tl'*
 'taglength' 'tl'	number	(default 0)
@@ -6913,13 +6879,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 					*'thesaurusfunc'* *'tsrfu'*
 'thesaurusfunc' 'tsrfu'	string	(default "")
 			global or local to buffer |global-local|
+			Disallowed in |modeline|. |no-modeline-option|
 	This option specifies a function to be used for thesaurus completion
 	with CTRL-X CTRL-T.  |i_CTRL-X_CTRL-T| See |compl-thesaurusfunc|.
 	The value can be the name of a function, a |lambda| or a |Funcref|.
 	See |option-value-function| for more information.
-
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 				*'tildeop'* *'top'* *'notildeop'* *'notop'*
 'tildeop' 'top'		boolean	(default off)
@@ -6972,10 +6936,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 							*'titleold'*
 'titleold'		string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	If not empty, this option will be used to set the window title when
 	exiting.  Only if 'title' is enabled.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 							*'titlestring'*
 'titlestring'		string	(default "")
@@ -7031,6 +6994,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 					*'undodir'* *'udir'* *E5003*
 'undodir' 'udir'	string	(default "$XDG_STATE_HOME/nvim/undo//")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	List of directory names for undo files, separated with commas.
 	See 'backupdir' for details of the format.
 	"." means using the directory of the file.  The undo file name for
@@ -7046,8 +7010,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	given, no further entry is used.
 	See |undo-persistence|.
 	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 	Note that unlike 'directory' and 'backupdir', 'undodir' always acts as
 	though the trailing slashes are present (see 'backupdir' for what this
@@ -7192,6 +7154,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 						*'verbosefile'* *'vfile'*
 'verbosefile' 'vfile'	string	(default "")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	When not empty all messages are written in a file with this name.
 	When the file exists messages are appended.
 	Writing to the file ends when Vim exits or when 'verbosefile' is made
@@ -7200,16 +7163,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 	The difference with |:redir| is that verbose messages are not
 	displayed when 'verbosefile' is set.
 	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'viewdir'* *'vdir'*
 'viewdir' 'vdir'	string	(default "$XDG_STATE_HOME/nvim/view//")
 			global
+			Disallowed in |modeline|. |no-modeline-option|
 	Name of the directory where to store files for |:mkview|.
 	Environment variables are expanded |:set_env|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
 
 						*'viewoptions'* *'vop'*
 'viewoptions' 'vop'	string	(default "folds,cursor,curdir")
@@ -7666,6 +7626,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 	This option is only checked when making a window smaller.  Don't use a
 	large number, it will cause errors when opening more than a few
 	windows.  A value of 0 to 12 is reasonable.
+
+				*'winpinned'* *'wp'* *'nowinpinned'* *'nowp'*
+'winpinned' 'wp'	boolean	(default off)
+			local to window  |local-noglobal|
+	If enabled, the window is pinned and will not be closed by |:only|
+	and |:fclose|. Only commands specifically targeting the window can
+	close it.
 
 						*'winwidth'* *'wiw'* *E592*
 'winwidth' 'wiw'	number	(default 20)

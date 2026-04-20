@@ -889,15 +889,17 @@ Create or update a progress-message by calling |nvim_echo()| with
 existing progress-message.
 
 Events: ~
-    • msg_show |ui-messages| event is fired for ext-ui upon creation/update of a
-    progress-message
-    • Updating or creating a progress message also triggers the |Progress| autocommand.
+    • msg_show |ui-messages| event is fired for ext-ui upon creation/update of
+      a progress-message
+    • Updating or creating a progress message also triggers the |Progress|
+      autocommand.
 
 Example: >lua
     local progress = {
       kind = 'progress',
-      status = 'running',
       percent = 10,
+      source = 'my-plugin',
+      status = 'running',
       title = 'term',
     }
     progress.id = vim.api.nvim_echo({ { 'searching...' } }, true, progress)

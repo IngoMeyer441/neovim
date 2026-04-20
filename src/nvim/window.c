@@ -2848,7 +2848,7 @@ int win_close(win_T *win, bool free_buf, bool force)
       // close the last window until the there are no floating windows
       while (lastwin->w_floating) {
         // `force` flag isn't actually used when closing a floating window.
-        if (win_close(lastwin, free_buf, true) == FAIL) {
+        if (win_close(lastwin, !buf_hide(lastwin->w_buffer), true) == FAIL) {
           // If closing the window fails give up, to avoid looping forever.
           return FAIL;
         }
@@ -3214,7 +3214,7 @@ bool win_close_othertab(win_T *win, int free_buf, tabpage_T *tp, bool force)
       // close the last window until the there are no floating windows
       while (tp->tp_lastwin->w_floating) {
         // `force` flag isn't actually used when closing a floating window.
-        if (!win_close_othertab(tp->tp_lastwin, free_buf, tp, true)) {
+        if (!win_close_othertab(tp->tp_lastwin, !buf_hide(tp->tp_lastwin->w_buffer), tp, true)) {
           // If closing the window fails give up, to avoid looping forever.
           goto leave_open;
         }
@@ -3369,7 +3369,7 @@ static win_T *win_free_mem(win_T *win, int *dirp, tabpage_T *tp)
   return wp;
 }
 
-#if defined(EXITFREE)
+#ifdef EXITFREE
 void win_free_all(void)
 {
   // avoid an error for switching tabpage with the cmdline window open
@@ -4248,10 +4248,12 @@ static int frame_minwidth(frame_T *topfrp, win_T *next_curwin)
 /// Buffers in the other windows become hidden if 'hidden' is set, or '!' is
 /// used and the buffer was modified.
 ///
-/// Used by ":bdel" and ":only".
+/// Used by ":tabclose" and ":only".
 ///
-/// @param forceit  always hide all other windows
-void close_others(int message, int forceit)
+/// @param message       if true, display error messages
+/// @param forceit       always hide all other windows
+/// @param ignore_pinned if true, also close pinned windows (for :tabclose)
+void close_others(int message, int forceit, bool ignore_pinned)
 {
   win_T *const old_curwin = curwin;
 
@@ -4280,7 +4282,8 @@ void close_others(int message, int forceit)
       curbuf = curwin->w_buffer;
     }
 
-    if (wp == curwin) {                 // don't close current window
+    // don't close current window or pinned windows
+    if (wp == curwin || (wp->w_p_wp && !ignore_pinned)) {
       continue;
     }
 
@@ -4312,7 +4315,17 @@ void close_others(int message, int forceit)
   }
 
   if (message && !ONE_WINDOW) {
-    emsg(_("E445: Other window contains changes"));
+    // Check if remaining windows are non-pinned
+    bool has_non_pinned = false;
+    for (win_T *wp = firstwin; wp != NULL; wp = wp->w_next) {
+      if (wp != curwin && !wp->w_p_wp) {
+        has_non_pinned = true;
+        break;
+      }
+    }
+    if (has_non_pinned) {
+      emsg(_("E445: Other window contains changes"));
+    }
   }
 }
 

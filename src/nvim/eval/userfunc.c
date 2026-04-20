@@ -1460,7 +1460,7 @@ void set_current_funccal(funccall_T *fc)
   current_funccal = fc;
 }
 
-#if defined(EXITFREE)
+#ifdef EXITFREE
 void free_all_functions(void)
 {
   hashitem_T *hi;
@@ -1741,7 +1741,7 @@ int call_func(const char *funcname, int len, typval_T *rettv, int argcount_in, t
       if (len > 0) {
         error = FCERR_NONE;
         argv_add_base(funcexe->fe_basetv, &argvars, &argcount, argv, &argv_base);
-        nlua_typval_call(funcname, (size_t)len, argvars, argcount, rettv);
+        nlua_call_typval(funcname, (size_t)len, argvars, argcount, rettv);
       } else {
         // v:lua was called directly; show its name in the emsg
         XFREE_CLEAR(name);
@@ -1827,7 +1827,7 @@ int call_simple_luafunc(const char *funcname, size_t len, typval_T *rettv)
 
   typval_T argvars[1];
   argvars[0].v_type = VAR_UNKNOWN;
-  nlua_typval_call(funcname, len, argvars, 0, rettv);
+  nlua_call_typval(funcname, len, argvars, 0, rettv);
   return OK;
 }
 

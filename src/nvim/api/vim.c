@@ -92,10 +92,15 @@
 /// Gets a highlight group by name
 ///
 /// similar to |hlID()|, but allocates a new ID if not present.
-Integer nvim_get_hl_id_by_name(String name)
+/// @param[out] err Error details, if any
+Integer nvim_get_hl_id_by_name(String name, Error *err)
   FUNC_API_SINCE(7)
 {
-  return syn_check_group(name.data, name.size);
+  int ret;
+  TRY_WRAP(err, {
+    ret = syn_check_group(name.data, name.size);
+  });
+  return ret;
 }
 
 /// Gets all or specific highlight groups in a namespace.
@@ -120,12 +125,8 @@ DictAs(get_hl_info) nvim_get_hl(Integer ns_id, Dict(get_highlight) *opts, Arena 
   return ns_get_hl_defs((NS)ns_id, opts, arena, err);
 }
 
-/// Sets a highlight group.
-///
-/// @note Unlike the `:highlight` command which can update a highlight group,
-///       this function completely replaces the definition. For example:
-///       `nvim_set_hl(0, 'Visual', {})` will clear the highlight group
-///       'Visual'.
+/// Sets a highlight group. By default, replaces the entire definition (e.g. `nvim_set_hl(0, 'Visual', {})`
+/// will clear the "Visual" group), unless `update` is specified.
 ///
 /// @note The fg and bg keys also accept the string values `"fg"` or `"bg"`
 ///       which act as aliases to the corresponding foreground and background
@@ -154,17 +155,17 @@ DictAs(get_hl_info) nvim_get_hl(Integer ns_id, Dict(get_highlight) *opts, Arena 
 ///                - ctermfg: Sets foreground of cterm color |ctermfg|
 ///                - default: boolean Don't override existing definition |:hi-default|
 ///                - dim: boolean
-///                - fg: color name or "#RRGGBB", see note.
+///                - fg: Color name or "#RRGGBB", see note.
 ///                - fg_indexed: boolean (default false) If true, fg is a terminal palette index (0-255).
 ///                - font: GUI font name (string). Sets |highlight-font|. Use "NONE" to clear.
-///                - force: if true force update the highlight group when it exists.
+///                - force: boolean (default false) Update the highlight group even if it already exists.
 ///                - italic: boolean
 ///                - link: Name of highlight group to link to. |:hi-link|
-///                - link_global: Like "link", but always resolved in the global (ns=0) namespace.
+///                - link_global: Like "link", but always resolved in the global namespace (ns=0).
 ///                - nocombine: boolean
 ///                - overline: boolean
 ///                - reverse: boolean
-///                - sp: color name or "#RRGGBB"
+///                - sp: Color name or "#RRGGBB"
 ///                - standout: boolean
 ///                - strikethrough: boolean
 ///                - undercurl: boolean
@@ -177,10 +178,13 @@ DictAs(get_hl_info) nvim_get_hl(Integer ns_id, Dict(get_highlight) *opts, Arena 
 void nvim_set_hl(uint64_t channel_id, Integer ns_id, String name, Dict(highlight) *val, Error *err)
   FUNC_API_SINCE(7)
 {
-  int hl_id = syn_check_group(name.data, name.size);
-  VALIDATE_S((hl_id != 0), "highlight name", name.data, {
-    return;
+  int hl_id;
+  TRY_WRAP(err, {
+    hl_id = syn_check_group(name.data, name.size);
   });
+  if (ERROR_SET(err) || hl_id == 0) {
+    return;
+  }
   int link_id = -1;
 
   // Setting URLs directly through highlight attributes is not supported
@@ -958,22 +962,22 @@ Buffer nvim_get_current_buf(void)
   return curbuf->handle;
 }
 
-/// Sets the current window's buffer to `buffer`.
+/// Sets the current window's buffer to `buf`.
 ///
-/// @param buffer   Buffer id
+/// @param buf   Buffer id
 /// @param[out] err Error details, if any
-void nvim_set_current_buf(Buffer buffer, Error *err)
+void nvim_set_current_buf(Buffer buf, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_TEXTLOCK
 {
-  buf_T *buf = find_buffer_by_handle(buffer, err);
+  buf_T *b = find_buffer_by_handle(buf, err);
 
-  if (!buf) {
+  if (!b) {
     return;
   }
 
   TRY_WRAP(err, {
-    do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD, buf->b_fnum, 0);
+    do_buffer(DOBUF_GOTO, DOBUF_FIRST, FORWARD, b->b_fnum, 0);
   });
 }
 
@@ -1009,23 +1013,23 @@ Window nvim_get_current_win(void)
 
 /// Navigates to the given window (and tabpage, implicitly).
 ///
-/// @param window |window-ID| to focus
+/// @param win |window-ID| to focus
 /// @param[out] err Error details, if any
-void nvim_set_current_win(Window window, Error *err)
+void nvim_set_current_win(Window win, Error *err)
   FUNC_API_SINCE(1)
   FUNC_API_TEXTLOCK
 {
-  win_T *win = find_window_by_handle(window, err);
+  win_T *w = find_window_by_handle(win, err);
 
-  if (!win) {
+  if (!w) {
     return;
   }
 
   TRY_WRAP(err, {
-    if (win->w_buffer != curbuf) {
+    if (w->w_buffer != curbuf) {
       reset_VIsual_and_resel();
     }
-    goto_tabpage_win(win_find_tabpage(win), win);
+    goto_tabpage_win(win_find_tabpage(w), w);
   });
 }
 
@@ -1131,7 +1135,7 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
 /// end, { desc = 'Highlights ANSI termcodes in curbuf' })
 /// ```
 ///
-/// @param buffer Buffer to use. Buffer contents (if any) will be written
+/// @param buf Buffer to use. Buffer contents (if any) will be written
 ///               to the PTY.
 /// @param opts   Optional parameters.
 ///          - on_input: Lua callback for input sent, i e keypresses in terminal
@@ -1143,28 +1147,28 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
 ///          - force_crlf: (boolean, default true) Convert "\n" to "\r\n".
 /// @param[out] err Error details, if any
 /// @return Channel id, or 0 on error
-Integer nvim_open_term(Buffer buffer, Dict(open_term) *opts, Error *err)
+Integer nvim_open_term(Buffer buf, Dict(open_term) *opts, Error *err)
   FUNC_API_SINCE(7)
   FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
-  buf_T *buf = api_buf_ensure_loaded(buffer, err);
-  if (!buf) {
+  buf_T *b = api_buf_ensure_loaded(buf, err);
+  if (!b) {
     return 0;
   }
 
-  if (buf == cmdwin_buf) {
+  if (b == cmdwin_buf) {
     api_set_error(err, kErrorTypeException, "%s", e_cmdwin);
     return 0;
   }
 
   bool may_read_buffer = true;
-  if (buf->terminal) {
-    if (terminal_running(buf->terminal)) {
+  if (b->terminal) {
+    if (terminal_running(b->terminal)) {
       api_set_error(err, kErrorTypeException,
-                    "Terminal already connected to buffer %d", buf->handle);
+                    "Terminal already connected to buffer %d", b->handle);
       return 0;
     }
-    buf_close_terminal(buf);
+    buf_close_terminal(b);
     may_read_buffer = false;
   }
 
@@ -1194,12 +1198,12 @@ Integer nvim_open_term(Buffer buffer, Dict(open_term) *opts, Error *err)
   // Read existing buffer contents (if any)
   StringBuilder contents = KV_INITIAL_VALUE;
   if (may_read_buffer) {
-    read_buffer_into(buf, 1, buf->b_ml.ml_line_count, &contents);
+    read_buffer_into(b, 1, b->b_ml.ml_line_count, &contents);
   }
 
   channel_incref(chan);
-  chan->term = terminal_alloc(buf, topts);
-  terminal_open(&chan->term, buf);
+  chan->term = terminal_alloc(b, topts);
+  terminal_open(&chan->term, b);
   if (chan->term != NULL) {
     terminal_check_size(chan->term);
   }
@@ -1377,6 +1381,9 @@ Boolean nvim_paste(uint64_t channel_id, String data, Boolean crlf, Integer phase
   });
   if (phase == -1 || phase == 1) {  // Start of paste-stream.
     cancelled = false;
+    if (curbuf->terminal) {
+      terminal_set_streamed_paste(curbuf->terminal, true);
+    }
   } else if (cancelled) {
     // Skip remaining chunks.  Report error only once per "stream".
     goto theend;
@@ -1389,6 +1396,9 @@ Boolean nvim_paste(uint64_t channel_id, String data, Boolean crlf, Integer phase
   // vim.paste() decides if client should cancel.
   if (ERROR_SET(err) || (rv.type == kObjectTypeBoolean && !rv.data.boolean)) {
     cancelled = true;
+  }
+  if ((phase == -1 || phase == 3 || cancelled) && curbuf->terminal) {
+    terminal_set_streamed_paste(curbuf->terminal, false);
   }
   if (!cancelled && (phase == -1 || phase == 1)) {
     paste_store(channel_id, kFalse, NULL_STRING, crlf);
@@ -1585,7 +1595,7 @@ DictAs(get_mode) nvim_get_mode(Arena *arena)
 ///
 /// @param  mode       Mode short-name ("n", "i", "v", ...)
 /// @returns Array of |maparg()|-like dictionaries describing mappings.
-///          The "buffer" key is always zero.
+///          The "buf" key is always zero.
 ArrayOf(DictAs(get_keymap)) nvim_get_keymap(String mode, Arena *arena)
   FUNC_API_SINCE(3)
 {
@@ -1781,7 +1791,8 @@ void nvim__chan_set_detach(uint64_t channel_id, Boolean detach, Error *err)
 ///    - "pty"      (optional) Name of pseudoterminal. On a POSIX system this is a device path like
 ///                 "/dev/pts/1". If unknown, the key will still be present if a pty is used (e.g.
 ///                 for conpty on Windows).
-///    - "buffer"   (optional) Buffer connected to |terminal| instance.
+///    - "buf"      (optional) Buffer connected to |terminal| instance.
+///    - "buffer"   (optional) Deprecated alias for `buf`.
 ///    - "client"   (optional) Info about the peer (client on the other end of the channel), as set
 ///                 by |nvim_set_client_info()|.
 ///    - "exitcode" (optional) Exit code of the |terminal| process.

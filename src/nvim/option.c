@@ -572,7 +572,7 @@ static const char *find_dup_item(const char *origval, const char *newval, const 
   return NULL;
 }
 
-#if defined(EXITFREE)
+#ifdef EXITFREE
 /// Free all options.
 void free_all_options(void)
 {
@@ -1209,7 +1209,7 @@ static int validate_opt_idx(win_T *win, OptIndex opt_idx, int opt_flags, uint32_
 
   // Disallow changing some options from modelines.
   if (opt_flags & OPT_MODELINE) {
-    if (flags & (kOptFlagSecure | kOptFlagNoML)) {
+    if (flags & kOptFlagSecure) {
       *errmsg = e_not_allowed_in_modeline;
       return FAIL;
     }
@@ -2393,7 +2393,7 @@ static const char *did_set_modified(optset_T *args)
     save_file_ff(buf);  // Buffer is unchanged
   }
   redraw_titles();
-  buf->b_modified_was_set = (int)args->os_newval.boolean;
+  buf->b_modified_was_set = !!(int)args->os_newval.boolean;
   return NULL;
 }
 
@@ -4859,6 +4859,8 @@ void *get_varp_from(vimoption_T *p, buf_T *buf, win_T *win)
     return &(win->w_p_wfh);
   case kOptWinfixwidth:
     return &(win->w_p_wfw);
+  case kOptWinpinned:
+    return &(win->w_p_wp);
   case kOptPreviewwindow:
     return &(win->w_p_pvw);
   case kOptLhistory:
@@ -5764,7 +5766,7 @@ void set_context_in_set_cmd(expand_T *xp, char *arg, int opt_flags)
           s--;
         }
         if ((*p == ' ' && ((xp->xp_backslash & XP_BS_THREE) && (p - s) < 3))
-#if defined(BACKSLASH_IN_FILENAME)
+#ifdef BACKSLASH_IN_FILENAME
             || (*p == ',' && (flags & kOptFlagComma) && (p - s) < 1)
 #else
             || (*p == ',' && (flags & kOptFlagComma) && (p - s) < 2)

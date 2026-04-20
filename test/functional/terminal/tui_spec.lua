@@ -23,7 +23,6 @@ local ok = t.ok
 local read_file = t.read_file
 local fn = n.fn
 local api = n.api
-local is_ci = t.is_ci
 local is_os = t.is_os
 local new_pipename = n.new_pipename
 local set_session = n.set_session
@@ -1767,11 +1766,8 @@ describe('TUI', function()
   end)
 
   it('paste: terminal mode', function()
-    if is_ci('github') then
-      pending('tty-test complains about not owning the terminal -- actions/runner#241')
-    end
     child_exec_lua('vim.o.statusline="^^^^^^^"')
-    child_exec_lua('vim.cmd.terminal(...)', testprg('tty-test'))
+    child_exec_lua('vim.fn.jobstart({ ... }, { term = true })', testprg('tty-test'))
     feed_data('i')
     screen:expect([[
       tty ready                                         |
@@ -2277,9 +2273,7 @@ describe('TUI', function()
   end)
 
   it('forwards :term palette colors with termguicolors', function()
-    if is_ci('github') then
-      pending('tty-test complains about not owning the terminal -- actions/runner#241')
-    end
+    t.skip(is_os('win'), 'FIXME: wrong behavior on Windows')
     screen:set_rgb_cterm(true)
     screen:set_default_attr_ids({
       [1] = { { reverse = true }, { reverse = true } },
@@ -2313,7 +2307,7 @@ describe('TUI', function()
 
     child_exec_lua('vim.o.statusline="^^^^^^^"')
     child_exec_lua('vim.o.termguicolors=true')
-    child_exec_lua('vim.cmd.terminal(...)', testprg('tty-test'))
+    child_exec_lua('vim.fn.jobstart({ ... }, { term = true })', testprg('tty-test'))
     screen:expect([[
       ^tty ready                                         |
                                                         |*3
@@ -2771,7 +2765,7 @@ describe('TUI', function()
       local buf = vim.api.nvim_get_current_buf()
       _G.urls = {}
       vim.api.nvim_create_autocmd('TermRequest', {
-        buffer = buf,
+        buf = buf,
         callback = function(ev)
           local req = ev.data.sequence
           if not req then
@@ -2820,7 +2814,7 @@ describe('TUI', function()
         end,
       })
       vim.api.nvim_create_autocmd('InsertEnter', {
-        buffer = 0,
+        buf = 0,
         callback = function()
           _G.result = vim.wait(3000, function()
             local expected = '\027P1+r5463'

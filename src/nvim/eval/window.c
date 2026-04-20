@@ -36,7 +36,6 @@
 
 #include "eval/window.c.generated.h"
 
-static const char *e_invalwindow = N_("E957: Invalid window number");
 static const char e_cannot_resize_window_in_another_tab_page[]
   = N_("E1308: Cannot resize a window in another tab page");
 
@@ -870,10 +869,10 @@ void f_winrestcmd(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
         continue;
       }
       size_t buflen = vim_snprintf_safelen(buf, sizeof(buf),
-                                           "%dresize %d|", winnr, wp->w_height);
+                                           ":%dresize %d|", winnr, wp->w_height);
       ga_concat_len(&ga, buf, buflen);
       buflen = vim_snprintf_safelen(buf, sizeof(buf),
-                                    "vert %dresize %d|", winnr, wp->w_width);
+                                    "vert :%dresize %d|", winnr, wp->w_width);
       ga_concat_len(&ga, buf, buflen);
       winnr++;
     }

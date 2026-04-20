@@ -242,7 +242,7 @@ const char *did_set_tagfunc(optset_T *args)
   return retval == FAIL ? e_invarg : NULL;
 }
 
-#if defined(EXITFREE)
+#ifdef EXITFREE
 void free_tagfunc_option(void)
 {
   callback_free(&tfu_cb);
@@ -2316,7 +2316,7 @@ int find_tags(char *pat, int *num_matches, char ***matchesp, int flags, int minc
 
   // uncrustify:on
 
-  int help_save = curbuf->b_help;
+  const bool help_save = curbuf->b_help;
 
   findtags_state_init(&st, pat, flags, mincount);
 
@@ -2452,7 +2452,7 @@ static bool found_tagfile_cb(int num_fnames, char **fnames, bool all, void *cook
   return num_fnames > 0;
 }
 
-#if defined(EXITFREE)
+#ifdef EXITFREE
 void free_tag_stuff(void)
 {
   ga_clear_strings(&tag_fnames);
@@ -3076,7 +3076,9 @@ static char *expand_tag_fname(char *fname, char *const tag_fname, const bool exp
   expand_T xpc;
 
   // Expand file name (for environment variables) when needed.
-  if (expand && path_has_wildcard(fname)) {
+  // Disallow backticks, they could execute arbitrary shell
+  // commands.  This is not needed for tag filenames.
+  if (expand && path_has_wildcard(fname) && vim_strchr(fname, '`') == NULL) {
     ExpandInit(&xpc);
     xpc.xp_context = EXPAND_FILES;
     expanded_fname = ExpandOne(&xpc, fname, NULL,

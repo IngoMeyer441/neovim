@@ -1700,7 +1700,10 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
 
       if (wp == cmdwin_win) {
         // Draw the cmdline character.
-        draw_col_fill(&wlv, schar_from_ascii(cmdwin_type), 1, win_hl_attr(wp, HLF_AT));
+        draw_col_fill(&wlv,
+                      schar_from_ascii(wlv.row == wlv.startrow ? cmdwin_type : ' '),
+                      1,
+                      wlv.row == wlv.startrow ? win_hl_attr(wp, HLF_AT) : 0);
       }
 
       if (wlv.filler_todo > 0) {
@@ -3105,7 +3108,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
 end_check:
     // At end of screen line and there is more to come: Display the line
     // so far.  If there is no more to display it is caught above.
-    if (wlv.col >= view_width && (!has_foldtext || virt_line_index >= 0)
+    if (wlv.col >= view_width && (!has_foldtext || wlv.filler_todo > 0)
         && (wlv.col <= leftcols_width
             || *ptr != NUL
             || wlv.filler_todo > 0
