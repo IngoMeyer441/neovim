@@ -88,7 +88,9 @@ Defaults                                            *defaults* *nvim-defaults*
   host terminal
 - 'ttimeout' is enabled
 - 'ttimeoutlen' defaults to 50
-- 'ttyfast' is always set
+- 'ttyfast' is set by default, but it can be unset during startup by setting
+  the environment variable `NVIM_NOTTYFAST` to adjust the startup sequence for
+  slow environments (such as ssh).
 - 'undodir' defaults to ~/.local/state/nvim/undo// (|xdg|), auto-created
 - 'viewoptions' includes "unix,slash", excludes "options"
 - 'viminfo' includes "!"
@@ -321,6 +323,7 @@ Commands:
 - User commands can support |:command-preview| to show results as you type
 - |:write| with "++p" flag creates parent directories.
 - |:update| command writes new file buffers even when unmodified.
+- |:uptime|
 
 Editor:
 - |prompt-buffer| supports multiline input/paste, undo/redo, and o/O normal
@@ -388,6 +391,7 @@ Input/Mappings:
 Normal commands:
 - |gO| shows a filetype-defined "outline" of the current buffer.
 - |Q| replays the last recorded macro instead of switching to Ex mode (|gQ|).
+- |ZR| performs |:restart|
 
 Options:
 
@@ -875,7 +879,6 @@ Options:
 - *'toolbar'* *'tb'*
 - *'toolbariconsize'* *'tbis'*
 - *'ttybuiltin'* *'tbi'* *'nottybuiltin'* *'notbi'*
-- *'ttyfast'* *'tf'* *'nottyfast'* *'notf'*
 - *'ttymouse'* *'ttym'*
 - *'ttyscroll'* *'tsl'*
 - *'ttytype'* *'tty'*

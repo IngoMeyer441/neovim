@@ -981,18 +981,18 @@ static void build_cmdline_str(char **cmdlinep, exarg_T *eap, CmdParseInfo *cmdin
 /// @param  cmd     Replacement command to execute when this user command is executed. When called
 ///                 from Lua, the command can also be a Lua function. The function is called with a
 ///                 single table argument that contains the following keys:
-///                 - name: (string) Command name
 ///                 - args: (string) The args passed to the command, if any [<args>]
+///                 - bang: (boolean) "true" if the command was executed with a ! modifier [<bang>]
+///                 - count: (number) Any count supplied [<count>]
 ///                 - fargs: (table) The args split by unescaped whitespace (when more than one
 ///                 argument is allowed), if any [<f-args>]
-///                 - nargs: (string) Number of arguments |:command-nargs|
-///                 - bang: (boolean) "true" if the command was executed with a ! modifier [<bang>]
 ///                 - line1: (number) The starting line of the command range [<line1>]
 ///                 - line2: (number) The final line of the command range [<line2>]
-///                 - range: (number) The number of items in the command range: 0, 1, or 2 [<range>]
-///                 - count: (number) Any count supplied [<count>]
-///                 - reg: (string) The optional register, if specified [<reg>]
 ///                 - mods: (string) Command modifiers, if any [<mods>]
+///                 - name: (string) Command name
+///                 - nargs: (string) Number of arguments |:command-nargs|
+///                 - range: (number) The number of items in the command range: 0, 1, or 2 [<range>]
+///                 - reg: (string) The optional register, if specified [<reg>]
 ///                 - smods: (table) Command modifiers in a structured format. Has the same
 ///                 structure as the "mods" key of |nvim_parse_cmd()|.
 /// @param  opts    Optional flags
@@ -1279,7 +1279,8 @@ void create_user_command(uint64_t channel_id, String name, Union(String, LuaRef)
     if (uc_add_command(name.data, name.size, rep, argt, def, flags, context, compl_arg,
                        compl_luaref, preview_luaref, addr_type_arg, luaref, force) != OK) {
       api_set_error(err, kErrorTypeException, "Failed to create user command");
-      // Do not goto err, since uc_add_command now owns luaref, compl_luaref, and compl_arg
+      // Do not goto err, since uc_add_command now owns luaref, compl_luaref, preview_luaref,
+      // and compl_arg
     }
   });
 
@@ -1288,6 +1289,7 @@ void create_user_command(uint64_t channel_id, String name, Union(String, LuaRef)
 err:
   NLUA_CLEAR_REF(luaref);
   NLUA_CLEAR_REF(compl_luaref);
+  NLUA_CLEAR_REF(preview_luaref);
   xfree(compl_arg);
 }
 /// Gets a map of global (non-buffer-local) Ex commands.

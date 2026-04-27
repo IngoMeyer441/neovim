@@ -22,8 +22,10 @@ local banned_verbs = {
   delete = 'del',
   disable = 'enable',
   exit = 'cancel', -- or "stop"
+  -- format = 'fmt',
   list = 'get',
   notify = 'print', -- or "echo"
+  pretty = 'fmt',
   remove = 'del',
   toggle = 'enable',
 }
@@ -221,6 +223,48 @@ function M.lint_names(source, api_funs, keysets, classes)
   if #errors > 0 then
     table.sort(errors)
     error('lint_names(): found banned parameter/key names:\n  ' .. table.concat(errors, '\n  '))
+  end
+end
+
+--- Checks that markdown list items (`- name :` or `- {name}`) in parameter/field
+--- descriptions are in sorted order.
+---
+--- This is for "quasi-keysets" defined as markdown lists in docstrings. Ideally they would be
+--- defined as a luals `@class` or a API keyset, but sometimes that isn't possible.
+---
+--- @param source string Source filename.
+--- @param funs {name:string, params:{name:string, desc?:string}[]}[]
+function M.lint_quasi_keysets(source, funs)
+  local errors = {} --- @type string[]
+
+  for _, fun in ipairs(funs) do
+    for _, p in ipairs(fun.params or {}) do
+      if p.desc then
+        local prev = nil --- @type string?
+        for name in p.desc:gmatch('\n%- ([%w_]+)') do
+          -- Sort underscore-prefixed keys (e.g. "_cmdline_offset") at the end.
+          local prev_key = prev and prev:gsub('^_', '~') or nil
+          local name_key = name:gsub('^_', '~')
+          if prev_key and name_key < prev_key then
+            errors[#errors + 1] = fmt(
+              '%s: %s(): param "%s": key "%s" should come before "%s" (sort alphabetically)',
+              source,
+              fun.name,
+              p.name,
+              name,
+              prev
+            )
+          end
+          prev = name
+        end
+      end
+    end
+  end
+
+  if #errors > 0 then
+    error(
+      'lint_quasi_keysets(): unsorted keys in doc comments:\n  ' .. table.concat(errors, '\n  ')
+    )
   end
 end
 

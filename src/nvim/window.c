@@ -5532,6 +5532,7 @@ win_T *win_alloc(win_T *after, bool hidden)
 
   // use global option for global-local options
   new_wp->w_allbuf_opt.wo_so = new_wp->w_p_so = -1;
+  new_wp->w_allbuf_opt.wo_sop = new_wp->w_p_sop = -1;
   new_wp->w_allbuf_opt.wo_siso = new_wp->w_p_siso = -1;
 
   // We won't calculate w_fraction until resizing the window
@@ -6868,7 +6869,7 @@ static void win_fix_cursor(bool normal)
 
   wp->w_do_win_fix_cursor = false;
   // Determine valid cursor range.
-  int so = MIN(wp->w_view_height / 2, get_scrolloff_value(wp));
+  int so = (int)MIN(wp->w_view_height / 2, get_scrolloff_value(wp));
   linenr_T lnum = wp->w_cursor.lnum;
 
   wp->w_cursor.lnum = wp->w_topline;

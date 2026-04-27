@@ -5488,8 +5488,8 @@ vim.go.sj = vim.go.scrolljump
 --- Minimal number of screen lines to keep above and below the cursor.
 --- This will make some context visible around where you are working.  If
 --- you set it to a very large value (999) the cursor line will always be
---- in the middle of the window (except at the start or end of the file or
---- when long lines wrap).
+--- in the middle of the window (except at the start or end of the file,
+--- see 'scrolloffpad', or when long lines wrap).
 --- After using the local value, go back the global value with one of
 --- these two:
 ---
@@ -5506,6 +5506,38 @@ vim.wo.scrolloff = vim.o.scrolloff
 vim.wo.so = vim.wo.scrolloff
 vim.go.scrolloff = vim.o.scrolloff
 vim.go.so = vim.go.scrolloff
+
+--- When 'scrolloff' and 'scrolloffpad' are greater than zero, allow
+--- the cursor to remain centered when at the end of the file.
+--- Normally, 'scrolloff' will not keep the cursor centered at the
+--- end of the file.
+---
+--- A value of 0 disables this feature.  Any value above 0 enables it.
+--- For a window-local value, -1 means to use the global value.
+--- Values below -1 are invalid.
+---
+--- Example:
+---
+--- ```vim
+--- 	:set scrolloff=99 scrolloffpad=1
+--- ```
+---
+--- After using the local value, go back the global value with one of
+--- these two:
+---
+--- ```vim
+--- 	setlocal scrolloffpad<
+--- 	setlocal scrolloffpad=-1
+--- ```
+---
+---
+--- @type integer
+vim.o.scrolloffpad = 0
+vim.o.sop = vim.o.scrolloffpad
+vim.wo.scrolloffpad = vim.o.scrolloffpad
+vim.wo.sop = vim.wo.scrolloffpad
+vim.go.scrolloffpad = vim.o.scrolloffpad
+vim.go.sop = vim.go.scrolloffpad
 
 --- This is a comma-separated list of words that specifies how
 --- 'scrollbind' windows should behave.  'sbo' stands for ScrollBind
@@ -6018,8 +6050,9 @@ vim.o.sw = vim.o.shiftwidth
 vim.bo.shiftwidth = vim.o.shiftwidth
 vim.bo.sw = vim.bo.shiftwidth
 
---- This option helps to avoid all the `hit-enter` prompts caused by file
---- messages, for example with CTRL-G, and to avoid some other messages.
+--- Controls display of file messages (e.g. CTRL-G) and various other
+--- messages.
+---
 --- It is a list of flags:
 ---  flag	meaning when present	~
 ---   l	use "999L, 888B" instead of "999 lines, 888 bytes"	*shm-l*
@@ -7472,7 +7505,7 @@ vim.go.titleold = vim.o.titleold
 --- The default (empty) behaviour is equivalent to:
 ---
 --- ```vim
----     set titlestring=%t%(\ %M%)%(\ \(%{expand(\"%:~:h\")}\)%)%a\ -\ Nvim
+---     set titlestring=%t%(\ %M%)%(\ \(%{expand('%:p:~:h')}\)%)%a\ -\ Nvim
 --- ```
 ---
 --- Example:
@@ -7527,6 +7560,27 @@ vim.o.ttimeoutlen = 50
 vim.o.ttm = vim.o.ttimeoutlen
 vim.go.ttimeoutlen = vim.o.ttimeoutlen
 vim.go.ttm = vim.go.ttimeoutlen
+
+--- Enables Nvim `TUI` features which assume a fast (usually local) host
+--- terminal. During startup, Nvim queries the terminal (for 'background'
+--- detection, etc.) and must wait for a response (or timeout).
+---
+--- If your terminal environment is slow (e.g. remote SSH), or broken
+--- (doesn't respond to queries), Nvim startup may be slower. Therefore
+--- you can disable this option by setting the `$NVIM_NOTTYFAST`
+--- environment variable before starting Nvim:
+--- ```
+--- 	NVIM_NOTTYFAST=1 nvim
+--- ```
+---
+--- The queries are performed early, before `--cmd` and user `config`, so
+--- `:set nottyfast` in your config happens too late.
+---
+--- @type boolean
+vim.o.ttyfast = true
+vim.o.tf = vim.o.ttyfast
+vim.go.ttyfast = vim.o.ttyfast
+vim.go.tf = vim.go.ttyfast
 
 --- List of directory names for undo files, separated with commas.
 --- See 'backupdir' for details of the format.

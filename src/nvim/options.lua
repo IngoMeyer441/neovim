@@ -7237,8 +7237,8 @@ local options = {
         Minimal number of screen lines to keep above and below the cursor.
         This will make some context visible around where you are working.  If
         you set it to a very large value (999) the cursor line will always be
-        in the middle of the window (except at the start or end of the file or
-        when long lines wrap).
+        in the middle of the window (except at the start or end of the file,
+        see 'scrolloffpad', or when long lines wrap).
         After using the local value, go back the global value with one of
         these two: >vim
         	setlocal scrolloff<
@@ -7250,6 +7250,35 @@ local options = {
       short_desc = N_('minimum nr. of lines above and below cursor'),
       type = 'number',
       varname = 'p_so',
+    },
+    {
+      abbreviation = 'sop',
+      defaults = 0,
+      desc = [=[
+        When 'scrolloff' and 'scrolloffpad' are greater than zero, allow
+        the cursor to remain centered when at the end of the file.
+        Normally, 'scrolloff' will not keep the cursor centered at the
+        end of the file.
+
+        A value of 0 disables this feature.  Any value above 0 enables it.
+        For a window-local value, -1 means to use the global value.
+        Values below -1 are invalid.
+
+        Example: >vim
+        	:set scrolloff=99 scrolloffpad=1
+        <
+
+        After using the local value, go back the global value with one of
+        these two: >vim
+        	setlocal scrolloffpad<
+        	setlocal scrolloffpad=-1
+        <
+      ]=],
+      full_name = 'scrolloffpad',
+      scope = { 'global', 'win' },
+      short_desc = N_('vertically center cursor even at end of file'),
+      type = 'number',
+      varname = 'p_sop',
     },
     {
       abbreviation = 'sbo',
@@ -7922,8 +7951,9 @@ local options = {
       cb = 'did_set_shortmess',
       defaults = 'ltToOCF',
       desc = [=[
-        This option helps to avoid all the |hit-enter| prompts caused by file
-        messages, for example with CTRL-G, and to avoid some other messages.
+        Controls display of file messages (e.g. CTRL-G) and various other
+        messages.
+
         It is a list of flags:
          flag	meaning when present	~
           l	use "999L, 888B" instead of "999 lines, 888 bytes"	*shm-l*
@@ -9685,7 +9715,7 @@ local options = {
         error will be given.
 
         The default (empty) behaviour is equivalent to: >vim
-            set titlestring=%t%(\ %M%)%(\ \(%{expand(\"%:~:h\")}\)%)%a\ -\ Nvim
+            set titlestring=%t%(\ %M%)%(\ \(%{expand('%:p:~:h')}\)%)%a\ -\ Nvim
         <
         Example: >vim
             auto BufEnter * let &titlestring = hostname() .. "/" .. expand("%:p")
@@ -9751,12 +9781,29 @@ local options = {
     {
       abbreviation = 'tf',
       defaults = true,
+      desc = [=[
+        Enables Nvim |TUI| features which assume a fast (usually local) host
+        terminal. During startup, Nvim queries the terminal (for 'background'
+        detection, etc.) and must wait for a response (or timeout).
+
+        If your terminal environment is slow (e.g. remote SSH), or broken
+        (doesn't respond to queries), Nvim startup may be slower. Therefore
+        you can disable this option by setting the `$NVIM_NOTTYFAST`
+        environment variable before starting Nvim: >
+        	NVIM_NOTTYFAST=1 nvim
+        <
+
+        The queries are performed early, before |--cmd| and user |config|, so
+        `:set nottyfast` in your config happens too late.
+      ]=],
       full_name = 'ttyfast',
       no_mkrc = true,
       scope = { 'global' },
-      short_desc = N_('Deprecated'),
+      short_desc = N_('assume terminal responds quickly, enabling more features'),
+      -- Vim E1568: https://github.com/vim/vim/blob/0f9218851dc91a855c3d186ccd05f550907cf37e/src/errors.h#L3791
+      tags = { 'E1568', '$NVIM_NOTTYFAST' },
       type = 'boolean',
-      immutable = true,
+      varname = 'p_tf',
     },
     {
       abbreviation = 'udir',

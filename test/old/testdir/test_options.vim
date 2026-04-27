@@ -1155,9 +1155,9 @@ func Test_backupskip()
       call writefile(['errors:'] + v:errors, 'Xtestout')
       qall
   [CODE]
-  call writefile(after, 'Xafter')
-  " let cmd = GetVimProg() . ' --not-a-term -S Xafter --cmd "set enc=utf8"'
-  let cmd = GetVimProg() . ' -S Xafter --cmd "set enc=utf8"'
+  call writefile(after, 'Xafter', 'D')
+  " let cmd = GetVimProg() . ' --clean --not-a-term -S Xafter --cmd "set enc=utf8"'
+  let cmd = GetVimProg() . ' --clean -S Xafter --cmd "set enc=utf8"'
 
   let saveenv = {}
   for var in ['TMPDIR', 'TMP', 'TEMP']
@@ -1165,9 +1165,9 @@ func Test_backupskip()
     call setenv(var, '/duplicate/path')
   endfor
 
-  " unset $HOME, so that it won't try to read init files
+  " set $HOME='', so that Vim won't try to read init files
   let saveenv['HOME'] = getenv("HOME")
-  call setenv('HOME', v:null)
+  call setenv('HOME', '')
   exe 'silent !' . cmd
   call assert_equal(['errors:'], readfile('Xtestout'))
 
@@ -1177,7 +1177,6 @@ func Test_backupskip()
   endfor
 
   call delete('Xtestout')
-  call delete('Xafter')
 
   " Duplicates should be filtered out (option has P_NODUP)
   let backupskip = &backupskip
@@ -1468,6 +1467,46 @@ func Test_local_scrolloff()
   close
   set so&
   set siso&
+endfunc
+
+func Test_local_scrolloffpad()
+  let save_g_sop = &g:sop
+  let save_l_sop = &l:sop
+  set sop=0
+  call assert_equal(0, &g:sop)
+  call assert_equal(-1, &l:sop)
+  call assert_equal(0, &sop)
+  setglobal sop=1
+  call assert_equal(1, &g:sop)
+  call assert_equal(1, &sop)
+  split
+  call assert_equal(1, &g:sop)
+  call assert_equal(-1, &l:sop)
+  call assert_equal(1, &sop)
+  setlocal sop=0
+  call assert_equal(0, &l:sop)
+  call assert_equal(0, &sop)
+  call assert_equal(1, &g:sop)
+  wincmd p
+  call assert_equal(1, &sop)
+  wincmd p
+  "setlocal sop<
+  set sop<
+  call assert_equal(-1, &l:sop)
+  call assert_equal(1, &sop)
+  setlocal sop=2
+  call assert_equal(2, &l:sop)
+  call assert_equal(2, &sop)
+  setlocal sop=-1
+  call assert_equal(-1, &l:sop)
+  call assert_equal(1, &sop)  " Uses global value because local is -1
+  call assert_fails("setlocal sop=-2", 'E474:')
+  call assert_equal(-1, &l:sop)
+  call assert_equal(1, &sop)
+  call assert_fails("setlocal sop=foo", 'E521:')
+  close
+  let &g:sop = save_g_sop
+  let &l:sop = save_l_sop
 endfunc
 
 func Test_writedelay()

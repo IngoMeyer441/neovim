@@ -59,6 +59,7 @@ local options_list = {
     { 'scroll', N_ 'number of lines to scroll for CTRL-U and CTRL-D' },
     { 'smoothscroll', N_ 'scroll by screen line' },
     { 'scrolloff', N_ 'number of screen lines to show around the cursor' },
+    { 'scrolloffpad', N_ 'vertically center cursor even at end of file' },
     { 'wrap', N_ 'long lines wrap' },
     { 'linebreak', N_ "wrap long lines at a character in 'breakat'" },
     { 'breakindent', N_ 'preserve indentation in wrapped text' },
@@ -454,6 +455,7 @@ local options_list = {
     { 'busy', N_ 'buffer is busy' },
     { 'termpastefilter', N_ 'characters removed when pasting into terminal window' },
     { 'scrollback', N_ 'number of lines kept beyond the visible screen in terminal buffer' },
+    { 'ttyfast', N_ 'assume terminal responds quickly, enabling more features' },
   },
 }
 

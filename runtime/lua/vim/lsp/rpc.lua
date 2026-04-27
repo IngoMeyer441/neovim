@@ -191,22 +191,30 @@ local default_dispatchers = {
 }
 
 --- @async
-local function request_parser_loop()
-  local buf = strbuffer.new()
+local function parse_content_length()
+  local strbuf = strbuffer.new()
   while true do
-    local msg = buf:tostring()
-    local header_end = msg:find('\r\n\r\n', 1, true)
-    if header_end then
-      local header = buf:get(header_end + 1)
-      buf:skip(2) -- skip past header boundary
-      local content_length = get_content_length(header)
-      while strbuffer.len(buf) < content_length do
-        buf:put(coroutine.yield())
+    local header_len ---@type integer?
+    local ptr, len = strbuf:ref()
+    for i = 0, len - 4 do
+      -- Find the header boundary "\r\n\r\n"
+      -- (compare bytes instead of string.find(), to avoid a string alloc).
+      if ptr[i] == 13 and ptr[i + 1] == 10 and ptr[i + 2] == 13 and ptr[i + 3] == 10 then
+        header_len = i + 2
+        break
       end
-      local body = buf:get(content_length)
-      buf:put(coroutine.yield(body))
+    end
+    if header_len then
+      local header = strbuf:get(header_len)
+      strbuf:skip(2) -- skip past header boundary
+      local content_length = get_content_length(header)
+      while strbuffer.len(strbuf) < content_length do
+        strbuf:put(coroutine.yield())
+      end
+      local body = strbuf:get(content_length)
+      strbuf:put(coroutine.yield(body))
     else
-      buf:put(coroutine.yield())
+      strbuf:put(coroutine.yield())
     end
   end
 end
@@ -218,7 +226,7 @@ end
 function M.create_read_loop(handle_body, on_exit, on_error)
   on_exit = on_exit or function() end
   on_error = on_error or function() end
-  local co = coroutine.create(request_parser_loop)
+  local co = coroutine.create(parse_content_length)
   coroutine.resume(co)
   return function(err, chunk)
     if err then
@@ -453,7 +461,17 @@ function Client:handle_body(body)
   log.debug('rpc.receive', decoded)
 
   -- Received a request.
-  if type(decoded.method) == 'string' and decoded.id then
+  if type(decoded.method) == 'string' and decoded.id and decoded.id ~= vim.NIL then
+    if type(decoded.id) ~= 'number' and type(decoded.id) ~= 'string' then
+      log.error(
+        'Server request id must be a number or string, got ' .. type(decoded.id),
+        decoded.method,
+        decoded.id
+      )
+      self:on_error(M.client_errors.INVALID_SERVER_MESSAGE, decoded)
+      return
+    end
+
     -- Schedule here so that the users functions don't trigger an error and
     -- we can still use the result.
     vim.schedule(coroutine.wrap(function()
@@ -501,6 +519,7 @@ function Client:handle_body(body)
     -- * If 'error' is nil, then 'result' must be present.
     -- * If 'result' is nil, then 'error' must be present (and not vim.NIL).
     decoded.id
+    and decoded.id ~= vim.NIL
     and (
       (decoded.error == nil and decoded.result ~= nil)
       or (decoded.result == nil and decoded.error ~= nil and decoded.error ~= vim.NIL)
@@ -549,6 +568,9 @@ function Client:handle_body(body)
       self:on_error(M.client_errors.NO_RESULT_CALLBACK_FOUND, decoded)
       log.error('No callback found for server response id ' .. result_id)
     end
+  elseif decoded.id == vim.NIL then
+    log.warn('Server sent response with null id', decoded.method, decoded.error)
+    self:on_error(M.client_errors.INVALID_SERVER_MESSAGE, decoded)
   elseif type(decoded.method) == 'string' then
     -- Received a notification.
     self:try_call(

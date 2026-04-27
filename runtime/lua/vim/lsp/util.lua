@@ -291,7 +291,9 @@ local function get_line_byte_from_position(bufnr, position, position_encoding)
   return col
 end
 
---- Applies a list of text edits to a buffer.
+--- Applies a list of text edits to a buffer. Note: this mutates `text_edits` (sorts in-place and
+--- adds `_index` fields).
+---
 ---@param text_edits (lsp.TextEdit|lsp.AnnotatedTextEdit)[]
 ---@param bufnr integer Buffer id
 ---@param position_encoding 'utf-8'|'utf-16'|'utf-32'
@@ -320,7 +322,10 @@ function M.apply_text_edits(text_edits, bufnr, position_encoding, change_annotat
     -- Fix reversed range and indexing each text_edits
     for index, text_edit in ipairs(text_edits) do
       --- @cast text_edit lsp.TextEdit|{_index: integer}
-      text_edit._index = index
+      -- XXX: Preserve existing _index to avoid surprises if the same edit is reapplied. #39344
+      if text_edit._index == nil then
+        text_edit._index = index
+      end
 
       if
         text_edit.range.start.line > text_edit.range['end'].line
@@ -917,9 +922,19 @@ function M.make_floating_popup_options(width, height, opts)
 
   local anchor = ''
 
-  local lines_above = opts.relative == 'mouse' and vim.fn.getmousepos().line - 1
-    or vim.fn.winline() - 1
-  local lines_below = vim.fn.winheight(0) - lines_above
+  local lines_above --- @type integer
+  local lines_below --- @type integer
+  if opts.relative == 'mouse' then
+    lines_above = vim.fn.getmousepos().line - 1
+    lines_below = vim.fn.winheight(0) - lines_above
+  elseif opts.relative == 'editor' then
+    -- No cursor to anchor against; treat the whole editor as space below.
+    lines_above = 0
+    lines_below = vim.o.lines
+  else
+    lines_above = vim.fn.winline() - 1
+    lines_below = vim.fn.winheight(0) - lines_above
+  end
 
   local anchor_bias = opts.anchor_bias or 'auto'
 
@@ -946,7 +961,14 @@ function M.make_floating_popup_options(width, height, opts)
     row = 0
   end
 
-  local wincol = opts.relative == 'mouse' and vim.fn.getmousepos().column or vim.fn.wincol()
+  local wincol --- @type integer
+  if opts.relative == 'mouse' then
+    wincol = vim.fn.getmousepos().column
+  elseif opts.relative == 'editor' then
+    wincol = 0
+  else
+    wincol = vim.fn.wincol()
+  end
 
   if wincol + width + (opts.offset_x or 0) <= vim.o.columns then
     anchor = anchor .. 'W'
@@ -1227,11 +1249,11 @@ end
 ---@param contents string[] of lines to show in window
 ---@param opts? table with optional fields
 ---  - height    of floating window
+---  - max_height maximal height of floating window
+---  - max_width  maximal width of floating window
+---  - separator insert separator after code block
 ---  - width     of floating window
 ---  - wrap_at   character to wrap at for computing height
----  - max_width  maximal width of floating window
----  - max_height maximal height of floating window
----  - separator insert separator after code block
 ---@return table stripped content
 function M.stylize_markdown(bufnr, contents, opts)
   vim.deprecate('vim.lsp.util.stylize_markdown', nil, '0.14')
