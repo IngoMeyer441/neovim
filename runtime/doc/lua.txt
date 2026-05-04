@@ -853,53 +853,6 @@ vim.ui_detach({ns})                                          *vim.ui_detach()*
     Parameters: ~
       • {ns}  (`integer`) Namespace ID
 
-vim.wait({time}, {callback}, {interval}, {fast_only})             *vim.wait()*
-    Waits up to `time` milliseconds, until `callback` returns `true`
-    (success). Executes `callback` immediately, then on user events, internal
-    events, and approximately every `interval` milliseconds (default 200).
-    Returns all `callback` results on success.
-
-    Nvim processes other events while waiting. Cannot be called during an
-    |api-fast| event.
-
-    Examples: >lua
-        -- Wait for 100 ms, allowing other events to process.
-        vim.wait(100)
-
-        -- Wait up to 1000 ms or until `vim.g.foo` is true, at intervals of ~500 ms.
-        vim.wait(1000, function() return vim.g.foo end, 500)
-
-        -- Wait indefinitely until `vim.g.foo` is true, and get the callback results.
-        local ok, rv1, rv2, rv3 = vim.wait(math.huge, function()
-          return vim.g.foo, 'a', 42, { ok = { 'yes' } }
-        end)
-
-        -- Schedule a function to set a value in 100ms. This would wait 10s if blocked, but actually
-        -- only waits 100ms because `vim.wait` processes other events while waiting.
-        vim.defer_fn(function() vim.g.timer_result = true end, 100)
-        if vim.wait(10000, function() return vim.g.timer_result end) then
-          print('Only waiting a little bit of time!')
-        end
-<
-
-    Parameters: ~
-      • {time}       (`number`) Number of milliseconds to wait. Must be
-                     non-negative number, any fractional part is truncated.
-      • {callback}   (`fun(): boolean, ...?`) Optional callback. Waits until
-                     {callback} returns true
-      • {interval}   (`integer?`) (Approximate) number of milliseconds to wait
-                     between polls
-      • {fast_only}  (`boolean?`) If true, only |api-fast| events will be
-                     processed.
-
-    Return (multiple): ~
-        (`boolean`)
-        (`-1|-2?`)
-        • If callback returns `true` before timeout: `true, nil, ...`
-        • On timeout: `false, -1`
-        • On interrupt: `false, -2`
-        • On error: the error is raised.
-
 
 ==============================================================================
 LUA-VIMSCRIPT BRIDGE                                           *lua-vimscript*
@@ -1519,11 +1472,59 @@ vim.str_utfindex({s}, {encoding}, {index}, {strict_indexing})
     Return: ~
         (`integer`)
 
+vim.wait({time}, {callback}, {interval}, {fast_only})             *vim.wait()*
+    Waits up to `time` milliseconds, until `callback` returns `true`
+    (success). Executes `callback` immediately, then on user events, internal
+    events, and approximately every `interval` milliseconds (default 200).
+    Returns `true` plus any remaining callback results on success.
+
+    Nvim processes other events while waiting. Cannot be called during an
+    |api-fast| event.
+
+    Examples: >lua
+        -- Wait for 100 ms, allowing other events to process.
+        vim.wait(100)
+
+        -- Wait up to 1000 ms or until `vim.g.foo` is true, at intervals of ~500 ms.
+        vim.wait(1000, function() return vim.g.foo end, 500)
+
+        -- Wait indefinitely until `vim.g.foo` is true, and get the callback results.
+        local ok, rv1, rv2, rv3 = vim.wait(math.huge, function()
+          return vim.g.foo, 'a', 42, { ok = { 'yes' } }
+        end)
+
+        -- Schedule a function to set a value in 100ms. This would wait 10s if blocked, but actually
+        -- only waits 100ms because `vim.wait` processes other events while waiting.
+        vim.defer_fn(function() vim.g.timer_result = true end, 100)
+        if vim.wait(10000, function() return vim.g.timer_result end) then
+          print('Only waiting a little bit of time!')
+        end
+<
+
+    Parameters: ~
+      • {time}       (`number`) Number of milliseconds to wait. Must be
+                     non-negative number, any fractional part is truncated.
+      • {callback}   (`fun(): boolean, ...?`) Optional callback. Waits until
+                     {callback} returns true
+      • {interval}   (`integer?`) (Approximate) number of milliseconds to wait
+                     between polls
+      • {fast_only}  (`boolean?`) If true, only |api-fast| events will be
+                     processed.
+
+    Return (multiple): ~
+        (`boolean`)
+        (`-1|-2?`)
+        • If callback returns `true` before timeout: `true, ...` (remaining
+          callback results).
+        • On timeout: `false, -1`
+        • On interrupt: `false, -2`
+        • On error: the error is raised.
+
 
 ==============================================================================
 Lua module: vim.inspector                                      *vim.inspector*
 
-vim.inspect_pos({bufnr}, {row}, {col}, {filter})           *vim.inspect_pos()*
+vim.inspect_pos({buf}, {row}, {col}, {filter})             *vim.inspect_pos()*
     Get all the items at a given buffer position.
 
     Can also be pretty-printed with `:Inspect!`.                   *:Inspect!*
@@ -1532,7 +1533,7 @@ vim.inspect_pos({bufnr}, {row}, {col}, {filter})           *vim.inspect_pos()*
         Since: 0.9.0
 
     Parameters: ~
-      • {bufnr}   (`integer?`) defaults to the current buffer
+      • {buf}     (`integer?`) defaults to the current buffer
       • {row}     (`integer?`) row to inspect, 0-based. Defaults to the row of
                   the current cursor
       • {col}     (`integer?`) col to inspect, 0-based. Defaults to the col of
@@ -1559,7 +1560,7 @@ vim.inspect_pos({bufnr}, {row}, {col}, {filter})           *vim.inspect_pos()*
         • row: the row used to get the items
         • col: the col used to get the items
 
-vim.show_pos({bufnr}, {row}, {col}, {filter})                 *vim.show_pos()*
+vim.show_pos({buf}, {row}, {col}, {filter})                   *vim.show_pos()*
     Show all the items at a given buffer position.
 
     Can also be shown with `:Inspect`.                              *:Inspect*
@@ -1573,7 +1574,7 @@ vim.show_pos({bufnr}, {row}, {col}, {filter})                 *vim.show_pos()*
         Since: 0.9.0
 
     Parameters: ~
-      • {bufnr}   (`integer?`) defaults to the current buffer
+      • {buf}     (`integer?`) defaults to the current buffer
       • {row}     (`integer?`) row to inspect, 0-based. Defaults to the row of
                   the current cursor
       • {col}     (`integer?`) col to inspect, 0-based. Defaults to the col of
@@ -2923,11 +2924,11 @@ vim.hl.priorities                                          *vim.hl.priorities*
       symbols or `on_yank` autocommands
 
                                                               *vim.hl.range()*
-vim.hl.range({bufnr}, {ns}, {higroup}, {start}, {finish}, {opts})
+vim.hl.range({buf}, {ns}, {higroup}, {start}, {finish}, {opts})
     Apply highlight group to range of text.
 
     Parameters: ~
-      • {bufnr}    (`integer`) Buffer number to apply highlighting to
+      • {buf}      (`integer`) Buffer number to apply highlighting to
       • {ns}       (`integer`) Namespace to add highlight to
       • {higroup}  (`string`) Highlight group to use for highlighting
       • {start}    (`[integer,integer]|string`) Start of region as a (line,
@@ -4203,9 +4204,10 @@ Lua module: vim.net                                                  *vim.net*
       • {body}  (`string`) The HTTP body of the request
 
 
-vim.net.request({url}, {opts}, {on_response})              *vim.net.request()*
-    Makes an HTTP GET request to the given URL, asynchronously passing the
-    result to the specified `on_response`, `outpath` or `outbuf`.
+                                                           *vim.net.request()*
+vim.net.request({method}, {url}, {opts}, {on_response})
+    Makes an HTTP request to the given URL, asynchronously passing the result
+    to the specified `on_response`, `outpath` or `outbuf`.
 
     Examples: >lua
         -- Write response body to file.
@@ -4235,11 +4237,21 @@ vim.net.request({url}, {opts}, {on_response})              *vim.net.request()*
         vim.net.request('https://neovim.io/charter/', {
           headers = { Authorization = 'Bearer XYZ' },
         })
+
+        -- POST request with body.
+        vim.net.request('POST', 'https://example.com/api', {
+          body = '{"key": "value"}',
+          headers = {['Content-Type'] = 'application/json' }
+        })
 <
 
     Parameters: ~
+      • {method}       (`vim.net.HttpMethod`) (default: GET) The HTTP method
+                       (GET, POST, PUT, PATCH, HEAD, DELETE).
       • {url}          (`string`) The URL for the request.
       • {opts}         (`table?`) A table with the following fields:
+                       • {body}? (`string`) Request body for POST/PUT/PATCH
+                         requests.
                        • {headers}? (`table<string, string>`) Custom headers
                          to send with the request. Supports basic key/value
                          headers and empty headers as supported by curl. Does
@@ -4252,10 +4264,12 @@ vim.net.request({url}, {opts}, {on_response})              *vim.net.request()*
                        • {retry}? (`integer`) Number of retries on transient
                          failures (default: 3).
                        • {verbose}? (`boolean`) Enables verbose output.
-      • {on_response}  (`fun(err: string?, response: vim.net.request.Response?)?`)
-                       Callback invoked on request completion. The `body`
-                       field in the response parameter contains the raw
-                       response data (text or binary).
+      • {on_response}  (`vim.net.request.ResponseFunc?`) Callback invoked on
+                       request completion.
+
+    Overloads: ~
+      • `fun(url: string, opts: vim.net.request.Opts, response: vim.net.request.ResponseFunc)`
+      • `fun(method: vim.net.HttpMethod, url: string, opts: vim.net.request.Opts, response: vim.net.request.ResponseFunc)`
 
     Return: ~
         (`{ close: fun() }`) Object with `close()` method which cancels the
@@ -4619,14 +4633,14 @@ within a single line.
 
 
                                                           *regex:match_line()*
-regex:match_line({bufnr}, {line_idx}, {start}, {end_})
-    Matches line at `line_idx` (zero-based) in buffer `bufnr`. Match is
+regex:match_line({buf}, {line_idx}, {start}, {end_})
+    Matches line at `line_idx` (zero-based) in buffer `buf`. Match is
     restricted to byte index range `start` and `end_` if given, otherwise see
     |regex:match_str()|. Returned byte indices are relative to `start` if
     given.
 
     Parameters: ~
-      • {bufnr}     (`integer`)
+      • {buf}       (`integer`)
       • {line_idx}  (`integer`)
       • {start}     (`integer?`)
       • {end_}      (`integer?`)
@@ -5164,12 +5178,13 @@ vim.ui.progress_status()                            *vim.ui.progress_status()*
 
 vim.ui.select({items}, {opts}, {on_choice})                  *vim.ui.select()*
     Prompts the user to pick from a list of items, allowing arbitrary
-    (potentially asynchronous) work until `on_choice`.
+    (potentially asynchronous) work until `on_choice`. This is the standard
+    "picker" interface, used by |z=|, |:tselect|, etc.
 
-    Plugins may override `vim.ui.select` to provide a custom "picker"
-    interface; they are expected to call the `format_item` and `preview_item`
-    handlers (if any) provided by the caller. They may also use the `kind`
-    hint (if provided by the caller) to decide how to handle some items.
+    Plugins may override `vim.ui.select` to provide a custom picker; they are
+    expected to call the `format_item` and `preview_item` handlers (if any)
+    provided by the caller. They may also use the `kind` hint (if provided by
+    the caller) to decide how to handle some items.
 
     Note: the default `vim.ui.select` currently doesn't support preview.
 
@@ -5226,66 +5241,6 @@ vim.ui.select({items}, {opts}, {on_choice})                  *vim.ui.select()*
 
 
 ==============================================================================
-Lua module: vim.uri                                                  *vim.uri*
-
-vim.uri_decode({str})                                       *vim.uri_decode()*
-    URI-decodes a string containing percent escapes.
-
-    Parameters: ~
-      • {str}  (`string`) string to decode
-
-    Return: ~
-        (`string`) decoded string
-
-vim.uri_encode({str}, {rfc})                                *vim.uri_encode()*
-    URI-encodes a string using percent escapes.
-
-    Parameters: ~
-      • {str}  (`string`) string to encode
-      • {rfc}  (`"rfc2396"|"rfc2732"|"rfc3986"?`)
-
-    Return: ~
-        (`string`) encoded string
-
-vim.uri_from_bufnr({bufnr})                             *vim.uri_from_bufnr()*
-    Gets a URI from a bufnr.
-
-    Parameters: ~
-      • {bufnr}  (`integer`)
-
-    Return: ~
-        (`string`) URI
-
-vim.uri_from_fname({path})                              *vim.uri_from_fname()*
-    Gets a URI from a file path.
-
-    Parameters: ~
-      • {path}  (`string`) Path to file
-
-    Return: ~
-        (`string`) URI
-
-vim.uri_to_bufnr({uri})                                   *vim.uri_to_bufnr()*
-    Gets the buffer for a uri. Creates a new unloaded buffer if no buffer for
-    the uri already exists.
-
-    Parameters: ~
-      • {uri}  (`string`)
-
-    Return: ~
-        (`integer`) bufnr
-
-vim.uri_to_fname({uri})                                   *vim.uri_to_fname()*
-    Gets a filename from a URI.
-
-    Parameters: ~
-      • {uri}  (`string`)
-
-    Return: ~
-        (`string`) filename or unchanged URI for non-file URIs
-
-
-==============================================================================
 Lua module: vim.ui.img                                            *vim.ui.img*
 
 EXPERIMENTAL: This API may change in the future. Its semantics are not yet
@@ -5312,17 +5267,20 @@ Examples: >lua
 
     -- Remove the image
     vim.ui.img.del(id)
+
+    -- Remove all images
+    vim.ui.img.del(math.huge)
 <
 
 
 vim.ui.img.del({id})                                        *vim.ui.img.del()*
-    Delete an image, removing it from display.
+    Delete an image, or all images if `math.huge` is given as the id.
 
     Parameters: ~
-      • {id}  (`integer`)
+      • {id}  (`integer`) image id, or `math.huge` to delete all images
 
     Return: ~
-        (`boolean`) found true if the image existed
+        (`boolean`) found true if any image existed
 
 vim.ui.img.get({id})                                        *vim.ui.img.get()*
     Get the opts for an image.
@@ -5359,6 +5317,66 @@ vim.ui.img.set({data_or_id}, {opts})                        *vim.ui.img.set()*
 
     Return: ~
         (`integer`) id
+
+
+==============================================================================
+Lua module: vim.uri                                                  *vim.uri*
+
+vim.uri_decode({str})                                       *vim.uri_decode()*
+    URI-decodes a string containing percent escapes.
+
+    Parameters: ~
+      • {str}  (`string`) string to decode
+
+    Return: ~
+        (`string`) decoded string
+
+vim.uri_encode({str}, {rfc})                                *vim.uri_encode()*
+    URI-encodes a string using percent escapes.
+
+    Parameters: ~
+      • {str}  (`string`) string to encode
+      • {rfc}  (`"rfc2396"|"rfc2732"|"rfc3986"?`)
+
+    Return: ~
+        (`string`) encoded string
+
+vim.uri_from_bufnr({buf})                               *vim.uri_from_bufnr()*
+    Gets a URI from a bufnr.
+
+    Parameters: ~
+      • {buf}  (`integer`)
+
+    Return: ~
+        (`string`) URI
+
+vim.uri_from_fname({path})                              *vim.uri_from_fname()*
+    Gets a URI from a file path.
+
+    Parameters: ~
+      • {path}  (`string`) Path to file
+
+    Return: ~
+        (`string`) URI
+
+vim.uri_to_bufnr({uri})                                   *vim.uri_to_bufnr()*
+    Gets the buffer for a uri. Creates a new unloaded buffer if no buffer for
+    the uri already exists.
+
+    Parameters: ~
+      • {uri}  (`string`)
+
+    Return: ~
+        (`integer`) bufnr
+
+vim.uri_to_fname({uri})                                   *vim.uri_to_fname()*
+    Gets a filename from a URI.
+
+    Parameters: ~
+      • {uri}  (`string`)
+
+    Return: ~
+        (`string`) filename or unchanged URI for non-file URIs
 
 
 ==============================================================================

@@ -1785,7 +1785,7 @@ static char *option_expand(OptIndex opt_idx, const char *val)
   // For 'spellsuggest' expand after "file:".
   char **var = (char **)options[opt_idx].var;
   bool esc = var == &p_tags || var == &p_path;
-  expand_env_esc(val, NameBuff, MAXPATHL, esc, false,
+  expand_env_esc(val, NameBuff, MAXPATHL, esc ? (char *)" \t" : NULL, false,
                  (char **)options[opt_idx].var == &p_sps ? "file:" : NULL);
   if (strcmp(NameBuff, val) == 0) {   // they are the same
     return NULL;
@@ -2060,9 +2060,9 @@ void set_option_sctx(OptIndex opt_idx, int opt_flags, sctx_T script_ctx)
   }
 }
 
-/// Apply the OptionSet autocommand.
-static void apply_optionset_autocmd(OptIndex opt_idx, int opt_flags, OptVal oldval, OptVal oldval_g,
-                                    OptVal oldval_l, OptVal newval, const char *errmsg)
+/// Execute OptionSet autocmd now (not deferred).
+void apply_optionset_autocmd_now(OptIndex opt_idx, int opt_flags, OptVal oldval, OptVal oldval_g,
+                                 OptVal oldval_l, OptVal newval, const char *errmsg)
 {
   // Don't do this while starting up, failure or recursively.
   if (starting || errmsg != NULL || *get_vim_var_str(VV_OPTION_TYPE) != NUL) {
@@ -2099,6 +2099,20 @@ static void apply_optionset_autocmd(OptIndex opt_idx, int opt_flags, OptVal oldv
   }
   apply_autocmds(EVENT_OPTIONSET, options[opt_idx].fullname, NULL, false, NULL);
   reset_v_option_vars();
+}
+
+/// For 'modified', the event is deferred.
+static void apply_optionset_autocmd(OptIndex opt_idx, int opt_flags, OptVal oldval, OptVal oldval_g,
+                                    OptVal oldval_l, OptVal newval, const char *errmsg)
+{
+  if (starting || errmsg != NULL) {
+    return;
+  }
+  if (opt_idx == kOptModified) {
+    aucmd_defer_modified(curbuf, newval.data.boolean);
+    return;
+  }
+  apply_optionset_autocmd_now(opt_idx, opt_flags, oldval, oldval_g, oldval_l, newval, errmsg);
 }
 
 /// Process the updated 'arabic' option value.

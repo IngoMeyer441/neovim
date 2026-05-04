@@ -4577,6 +4577,53 @@ func Test_custom_completion()
   delfunc Check_customlist_completion
 endfunc
 
+" Test that 'customlist' completion accepts dict items with extra info
+" (kind/menu/info) for display in the popup menu, and that string items still
+" work in the same list.
+func Test_customlist_dict_completion()
+  func DictComp(A, L, P)
+    return [
+          \ {'word': 'apple',  'kind': 'f', 'menu': 'fruit',     'info': 'A red fruit'},
+          \ {'word': 'banana', 'kind': 'f', 'menu': 'fruit',     'info': 'A yellow fruit'},
+          \ {'word': 'carrot', 'kind': 'v', 'menu': 'vegetable', 'info': 'An orange vegetable'},
+          \ 'plain',
+          \ ]
+  endfunc
+  command -nargs=1 -complete=customlist,DictComp DictCmd echo <q-args>
+
+  " getcompletion() returns only the "word" of each item; string items pass
+  " through unchanged.
+  call assert_equal(['apple', 'banana', 'carrot', 'plain'],
+        \ getcompletion('', 'customlist,DictComp'))
+
+  " Items missing a "word" key are silently skipped.
+  func DictCompMissingWord(A, L, P)
+    return [{'kind': 'x'}, {'word': 'ok'}]
+  endfunc
+  call assert_equal(['ok'],
+        \ getcompletion('', 'customlist,DictCompMissingWord'))
+
+  " Tab completion still selects the word.
+  call feedkeys(":DictCmd a\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"DictCmd apple', @:)
+
+  " "abbr" overrides display only; "word" is what gets inserted.
+  func DictCompAbbr(A, L, P)
+    return [{'word': 'apple', 'abbr': 'APPLE🍎'}]
+  endfunc
+  call assert_equal(['apple'],
+        \ getcompletion('', 'customlist,DictCompAbbr'))
+  command -nargs=1 -complete=customlist,DictCompAbbr DictAbbrCmd echo <q-args>
+  call feedkeys(":DictAbbrCmd \<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"DictAbbrCmd apple', @:)
+
+  delcommand DictAbbrCmd
+  delcommand DictCmd
+  delfunc DictComp
+  delfunc DictCompMissingWord
+  delfunc DictCompAbbr
+endfunc
+
 func Test_custom_completion_with_glob()
   func TestGlobComplete(A, L, P)
     return split(glob('Xglob*'), "\n")
@@ -5319,6 +5366,139 @@ func Test_rulerformat_empty()
   endtry
   set ruler&
   set rulerformat&
+endfunc
+
+func Test_cmdline_complete_with_space()
+  call mkdir('Xspc', 'R')
+  let save_cwd = getcwd()
+  cd Xspc
+  call writefile([], 'foo bar')
+  call writefile([], 'baz')
+  call writefile([], 'bz')
+
+  " This should expand to foo\ bar, not add 3 space separated
+  " files: foo baz bz
+  call feedkeys(":badd foo b\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"badd foo\ bar', @:)
+
+  call chdir(save_cwd)
+endfunc
+
+func Test_wildmode_noinsert()
+  command! -nargs=1 -complete=custom,T MyCmd echo
+  func T(a, c, p)
+    return "oneA\noneB\noneC"
+  endfunc
+
+  set wildmenu wildoptions=pum wildmode=noinsert,full wildchar=<Tab>
+  call feedkeys(":MyCmd o\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd o', @:)
+  call feedkeys(":MyCmd o\<Tab>\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneB', @:)
+  call feedkeys(":MyCmd o\<Tab>\<Tab>\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneC', @:)
+
+  call feedkeys(":MyCmd o\<Tab>\<C-Y>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneA', @:)
+
+  " CTRL-P from highlighted first item returns to original text
+  call feedkeys(":MyCmd o\<Tab>\<C-P>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd o', @:)
+  " Another CTRL-P wraps to the last match
+  call feedkeys(":MyCmd o\<Tab>\<C-P>\<C-P>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneC', @:)
+
+  set wildoptions=
+  call feedkeys(":MyCmd o\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd o', @:)
+  call feedkeys(":MyCmd o\<Tab>\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneB', @:)
+
+  call feedkeys(":MyCmd o\<Tab>\<C-Y>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneA', @:)
+  call feedkeys(":MyCmd o\<Tab>\<C-E>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd o', @:)
+
+  " 'nowildmenu' should make 'noinsert' ineffective
+  set nowildmenu
+  call feedkeys(":MyCmd o\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneA', @:)
+
+  " 'noselect' takes precedence over 'noinsert'
+  set wildmenu wildoptions=pum wildmode=noselect:noinsert,full
+  call feedkeys(":MyCmd o\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd o', @:)
+  call feedkeys(":MyCmd o\<Tab>\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneA', @:)
+  call feedkeys(":MyCmd o\<Tab>\<C-Y>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd o', @:)
+
+  set wildmode=noinsert
+  call feedkeys(":MyCmd o\<Tab>\<Tab>\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd o', @:)
+
+  set wildmode=noinsert,full
+  call feedkeys(":MyCmd o\<Tab>\<C-N>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd oneB', @:)
+  call feedkeys(":MyCmd o\<Tab>\<C-E>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd o', @:)
+
+  " 'longest' takes precedence over 'noinsert'
+  set wildmode=noinsert:longest
+  call feedkeys(":MyCmd o\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd one', @:)
+
+  set wildmode&
+  call feedkeys(":set wildmode=noi\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"set wildmode=noinsert', @:)
+
+  set wildmode=noinsert:lastused,full
+  call assert_equal('noinsert:lastused,full', &wildmode)
+  call assert_fails('set wildmode=noinser', 'E474:')
+
+  " Single match with 'noinsert': item shown highlighted, C-Y commits
+  command! -nargs=1 -complete=custom,T1 MyCmd1 echo
+  func T1(a, c, p)
+    return "oneA"
+  endfunc
+  set wildmenu wildoptions=pum wildmode=noinsert,full
+  call feedkeys(":MyCmd1 o\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd1 o', @:)
+  call feedkeys(":MyCmd1 o\<Tab>\<C-Y>\<C-B>\"\<CR>", 'xt')
+  call assert_equal('"MyCmd1 oneA', @:)
+  delcommand MyCmd1
+  delfunc T1
+
+  set wildmenu& wildoptions& wildmode& wildchar&
+  delcommand MyCmd
+  delfunc T
+endfunc
+
+func Test_cmdline_compl_env_var_wildcard()
+  CheckUnix
+
+  let d = tempname()
+  call mkdir(d .. '/[x]', 'pR')
+  call writefile(['hello'], d .. '/[x]/file.txt')
+  let $XWILD = d .. '/[x]'
+
+  call feedkeys(":e $XWILD/fi\<Tab>\<C-B>\"\<CR>", 'xt')
+  call assert_match('\[x\]/file\.txt$', @:)
+  call assert_equal([d .. '/[x]/file.txt'], glob('$XWILD/*', 0, 1))
+
+  edit $XWILD/file.txt
+  call assert_equal('hello', getline(1))
+  bwipe!
+
+  if has('profile')
+    let prof = d .. '/[x]/prof.out'
+    profile start $XWILD/prof.out
+    profile stop
+    call assert_true(filereadable(prof))
+    call delete(prof)
+  endif
+
+  unlet $XWILD
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -8000,6 +8000,9 @@ local options = {
         	search count statistics.  The maximum limit can be set with
         	the 'maxsearchcount' option, see also |searchcount()|
         	function.
+          u	don't give undo and redo messages like			*shm-u*
+        	"1 line less; before #1  1 second ago", "Already at oldest
+        	change" or "Already at newest change"
 
         This gives you the opportunity to avoid that a change between buffers
         requires you to hit <Enter>, but still gives as useful a message as
@@ -8633,6 +8636,7 @@ local options = {
     },
     {
       abbreviation = 'spk',
+      cb = 'did_set_splitkeep',
       defaults = 'cursor',
       values = { 'cursor', 'screen', 'topline' },
       desc = [=[
@@ -10369,7 +10373,7 @@ local options = {
       cb = 'did_set_wildmode',
       defaults = 'full',
       -- Keep this in sync with check_opt_wim().
-      values = { 'full', 'longest', 'list', 'lastused', 'noselect' },
+      values = { 'full', 'longest', 'list', 'lastused', 'noselect', 'noinsert' },
       flags = true,
       deny_duplicates = false,
       desc = [=[
@@ -10395,8 +10399,12 @@ local options = {
         		applies to buffer name completion.
         "noselect"	If 'wildmenu' is enabled, show the menu but do not
         		preselect the first item.
-        If only one match exists, it is completed fully, unless "noselect" is
-        specified.
+        "noinsert"	If 'wildmenu' is enabled, show the menu and preselect
+        		the first match, but do not insert it in the
+        		command line.  If both "noinsert" and "noselect" are
+        		present, "noselect" takes precedence.
+        If only one match exists, it is completed fully, unless "noselect" or
+        "noinsert" is specified.
 
         Some useful combinations of colon-separated values:
         "longest:full"		Start with the longest common string and show

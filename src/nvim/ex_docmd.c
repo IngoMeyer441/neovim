@@ -4108,7 +4108,8 @@ int expand_filename(exarg_T *eap, char **cmdlinep, const char **errormsgp)
       // if there are still wildcards present.
       if (vim_strchr(eap->arg, '$') != NULL
           || vim_strchr(eap->arg, '~') != NULL) {
-        expand_env_esc(eap->arg, NameBuff, MAXPATHL, true, true, NULL);
+        expand_env_esc(eap->arg, NameBuff, MAXPATHL, (char *)(" \t" PATH_ESC_WILDCARDS), true,
+                       NULL);
         has_wildcards = path_has_wildcard(NameBuff);
         p = NameBuff;
       } else {
@@ -7639,8 +7640,7 @@ static void ex_tag_cmd(exarg_T *eap, const char *name)
     cmd = DT_LTAG;
   }
 
-  do_tag(eap->arg, cmd, eap->addr_count > 0 ? (int)eap->line2 : 1,
-         eap->forceit, true);
+  do_tag(eap, eap->arg, cmd, eap->addr_count > 0 ? (int)eap->line2 : 1, eap->forceit, true);
 }
 
 enum {
