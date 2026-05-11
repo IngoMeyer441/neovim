@@ -592,6 +592,9 @@ static void may_do_incsearch_highlighting(int firstc, int count, incsearch_state
   msg_starthere();
   redrawcmdline();
   s->did_incsearch = true;
+  // Fire WinScrolled/WinResized last, after all state is finalized: the
+  // autocmd may mutate curwin or ccline via arbitrary user code.
+  may_trigger_win_scrolled_resized();
 }
 
 // When CTRL-L typed: add character from the match to the pattern.
@@ -680,6 +683,7 @@ static void finish_incsearch_highlighting(bool gotesc, incsearch_state_T *s,
   redraw_all_later(UPD_SOME_VALID);
   if (call_update_screen) {
     update_screen();
+    may_trigger_win_scrolled_resized();
   }
 }
 

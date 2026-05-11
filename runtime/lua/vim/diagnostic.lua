@@ -177,37 +177,33 @@ local M = vim._defer_require('vim.diagnostic', {
 
 --- @class vim.diagnostic.Opts.Status
 ---
---- Either:
---- - a table mapping |diagnostic-severity| to the text to use for each
----   existing severity section.
---- - a function that accepts a mapping of |diagnostic-severity| to the
----   number of diagnostics of the corresponding severity (only those
----   severity levels that have at least 1 diagnostic) and returns
----   a 'statusline' component. In this case highlights must be applied
----   by the user in the `format` function. Example:
----   ```lua
----   local signs = {
----     [vim.diagnostic.severity.ERROR] = "A",
----     -- ...
----   }
----   local hl_map = {
----     [vim.diagnostic.severity.ERROR] = 'DiagnosticSignError',
----     -- ...
----   }
----   vim.diagnostic.config({
----     status = {
----       format = function(counts)
----         local items = {}
----         for level, _ in ipairs(vim.diagnostic.severity) do
----           local count = counts[level] or 0
----           table.insert(items, ("%%#%s#%s %s"):format(hl_map[level], signs[level], count))
----         end
----         return table.concat(items, " ")
+--- Function that accepts a mapping of |diagnostic-severity| to the number of diagnostics of the
+--- corresponding severity (only those having at least 1 diagnostic) and returns a 'statusline'
+--- component. Highlights must be applied by the `format` function.
+--- Example:
+--- ```lua
+--- local signs = {
+---   [vim.diagnostic.severity.ERROR] = "A",
+---   -- ...
+--- }
+--- local hl_map = {
+---   [vim.diagnostic.severity.ERROR] = 'DiagnosticSignError',
+---   -- ...
+--- }
+--- vim.diagnostic.config({
+---   status = {
+---     format = function(severity_counts)
+---       local items = {}
+---       for severity in ipairs(vim.diagnostic.severity) do
+---         local count = severity_counts[severity] or 0
+---         table.insert(items, ("%%#%s#%s %s"):format(hl_map[severity], signs[severity], count))
 ---       end
----     }
----   })
----   ```
---- @field format? table<vim.diagnostic.Severity,string>|(fun(counts:table<vim.diagnostic.Severity,integer>): string)
+---       return table.concat(items, " ")
+---     end
+---   }
+--- })
+--- ```
+--- @field format? (fun(counts:table<vim.diagnostic.Severity,integer>): string)
 
 --- @class vim.diagnostic.Opts.Underline
 ---
@@ -300,8 +296,8 @@ local M = vim._defer_require('vim.diagnostic', {
 --- @field priority? integer
 ---
 --- A table mapping |diagnostic-severity| to the sign text to display in the
---- sign column. The default is to use `"E"`, `"W"`, `"I"`, and `"H"` for errors,
---- warnings, information, and hints, respectively. Example:
+--- sign column and statusline. The default is to use `"E"`, `"W"`, `"I"`, and `"H"`
+--- for errors, warnings, information, and hints, respectively. Example:
 --- ```lua
 --- vim.diagnostic.config({
 ---   signs = { text = { [vim.diagnostic.severity.ERROR] = 'E', ... } }
@@ -802,7 +798,7 @@ end
 --- @param opts? vim.diagnostic.setqflist.Opts|vim.diagnostic.setloclist.Opts
 local function set_list(loclist, opts)
   opts = opts or {}
-  local open = vim.F.if_nil(opts.open, true)
+  local open = vim.nonnil(opts.open, true)
   local title = opts.title or 'Diagnostics'
   local winnr = opts.winnr or 0
   local bufnr --- @type integer?
@@ -1118,21 +1114,22 @@ function M.status(buf)
   vim.validate('buf', buf, 'number', true)
   buf = buf or 0
   local config = assert(vim.diagnostic.config()).status or {} --- @type vim.diagnostic.Opts.Status
-  vim.validate('config.format', config.format, { 'table', 'function' }, true)
+  vim.validate('config.format', config.format, 'function', true)
 
   local counts = M.count(buf)
-  local format = config.format or default_status_signs
+  local format = config.format
   local result_str --- @type string
-  if type(format) == 'table' then
-    local signs = vim.tbl_extend('keep', format, default_status_signs)
+  if type(format) == 'function' then
+    result_str = format(counts)
+  else
+    local resolved_signs = M._config.get_resolved_options(vim.diagnostic.config(), nil, buf).signs
+    local signs = (type(resolved_signs) == 'table' and resolved_signs.text) or default_status_signs
     result_str = vim
       .iter(pairs(counts))
       :map(function(level, value)
         return ('%%#%s#%s:%s'):format(status_hl_map[level], signs[level], value)
       end)
       :join(' ')
-  else
-    result_str = format(counts)
   end
 
   if result_str:len() > 0 then
