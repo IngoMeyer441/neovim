@@ -88,7 +88,7 @@ end
 local options = {
   cstr = cstr,
   --- @type string[]
-  valid_scopes = { 'global', 'buf', 'win' },
+  valid_scopes = { 'global', 'buf', 'win', 'tab' },
   --- @type vim.option_meta[]
   --- The order of the options MUST be alphabetic for ":set all".
   options = {
@@ -366,7 +366,7 @@ local options = {
       desc = [=[
         When set to "dark" or "light", adjusts the default color groups for
         that background type.  The |TUI| or other UI sets this on startup
-        (triggering |OptionSet|) if it can detect the background color.
+        if it can detect the background color.
 
         This option does NOT change the background color, it tells Nvim what
         the "inherited" (terminal/GUI) background looks like.
@@ -1350,7 +1350,7 @@ local options = {
       ]=],
       full_name = 'cmdheight',
       redraw = { 'all_windows' },
-      scope = { 'global' },
+      scope = { 'global', 'tab' },
       short_desc = N_('number of lines to use for the command-line'),
       type = 'number',
       varname = 'p_ch',
@@ -5447,7 +5447,7 @@ local options = {
         		combine it with "tab:", for example: >vim
         			set listchars+=tab:>-,lead:.
         <
-        						*lcs-leadmultispace*
+                                        *lcs-leadmultispace* *indent-guides*
           leadmultispace:c...
         		Like the |lcs-multispace| value, but for leading
         		spaces only.  Also overrides |lcs-lead| for leading
@@ -5458,6 +5458,13 @@ local options = {
         <
         		Where "XXX" denotes the first non-blank characters in
         		the line.
+
+                        Combined with |lcs-leadtab|, this can be used to show
+                        "indentation guides" (vertical lines).
+        		For example, with 'shiftwidth' 2: >vim
+        			set list listchars=leadtab:\ \ │,tab:\ \ │,leadmultispace:\ \ │
+        <		For richer rendering (per-level colors, treesitter-aware
+        		scopes, etc.) use a third-party plugin.
         						*lcs-leadtab*
           leadtab:xy[z]
         		Like |lcs-tab|, but only for leading tabs.  When
@@ -7182,9 +7189,9 @@ local options = {
         Maximum number of lines kept beyond the visible screen. Lines at the
         top are deleted if new lines exceed this limit.
         Minimum is 1, maximum is 1000000.
-        Only in |terminal| buffers.
+        Only in |terminal| and |prompt-buffer| buffers.
 
-        Note: Lines that are not visible and kept in scrollback are not
+        Note: Lines that are not visible and kept in terminal scrollback are not
         reflown when the terminal buffer is resized horizontally.
       ]=],
       full_name = 'scrollback',

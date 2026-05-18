@@ -66,7 +66,7 @@
 ---taken from |vim.pack-lockfile| (if present) or inferred from the `version`.
 ---
 ---- To update all plugins with new changes:
----    - Execute |vim.pack.update()|. This will download updates from source and
+---    - Execute |:packupdate|. This will download updates from source and
 ---      show confirmation buffer in a separate tabpage.
 ---    - Review changes. To confirm all updates execute |:write|.
 ---      To discard updates execute |:quit|.
@@ -92,7 +92,7 @@
 ---
 ---Explore installed plugins ~
 ---
----- `vim.pack.update(nil, { offline = true })`
+---- `:packupdate ++offline`
 ---- Navigate between plugins with `[[` and `]]`. List them with `gO`
 ---  (|vim.lsp.buf.document_symbol()|).
 ---
@@ -102,11 +102,11 @@
 ---  Let's say, the switch is for plugin named 'plugin1'.
 ---- |:restart|. The plugin's state on disk (revision and/or tracked source)
 ---  is not yet changed. Only plugin's `version` in |vim.pack-lockfile| is updated.
----- Execute `vim.pack.update({ 'plugin1' })`. The plugin's source is updated.
----  If only switching version, use `{ offline = true }` option table.
+---- Execute `:packupdate plugin1`. The plugin's source is updated. If only
+---  switching version, also pass the `++offline` argument.
 ---- Review changes and either confirm or discard them. If discarded, revert
 ---  `version` change in 'init.lua' as well or you will be prompted again next time
----  you run |vim.pack.update()|.
+---  you run `:packupdate`.
 ---
 ---Freeze plugin from being updated ~
 ---
@@ -128,7 +128,7 @@
 ---      locate the revisions before the latest update, and (carefully) adjust
 ---      current lockfile to have those revisions.
 ---- |:restart|.
----- `vim.pack.update({ 'plugin' }, { offline = true, target = 'lockfile' })`.
+---- `:packupdate ++offline ++lockfile plugin`.
 ---  Read and confirm.
 ---
 ---Synchronize config across machines ~
@@ -142,9 +142,9 @@
 ---       are installed at proper revision. If some installation has failed but
 ---       you know it should not (like due to bad Internet connection),
 ---       revert |vim.pack-lockfile| and |:restart| again.
----     - `vim.pack.update(nil, { target = 'lockfile' })`. Read and confirm.
+---     - `:packupdate ++lockfile`. Read and confirm.
 ---     - Manually delete outdated plugins (present locally, but were not present
----       in the lockfile prior to restart) with `vim.pack.del( { 'plugin' })`.
+---       in the lockfile prior to restart) with `:packdel plugin`.
 ---       They can be located by examining the VCS difference of the lockfile
 ---       (`git diff -- nvim-pack-lock.json` for Git).
 ---
@@ -153,14 +153,38 @@
 ---- Remove plugin specs from |vim.pack.add()| calls in 'init.lua' or they will be
 ---  reinstalled later.
 ---- |:restart|.
----- Use |vim.pack.del()| with a list of plugin names to remove. Use |vim.pack.get()|
----  to get all non-active plugins:
----```lua
----vim.iter(vim.pack.get())
----  :filter(function(x) return not x.active end)
----  :map(function(x) return x.spec.name end)
----  :totable()
----```
+---- Use |:packdel| with plugin names to remove. Use `:packdel ++all` to delete
+---  all inactive plugins.
+---
+---Check for pending updates ~
+---
+---- Run `vim.pack.get(nil, { offline = false })` and check the output for items
+---  with different `rev` and `rev_to` fields. To not download new updates
+---  from source, use plain `vim.pack.get()`.
+---
+--- <pre>help
+--- Commands                                             *vim.pack-commands* *E5807*
+---
+---                                                      *:packu* *:packupdate* *E5808*
+--- :packu[pdate][!] [++offline] [++lockfile] [name]
+---
+---     Interactively update the specified plugins. Skips confirmation when `!` is
+---     given. If no plugin names are provided, update all plugins.
+---
+---     When `++offline` is given, skip downloading new updates.
+---
+---     When `++lockfile` is given, use revisions from the lockfile.
+---
+---                                         *:packd* *:packdel* *E5809* *E5810* *E5811*
+--- :packd[el][!] {name}
+---
+---     Remove the specified plugins. Can only remove inactive plugins unless `!`
+---     is given.
+---
+--- :packd[el][!] ++all
+---
+---     Remove all inactive plugins. When `!` is given, instead remove all plugins.
+--- </pre>
 ---
 ---[vim.pack-events]()
 ---
@@ -207,6 +231,8 @@
 local api = vim.api
 local uv = vim.uv
 local async = require('vim._async')
+local util = require('vim._core.util')
+local N_ = vim.fn.gettext
 
 local M = {}
 
@@ -295,6 +321,14 @@ local function git_get_hash(ref, cwd)
   -- Using `rev-list -1` shows a commit of reference, while `rev-parse` shows
   -- hash of reference. Those are different for annotated tags.
   return git_cmd({ 'rev-list', '-1', ref }, cwd)
+end
+
+--- @async
+--- @param cwd string
+local function git_fetch(cwd)
+  -- Using '--tags --force' means conflicting tags will be synced with remote
+  local args = { 'fetch', '--quiet', '--tags', '--force', '--recurse-submodules=yes', 'origin' }
+  git_cmd(args, cwd)
 end
 
 --- @async
@@ -1268,7 +1302,9 @@ function M.update(names, opts)
 
   local plug_list = plug_list_from_names(names)
   if #plug_list == 0 then
-    notify('Nothing to update', 'WARN')
+    if opts._ex then
+      util.echo_err(N_('E5808: Nothing to update'))
+    end
     return
   end
   git_ensure_exec()
@@ -1291,9 +1327,7 @@ function M.update(names, opts)
 
     -- Fetch
     if not opts.offline then
-      -- Using '--tags --force' means conflicting tags will be synced with remote
-      local args = { 'fetch', '--quiet', '--tags', '--force', '--recurse-submodules=yes', 'origin' }
-      git_cmd(args, p.path)
+      git_fetch(p.path)
     end
 
     -- Compute change info: changelog if any, new tags if nothing to update
@@ -1367,7 +1401,9 @@ function M.del(names, opts)
 
   local plug_list = plug_list_from_names(names)
   if #plug_list == 0 then
-    notify('Nothing to remove', 'WARN')
+    if opts._ex then
+      util.echo_err(N_('E5809: Nothing to remove'))
+    end
     return
   end
 
@@ -1394,9 +1430,14 @@ function M.del(names, opts)
 
   if #fail_to_delete > 0 then
     local plugs = table.concat(fail_to_delete, ', ')
-    local msg = ('Some plugins are active and were not deleted: %s.'):format(plugs)
-      .. ' Remove them from init.lua, restart, and try again.'
-    error(msg)
+    if opts._ex then
+      util.echo_err(N_('E5810: Some plugins are active and were not deleted: %s'):format(plugs))
+      return
+    else
+      local msg = ('Some plugins are active and were not deleted: %s.'):format(plugs)
+        .. ' Remove them from init.lua, restart, and try again.'
+      error(msg)
+    end
   end
 end
 
@@ -1405,23 +1446,39 @@ end
 --- @field active boolean Whether plugin was added via |vim.pack.add()| to current session.
 --- @field branches? string[] Available Git branches (first is default). Missing if `info=false`.
 --- @field path string Plugin's path on disk.
---- @field rev string Current Git revision.
+--- @field rev string Current Git revision. Taken from |vim.pack-lockfile| if `info=false`.
+--- Git revision of a pending update. The same as used during |vim.pack.update()| and which
+--- points to a resolved `spec.version`. Missing if `info=false`.
+--- @field rev_to? string
 --- @field spec vim.pack.SpecResolved A |vim.pack.Spec| with resolved `name`.
 --- @field tags? string[] Available Git tags. Missing if `info=false`.
 
 --- @class vim.pack.keyset.get
 --- @inlinedoc
---- @field info boolean Whether to include extra plugin info. Default `true`.
+--- @field info? boolean Whether to include extra plugin info. Default `true`.
+--- Whether to skip downloading new updates. Requires `info=true`. Default: `true`.
+--- @field offline? boolean
 
 --- @param p_data_list vim.pack.PlugData[]
-local function add_p_data_info(p_data_list)
+--- @param offline boolean
+local function add_p_data_info(p_data_list, offline)
   local funs = {} --- @type (async fun())[]
+  local plug_dir = get_plug_dir()
   for i, p_data in ipairs(p_data_list) do
+    local plug = new_plug(p_data.spec, plug_dir)
     local path = p_data.path
     --- @async
     funs[i] = function()
       p_data.branches = git_get_branches(path)
       p_data.tags = git_get_tags(path)
+
+      if not offline then
+        git_fetch(path)
+      end
+
+      infer_revisions(plug)
+      p_data.rev = plug.info.sha_head
+      p_data.rev_to = plug.info.sha_target
     end
   end
   async_join_run_wait(funs)
@@ -1433,7 +1490,7 @@ end
 --- @return vim.pack.PlugData[]
 function M.get(names, opts)
   vim.validate('names', names, vim.islist, true, 'list')
-  opts = vim.tbl_extend('force', { info = true }, opts or {})
+  opts = vim.tbl_extend('force', { info = true, offline = true }, opts or {})
 
   -- Process active plugins in order they were added. Take into account that
   -- there might be "holes" after `vim.pack.del()`.
@@ -1482,10 +1539,22 @@ function M.get(names, opts)
 
   if opts.info then
     git_ensure_exec()
-    add_p_data_info(res)
+    add_p_data_info(res, opts.offline)
   end
 
   return res
+end
+
+--- @param skip_inactive? boolean
+--- @return string[] plugin_names
+function M._get_names(skip_inactive)
+  local names = {} --- @type string[]
+  for _, plugin_data in ipairs(vim.pack.get(nil, { info = false })) do
+    if not (skip_inactive and plugin_data.active) then
+      names[#names + 1] = plugin_data.spec.name
+    end
+  end
+  return names
 end
 
 return M

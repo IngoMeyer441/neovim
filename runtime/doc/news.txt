@@ -111,12 +111,19 @@ The following new features were added.
 
 API
 
+• |nvim_buf_call()| and |nvim_win_call()| now preserve multiple return values.
 • |nvim_set_hl()| supports "font" key.
 • |nvim_open_win()| `zindex` controls whether the UI will use a dimmed cursor
   shape when an unfocused float is on top of the cursor.
 • |nvim_echo()| distinguishes zero percent from omitted percent for Progress
   events.
 • |nvim_create_user_command()| accepts `desc` for Vimscript commands.
+• Support for tabpage-local options ('cmdheight'):
+  • |gettabvar()|
+  • |gettabwinvar()|
+  • |nvim_get_option_info2()|
+  • |nvim_get_option_value()|
+  • |nvim_set_option_value()|
 
 BUILD
 
@@ -139,15 +146,22 @@ EDITOR
 • |:log| opens log files.
 • |ZR| restarts Nvim (|:restart|).
 • |:uptime| displays uptime.
+• |:packupdate| and |:packdel| for managing |vim.pack|.
+• 'scrollback' is now also valid in |prompt-buffer| buffers to limit the
+  number of history lines kept above the prompt.
 
 EVENTS
 
 • |:delmarks| now triggers the |MarkSet| autocommand with line==col==0, same
   as |nvim_buf_del_mark()|
+• |TextPutPre| and |TextPutPost| are triggered before/after putting text.
+• |TabMoved| is triggered when tabs are reordered.
 
 HIGHLIGHTS
 
-• todo
+• `Dimmed` for text that should be de-emphasized.
+• |vim.hl.hl_op()| highlights text regions for |TextYankPost| and
+  |TextPutPost| events. It replaces the now deprecated `vim.hl.on_yank()`.
 
 LSP
 
@@ -185,7 +199,10 @@ LUA
 • |vim.npcall()| calls the function `fn` in protected-mode like |pcall()|,
   but returns `nil` on error.
 • |vim.pos| can now convert between positions and buffer offsets.
+• |vim.ui.input()| now allows setting input scope.
 • |vim.log| for easily creating loggers.
+• |vim.pack.get()| output includes revision of a pending update.
+• |vim.pack.get()| can fetch new updates before computing the output.
 
 OPTIONS
 
@@ -232,6 +249,7 @@ TUI
 
 • The TUI will re-query the terminal's background color when resuming from
   a suspended state, and Nvim will update 'background' accordingly.
+• TUI uses |$NVIM_TERMDEFS| to override terminfo entries.
 
 UI
 
@@ -253,6 +271,8 @@ CHANGED FEATURES                                                 *news-changed*
 
 These existing features changed their behavior.
 
+• |OptionSet| is no longer triggered during startup by automatic
+  |'background'| detection.
 • |:Open| with no arguments uses the current file.
 • The "buffer" key was renamed to "buf" in these functions (but the old name
   "buffer" is still accepted, for backwards compatibility):

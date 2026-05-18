@@ -194,6 +194,7 @@ error('Cannot require a meta file')
 --- |'TabClosedPre'
 --- |'TabEnter'
 --- |'TabLeave'
+--- |'TabMoved'
 --- |'TabNew'
 --- |'TabNewEntered'
 --- |'TermChanged'
@@ -207,6 +208,8 @@ error('Cannot require a meta file')
 --- |'TextChangedI'
 --- |'TextChangedP'
 --- |'TextChangedT'
+--- |'TextPutPost'
+--- |'TextPutPre'
 --- |'TextYankPost'
 --- |'UIEnter'
 --- |'UILeave'
@@ -379,6 +382,7 @@ error('Cannot require a meta file')
 --- @field buf? integer
 --- @field filetype? string
 --- @field scope? string
+--- @field tab? integer
 --- @field win? integer
 
 --- @class vim.api.keyset.redraw

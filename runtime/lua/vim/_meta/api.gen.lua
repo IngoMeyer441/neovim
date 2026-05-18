@@ -167,6 +167,12 @@ function vim.api.nvim__screenshot(path) end
 
 --- WARNING: This feature is experimental/unstable.
 ---
+--- @param progpath string
+--- @param argv any[]
+function vim.api.nvim__set_restart_on_crash(progpath, argv) end
+
+--- WARNING: This feature is experimental/unstable.
+---
 --- Gets internal stats.
 ---
 --- @return table<string,any> # Map of various internal stats.
@@ -259,7 +265,8 @@ function vim.api.nvim_buf_add_highlight(buffer, ns_id, hl_group, line, col_start
 --- otherwise True.
 function vim.api.nvim_buf_attach(buf, send_buffer, opts) end
 
---- Call a function with buffer as temporary current buffer.
+--- Calls function `fn` in the context of buffer `buf` and returns its result (may be multiple
+--- values).
 ---
 --- This temporarily switches current buffer to `buf`.
 --- If the current window already shows `buf`, the window is not switched.
@@ -271,11 +278,10 @@ function vim.api.nvim_buf_attach(buf, send_buffer, opts) end
 --- This is useful e.g. to call Vimscript functions that only work with the
 --- current buffer/window currently, like `jobstart(…, {'term': v:true})`.
 ---
---- @param buf integer Buffer id, or 0 for current buffer
---- @param fun function Function to call inside the buffer (currently Lua callable
---- only)
---- @return any # Return value of function.
-function vim.api.nvim_buf_call(buf, fun) end
+--- @param buf integer Buffer id, or 0 for current buffer.
+--- @param fn function Lua function to call inside the buffer.
+--- @return any # Value(s) returned by `fn()`.
+function vim.api.nvim_buf_call(buf, fn) end
 
 --- @deprecated
 --- @param buffer integer
@@ -1510,7 +1516,7 @@ function vim.api.nvim_get_option_info(name) end
 --- - last_set_linenr: line number where option was set
 --- - last_set_chan: Channel where option was set (0 for local)
 ---
---- - scope: one of "global", "win", or "buf"
+--- - scope: one of "global", "win", "buf", or "tab"
 --- - global_local: whether win or buf option has a global value
 ---
 --- - commalist: List of comma separated values
@@ -1546,6 +1552,8 @@ function vim.api.nvim_get_option_info2(name, opts) end
 ---   autocommands for the corresponding filetype.
 --- - scope: One of "global" or "local". Analogous to
 --- `:setglobal` and `:setlocal`, respectively.
+--- - tab: `tab-ID` for tab-local options. Currently only
+---   supports "cmdheight". Tabpage `0` means the current tabpage.
 --- - win: `window-ID`. Used for getting window local options.
 --- @return any # Option value
 function vim.api.nvim_get_option_value(name, opts) end
@@ -2328,6 +2336,9 @@ function vim.api.nvim_set_option(name, value) end
 --- - buf: Buffer number. Used for setting buffer local option.
 --- - scope: One of "global" or "local". Analogous to
 --- `:setglobal` and `:setlocal`, respectively.
+--- - tab: `tab-ID` for tab-local options (currently only 'cmdheight'). Tabpage 0
+---   means the current tabpage. If a non-current tab is given, the value will take
+---   effect when it is switched-to.
 --- - win: `window-ID`. Used for setting window local option.
 function vim.api.nvim_set_option_value(name, value, opts) end
 
@@ -2409,16 +2420,16 @@ function vim.api.nvim_tabpage_set_win(tabpage, win) end
 --- @param content string Content to write to the TTY
 function vim.api.nvim_ui_send(content) end
 
---- Calls a function with window as temporary current window.
+--- Calls function `fn` in the context of window `win` and returns its result (may be multiple
+--- values).
 ---
 ---
 --- @see `:help win_execute()`
 --- @see vim.api.nvim_buf_call
---- @param win integer `window-ID`, or 0 for current window
---- @param fun function Function to call inside the window (currently Lua callable
---- only)
---- @return any # Return value of function.
-function vim.api.nvim_win_call(win, fun) end
+--- @param win integer `window-ID`, or 0 for current window.
+--- @param fn function Lua function to call inside the window.
+--- @return any # Value(s) returned by `fn()`.
+function vim.api.nvim_win_call(win, fn) end
 
 --- Closes the window (like `:close` with a `window-ID`).
 ---

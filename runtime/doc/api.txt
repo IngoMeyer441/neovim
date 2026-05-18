@@ -1871,6 +1871,15 @@ nvim__redraw({opts})                                          *nvim__redraw()*
     See also: ~
       • |:redraw|
 
+                                                *nvim__set_restart_on_crash()*
+nvim__set_restart_on_crash({progpath}, {argv})
+    WARNING: This feature is experimental/unstable.
+
+
+    Parameters: ~
+      • {progpath}  (`string`)
+      • {argv}      (`any[]`)
+
 nvim__stats()                                                  *nvim__stats()*
     WARNING: This feature is experimental/unstable.
 
@@ -2400,8 +2409,9 @@ nvim_buf_attach({buf}, {send_buffer}, {opts})              *nvim_buf_attach()*
       • |nvim_buf_detach()|
       • |api-buffer-updates-lua|
 
-nvim_buf_call({buf}, {fun})                                  *nvim_buf_call()*
-    Call a function with buffer as temporary current buffer.
+nvim_buf_call({buf}, {fn})                                   *nvim_buf_call()*
+    Calls function `fn` in the context of buffer `buf` and returns its result
+    (may be multiple values).
 
     This temporarily switches current buffer to `buf`. If the current window
     already shows `buf`, the window is not switched. If a window inside the
@@ -2418,12 +2428,11 @@ nvim_buf_call({buf}, {fun})                                  *nvim_buf_call()*
         Since: 0.5.0
 
     Parameters: ~
-      • {buf}  (`integer`) Buffer id, or 0 for current buffer
-      • {fun}  (`function`) Function to call inside the buffer (currently Lua
-               callable only)
+      • {buf}  (`integer`) Buffer id, or 0 for current buffer.
+      • {fn}   (`function`) Lua function to call inside the buffer.
 
     Return: ~
-        (`any`) Return value of function.
+        (`any`) Value(s) returned by `fn()`.
 
 nvim_buf_del_keymap({buf}, {mode}, {lhs})              *nvim_buf_del_keymap()*
     Unmaps a buffer-local |mapping| for the given mode.
@@ -3505,7 +3514,7 @@ nvim_get_option_info2({name}, {opts})                *nvim_get_option_info2()*
     • last_set_sid: Last set script id (if any)
     • last_set_linenr: line number where option was set
     • last_set_chan: Channel where option was set (0 for local)
-    • scope: one of "global", "win", or "buf"
+    • scope: one of "global", "win", "buf", or "tab"
     • global_local: whether win or buf option has a global value
     • commalist: List of comma separated values
     • flaglist: List of single char flags
@@ -3550,6 +3559,8 @@ nvim_get_option_value({name}, {opts})                *nvim_get_option_value()*
                   autocommands for the corresponding filetype.
                 • scope: One of "global" or "local". Analogous to |:setglobal|
                   and |:setlocal|, respectively.
+                • tab: |tab-ID| for tab-local options. Currently only supports
+                  "cmdheight". Tabpage `0` means the current tabpage.
                 • win: |window-ID|. Used for getting window local options.
 
     Return: ~
@@ -3573,6 +3584,10 @@ nvim_set_option_value({name}, {value}, {opts})
                  • buf: Buffer number. Used for setting buffer local option.
                  • scope: One of "global" or "local". Analogous to
                    |:setglobal| and |:setlocal|, respectively.
+                 • tab: |tab-ID| for tab-local options (currently only
+                   'cmdheight'). Tabpage 0 means the current tabpage. If a
+                   non-current tab is given, the value will take effect when
+                   it is switched-to.
                  • win: |window-ID|. Used for setting window local option.
 
 
@@ -4042,20 +4057,20 @@ nvim_win_set_config({win}, {config})                   *nvim_win_set_config()*
 ==============================================================================
 Window Functions                                                  *api-window*
 
-nvim_win_call({win}, {fun})                                  *nvim_win_call()*
-    Calls a function with window as temporary current window.
+nvim_win_call({win}, {fn})                                   *nvim_win_call()*
+    Calls function `fn` in the context of window `win` and returns its result
+    (may be multiple values).
 
     Attributes: ~
         Lua |vim.api| only
         Since: 0.5.0
 
     Parameters: ~
-      • {win}  (`integer`) |window-ID|, or 0 for current window
-      • {fun}  (`function`) Function to call inside the window (currently Lua
-               callable only)
+      • {win}  (`integer`) |window-ID|, or 0 for current window.
+      • {fn}   (`function`) Lua function to call inside the window.
 
     Return: ~
-        (`any`) Return value of function.
+        (`any`) Value(s) returned by `fn()`.
 
     See also: ~
       • |win_execute()|

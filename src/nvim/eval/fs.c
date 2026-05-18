@@ -203,6 +203,21 @@ repeat:
     }
   }
 
+#ifndef MSWIN
+  if (src[*usedlen] == ':' && src[*usedlen + 1] == 'h') {
+    char *fname = *fnamep;
+    // POSIX reserves exactly "//"; longer slash runs are ordinary absolute paths.
+    // "///foo/bar" => "/foo"
+    // "//foo/bar" => "//foo"
+    if (fname[0] == '/' && fname[1] == '/' && fname[2] == '/') {
+      while (fname[1] == '/') {
+        fname++;
+      }
+      *fnamep = fname;
+    }
+  }
+#endif
+
   char *tail = path_tail(*fnamep);
   *fnamelen = strlen(*fnamep);
 
@@ -362,6 +377,10 @@ void f_chdir(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;
+
+  if (check_secure()) {
+    return;
+  }
 
   if (argvars[0].v_type != VAR_STRING) {
     // Returning an empty string means it failed.
@@ -1181,6 +1200,9 @@ theend:
 void f_readdir(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   tv_list_alloc_ret(rettv, kListLenUnknown);
+  if (check_secure()) {
+    return;
+  }
 
   const char *path = tv_get_string(&argvars[0]);
   typval_T *expr = &argvars[1];
@@ -1451,12 +1473,20 @@ static void read_file_or_blob(typval_T *argvars, typval_T *rettv, bool always_bl
 /// "readblob()" function
 void f_readblob(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
+  if (check_secure()) {
+    return;
+  }
+
   read_file_or_blob(argvars, rettv, true);
 }
 
 /// "readfile()" function
 void f_readfile(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
+  if (check_secure()) {
+    return;
+  }
+
   read_file_or_blob(argvars, rettv, false);
 }
 

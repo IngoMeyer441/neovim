@@ -165,6 +165,13 @@ function Test_NetrwUnMarkFile()
     " wipe out the test buffer
     bw
 endfunction
+
+function Test_MakeBookmark(netrw_curdir, fname)
+  new
+  let b:netrw_curdir = a:netrw_curdir
+  call s:MakeBookmark(a:fname)
+  bw
+endfunction
 " }}}
 END
 
@@ -683,4 +690,101 @@ func Test_netrw_unmark_all()
   call Test_NetrwUnMarkFile()
 endfunc
 
+" Creating a bookmark from a marked file should use b:netrw_curdir as head directory
+func Test_netrw_bookmark_marked_file()
+  let save_keepdir = g:netrw_keepdir
+  let save_workdir = getcwd()
+  let save_bookmarklist = exists('g:netrw_bookmarklist') ? g:netrw_bookmarklist : v:null
+
+  " Make sure Vim's working directory diverge from Netrw's
+  let g:netrw_keepdir = 1
+  let g:netrw_bookmarklist = []
+  let test_workdir = getcwd() . '/Xtest_workdir'
+  let test_netrw_curdir = test_workdir . '/Xtest_netrw_curdir'
+  call mkdir(test_netrw_curdir, 'p')
+  call writefile([], test_netrw_curdir . '/test_file')
+
+  execute 'cd ' . test_workdir
+  call Test_MakeBookmark(test_netrw_curdir, 'test_file')
+
+  " Bookmark paths should be absolute and normalized to prevent duplicates on win32
+  let expected_path = netrw#fs#AbsPath(test_netrw_curdir . '/test_file')
+  if has('win32')
+    let expected_path = substitute(expected_path, '\\', '/', 'ge')
+  endif
+  let expected_path = simplify(expected_path)
+
+  call assert_equal(1, len(g:netrw_bookmarklist))
+  call assert_equal(expected_path, g:netrw_bookmarklist[0])
+  call assert_true(isabsolutepath(g:netrw_bookmarklist[0]), 'Bookmark paths should be absolute')
+
+  " Tear down
+  execute 'cd ' . save_workdir
+  call delete(test_workdir, 'rf')
+
+  let g:netrw_keepdir = save_keepdir
+  if save_bookmarklist is v:null
+    unlet g:netrw_bookmarklist
+  else
+    let g:netrw_bookmarklist = save_bookmarklist
+  endif
+
+  bw!
+endfunc
+
+func Test_netrw_mf_command_injection()
+  CheckUnix
+  CheckExecutable touch
+  let path = tempname()
+  let fname = 'x" . execute("silent! !touch poc") . "'
+  call mkdir(path, 'R')
+  let _cwd = getcwd()
+  exe "cd " path
+  call writefile([], fname)
+  Explore .
+  call search('^x')
+  :norm mf
+  :norm mf
+  call assert_false(filereadable('poc'), 'Command injection via mf command')
+  exe "cd " _cwd
+  bw!
+endfunc
+
+function Test_netrw_NetrwMaps_CR_dirname()
+  CheckNotMSWindows
+
+  let tmpdir = tempname() . '/evil<CR>:let g:netrw_pwn=1<CR>'
+  call mkdir(tmpdir, 'pR')
+  call assert_true(isdirectory(tmpdir))
+  exe ":Explore " tmpdir
+  " Fire D
+  " If the commands are injected successfully,
+  " this fails with
+  "  Vim(let):E488: Trailing characters: \ @ command line script
+  call feedkeys("D\<C-c>\<C-c>", "xt")
+  call assert_false(exists("g:netrw_pwn"))
+
+  unlet! g:netrw_pwn
+  bw!
+endfunction
+
+func Test_netrw_injection()
+  let g:netrw_home       = getcwd()
+  let savefile           = g:netrw_home . '/.netrwhist'
+  let g:netrw_dirhistmax = 10
+  let g:netrw_dirhistcnt = 1
+  let g:netrw_dirhist_1  = "x'|let g:injected = 1|let y='z"
+  call delete(savefile)
+  try
+    call netrw#Call('NetrwBookHistSave')
+    call assert_true(filereadable(savefile), savefile . ' must be written')
+    unlet g:netrw_dirhist_1
+    execute 'source ' . fnameescape(savefile)
+    call assert_false(exists("g:injected"), 'injected statement must not execute')
+    call assert_equal("x'|let g:injected = 1|let y='z", g:netrw_dirhist_1, 'dirname must round-trip')
+  finally
+    call delete(savefile)
+    unlet! g:netrw_home g:netrw_dirhistmax g:netrw_dirhistcnt g:netrw_dirhist_1 g:injected
+  endtry
+endfunc
 " vim:ts=8 sts=2 sw=2 et

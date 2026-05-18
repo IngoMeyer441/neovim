@@ -289,12 +289,7 @@ ArrayOf(String) nvim_buf_get_lines(uint64_t channel_id,
     return rv;
   });
 
-  if (start >= end) {
-    // Return 0-length array
-    return rv;
-  }
-
-  size_t size = (size_t)(end - start);
+  size_t size = end >= start ? (size_t)(end - start) : 0;
 
   init_line_array(lstate, &rv, size, arena);
 
@@ -965,7 +960,8 @@ void nvim_buf_set_name(Buffer buf, String name, Error *err)
     const bool is_curbuf = b == curbuf;
     const int save_acd = p_acd;
     if (!is_curbuf) {
-      // Temporarily disable 'autochdir' when setting file name for another buffer.
+      // Don't update 'title' and 'autochdir' when setting file name for another buffer.
+      RedrawingDisabled++;
       p_acd = false;
     }
 
@@ -976,6 +972,7 @@ void nvim_buf_set_name(Buffer buf, String name, Error *err)
     aucmd_restbuf(&aco);
 
     if (!is_curbuf) {
+      RedrawingDisabled--;
       p_acd = save_acd;
     }
   });
@@ -1181,7 +1178,8 @@ ArrayOf(Integer, 2) nvim_buf_get_mark(Buffer buf, String name, Arena *arena, Err
   return rv;
 }
 
-/// Call a function with buffer as temporary current buffer.
+/// Calls function `fn` in the context of buffer `buf` and returns its result (may be multiple
+/// values).
 ///
 /// This temporarily switches current buffer to `buf`.
 /// If the current window already shows `buf`, the window is not switched.
@@ -1193,12 +1191,11 @@ ArrayOf(Integer, 2) nvim_buf_get_mark(Buffer buf, String name, Arena *arena, Err
 /// This is useful e.g. to call Vimscript functions that only work with the
 /// current buffer/window currently, like `jobstart(…, {'term': v:true})`.
 ///
-/// @param buf     Buffer id, or 0 for current buffer
-/// @param fun        Function to call inside the buffer (currently Lua callable
-///                   only)
-/// @param[out] err   Error details, if any
-/// @return           Return value of function.
-Object nvim_buf_call(Buffer buf, LuaRef fun, Error *err)
+/// @param buf  Buffer id, or 0 for current buffer.
+/// @param fn   Lua function to call inside the buffer.
+/// @param err  Error details, if any.
+/// @return     Value(s) returned by `fn()`.
+Object nvim_buf_call(Buffer buf, LuaRef fn, lua_State *lstate, Error *err)
   FUNC_API_SINCE(7)
   FUNC_API_LUA_ONLY
 {
@@ -1207,18 +1204,17 @@ Object nvim_buf_call(Buffer buf, LuaRef fun, Error *err)
     return NIL;
   }
 
-  Object res = OBJECT_INIT;
   TRY_WRAP(err, {
     aco_save_T aco;
     aucmd_prepbuf(&aco, b);
 
     Array args = ARRAY_DICT_INIT;
-    res = nlua_call_ref(fun, NULL, args, kRetLuaref, NULL, err);
+    nlua_call_ref(fn, NULL, args, kRetMultiStack, NULL, err);
 
     aucmd_restbuf(&aco);
   });
 
-  return res;
+  return NIL;  // kRetMultiStack: values are already on the lua stack
 }
 
 /// @nodoc

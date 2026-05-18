@@ -2604,7 +2604,7 @@ vim.fs.basename({file})                                    *vim.fs.basename()*
       • {file}  (`string?`) Path
 
     Return: ~
-        (`string?`) Basename of {file}
+        (`string?`) Basename of `file`
 
 vim.fs.dir({path}, {opts})                                      *vim.fs.dir()*
     Gets an iterator over items found in `path` (normalized via
@@ -2642,7 +2642,7 @@ vim.fs.dirname({file})                                      *vim.fs.dirname()*
       • {file}  (`string?`) Path
 
     Return: ~
-        (`string?`) Parent directory of {file}
+        (`string?`) Parent directory of `file`
 
 vim.fs.ext({file}, {opts})                                      *vim.fs.ext()*
     Return the file's last extension, if any.
@@ -2954,21 +2954,23 @@ vim.glob.to_lpeg({pattern})                               *vim.glob.to_lpeg()*
 ==============================================================================
 Lua module: vim.hl                                                    *vim.hl*
 
-vim.hl.on_yank({opts})                                      *vim.hl.on_yank()*
-    Highlight the yanked text during a |TextYankPost| event.
+vim.hl.hl_op({opts})                                          *vim.hl.hl_op()*
+    Highlight the related text region during a |TextYankPost| or |TextPutPost|
+    event.
 
     Add the following to your `init.vim`: >vim
-        autocmd TextYankPost * silent! lua vim.hl.on_yank {higroup='Visual', timeout=300}
+        autocmd TextYankPost * silent! lua vim.hl.hl_op {higroup='Visual', timeout=300}
+        autocmd TextPutPost * silent! lua vim.hl.hl_op {higroup='Visual', timeout=300}
 <
 
     Parameters: ~
       • {opts}  (`table?`) Optional parameters
                 • event event structure (default vim.v.event)
-                • higroup highlight group for yanked region (default
+                • higroup highlight group for the text region (default
                   "IncSearch")
                 • on_macro highlight when executing macro (default false)
-                • on_visual highlight when yanking visual selection (default
-                  true)
+                • on_visual highlight when the event is in |Visual| mode
+                  (default true)
                 • priority integer priority (default
                   |vim.hl.priorities|`.user`)
                 • timeout time in ms before highlight is cleared (default 150)
@@ -2980,7 +2982,7 @@ vim.hl.priorities                                          *vim.hl.priorities*
     • `semantic_tokens`: `125`, used for LSP semantic token highlighting
     • `diagnostics`: `150`, used for code analysis such as diagnostics
     • `user`: `200`, used for user-triggered highlights such as LSP document
-      symbols or `on_yank` autocommands
+      symbols or `hl_op` autocommands
 
                                                               *vim.hl.range()*
 vim.hl.range({buf}, {ns}, {higroup}, {start}, {finish}, {opts})
@@ -5332,7 +5334,8 @@ vim.ui.input({opts}, {on_confirm})                            *vim.ui.input()*
     work until `on_confirm`.
 
     Example: >lua
-        vim.ui.input({ prompt = 'Enter value for shiftwidth: ' }, function(input)
+        local opts = { prompt = 'Enter value for shiftwidth: ', scope = 'buffer' }
+        vim.ui.input(opts, function(input)
             vim.o.shiftwidth = tonumber(input)
         end)
 <
@@ -5347,6 +5350,14 @@ vim.ui.input({opts}, {on_confirm})                            *vim.ui.input()*
                       • {highlight}? (`function`) Function that will be used
                         for highlighting user inputs.
                       • {prompt}? (`string`) Text of the prompt
+                      • {scope}?
+                        (`'cursor'|'line'|'buffer'|'window'|'tabpage'|'editor'|'project'`)
+                        Input scope, as in "This input is for something at
+                        cursor/line/etc scope". Can be used by `vim.ui.input`
+                        implementations to tweak behavior and presentation.
+                        For example, the input may adjust the floating window
+                        position: near the cursor if `cursor`, in window
+                        corner if `buffer` or `window`, etc.
       • {on_confirm}  (`fun(input?: string)`) Called once the user confirms or
                       abort the input. `input` is what the user typed (it
                       might be an empty string if nothing was entered), or
@@ -5857,13 +5868,15 @@ To enable this feature (default opts shown): >lua
     require('vim._core.ui2').enable({
       enable = true, -- Whether to enable or disable the UI.
       msg = { -- Options related to the message module.
-        ---@type 'cmd'|'msg' Default message target, either in the
-        ---cmdline or in a separate ephemeral message window.
         ---@type string|table<string, 'cmd'|'msg'|'pager'> Default message target
-        ---or table mapping |ui-messages| kinds and triggers to a target.
+        ---or table mapping |ui-messages| kinds, triggers and IDs to a target.
+        ---Table keys are are matched as a Lua pattern to the message ID. 'default'
+        ---mapping applies to any omitted kind: { default = 'cmd', progress = 'msg' }.
         targets = 'cmd',
         cmd = { -- Options related to messages in the cmdline window.
-          height = 0.5 -- Maximum height while expanded for messages beyond 'cmdheight'.
+          -- Maximum height (rows if >=1, or % of 'lines' if <1) of messages expanded
+          -- beyond 'cmdheight'; 0.999 for full height.
+          height = 0.5,
         },
         dialog = { -- Options related to dialog window.
           height = 0.5, -- Maximum height.
@@ -5873,7 +5886,7 @@ To enable this feature (default opts shown): >lua
           timeout = 4000, -- Time a message is visible in the message window.
         },
         pager = { -- Options related to message window.
-          height = 1, -- Maximum height.
+          height = 0.999, -- Maximum height.
         },
       },
     })
