@@ -28,18 +28,19 @@ function M.request(payload, opts, on_response)
     timer = assert(vim.uv.new_timer())
   end
 
-  local id = vim.api.nvim_create_autocmd('TermResponse', {
-    group = opts.group,
-    nested = true,
-    callback = function(ev)
+  local id = require('vim._core.util').nvim_on(
+    'TermResponse',
+    opts.group,
+    { nested = true },
+    function(ev)
       local stop = on_response(ev.data.sequence)
       -- If on_response is done, cancel the timeout so on_timeout doesn't fire spuriously.
       if stop and timer and not timer:is_closing() then
         timer:close()
       end
       return stop
-    end,
-  })
+    end
+  )
 
   if payload ~= '' then
     vim.api.nvim_ui_send(payload)
@@ -169,7 +170,7 @@ local function broadcast_error(msg)
 end
 
 --- Get user overrides for terminfo entries as a table. See |$NVIM_TERMDEFS|
-function M.get_termdefs()
+function M._get_termdefs()
   local termdefs_raw = os.getenv('NVIM_TERMDEFS')
   if termdefs_raw ~= nil then
     local ok, termdefs_or_err = pcall(vim.json.decode, termdefs_raw)

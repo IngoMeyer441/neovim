@@ -324,13 +324,10 @@ describe('startup', function()
         os.remove('Xtest_shada')
       end)
 
-      assert_l_out(
-        'updatecount=0 shadafile=NONE loadplugins=false scripts=1\n',
-        nil,
-        nil,
-        '-',
-        script
-      )
+      assert_l_out(function(out)
+        -- Accept scripts=2 for PUC Lua where `vim._core.util` is sourced from disk instead of a preload blob.
+        return matches('updatecount=0 shadafile=NONE loadplugins=false scripts=[12]\n', out)
+      end, nil, nil, '-', script)
 
       -- User can override.
       assert_l_out(
@@ -1817,6 +1814,18 @@ describe('runtime:', function()
     command('let g:aseq = ""')
     command('edit FTDETECT')
     eq('SsABab', eval('g:aseq'))
+  end)
+
+  it('no crash for recursive search_path build #39815', function()
+    clear()
+    local screen = Screen.new()
+    fn.jobstart({
+      nvim_prog,
+      '--clean',
+      '+lua require("vim._core.ui2").enable()',
+      '+set rtp+=$FOO | set syntax',
+    }, { term = true, env = { VIMRUNTIME = os.getenv('VIMRUNTIME') } })
+    screen:expect({ any = 'syntax', none = 'Process exited 1' })
   end)
 end)
 

@@ -33,6 +33,8 @@ LSP
 LUA
 
 • vim.pos, vim.range always require the `buf` parameter.
+• range.cursor() and range.to_cursor() are removed.
+  Use range.mark() and range.to_mark() instead.
 
 DIAGNOSTICS
 
@@ -149,6 +151,8 @@ EDITOR
 • |:packupdate| and |:packdel| for managing |vim.pack|.
 • 'scrollback' is now also valid in |prompt-buffer| buffers to limit the
   number of history lines kept above the prompt.
+• |v_al| and |v_il| text objects select the whole buffer and the current line
+  without leading or trailing white space.
 
 EVENTS
 
@@ -170,6 +174,7 @@ LSP
     "preselect". https://microsoft.github.io/language-server-protocol/specification/#completionClientCapabilities
   • `textDocument/foldingRange` |vim.lsp.foldtext()| highlights collapsed text.
     https://microsoft.github.io/language-server-protocol/specification/#textDocument_foldingRange
+• `:checkhealth vim.lsp` highlights the "current buffer".
 • |vim.lsp.buf.declaration()|, |vim.lsp.buf.definition()|,
   |vim.lsp.buf.type_definition()|, and |vim.lsp.buf.implementation()|
   now follows 'switchbuf'.
@@ -199,8 +204,9 @@ LUA
 • |vim.npcall()| calls the function `fn` in protected-mode like |pcall()|,
   but returns `nil` on error.
 • |vim.pos| can now convert between positions and buffer offsets.
+• |vim.pos| and |vim.range| can now convert between mark positions.
 • |vim.ui.input()| now allows setting input scope.
-• |vim.log| for easily creating loggers.
+• |vim.log| provides a logging interface.
 • |vim.pack.get()| output includes revision of a pending update.
 • |vim.pack.get()| can fetch new updates before computing the output.
 
@@ -215,15 +221,13 @@ PERFORMANCE
 
 • |treesitter-highlight| performance on large injection-heavy files improves
   by 50% to 100% by reusing edited child-tree ranges.
-
 • Nvim architecture allows pure-Lua implementations of some `vim.fn`
   functions, which skips the Vimscript <=> Lua "bridge" (no data
   conversion/marshalling) entirely, if the `vim.fn` function is called from
   Lua.
-• The table holding LSP data is now cleared using `table.clear`,
-  thus reducing GC and memory reallocation during each data reset.
-• When parsing the received Content-Length messages,
-  the RPC client will no longer allocate extra strings.
+• Internal LSP data is cleared using `table.clear`, which reduces GC and
+  memory reallocation during each data reset.
+• RPC client avoids string allocations when parsing Content-Length messages.
 
 PLUGINS
 
@@ -249,10 +253,12 @@ TUI
 
 • The TUI will re-query the terminal's background color when resuming from
   a suspended state, and Nvim will update 'background' accordingly.
-• TUI uses |$NVIM_TERMDEFS| to override terminfo entries.
+• User can override the builtin "terminfo" via |$NVIM_TERMDEFS|. This is
+  similar to Vim's |t_xx| options.
 
 UI
 
+• |:checkhealth| shows filewatcher info in the Performance section.
 • These builtin "picker" menus delegate to |vim.ui.select()|:
   • :browse oldfiles
   • |:recover|
@@ -271,6 +277,7 @@ CHANGED FEATURES                                                 *news-changed*
 
 These existing features changed their behavior.
 
+• `nvim_exec_autocmds({buf=…})` runs in the context of the target buffer.
 • |OptionSet| is no longer triggered during startup by automatic
   |'background'| detection.
 • |:Open| with no arguments uses the current file.

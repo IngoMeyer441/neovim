@@ -1,6 +1,7 @@
 local protocol = require('vim.lsp.protocol')
 local validate = vim.validate
 local api = vim.api
+local nvim_on = require('vim._core.util').nvim_on
 local list_extend = vim.list_extend
 local uv = vim.uv
 
@@ -133,9 +134,9 @@ local function sort_by_key(fn)
   end
 end
 
-local get_lines = vim.pos._get_lines
-
-local get_line = vim.pos._get_line
+-- TODO(ofseed): remove these exported functions by replacing their usages with `vim.pos`.
+local get_lines = require('vim.pos._util').get_lines
+local get_line = require('vim.pos._util').get_line
 
 --- Applies a list of text edits to a buffer. Note: this mutates `text_edits` (sorts in-place and
 --- adds `_index` fields).
@@ -535,6 +536,7 @@ end
 ---@param position_encoding 'utf-8'|'utf-16'|'utf-32' (required)
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#workspace_applyEdit
 function M.apply_workspace_edit(workspace_edit, position_encoding)
+  vim.validate('workspace_edit', workspace_edit, 'table')
   vim.validate('position_encoding', position_encoding, 'string')
 
   if workspace_edit.documentChanges then
@@ -1320,28 +1322,20 @@ local function close_preview_autocmd(events, winnr, floating_bufnr, bufnr)
 
   -- close the preview window when entered a buffer that is not
   -- the floating window buffer or the buffer that spawned it
-  api.nvim_create_autocmd('BufLeave', {
-    group = augroup,
-    buf = bufnr,
-    callback = function()
-      vim.schedule(function()
-        -- When jumping to the quickfix window from the preview window,
-        -- do not close the preview window.
-        if api.nvim_get_option_value('filetype', { buf = 0 }) ~= 'qf' then
-          close_preview_window(winnr, { floating_bufnr, bufnr })
-        end
-      end)
-    end,
-  })
+  nvim_on('BufLeave', augroup, { buf = bufnr }, function()
+    vim.schedule(function()
+      -- When jumping to the quickfix window from the preview window,
+      -- do not close the preview window.
+      if api.nvim_get_option_value('filetype', { buf = 0 }) ~= 'qf' then
+        close_preview_window(winnr, { floating_bufnr, bufnr })
+      end
+    end)
+  end)
 
   if #events > 0 then
-    api.nvim_create_autocmd(events, {
-      group = augroup,
-      buf = bufnr,
-      callback = function()
-        close_preview_window(winnr)
-      end,
-    })
+    nvim_on(events, augroup, { buf = bufnr }, function()
+      close_preview_window(winnr)
+    end)
   end
 end
 
@@ -1373,7 +1367,7 @@ function M._make_floating_popup_size(contents, opts)
   end
 
   local _, border_width = get_border_size(opts)
-  local screen_width = api.nvim_win_get_width(0)
+  local screen_width = opts.relative == 'editor' and vim.o.columns or api.nvim_win_get_width(0)
   width = math.min(width, screen_width)
 
   -- make sure borders are always inside the screen
@@ -1593,9 +1587,10 @@ function M.open_floating_preview(contents, syntax, opts)
     api.nvim_win_set_var(floating_winnr, 'lsp_floating_bufnr', bufnr)
   end
 
-  api.nvim_create_autocmd('WinClosed', {
-    group = api.nvim_create_augroup('nvim.closing_floating_preview', { clear = true }),
-    callback = function(args)
+  nvim_on(
+    'WinClosed',
+    api.nvim_create_augroup('nvim.closing_floating_preview', { clear = true }),
+    function(args)
       local winid = vim._tointeger(args.match)
       local preview_bufnr = vim.w[winid].lsp_floating_bufnr
       if
@@ -1606,8 +1601,8 @@ function M.open_floating_preview(contents, syntax, opts)
         vim.b[bufnr].lsp_floating_preview = nil
         return true
       end
-    end,
-  })
+    end
+  )
 
   vim.wo[floating_winnr].foldenable = false -- Disable folding.
   vim.wo[floating_winnr].wrap = opts.wrap -- Soft wrapping.
@@ -1856,32 +1851,11 @@ function M.make_given_range_params(start_pos, end_pos, bufnr, position_encoding)
   validate('position_encoding', position_encoding, 'string')
 
   bufnr = vim._resolve_bufnr(bufnr)
-  --- @type [integer, integer]
-  local A = { unpack(start_pos or api.nvim_buf_get_mark(bufnr, '<')) }
-  --- @type [integer, integer]
-  local B = { unpack(end_pos or api.nvim_buf_get_mark(bufnr, '>')) }
-  -- convert to 0-index
-  A[1] = A[1] - 1
-  B[1] = B[1] - 1
-  -- account for position_encoding.
-  if A[2] > 0 then
-    A[2] = M.character_offset(bufnr, A[1], A[2], position_encoding)
-  end
-  if B[2] > 0 then
-    B[2] = M.character_offset(bufnr, B[1], B[2], position_encoding)
-  end
-  -- we need to offset the end character position otherwise we loose the last
-  -- character of the selection, as LSP end position is exclusive
-  -- see https://microsoft.github.io/language-server-protocol/specification#range
-  if vim.o.selection ~= 'exclusive' then
-    B[2] = B[2] + 1
-  end
+  local start_row, start_col = unpack(start_pos or api.nvim_buf_get_mark(bufnr, '<'))
+  local end_row, end_col = unpack(end_pos or api.nvim_buf_get_mark(bufnr, '>'))
   return {
     textDocument = M.make_text_document_params(bufnr),
-    range = {
-      start = { line = A[1], character = A[2] },
-      ['end'] = { line = B[1], character = B[2] },
-    },
+    range = vim.range.mark(bufnr, start_row, start_col, end_row, end_col):to_lsp(position_encoding),
   }
 end
 
@@ -1933,12 +1907,14 @@ end
 
 --- Returns the UTF-32 and UTF-16 offsets for a position in a certain buffer.
 ---
+---@deprecated
 ---@param buf integer buffer number (0 for current)
 ---@param row integer 0-indexed line
 ---@param col integer 0-indexed byte offset in line
 ---@param position_encoding 'utf-8'|'utf-16'|'utf-32'
 ---@return integer `position_encoding` index of the character in line {row} column {col} in buffer {buf}
 function M.character_offset(buf, row, col, position_encoding)
+  vim.deprecate('vim.lsp.util.character_offset', 'vim.str_utfindex', '0.14')
   vim.validate('position_encoding', position_encoding, 'string')
 
   local line = get_line(buf, row)

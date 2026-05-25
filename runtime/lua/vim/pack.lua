@@ -232,6 +232,7 @@ local api = vim.api
 local uv = vim.uv
 local async = require('vim._async')
 local util = require('vim._core.util')
+local nvim_on = util.nvim_on
 local N_ = vim.fn.gettext
 
 local M = {}
@@ -1199,7 +1200,7 @@ local function show_confirm_buf(lines, on_finish)
     delete_buffer()
   end
   -- - Use `nested` to allow other events (useful for statuslines)
-  api.nvim_create_autocmd('BufWriteCmd', { buf = bufnr, nested = true, callback = finish })
+  nvim_on('BufWriteCmd', nil, { buf = bufnr, nested = true }, finish)
 
   -- Define action to cancel confirm
   --- @type integer
@@ -1211,7 +1212,7 @@ local function show_confirm_buf(lines, on_finish)
     pcall(api.nvim_del_autocmd, cancel_au_id)
     delete_buffer()
   end
-  cancel_au_id = api.nvim_create_autocmd('WinClosed', { nested = true, callback = on_cancel })
+  cancel_au_id = nvim_on('WinClosed', nil, { nested = true }, on_cancel)
 
   -- Set buffer-local options last (so that user autocmmands could override)
   vim.bo[bufnr].modified = false
@@ -1409,6 +1410,7 @@ function M.del(names, opts)
 
   lock_read()
 
+  local successful_delete = {} --- @type string[]
   local fail_to_delete = {} --- @type string[]
   for _, p in ipairs(plug_list) do
     if not active_plugins[p.path] or opts.force then
@@ -1416,17 +1418,22 @@ function M.del(names, opts)
 
       vim.fs.rm(p.path, { recursive = true, force = true })
       active_plugins[p.path] = nil
-      notify(("Removed plugin '%s'"):format(p.spec.name), 'INFO')
-
       plugin_lock.plugins[p.spec.name] = nil
 
       trigger_event(p, 'PackChanged', 'delete')
+      successful_delete[#successful_delete + 1] = p.spec.name
     else
       fail_to_delete[#fail_to_delete + 1] = p.spec.name
     end
   end
 
   lock_write()
+
+  if #successful_delete > 0 then
+    local suffix = #successful_delete == 1 and '' or 's'
+    local plugs = table.concat(successful_delete, ', ')
+    notify(('Removed plugin%s: %s'):format(suffix, plugs), 'INFO')
+  end
 
   if #fail_to_delete > 0 then
     local plugs = table.concat(fail_to_delete, ', ')

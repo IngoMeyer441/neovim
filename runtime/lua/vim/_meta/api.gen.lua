@@ -1231,15 +1231,16 @@ function vim.api.nvim_exec(src, output) end
 --- - output: (string|nil) Output if `opts.output` is true.
 function vim.api.nvim_exec2(src, opts) end
 
---- Executes handlers for {event} that match the corresponding {opts} query. `autocmd-execute`
+--- Executes {event} handlers matching the {opts} query, in the context of {buf} (if given). `autocmd-execute`
+---
 --- @see `:help :doautocmd`
 --- @param event vim.api.keyset.events|vim.api.keyset.events[] Event(s) to execute.
 --- @param opts vim.api.keyset.exec_autocmds Optional filters:
---- - buf (`integer?`) Buffer id `autocmd-buflocal`. Not allowed with {pattern}.
+--- - buf (`integer?`) Buffer where the event is applied. `autocmd-buflocal` Not allowed with {pattern}.
 --- - data (`any`): Arbitrary data passed to the callback. See `nvim_create_autocmd()`.
 --- - group (`string|integer?`) Group name or id to match against. `autocmd-groups`.
 --- - modeline (`boolean?`, default: true) Process the modeline after the autocommands
----   [<nomodeline>].
+---   [<nomodeline>]. Ignored if `buf` is given.
 --- - pattern (`string|array?`, default: current file name) `autocmd-pattern`. Not allowed with {buf}.
 function vim.api.nvim_exec_autocmds(event, opts) end
 
