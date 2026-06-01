@@ -2202,11 +2202,15 @@ int stop_arrow(void)
     new_insert_skip = 2;
   } else if (ins_need_undo) {
     if (u_save_cursor() == OK) {
-      // A command or event may have moved the cursor or edited the
-      // buffer. Update Insstart so that later edits can properly decide
-      // whether an extra undo entry is needed.
-      Insstart = curwin->w_cursor;
-      Insstart_textlen = (colnr_T)linetabsize_str(get_cursor_line_ptr());
+      // A command or event may have moved the cursor before the next
+      // edit. Pull Insstart back only when the cursor moved above it,
+      // so that later edits can properly decide whether an extra undo
+      // entry is needed. Advancing Insstart would mis-place '[ after a
+      // register paste.
+      if (lt(curwin->w_cursor, Insstart)) {
+        Insstart = curwin->w_cursor;
+        Insstart_textlen = (colnr_T)linetabsize_str(get_cursor_line_ptr());
+      }
       ins_need_undo = false;
     }
   }
@@ -2331,6 +2335,9 @@ static void stop_insert(pos_T *end_insert_pos, int esc, int nomove)
         if (VIsual_active) {
           check_visual_pos();
         }
+      } else {
+        // Non-whitespace follows, keep original cursor.
+        curwin->w_cursor = tpos;
       }
     }
   }

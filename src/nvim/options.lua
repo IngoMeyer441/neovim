@@ -944,14 +944,15 @@ local options = {
       },
       desc = [=[
         The value of this option specifies the type of a buffer:
-          <empty>	normal buffer
-          acwrite	buffer will always be written with |BufWriteCmd|s
-          help		help buffer (do not set this manually)
-          nofile	buffer is not related to a file, will not be written
-          nowrite	buffer will not be written
-          prompt	buffer where only the last section can be edited, for
+          (empty)	Normal buffer.
+          acwrite	Buffer will always be written with |BufWriteCmd|.
+          help		Help buffer (do not set this manually).
+          nofile	Buffer is not a file, will not be written.
+          nowrite	Buffer represents a filepath (such as a directory),
+        		but will not be written.
+          prompt	Buffer where only the last section can be edited, for
         		use by plugins. |prompt-buffer|
-          quickfix	list of errors |:cwindow| or locations |:lwindow|
+          quickfix	List of errors |:cwindow| or locations |:lwindow|
           terminal	|terminal-emulator| buffer
 
         This option is used together with 'bufhidden' and 'swapfile' to
@@ -8879,7 +8880,8 @@ local options = {
         { NF  Evaluate expression between "%{" and "}" and substitute result.
               Note that there is no "%" before the closing "}".  The
               expression cannot contain a "}" character, call a function to
-              work around that.  See |stl-%{| below.
+              work around that.  See |stl-%{| below.  Use "%0{" to insert the
+              result verbatim.
         `{%` -  This is almost same as "{" except the result of the expression is
               re-evaluated as a statusline format string.  Thus if the
               return value of expr contains "%" items they will get expanded.
@@ -8982,6 +8984,8 @@ local options = {
         A result of all digits is regarded a number for display purposes.
         Otherwise the result is taken as flag text and applied to the rules
         described above.
+        							*stl-%0{*
+        With %0{ neither applies: the result is inserted as a literal string.
 
         Watch out for errors in expressions.  They may render Vim unusable!
         If you are stuck, hold down ':' or 'Q' to get a prompt, then quit and
