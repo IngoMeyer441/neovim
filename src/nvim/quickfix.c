@@ -3666,8 +3666,6 @@ static void qf_free_items(qf_list_T *qfl)
     qfl->qf_count--;
   }
 
-  qfl->qf_start = NULL;
-  qfl->qf_ptr = NULL;
   qfl->qf_index = 0;
   qfl->qf_start = NULL;
   qfl->qf_last = NULL;
@@ -3727,6 +3725,10 @@ bool qf_mark_adjust(buf_T *buf, win_T *wp, linenr_T line1, linenr_T line2, linen
       FOR_ALL_QFL_ITEMS(qfl, qfp, i) {
         if (qfp->qf_fnum == buf->b_fnum) {
           found_one = true;
+          if (qfp->qf_cleared) {
+            continue;
+          }
+
           if (qfp->qf_lnum >= line1 && qfp->qf_lnum <= line2) {
             if (amount == MAXLNUM) {
               qfp->qf_cleared = true;

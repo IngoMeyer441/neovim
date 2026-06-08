@@ -205,6 +205,13 @@ describe('float window', function()
       "Conflict: 'bufpos' not allowed with non-float window",
       pcall_err(api.nvim_win_set_config, winid, { split = 'right', bufpos = { 0, 0 } })
     )
+
+    -- Reconfiguring split
+    local not_allowed = { hide = true, zindex = 1, title = '', footer = '', border = 'single' }
+    for k, v in pairs(not_allowed) do
+      local err = ("Conflict: '%s' not allowed with non-float window"):format(k)
+      eq(err, pcall_err(api.nvim_win_set_config, winid, { [k] = v }))
+    end
   end)
 
   it('win_execute() should work', function()
@@ -11471,8 +11478,18 @@ describe('float window', function()
       winid = api.nvim_open_win(buf, false, config)
       eq('●', api.nvim_win_get_config(winid).border[1])
 
+      -- Single-space border char.
+      command([[lua vim.opt.winborder=",,, ,,,, "]])
+      winid = api.nvim_open_win(buf, false, config)
+      eq({ '', '', '', ' ', '', '', '', ' ' }, api.nvim_win_get_config(winid).border)
+
+      -- Trailing comma hides the last side
+      command([[set winborder=+,-,+,\|,+,-,+,]])
+      winid = api.nvim_open_win(buf, false, config)
+      eq({ '+', '-', '+', '|', '+', '-', '+', '' }, api.nvim_win_get_config(winid).border)
+      command('fclose!')
+
       eq('Vim(set):E474: Invalid argument: winborder=,,', pcall_err(command, 'set winborder=,,'))
-      eq('Vim(set):E474: Invalid argument: winborder=+,-,+,|,+,-,+,', pcall_err(command, [[set winborder=+,-,+,\|,+,-,+,]]))
       eq('Vim(set):E474: Invalid argument: winborder=custom', pcall_err(command, 'set winborder=custom'))
     end)
 
