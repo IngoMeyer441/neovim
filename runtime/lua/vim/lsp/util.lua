@@ -223,6 +223,7 @@ function M.apply_text_edits(text_edits, bufnr, position_encoding, change_annotat
       -- of the buffer.
       if max <= start_row then
         api.nvim_buf_set_lines(bufnr, max, max, false, text)
+        has_eol_text_edit = true
       else
         local last_line_len = #get_line(bufnr, math.min(end_row, max - 1))
         -- Some LSP servers may return +1 range of the buffer content but nvim_buf_set_text can't
@@ -1810,10 +1811,9 @@ end
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocumentPositionParams
 function M.make_position_params(win, position_encoding)
   win = win or 0
-  local buf = api.nvim_win_get_buf(win)
   return {
-    textDocument = M.make_text_document_params(buf),
-    position = vim.pos.cursor(buf, api.nvim_win_get_cursor(win)):to_lsp(position_encoding),
+    textDocument = M.make_text_document_params(api.nvim_win_get_buf(win)),
+    position = vim.pos.cursor(win):to_lsp(position_encoding),
   }
 end
 

@@ -2261,7 +2261,6 @@ vim.validate({name}, {value}, {validator}, {optional}, {message})
           -- ...
         end
 <
-
     2. `vim.validate(spec)` (DEPRECATED) where `spec` is of type
        `table<string,[value:any, validator: vim.validate.Validator, optional_or_msg? : boolean|string]>)`
        Validates a argument specification. Specs are evaluated in alphanumeric
@@ -2469,9 +2468,7 @@ vim.filetype.match({args})                              *vim.filetype.match()*
 
     The filetype can be detected using one of three methods:
     1. Using an existing buffer
-
     2. Using only a file name
-
     3. Using only file contents
 
     Of these, option 1 provides the most accurate result as it uses both the
@@ -2969,13 +2966,13 @@ vim.hl.priorities                                          *vim.hl.priorities*
       symbols or `hl_op` autocommands
 
                                                               *vim.hl.range()*
-vim.hl.range({buf}, {ns}, {higroup}, {start}, {finish}, {opts})
+vim.hl.range({buf}, {ns}, {hlgroup}, {start}, {finish}, {opts})
     Apply highlight group to range of text.
 
     Parameters: ~
       • {buf}      (`integer`) Buffer number to apply highlighting to
       • {ns}       (`integer`) Namespace to add highlight to
-      • {higroup}  (`integer|integer[]|string|string[]`) Highlight group used
+      • {hlgroup}  (`integer|integer[]|string|string[]`) Highlight group used
                    for the text range. See the `hl_group` option in
                    |nvim_buf_set_extmark()|.
       • {start}    (`[integer,integer]|string`) Start of region as a (line,
@@ -3677,8 +3674,8 @@ vim.json.decode({str}, {opts})                             *vim.json.decode()*
       • {str}   (`string`) Stringified JSON data.
       • {opts}  (`table?`) A table with the following fields:
                 • {luanil}? (`{ object?: boolean, array?: boolean }`, default:
-                  `nil`) Convert `null` in JSON objects and/or arrays to Lua
-                  `nil` instead of |vim.NIL|.
+                  `nil`) Convert JSON "null" in objects/arrays to Lua `nil`
+                  instead of |vim.NIL|.
                 • {skip_comments}? (`boolean`, default: `false`) Allows
                   JavaScript-style comments within JSON data. Comments are
                   treated as whitespace and may appear anywhere whitespace is
@@ -4503,14 +4500,23 @@ by |vim.Pos| objects.
 cursor({buf}, {pos})                                        *vim.pos.cursor()*
     Creates a new |vim.Pos| from cursor position (see |api-indexing|).
 
+    If {pos} is omitted, the first argument is treated as {win} instead of
+    {buf}, and the current cursor position of {win} is used.
+
     Example: >lua
+        local buf = vim.api.nvim_win_get_buf(0)
         local cursor_pos = vim.api.nvim_win_get_cursor(0)
-        local pos = vim.pos.cursor(0, cursor_pos)
+        local pos = vim.pos.cursor(buf, cursor_pos)
+        -- This is equivalent:
+        local pos = vim.pos.cursor(0)
 <
 
     Parameters: ~
       • {buf}  (`integer`)
       • {pos}  (`[integer, integer]`) (lnum, col) tuple
+
+    Overloads: ~
+      • `fun(win: integer): vim.Pos`
 
     Return: ~
         (`vim.Pos`) See |vim.Pos|.
@@ -4594,16 +4600,15 @@ to_cursor({pos})                                         *vim.pos.to_cursor()*
         local pos = vim.pos(0, 3, 5)
 
         -- Convert to cursor position, you can call it in a method style.
-        local cursor_pos = { pos:to_cursor() }
+        local cursor_pos = pos:to_cursor()
         vim.api.nvim_win_set_cursor(0, cursor_pos)
 <
 
     Parameters: ~
       • {pos}  (`vim.Pos`) See |vim.Pos|.
 
-    Return (multiple): ~
-        (`integer`) lnum
-        (`integer`) col
+    Return: ~
+        (`[integer, integer]`) (lnum, col) tuple
 
 to_extmark({pos})                                       *vim.pos.to_extmark()*
     Converts |vim.Pos| to extmark position (see |api-indexing|).

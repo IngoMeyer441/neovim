@@ -1083,6 +1083,15 @@ function vim.fn.col(expr, winid) end
 --- The match can be selected with CTRL-N and CTRL-P as usual with
 --- Insert mode completion.  The popup menu will appear if
 --- specified, see |ins-completion-menu|.
+--- Unlike with other |ins-completion| modes, the CTRL-N and
+--- CTRL-P keys can be mapped while this completion is active.
+--- For example, to make CTRL-N move the selection without
+--- inserting the match: >vim
+---
+--- inoremap <expr> <C-N> complete_info().mode ==# 'eval'
+---       \ ? '<Down>' : '<C-N>'
+--- <
+---
 --- Example: >vim
 ---
 --- inoremap <F5> <C-R>=ListMonths()<CR>
@@ -3064,12 +3073,11 @@ function vim.fn.getchar(expr, opts) end
 --- @return integer
 function vim.fn.getcharmod() end
 
---- Get the position for String {expr}.  Same as |getpos()| but the
---- column number in the returned List is a character index
---- instead of a byte index.
---- If |getpos()| returns a very large column number, equal to
---- |v:maxcol|, then getcharpos() will return the character index
---- of the last character.
+--- Same as |getpos()|, except the column-number is
+--- character-indexed (UTF-8) instead of byte-indexed.
+---
+--- If |getpos()| returns |v:maxcol|, then getcharpos() returns
+--- the index of the last character.
 ---
 --- Example:
 --- With the cursor on '세' in line 5 with text "여보세요": >vim
@@ -6179,15 +6187,15 @@ function vim.fn.matchend(expr, pat, start, count) end
 ---     use for fuzzy matching.
 ---
 --- {str} is treated as a literal string and regular expression
---- matching is NOT supported.  The maximum supported {str} length
---- is 256.
+--- matching is NOT supported.  Only the first 1024 characters of
+--- {str} and of each item in {list} are used for matching;
+--- characters beyond that are ignored.
 ---
 --- When {str} has multiple words each separated by white space,
 --- then the list of strings that have all the words is returned.
 ---
 --- If there are no matching strings or there is an error, then an
---- empty list is returned.  If length of {str} is greater than
---- 256, then returns an empty list.
+--- empty list is returned.
 ---
 --- When {limit} is given, matchfuzzy() will find up to this
 --- number of matches in {list} and return them in sorted order.

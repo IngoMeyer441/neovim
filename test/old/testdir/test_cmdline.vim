@@ -1657,7 +1657,7 @@ func Test_lnum_and_pattern_as_range()
   2/foo/yank
   call assert_equal("foo 3\n", @")
   call assert_equal(1, line('.'))
-  close!
+  bw!
 endfunc
 
 " Tests for getcmdline(), getcmdpos() and getcmdtype()
@@ -2226,7 +2226,7 @@ func Test_cmdline_ctrl_g()
   " 'insertmode'
   " call feedkeys(":set im\<cr>\<C-L>:\<C-\>\<C-G>12\<C-L>:set noim\<cr>", 'xt')
   " call assert_equal('ab12xyc', getline(1))
-  close!
+  bw!
 endfunc
 
 " Test for 'wildmode'
@@ -4706,6 +4706,52 @@ func Test_customlist_dict_completion_info_popup()
   call term_sendkeys(buf, "\<C-U>sign un\<C-X>\<C-V>")
   call VerifyScreenDump(buf, 'Test_customlist_info_popup_11', {})
 
+  call StopVimInTerminal(buf)
+endfunc
+
+" Test that the mouse scroll wheel scrolls the info popup of the command line
+" completion popup menu when the mouse pointer is on top of it.
+func Test_wildmenu_pum_info_mouse_scroll()
+  CheckScreendump
+  CheckFeature quickfix
+
+  let lines =<< trim END
+    func DictComp(A, L, P)
+      let info = join(map(range(1, 30), '"info line " .. v:val'), "\n")
+      return [
+            \ {'word': 'apple',  'kind': 'f', 'menu': 'fruit', 'info': info},
+            \ {'word': 'banana', 'kind': 'f', 'menu': 'fruit', 'info': info},
+            \ ]
+    endfunc
+    command -nargs=1 -complete=customlist,DictComp DictCmd echo <q-args>
+    set wildmenu wildoptions=pum completeopt=menu,popup mouse=a
+
+    " Put the mouse on top of the info popup and turn the scroll wheel.
+    func ScrollInfo(keys)
+      let pos = popup_getpos(popup_findinfo())
+      call test_setmouse(pos.line + 1, pos.col + 1)
+      call feedkeys(a:keys, 'nt')
+    endfunc
+    cnoremap <F6> <Cmd>call ScrollInfo(repeat("\<ScrollWheelDown>", 3))<CR>
+    cnoremap <F7> <Cmd>call ScrollInfo(repeat("\<ScrollWheelUp>", 2))<CR>
+  END
+  call writefile(lines, 'XtestWildmenuMouseScroll', 'D')
+  let buf = RunVimInTerminal('-S XtestWildmenuMouseScroll', #{rows: 12})
+
+  " The info popup is shown next to the completion popup menu.
+  call term_sendkeys(buf, ":DictCmd \<Tab>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_info_mouse_scroll_1', {})
+
+  " Scrolling down with the wheel scrolls the info popup without closing the
+  " completion popup menu.
+  call term_sendkeys(buf, "\<F6>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_info_mouse_scroll_2', {})
+
+  " Scrolling back up scrolls the info popup up again.
+  call term_sendkeys(buf, "\<F7>")
+  call VerifyScreenDump(buf, 'Test_wildmenu_pum_info_mouse_scroll_3', {})
+
+  call term_sendkeys(buf, "\<Esc>")
   call StopVimInTerminal(buf)
 endfunc
 

@@ -267,11 +267,12 @@ g<End>			Like |g$| but to the last non-blank character
 f{char}			To [count]'th occurrence of {char} to the right.  The
 			cursor is placed on {char} |inclusive|.
 			{char} can be entered as a digraph |digraph-arg|.
-			When 'encoding' is set to Unicode, composing
-			characters may be used, see |utf-8-char-arg|.
+			Composing characters may be used |utf-8-char-arg|.
 			|:lmap| mappings apply to {char}.  The CTRL-^ command
 			in Insert mode can be used to switch this on/off
 			|i_CTRL-^|.
+
+			See |getcharsearch() |setcharsearch()
 
 							*F*
 F{char}			To the [count]'th occurrence of {char} to the left.
@@ -284,6 +285,8 @@ t{char}			Till before [count]'th occurrence of {char} to the
 			{char} |inclusive|.
 			{char} can be entered like with the |f| command.
 
+			See |getcharsearch() |setcharsearch()
+
 							*T*
 T{char}			Till after [count]'th occurrence of {char} to the
 			left.  The cursor is placed on the character right of
@@ -291,11 +294,15 @@ T{char}			Till after [count]'th occurrence of {char} to the
 			{char} can be entered like with the |f| command.
 
 							*;*
-;			Repeat latest f, t, F or T [count] times.  See |cpo-;|
+;			Repeat latest f, t, F or T [count] times.
+
+			See |getcharsearch() |setcharsearch() |cpo-;|
 
 							*,*
 ,			Repeat latest f, t, F or T in opposite direction
-			[count] times.  See also |cpo-;|
+			[count] times.
+
+			See |getcharsearch() |setcharsearch() |cpo-;|
 
 ==============================================================================
 3. Up-down motions					*up-down-motions*
@@ -1331,9 +1338,13 @@ remembered.
 			quotes).  Note that this works fine for C, but not for
 			Perl, where single quotes are used for strings.
 
-			Nothing special is done for matches in comments.  You
-			can either use the |matchit| plugin or put quotes around
-			matches.
+			When in addition 'comments' defines C-style "//" or
+			"/*" comments, parens and braces inside such comments
+			are skipped, like the |=| operator does.  This does
+			not happen when the cursor is inside a comment, so a
+			match inside that comment can still be found.
+			Otherwise you can use the |matchit| plugin or put
+			quotes around matches.
 
 			No count is allowed, {count}% jumps to a line {count}
 			percentage down the file |N%|.  Using '%' on

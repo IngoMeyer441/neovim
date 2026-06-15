@@ -35,6 +35,8 @@ LUA
 • vim.pos, vim.range always require the `buf` parameter.
 • range.cursor() and range.to_cursor() are removed.
   Use range.mark() and range.to_mark() instead.
+• pos.to_cursor() returns a (`row,` `col)` tuple
+  instead of returning them as separate values.
 
 DIAGNOSTICS
 
@@ -127,23 +129,22 @@ API
   • |nvim_get_option_info2()|
   • |nvim_get_option_value()|
   • |nvim_set_option_value()|
+• |nvim_buf_set_extmark()| `virt_lines_overflow` accepts "wrap" to enable
+  wrapping onto extra rows and "auto" which enables horizontal scrolling when
+  'nowrap' is set and wrapping when 'wrap' is set.
 
 BUILD
 
 • Building using "zig build" requires zig 0.16.x.
-
 • zig build: "-Dcross" option was removed. Often cross-compilation is now
-detected, so e.g. from a linux host
-
+  detected, so e.g. from a linux host: >
    zig build -Dtarget=aarch64-macos
-
-will automatically compile a host Lua for use during build.
-
-The new "-Dhost={target_string}" option can be used to override the used host.
-use "-Dhost=native" to force cross-compiling or "-Dhost=" (empty string) to
-assume that target binaries can run on the host during the build process (e.g.
-if target is x86 on a x86_64 system, or if emulation set up with binfmt or
-similar)
+<  will automatically compile a host Lua for use during build.
+• zig build: The new "-Dhost={target_string}" option can be used to override
+  the used host. Use "-Dhost=native" to force cross-compiling or "-Dhost="
+  (empty string) to assume that target binaries can run on the host during the
+  build process (e.g. if target is x86 on a x86_64 system, or if emulation set
+  up with binfmt or similar).
 
 DEFAULTS
 
@@ -153,6 +154,8 @@ DIAGNOSTICS
 
 • |vim.diagnostic.status()| uses the severity names defined by the `signs`
   field of |vim.diagnostic.config()|, if any.
+• `virtual_lines.overflow` in |vim.diagnostic.config()| controls
+  how virtual lines wider than the window are displayed.
 
 EDITOR
 
@@ -167,6 +170,10 @@ EDITOR
   number of history lines kept above the prompt.
 • |v_al| and |v_il| text objects select the whole buffer and the current line
   without leading or trailing white space.
+• 'autoread' uses file system watchers to detect external changes in
+  real-time, instead of only on |FocusGained|/|:checktime|.
+• During |complete()|-triggered completion, CTRL-N and CTRL-P are now subject
+  to insert-mode mappings.
 
 EVENTS
 
@@ -174,6 +181,7 @@ EVENTS
   as |nvim_buf_del_mark()|
 • |TextPutPre| and |TextPutPost| are triggered before/after putting text.
 • |TabMoved| is triggered when tabs are reordered.
+• Added the |SessionWritePre| autocommand event.
 
 HIGHLIGHTS
 

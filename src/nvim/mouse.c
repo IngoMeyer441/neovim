@@ -8,8 +8,10 @@
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand.h"
 #include "nvim/cursor.h"
 #include "nvim/decoration.h"
+#include "nvim/diff.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
@@ -1135,6 +1137,58 @@ void ins_mousescroll(int dir)
   }
 }
 
+/// Command-line mode implementation for scrolling in direction "dir", which is
+/// one of the MSCR_ values.  Scrolls the completion info popup when the mouse
+/// pointer is on top of it.
+/// Returns true when the info popup was scrolled.
+bool cmdline_mousescroll(int dir)
+{
+  cmdarg_T cap;
+  oparg_T oa;
+  CLEAR_FIELD(cap);
+  clear_oparg(&oa);
+  cap.oap = &oa;
+  cap.arg = dir;
+
+  switch (dir) {
+  case MSCR_UP:
+    cap.cmdchar = K_MOUSEUP; break;
+  case MSCR_DOWN:
+    cap.cmdchar = K_MOUSEDOWN; break;
+  case MSCR_LEFT:
+    cap.cmdchar = K_MOUSELEFT; break;
+  case MSCR_RIGHT:
+    cap.cmdchar = K_MOUSERIGHT; break;
+  }
+
+  if (mouse_row < 0 || mouse_col < 0) {
+    return false;
+  }
+
+  int grid = mouse_grid;
+  int row = mouse_row;
+  int col = mouse_col;
+
+  // Only scroll when the mouse is on top of the info popup.
+  win_T *wp = mouse_find_win_inner(&grid, &row, &col);
+  if (wp == NULL || !wp->w_float_is_info) {
+    return false;
+  }
+
+  win_T *old_curwin = curwin;
+
+  curwin = wp;
+  curbuf = wp->w_buffer;
+  // Call the common mouse scroll function shared with other modes.
+  do_mousescroll(&cap);
+  curwin = old_curwin;
+  curbuf = curwin->w_buffer;
+
+  // Cmdline mode doesn't normally call update_screen(), so call it here.
+  update_screen();
+  return true;
+}
+
 /// Return true if "c" is a mouse key.
 bool is_mouse_key(int c)
 {
@@ -1631,13 +1685,8 @@ bool mouse_comp_pos(win_T *win, int *rowp, int *colp, linenr_T *lnump)
 
   while (row > 0) {
     // Don't include filler lines in "count"
-    if (win_may_fill(win)) {
-      row -= lnum == win->w_topline ? win->w_topfill
-                                    : win_get_fill(win, lnum);
-      count = plines_win_nofill(win, lnum, false);
-    } else {
-      count = plines_win(win, lnum, false);
-    }
+    row -= lnum == win->w_topline ? win->w_topfill : win_get_fill(win, lnum);
+    count = plines_win_nofill(win, lnum, false);
 
     if (win->w_skipcol > 0 && lnum == win->w_topline) {
       int width1 = win->w_view_width - win_col_off(win);
@@ -1657,7 +1706,12 @@ bool mouse_comp_pos(win_T *win, int *rowp, int *colp, linenr_T *lnump)
       }
     }
 
-    if (count > row) {
+    // Clicking a "below" virtual line should interact with the line above,
+    // rather than the next line to which it is attached in the decor/draw sense.
+    int virt_below = 0;
+    if (count > row
+        || (decor_virt_lines(win, lnum, lnum + 1, &virt_below, NULL, false)
+            && count + virt_below > row)) {
       break;            // Position is in this buffer line.
     }
 
@@ -1669,6 +1723,15 @@ bool mouse_comp_pos(win_T *win, int *rowp, int *colp, linenr_T *lnump)
     }
     row -= count;
     lnum++;
+  }
+
+  // Earlier virt below check avoids advancing lnum, also need to decrement for topline.
+  if (lnum == win->w_topline) {
+    int virt_below = 0;
+    int virt_lines = decor_virt_lines(win, lnum - 1, lnum, &virt_below, NULL, false);
+    int diff_fill = diff_check_fill(win, lnum);
+    int skip_fill = virt_lines + diff_fill - win->w_topfill;
+    lnum -= (*rowp < virt_below - skip_fill);
   }
 
   // Mouse row reached, adjust lnum for concealed lines.
