@@ -76,6 +76,9 @@ DIAGNOSTICS
 
 • `vim.diagnostic.Opts.Status.format` no longer accepts the table mapping
   from severity to text. Use `vim.diagnostic.Opts.Signs.text` instead.
+• `current_line` property of |vim.diagnostic.Opts.VirtualLines| and
+  |vim.diagnostic.Opts.VirtualText| is now applied on |CursorHold| event.
+  Make sure your 'updatetime' is reasonable.
 
 EDITOR
 
@@ -174,14 +177,19 @@ EDITOR
   real-time, instead of only on |FocusGained|/|:checktime|.
 • During |complete()|-triggered completion, CTRL-N and CTRL-P are now subject
   to insert-mode mappings.
+• Multi-byte characters, translated by 'langmap', now invoke correct
+  mappings.
+  Example: >vim
+    set langmap=õ]
+<    Typing õõ in |Normal-mode| now invokes a mapping bound to ]].
 
 EVENTS
 
 • |:delmarks| now triggers the |MarkSet| autocommand with line==col==0, same
   as |nvim_buf_del_mark()|
+• |SessionWritePre| event emits just before |:mksession|.
 • |TextPutPre| and |TextPutPost| are triggered before/after putting text.
 • |TabMoved| is triggered when tabs are reordered.
-• Added the |SessionWritePre| autocommand event.
 
 HIGHLIGHTS
 
@@ -291,6 +299,7 @@ UI
 VIMSCRIPT
 
 • |v:exitreason| is set before |QuitPre|.
+• |v:startreason| differentiates between restart and normal start.
 • |v:starttime| is the process start time (nanoseconds since UNIX epoch).
 • |v:useractive| indicates user activity.
 • |serverlist()| with `info=true` returns details for each server (own + peers).
@@ -311,6 +320,8 @@ These existing features changed their behavior.
   • |nvim_exec_autocmds()|
   • |nvim_get_autocmds()|
 • |vim.keymap.set()| and |vim.keymap.del()| accept a list of strings for `lhs`.
+• 'statuscolumn' click function labels can be different across rows.
+  |v:virtnum| and |v:lnum| are available during the click function callback.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*

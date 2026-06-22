@@ -385,8 +385,9 @@ int nextwild(expand_T *xp, int type, int options, bool escape)
 }
 
 /// Create completion popup menu with items from "matches".
-static void cmdline_pum_create(CmdlineInfo *ccline, expand_T *xp, char **matches, int numMatches,
-                               bool showtail, bool cmdline_unchanged)
+static void cmdline_pum_create(const CmdlineInfo *ccline, expand_T *xp, char **matches,
+                               int numMatches, bool showtail, bool cmdline_unchanged)
+  FUNC_ATTR_NONNULL_ARG(1, 2)
 {
   assert(numMatches >= 0);
   // Add all the completion matches
@@ -1956,12 +1957,12 @@ static const char *set_context_in_filetype_cmd(expand_T *xp, const char *arg)
   int val = 0;
 
   while (true) {
-    if (strncmp(p, "plugin", 6) == 0) {
+    if (strncmp(p, "plugin", 6) == 0 && ascii_iswhite(p[6])) {
       val |= EXPAND_FILETYPECMD_PLUGIN;
       p = skipwhite(p + 6);
       continue;
     }
-    if (strncmp(p, "indent", 6) == 0) {
+    if (strncmp(p, "indent", 6) == 0 && ascii_iswhite(p[6])) {
       val |= EXPAND_FILETYPECMD_INDENT;
       p = skipwhite(p + 6);
       continue;

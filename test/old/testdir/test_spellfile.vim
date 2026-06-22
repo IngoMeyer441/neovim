@@ -1252,4 +1252,53 @@ func Test_mkspell_no_compflag_overflow()
   call assert_false(filereadable('Xcompbof.spl'))
 endfunc
 
+func Test_spell_sug_tree_count_words_overflow()
+  " A crafted .spl/.sug pair with a BY_INDEX self-cycle in the fold word tree
+  " parses cleanly (shared refs aren't recursed, so read_tree_node()'s depth
+  " cap never trips), but drove tree_count_words() past its MAXWLEN-sized depth
+  " arrays -> stack out-of-bounds write.  The walk only happens when
+  " spellsuggest() loads the matching .sug.  Reaching the assert == no OOB.
+  call mkdir('Xrtp/spell', 'pR')
+  " VIMspell + v50, SN_SUGFILE(ts), SN_END, LWORDTREE{node:1,BY_INDEX->0,'A'},
+  " empty KWORDTREE/PREFIXTREE
+  let spl = eval('0z56494D7370656C6C320B0000000008000000001234'
+        \ .. '5678FF000000020101000000410000000000000000')
+  " VIMsug + v1, matching ts, SUGWORDTREE word "a", empty SUGTABLE
+  let sug = 0z56494D737567010000000012345678000000040161010000000000
+  call writefile(spl, 'Xrtp/spell/xx.utf-8.spl', 'b')
+  call writefile(sug, 'Xrtp/spell/xx.utf-8.sug', 'b')
+
+  new
+  set runtimepath+=./Xrtp
+  set spelllang=xx
+  set spell
+  " Unpatched: OOB write here (ASan abort, or crash).  Patched: returns a list.
+  call assert_equal(v:t_list, type(spellsuggest('helloo')))
+
+  set spell& spelllang& runtimepath&
+  bwipe!
+endfunc
+
+" A word longer than MAXWLEN must not overflow the soundfold result buffer in
+" the single-byte SOFO branch of spell_soundfold_sofo().
+func Test_soundfold_overflow()
+  throw 'Skipped: Nvim does not support setting encoding=latin1'
+  let _enc=&enc
+  set enc=latin1
+  call writefile(['SOFOFROM ab', 'SOFOTO xy'], 'Xtest.aff', 'D')
+  call writefile(['1', 'foo'], 'Xtest.dic', 'D')
+  mkspell! Xtest Xtest
+  defer delete('Xtest.latin1.spl')
+  defer delete('Xtest.latin1.sug')
+  setl spelllang=Xtest.latin1.spl spell
+
+  " Before the fix the copy loop wrote one byte per input byte into a
+  " MAXWLEN (254) stack buffer with no upper bound, smashing the stack.
+  let sound = soundfold(repeat('ab', 300))
+  call assert_true(strlen(sound) < 254, 'soundfold result exceeds MAXWLEN')
+
+  set spell& spelllang&
+  let &enc = _enc
+endfunc
+
 " vim: shiftwidth=2 sts=2 expandtab
