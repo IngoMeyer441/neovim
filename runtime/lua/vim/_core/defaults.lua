@@ -922,7 +922,7 @@ do
   --- @param sync boolean When true (a TTY is present at startup), also send a
   --- DSR probe and synchronously wait so 'background' is set before user config,
   --- warning (E1568) if the terminal never answers the DSR.
-  local function detect_background(sync)
+  local function detect_background(sync, chan)
     -- Re-create (clear) the handler's augroup on each call so only the
     -- most-recently-attached TUI's handler remains.
     local bg_group = vim.api.nvim_create_augroup('nvim.tty.background', {})
@@ -938,36 +938,40 @@ do
     -- also reacts to runtime theme changes; the per-response bg_user_set() guard
     -- stops it once the user pins 'background'.
     local did_dsr_response = false
-    vim.tty.request(osc11 .. (sync and dsr or ''), { group = bg_group, timeout = 0 }, function(resp)
-      -- DSR response that should come after the OSC 11 response if the terminal
-      -- supports it.
-      if sync and string.match(resp, '^\027%[0n$') then
-        did_dsr_response = true
-        -- Don't stop listening: the bg response may come after the DSR response
-        -- if the terminal handles requests out of sequence. In that case, the bg
-        -- will simply be set later in the startup sequence.
-        return
-      end
+    vim.tty.request(
+      osc11 .. (sync and dsr or ''),
+      { group = bg_group, timeout = 0, chan = chan },
+      function(resp)
+        -- DSR response that should come after the OSC 11 response if the terminal
+        -- supports it.
+        if sync and string.match(resp, '^\027%[0n$') then
+          did_dsr_response = true
+          -- Don't stop listening: the bg response may come after the DSR response
+          -- if the terminal handles requests out of sequence. In that case, the bg
+          -- will simply be set later in the startup sequence.
+          return
+        end
 
-      -- Never override an explicit user value: stop once the user pins it.
-      if bg_user_set() then
-        return true
-      end
+        -- Never override an explicit user value: stop once the user pins it.
+        if bg_user_set() then
+          return true
+        end
 
-      local r, g, b = parseosc11(resp)
-      if r and g and b then
-        local rr = parsecolor(r)
-        local gg = parsecolor(g)
-        local bb = parsecolor(b)
+        local r, g, b = parseosc11(resp)
+        if r and g and b then
+          local rr = parsecolor(r)
+          local gg = parsecolor(g)
+          local bb = parsecolor(b)
 
-        if rr and gg and bb then
-          local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
-          local bg = luminance < 0.5 and 'dark' or 'light'
-          -- Use :noautocmd to suppress OptionSet event; OSC11 response may arrive after VimEnter.
-          vim.cmd('noautocmd set background=' .. bg)
+          if rr and gg and bb then
+            local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
+            local bg = luminance < 0.5 and 'dark' or 'light'
+            -- Use :noautocmd to suppress OptionSet event; OSC11 response may arrive after VimEnter.
+            vim.cmd('noautocmd set background=' .. bg)
+          end
         end
       end
-    end)
+    )
 
     if not sync then
       return
@@ -1007,16 +1011,20 @@ do
       -- Neither the TUI nor $COLORTERM indicate that truecolor is supported, so query the
       -- terminal
       local caps = {} ---@type table<string, boolean>
-      vim.tty.query({ 'Tc', 'RGB', 'setrgbf', 'setrgbb' }, function(cap, found)
-        if not found then
-          return
-        end
+      vim.tty.query(
+        { 'Tc', 'RGB', 'setrgbf', 'setrgbb' },
+        { group = group, chan = ui.chan },
+        function(cap, found)
+          if not found then
+            return
+          end
 
-        caps[cap] = true
-        if caps.Tc or caps.RGB or (caps.setrgbf and caps.setrgbb) then
-          setoption('termguicolors', true)
+          caps[cap] = true
+          if caps.Tc or caps.RGB or (caps.setrgbf and caps.setrgbb) then
+            setoption('termguicolors', true)
+          end
         end
-      end)
+      )
 
       -- Arbitrary colors to set in the SGR sequence
       local r = 1
@@ -1031,7 +1039,7 @@ do
       -- Reset attributes first, as other code may have set attributes.
       local payload = ('\027[0m\027[48;2;%d;%d;%dm%s'):format(r, g, b, '\027P$qm\027\\')
 
-      vim.tty.request(payload, { group = group }, function(resp)
+      vim.tty.request(payload, { group = group, chan = ui.chan }, function(resp)
         local decrqss = resp:match('^\027P1%$r([%d;:]+)m$')
         if not decrqss then
           return
@@ -1079,7 +1087,7 @@ do
     -- startup TTY (including runtime reactivity), so the UIEnter path below is
     -- not registered for it (avoids double-detection).
     if vim.o.ttyfast then
-      detect_background(true)
+      detect_background(true, tty.chan)
     end
 
     detect_termguicolors(tty)
@@ -1133,7 +1141,7 @@ do
       -- runtime theme changes (mode 2031 -> TUI re-queries -> |TermResponse|);
       -- the per-response bg_user_set() guard preserves an explicit user value.
       if vim.o.ttyfast then
-        detect_background(false)
+        detect_background(false, ui.chan)
       end
     end)
   end
