@@ -77,19 +77,26 @@ function M.open(type, init_line, init_col)
   vim.bo[buf].buflisted = true -- #40431
   vim.wo[win][0].winfixbuf = true
   vim.wo[win][0].foldenable = false
+  vim.wo[win][0].scrollbind = false
   -- Show cmdwin-char via 'statuscolumn'.
   vim.wo[win][0].statuscolumn = '%#NonText#' .. type
 
   local filled = fill_history(buf, type)
+  init_line = init_line and init_line:gsub('\n', '\0') or ''
 
   -- Append the in-flight cmdline as the last line (or only line if history is empty).
-  vim.api.nvim_buf_set_lines(buf, filled and -1 or 0, -1, false, { init_line or '' })
+  vim.api.nvim_buf_set_lines(buf, filled and -1 or 0, -1, false, { init_line })
   local last = vim.api.nvim_buf_line_count(buf)
   vim.api.nvim_win_set_cursor(win, { last, math.max(0, (init_col or 1) - 1) })
 
   pcall(vim.api.nvim_buf_set_name, buf, '[Command Line]')
   if type == ':' then
     vim.bo[buf].filetype = 'vim'
+  end
+
+  if vim.o.wildchar == ('\t'):byte() then
+    vim.keymap.set('i', '<Tab>', '<C-X><C-V>', { buf = buf })
+    vim.keymap.set('n', '<Tab>', 'a<C-X><C-V>', { buf = buf })
   end
 
   vim.api.nvim__cmdwin_set(type, buf) -- Update the C-side globals.
@@ -101,15 +108,22 @@ function M.open(type, init_line, init_col)
     caller_win = caller,
   }
 
-  -- Clean up if the window is closed by other means (`:q`, `:close`, etc.).
+  -- Clean up when the (last-visible) cmdwin is closed by other means (`:q`, `:close`, etc.).
   vim.api.nvim_create_autocmd({ 'WinClosed' }, {
     buffer = buf,
-    once = true,
     nested = true,
-    callback = function()
-      if state ~= nil then
-        M._cleanup()
+    callback = function(ev)
+      if state == nil then
+        return
       end
+      local closing = tonumber(ev.match)
+      for _, w in ipairs(vim.fn.win_findbuf(buf)) do
+        if w ~= closing then
+          return -- Still visible elsewhere; keep cmdwin (and this autocmd) active.
+        end
+      end
+      M._cleanup()
+      return true -- Last cmdwin window gone; delete this autocmd.
     end,
   })
 
@@ -125,8 +139,8 @@ function M._cleanup()
   state = nil
   pcall(vim.api.nvim__cmdwin_set, '', 0) -- Clear the C-side globals.
   pcall(vim.api.nvim_exec_autocmds, 'CmdwinLeave', { pattern = s.type, modeline = false })
-  if vim.api.nvim_win_is_valid(s.win) then
-    pcall(vim.api.nvim_win_close, s.win, true)
+  if vim.api.nvim_buf_is_valid(s.buf) then
+    pcall(vim.api.nvim_buf_delete, s.buf, { force = true })
   end
   if vim.api.nvim_win_is_valid(s.caller_win) then
     pcall(vim.api.nvim_set_current_win, s.caller_win)
@@ -148,6 +162,7 @@ function M.confirm()
     return
   end
   local line, type = _close()
+  line = line:gsub('%z', '\n'):gsub('(%c)', '\022%1') -- Escape control characters.
   vim.api.nvim_feedkeys(type .. line .. vim.keycode('<CR>'), 'nt', false)
 end
 
@@ -157,6 +172,7 @@ function M.cancel()
     return
   end
   local line, type = _close()
+  line = line:gsub('%z', '\n'):gsub('(%c)', '\022%1') -- Escape control characters.
   vim.api.nvim_feedkeys(type .. line, 'nt', false)
 end
 

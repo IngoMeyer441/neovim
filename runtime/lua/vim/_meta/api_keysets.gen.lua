@@ -102,6 +102,7 @@ error('Cannot require a meta file')
 --- |'BufWriteCmd'
 --- |'BufWritePost'
 --- |'BufWritePre'
+--- |'ChanClose'
 --- |'ChanInfo'
 --- |'ChanOpen'
 --- |'CmdUndefined'
@@ -494,6 +495,9 @@ error('Cannot require a meta file')
 --- @field win? integer
 --- @field zindex? integer
 --- @field _cmdline_offset? integer
+
+--- @class vim.api.keyset.win_resize
+--- @field anchor? string
 
 --- @class vim.api.keyset.win_text_height
 --- @field end_row? integer

@@ -32,6 +32,35 @@ describe('cmdwin', function()
     eq('', fn.getcmdwintype())
   end)
 
+  it('<CR> closes all cmdwin (split) windows #40484', function()
+    feed('q:')
+    feed('ilet g:cmdwin_result = 7<Esc>')
+    feed('<C-w>s') -- split: two windows now show the cmdwin buffer.
+    local cmdwin_buf = api.nvim_get_current_buf()
+    eq(2, #fn.win_findbuf(cmdwin_buf)) -- sanity: the split happened
+
+    feed('<CR>')
+    eq(7, api.nvim_get_var('cmdwin_result')) -- the cmdline executed
+    eq('', fn.getcmdwintype())
+    eq(0, #fn.win_findbuf(cmdwin_buf)) -- All cmdwin windows are closed.
+    eq(1, #api.nvim_list_wins()) -- Back to the single original window.
+  end)
+
+  it('<CR> executes when cmdwin was moved to another tabpage #40484', function()
+    feed('q:')
+    feed('ilet g:cmdwin_result = 9<Esc>')
+    feed('<C-w>T') -- Move the cmdwin to its own new tabpage.
+    eq(2, fn.tabpagenr('$')) -- sanity: the new tabpage exists
+    local cmdwin_buf = api.nvim_get_current_buf()
+
+    feed('<CR>')
+    eq(9, api.nvim_get_var('cmdwin_result')) -- the cmdline executed.
+    eq('', fn.getcmdwintype())
+    eq(0, #fn.win_findbuf(cmdwin_buf)) -- cmdwin window closed.
+    eq(1, fn.tabpagenr('$')) -- cmdwin's tabpage is gone.
+    eq(1, #api.nvim_list_wins())
+  end)
+
   it('q/ opens cmdwin with search history', function()
     fn.histadd('/', 'foo')
     fn.histadd('/', 'bar')
@@ -52,22 +81,40 @@ describe('cmdwin', function()
     eq(2, fn.histnr('cmd')) -- History unchanged (the in-flight cmdline was not added).
   end)
 
-  it('history entry with literal newline char', function()
-    fn.histadd(':', 'echo \n x')
-    feed('q:')
-    eq(':', fn.getcmdwintype())
-    eq('echo \0 x', api.nvim_buf_get_lines(0, 0, 1, false)[1])
-  end)
-
   it('<C-C> in normal mode cancels without executing', function()
     feed('q:')
     feed('ilet g:executed = 1<Esc>')
+    n.poke_eventloop() -- Ensure previous input is processed before <C-C>.
     feed('<C-C>')
     eq('', fn.getcmdwintype())
     -- The cancelled line is neither executed nor added to history. It is pre-filled into the
     -- cmdline; reopening via c_CTRL-F must then not duplicate it.
     eq(0, fn.exists('g:executed'))
     eq(-1, fn.histnr('cmd'))
+    eq('let g:executed = 1', fn.getcmdline())
+    eq(':', fn.getcmdtype())
+  end)
+
+  it('history entry or current cmdline with control chars', function()
+    local firstbuf = api.nvim_get_current_buf()
+    local cmdline = 'normal! \023\022ifoo\nbar\027' -- Ctrl-W Ctrl-V ifoo\nbar Esc
+    local bufline = cmdline:gsub('\n', '\0')
+    fn.histadd(':', cmdline)
+    feed('q:')
+    eq(':', fn.getcmdwintype())
+    eq({ bufline, '' }, api.nvim_buf_get_lines(0, 0, -1, false))
+    api.nvim_win_set_cursor(0, { 1, 0 })
+    feed('<C-C>')
+    eq(cmdline, fn.getcmdline())
+    eq(':', fn.getcmdtype())
+    eq({ firstbuf }, fn.tabpagebuflist())
+    feed('<C-F>')
+    n.poke_eventloop()
+    eq(':', fn.getcmdwintype())
+    eq({ bufline, bufline }, api.nvim_buf_get_lines(0, 0, -1, false))
+    feed('<CR>')
+    eq({ firstbuf, firstbuf }, fn.tabpagebuflist())
+    eq({ 'foo', 'bar' }, api.nvim_buf_get_lines(0, 0, -1, false))
   end)
 
   it('async API calls work while cmdwin is open #40312', function()

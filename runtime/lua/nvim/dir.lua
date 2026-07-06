@@ -1,12 +1,8 @@
 --- @brief
 --- Directory listing for `:edit <dir>`.
----
---- [g:loaded_nvim_dir_plugin]()
---- The plugin can be disabled by setting `g:loaded_nvim_dir_plugin = 1`.
 
 local api = vim.api
 local fs = vim.fs
-local uv = vim.uv
 
 local M = {}
 
@@ -53,17 +49,13 @@ end
 ---@param dir string
 ---@return boolean
 local function render(buf, dir)
-  -- TODO(#39878): drop this scandir probe once vim.fs.dir() can report
-  -- traversal errors.
-  local handle, err = uv.fs_scandir(dir)
-  if not handle then
-    vim.notify('dir: ' .. (err or ('cannot read directory: ' .. dir)), vim.log.levels.ERROR)
-    return false
-  end
-
   ---@type { name: string, dir: boolean }[]
   local items = {}
-  for name, type in fs.dir(dir) do
+  for name, type, err in fs.dir(dir, { err = true }) do
+    if err then
+      vim.notify('dir: ' .. err, vim.log.levels.ERROR)
+      return false
+    end
     if type == 'link' and vim.fn.isdirectory(fs.joinpath(dir, name)) == 1 then
       type = 'directory'
     end
@@ -198,6 +190,16 @@ function first_open(buf, dir)
     return
   end
   vim.b[buf].nvim_dir = dir
+  api.nvim_create_autocmd('BufReadCmd', {
+    buffer = buf,
+    nested = true,
+    desc = 'Reload directory listing',
+    callback = function()
+      if vim.b[buf].nvim_dir ~= nil then
+        reload(buf)
+      end
+    end,
+  })
   set_maps(buf)
   if api.nvim_get_option_value('filetype', { buf = buf }) ~= 'directory' then
     api.nvim_set_option_value('filetype', 'directory', { buf = buf })

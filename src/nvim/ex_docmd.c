@@ -4969,6 +4969,32 @@ static void ex_quitall(exarg_T *eap)
 /// ":restart +cmd <command>": restart the Nvim server using ":cmd" and runs <command> in the new server.
 static void ex_restart(exarg_T *eap)
 {
+  if (!eap->forceit) {
+    dict_T *extra_d = tv_dict_alloc();  // Pass +cmd in the `extra` param of nlua_call_excmd.
+    tv_dict_add_str(extra_d, S_LEN("quit_cmd"), eap->do_ecmd_cmd ? eap->do_ecmd_cmd : "");
+    typval_T extra_tv = { .v_type = VAR_DICT, .vval.v_dict = extra_d };
+    nlua_call_excmd("vim._core.server", "ex_session_restart", eap, &cmdmod, &extra_tv);
+    tv_clear(&extra_tv);
+    return;
+  }
+
+  const char *startreason = "restart!";
+  char *quit_cmd = (eap->do_ecmd_cmd) ? eap->do_ecmd_cmd : "qall";
+  char *after_cmd = eap->arg;
+
+  // XXX: "+:::" is how ex_session_restart() signals that it (recursively) called :restart.
+  if (strequal(quit_cmd, ":::")) {
+    startreason = "restart";
+    if (eap->argc > 1) {
+      eap->args[1][eap->arglens[1]] = NUL;
+      quit_cmd = eap->args[1];
+      after_cmd = eap->argc > 2 ? eap->args[2] : "";
+    } else {
+      emsg("restart failed: +cmd did not quit the server");
+      return;
+    }
+  }
+
   Error err = ERROR_INIT;
   const bool no_ui = !ui_active();
   const char *exepath = get_vim_var_str(VV_PROGPATH);
@@ -4985,6 +5011,16 @@ static void ex_restart(exarg_T *eap)
     // Drop "-- [files…]". Usually isn't wanted. User can :mksession instead.
     if (i > 0 && strequal(arg, "--")) {
       break;
+    }
+    // Drop "-S [file]". It conflicts with :restart and usually isn't wanted for :restart!
+    if (i > 0 && strequal(arg, "-S")) {
+      if (li->li_next != NULL) {
+        const char *next_arg = tv_get_string(TV_LIST_ITEM_TV(li->li_next));
+        if (next_arg[0] != '-') {
+          li = li->li_next;
+        }
+      }
+      continue;
     }
     // Drop "-s <scriptfile>": skip the scriptfile arg too.
     if (i > 0 && strequal(arg, "-s")) {
@@ -5046,7 +5082,7 @@ static void ex_restart(exarg_T *eap)
 #endif
 
   dict_T *env = create_environment(NULL, false, false, false, NULL);
-  tv_dict_add_str(env, S_LEN(ENV_STARTREASON), "restart");
+  tv_dict_add_str(env, S_LEN(ENV_STARTREASON), startreason);
 #ifdef MSWIN
   tv_dict_add_str(env, S_LEN(ENV_RESTART_ALLOC_CONSOLE), "1");
 #endif
@@ -5082,12 +5118,12 @@ static void ex_restart(exarg_T *eap)
   arena_mem_free(result_mem);
   result_mem = NULL;
 
-  if (*eap->arg != NUL) {
+  if (*after_cmd != NUL) {
     // Execute [command] on new server on UIEnter.
     MAXSIZE_TEMP_DICT(autocmd_opts, 3);
     PUT_C(autocmd_opts, "once", BOOLEAN_OBJ(true));
     PUT_C(autocmd_opts, "nested", BOOLEAN_OBJ(true));
-    PUT_C(autocmd_opts, "command", CSTR_AS_OBJ(eap->arg));
+    PUT_C(autocmd_opts, "command", CSTR_AS_OBJ(after_cmd));
     MAXSIZE_TEMP_ARRAY(autocmd_args, 2);
     ADD_C(autocmd_args, CSTR_AS_OBJ("UIEnter"));
     ADD_C(autocmd_args, DICT_OBJ(autocmd_opts));
@@ -5142,7 +5178,6 @@ static void ex_restart(exarg_T *eap)
 
   set_vim_var_string(VV_EXITREASON, S_LEN("restart"));
 
-  char *quit_cmd = (eap->do_ecmd_cmd) ? eap->do_ecmd_cmd : "qall";
   char *quit_cmd_copy = NULL;
 
   // Prepend "confirm " to cmd if :confirm is used
@@ -6042,14 +6077,14 @@ static void ex_resize(exarg_T *eap)
     } else if (n == 0 && eap->arg[0] == NUL) {  // default is very wide
       n = Columns;
     }
-    win_setwidth_win(n, wp);
+    win_setwidth_win(n, wp, true);
   } else {
     if (*eap->arg == '-' || *eap->arg == '+') {
       n += wp->w_height;
     } else if (n == 0 && eap->arg[0] == NUL) {  // default is very high
       n = Rows - 1;
     }
-    win_setheight_win(n, wp);
+    win_setheight_win(n, wp, true);
   }
 }
 

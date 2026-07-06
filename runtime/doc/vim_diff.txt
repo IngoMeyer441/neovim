@@ -149,6 +149,7 @@ you never want any default mappings, call |:mapclear| early in your config.
 - <C-W> |i_CTRL-W-default|
 - <C-L> |CTRL-L-default|
 - & |&-default|
+- - |dir-mappings|
 - Q |v_Q-default|
 - @ |v_@-default|
 - # |v_#-default|
@@ -425,9 +426,10 @@ Options:
 - 'inccommand'  shows interactive results for |:substitute|-like commands
                 and |:command-preview| commands
 - 'jumpoptions'
-    - "view" tries to restore |mark-view| when moving through the jumplist.
+    - "view" tries to restore |mark-view| when moving through the |jumplist|,
+      |changelist|, |alternate-file|, and |mark-motions|.
     - "clean" removes unloaded buffers from the jumplist.
-- the |jumplist|, |changelist|, |alternate-file| or using |mark-motions|.
+- 'langmap'     supports multibyte chars.
 - 'laststatus'  global statusline support
 - 'mousemodel'  cannot be set to empty.
 - 'mousescroll' amount to scroll by when scrolling with a mouse
@@ -712,7 +714,6 @@ Missing features                                         *nvim-missing*
 These legacy Vim features are not yet implemented:
 
 - *:gui*
-- *:gvim*
 - *'browsedir'* *'bsdir'*
 - *'completepopup'*
 - *'guioptions'* *'go'*
@@ -743,6 +744,7 @@ Aliases:
 Commands:
 - :behave
 - :fixdel
+- *:gvim*
 - *hardcopy* `:hardcopy` was removed. Instead, use `:TOhtml` and print the
   resulting HTML using a web browser or other HTML viewer.
 - :helpfind

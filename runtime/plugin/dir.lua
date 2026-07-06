@@ -18,10 +18,6 @@ vim.keymap.set('n', '<Plug>(nvim-dir-reload)', function()
   require('nvim.dir')._reload()
 end, { silent = true, desc = 'Reload directory' })
 
-if vim.fn.mapcheck('-', 'n') == '' and vim.fn.hasmapto('<Plug>(nvim-dir-up)', 'n') == 0 then
-  vim.keymap.set('n', '-', '<Plug>(nvim-dir-up)', { silent = true, desc = 'Open parent directory' })
-end
-
 ---@param buf integer
 ---@param path string
 ---@return boolean
@@ -38,7 +34,8 @@ local function should_open(buf, path)
   return vim.fn.isdirectory(path) == 1
 end
 
-local group = api.nvim_create_augroup('FileExplorer', { clear = true })
+api.nvim_create_augroup('FileExplorer', { clear = true })
+local group = api.nvim_create_augroup('nvim.dir', { clear = true })
 -- Latch on our own VimEnter, not v:vim_did_enter (set just before VimEnter
 -- autocmds), so an earlier VimEnter autocmd's BufEnter can't preempt startup.
 local vimentered = vim.v.vim_did_enter == 1
