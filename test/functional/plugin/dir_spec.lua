@@ -37,8 +37,9 @@ local function bufopt(name)
 end
 
 local function assert_directory(path)
-  eq(path, api.nvim_buf_get_name(0))
-  eq(path, fn.bufname('%'))
+  local ffname = path:sub(-1) == '/' and path or path .. '/'
+  eq(ffname, api.nvim_buf_get_name(0))
+  eq(path, vim.fs.normalize(fn.bufname('%')))
   eq('directory', bufopt('filetype'))
   eq(true, bufopt('buflisted'))
 end
@@ -155,19 +156,45 @@ describe('nvim.dir', function()
     assert_directory(root)
     line_of('alpha.txt')
 
-    n.clear({ args_rm = { '--cmd' }, args = { '--noplugin' } })
-    api.nvim_buf_set_lines(0, 0, -1, false, { '  alpha', '  beta' })
-    api.nvim_win_set_cursor(0, { 2, 7 })
-    feed('-')
+    -- Ensure the cursor stays on the entry we navigated up from.
+    eq('alpha.txt', api.nvim_get_current_line())
+  end)
 
-    eq({ 1, 2 }, api.nvim_win_get_cursor(0))
-    eq(false, exec_lua([[return package.loaded['nvim.dir'] ~= nil]]))
+  it('startup plugins can replace the `-` mapping', function()
+    local plugin_file = vim.fs.joinpath(vim.fn.stdpath('config'), 'plugin/dirvish.lua')
+    vim.fs.mkdir(vim.fs.dirname(plugin_file), { parents = true })
+    finally(function()
+      os.remove(plugin_file) -- XXX: Remove file only, to avoid n.rmdir() hang on Windows.
+    end)
+    vim.fn.writefile(
+      [[
+        if vim.fn.mapcheck('-', 'n') == '' and vim.fn.hasmapto('<Plug>(dirvish_up)', 'n') == 0 then
+          vim.keymap.set('n', '-', '<Plug>(dirvish_up)')
+        end
+      ]],
+      plugin_file
+    )
+
+    n.clear({ args_rm = { '-u', '--cmd' } })
+
+    eq(1, fn.exists('g:loaded_nvim_dir_plugin')) -- Avoid false negatives.
+    eq('<Plug>(dirvish_up)', fn.mapcheck('-', 'n'))
+  end)
+
+  it('preserves alternate buffer when opening a parent directory', function()
+    make_fixture()
+    n.clear({ args_rm = { '-u', '--cmd' } })
+
+    edit(file)
+    feed('-')
+    poke_eventloop()
+
+    assert_directory(root)
+    -- Keep the alternate buffer on the file we navigated up from.
+    eq(file, api.nvim_buf_get_name(fn.bufnr('#')))
   end)
 
   it('uses an absolute buffer name for a relative startup directory argument', function()
-    if t.is_zig_build() then
-      return pending('broken with build.zig relative runtime paths after chdir')
-    end
     make_fixture()
     local cwd = assert(vim.uv.cwd())
     assert(vim.uv.chdir(root))
@@ -373,9 +400,6 @@ describe('nvim.dir', function()
   end)
 
   it('coexists with netrw and can be disabled', function()
-    if t.is_zig_build() then
-      return pending('broken with build.zig relative runtime paths after chdir')
-    end
     make_fixture()
     n.clear({ args_rm = { '-u' } })
     local cwd = fn.getcwd()
@@ -399,7 +423,7 @@ describe('nvim.dir', function()
 
   it('supports the FileExplorer browse contract', function()
     if t.is_zig_build() then
-      return pending('broken with build.zig relative runtime paths after chdir')
+      return pending('broken with build.zig: TMPDIR relative cwd')
     end
     make_fixture()
     n.clear({ args_rm = { '-u' } })

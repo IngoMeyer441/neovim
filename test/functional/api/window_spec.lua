@@ -1,6 +1,7 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
+local tt = require('test.functional.testterm')
 
 local clear, curbuf, curbuf_contents, curwin, eq, neq, matches, ok, feed, insert, eval =
   n.clear,
@@ -2303,6 +2304,51 @@ describe('API/win', function()
                     |
       ]])
     end)
+
+    it('keep focus when creating split window with enter=false in init script', function()
+      local script_file = 'Xstartup.lua'
+      t.write_file(
+        script_file,
+        [[
+        vim.o.laststatus = 0
+        local enter = vim.g.test_enter
+        local win = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), enter, {
+          split = 'left',
+          win = 0,
+        })
+      ]]
+      )
+      finally(function()
+        os.remove(script_file)
+      end)
+      local screen = tt.setup_child_nvim({
+        '--clean',
+        '--cmd',
+        'let g:test_enter = v:false',
+        '-u',
+        script_file,
+      })
+      screen:expect([[
+                                 │^                        |
+        ~                        │~                       |*4
+                                        0,0-1         All |
+        {5:-- TERMINAL --}                                    |
+      ]])
+      screen:detach()
+      screen = tt.setup_child_nvim({
+        '--clean',
+        '--cmd',
+        'let g:test_enter = v:true',
+        '-u',
+        script_file,
+      })
+      screen:expect([[
+        ^                         │                        |
+        ~                        │~                       |*4
+                                        0,0-1         All |
+        {5:-- TERMINAL --}                                    |
+      ]])
+    end)
   end)
 
   describe('set_config', function()
@@ -3767,6 +3813,24 @@ describe('API/win', function()
   end)
 
   describe('nvim_win_call', function()
+    it('restores prevwin', function()
+      local w1 = api.nvim_get_current_win()
+      command('split')
+      local w2 = api.nvim_get_current_win()
+      command('split')
+      local w3 = api.nvim_get_current_win()
+      -- Entry state: curwin=w3, prevwin=w2.
+      eq(w2, fn.win_getid(fn.winnr('#')))
+      exec_lua(function()
+        vim.api.nvim_win_call(w1, function()
+          vim.api.nvim_set_current_win(w2) -- changes prevwin to w1
+        end)
+      end)
+      -- No evidence of the context-switch; curwin/prevwin are restored.
+      eq(w3, api.nvim_get_current_win())
+      eq(w2, fn.win_getid(fn.winnr('#')))
+    end)
+
     it('supports multiple returns', function()
       local cur = api.nvim_get_current_win()
       local other = api.nvim_open_win(api.nvim_create_buf(false, true), false, { split = 'left' })

@@ -11,6 +11,7 @@
 #include "nvim/api/window.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
+#include "nvim/context.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
 #include "nvim/errors.h"
@@ -133,11 +134,12 @@ void nvim_win_set_cursor(Window win, ArrayOf(Integer, 2) pos, Error *err)
 
   // make sure cursor is in visible range and
   // cursorcolumn and cursorline are updated even if w != curwin
-  switchwin_T switchwin;
-  switch_win(&switchwin, w, NULL, true);
-  update_topline(curwin);
-  validate_cursor(curwin);
-  restore_win(&switchwin, true);
+  CtxSwitch switchwin;
+  if (ctx_switch(&switchwin, w, NULL, NULL, kCtxNoEvents | kCtxNoDisplay)) {
+    update_topline(curwin);
+    validate_cursor(curwin);
+  }
+  ctx_restore(&switchwin);
 
   redraw_later(w, UPD_VALID);
   w->w_redr_status = true;
@@ -321,7 +323,7 @@ void nvim_win_hide(Window win, Error *err)
   tabpage_T *tabpage = win_find_tabpage(w);
   TRY_WRAP(err, {
     // Never close the autocommand window.
-    if (is_aucmd_win(w)) {
+    if (is_ctx_win(w)) {
       emsg(_(e_autocmd_close));
     } else if (tabpage == curtab) {
       win_close(w, false, false);
@@ -374,12 +376,12 @@ Object nvim_win_call(Window win, LuaRef fn, lua_State *lstate, Error *err)
   tabpage_T *tabpage = win_find_tabpage(w);
 
   TRY_WRAP(err, {
-    win_execute_T win_execute_args;
-    if (win_execute_before(&win_execute_args, w, tabpage)) {
+    CtxSwitch cs = { 0 };
+    if (ctx_switch(&cs, w, tabpage, NULL, kCtxNoDisplay | kCtxKeepCwd | kCtxValidate)) {
       Array args = ARRAY_DICT_INIT;
       nlua_call_ref(fn, NULL, args, kRetMultiStack, NULL, err);
     }
-    win_execute_after(&win_execute_args);
+    ctx_restore(&cs);
   });
   return NIL;  // kRetMultiStack: values are already on the lua stack
 }
