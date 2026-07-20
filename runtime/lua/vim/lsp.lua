@@ -644,7 +644,7 @@ function lsp.enable(name, enable)
   else
     -- Only ever create autocmd once to reuse computation of config merging.
     lsp_enable_autocmd_id = lsp_enable_autocmd_id
-      or nvim_on('FileType', api.nvim_create_augroup('nvim.lsp.enable', {}), function(ev)
+      or nvim_on('FileType', api.nvim_create_augroup('nvim.lsp.enable'), function(ev)
         lsp_enable_callback(ev.buf)
       end)
   end
@@ -1472,7 +1472,7 @@ function lsp.foldexpr(lnum)
   return vim.lsp._folding_range.foldexpr(lnum)
 end
 
---- Close all {kind} of folds in the the window with {winid}.
+--- Close all {kind} of folds in the window with {winid}.
 ---
 --- To automatically fold imports when opening a file, you can use an autocmd:
 ---

@@ -854,11 +854,11 @@ int start_redo(int count, bool old_redo)
   }
 
   if (c == 'v') {   // redo Visual
-    VIsual = curwin->w_cursor;
-    VIsual_active = true;
-    VIsual_select = false;
-    VIsual_reselect = true;
-    redo_VIsual_busy = true;
+    Visual.start = curwin->w_cursor;
+    Visual.active = true;
+    Visual.select = false;
+    Visual.reselect = true;
+    Visual.redo_busy = true;
     c = read_redo(false, old_redo);
   }
 
@@ -1311,7 +1311,7 @@ static void ungetchars(int len, bool recorded)
 /// - When no_u_sync is non-zero.
 void may_sync_undo(void)
 {
-  if ((!(State & (MODE_INSERT | MODE_CMDLINE)) || arrow_used)
+  if ((!(State & (MODE_INSERT | MODE_CMDLINE)) || Ins.arrow_used)
       && curscript < 0) {
     u_sync(false);
   }
@@ -1837,7 +1837,7 @@ int vgetc(void)
 
   // Execute Lua on_key callbacks.
   kvi_push(on_key_buf, NUL);
-  if (nlua_execute_on_key(c, on_key_buf.items)) {
+  if (nlua_exec_on_key(c, on_key_buf.items)) {
     // Keys following K_COMMAND/K_LUA/K_PASTE_START aren't normally received by
     // vim.on_key() callbacks, so discard them along with the current key.
     if (c == K_COMMAND) {
@@ -2538,8 +2538,8 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
 
     // In Select mode and a Visual mode mapping is used: Switch to Visual
     // mode temporarily.  Append K_SELECT to switch back to Select mode.
-    if (VIsual_active && VIsual_select && (mp->m_mode & MODE_VISUAL)) {
-      VIsual_select = false;
+    if (Visual.active && Visual.select && (mp->m_mode & MODE_VISUAL)) {
+      Visual.select = false;
       ins_typebuf(K_SELECT_STRING, REMAP_NONE, 0, true, false);
     }
 
@@ -2868,7 +2868,7 @@ static int vgetorpeek(bool advance)
               // we are expecting to truncate the trailing
               // white-space, so find the last non-white
               // character -- webb
-              if (did_ai && *skipwhite(get_cursor_line_ptr() + curwin->w_cursor.col) == NUL) {
+              if (Ins.did_ai && *skipwhite(get_cursor_line_ptr() + curwin->w_cursor.col) == NUL) {
                 curwin->w_wcol = 0;
                 ptr = get_cursor_line_ptr();
                 char *endptr = ptr + curwin->w_cursor.col;

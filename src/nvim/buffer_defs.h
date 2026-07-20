@@ -445,7 +445,7 @@ struct file_buffer {
 
   fmark_T b_namedm[NMARKS];     // current named marks (mark.c)
 
-  // These variables are set when VIsual_active becomes false
+  // These variables are set when Visual.active becomes false
   visualinfo_T b_visual;
   int b_visual_mode_eval;            // b_visual.vi_mode for visualmode()
 
@@ -472,7 +472,7 @@ struct file_buffer {
   garray_T b_ucmds;
   // start and end of an operator, also used for '[ and ']
   pos_T b_op_start;
-  pos_T b_op_start_orig;  // used for Insstart_orig
+  pos_T b_op_start_orig;  // used for Ins.start_orig
   pos_T b_op_end;
 
   bool b_marks_read;            // Have we read ShaDa marks yet?
@@ -483,8 +483,8 @@ struct file_buffer {
                             ///< to execute autocommands
 
   /// Set by the apply_autocmds_group function if the given event is equal to
-  /// EVENT_FILETYPE. Used by the readfile function in order to determine if
-  /// EVENT_BUFREADPOST triggered the EVENT_FILETYPE.
+  /// EVENT_FILETYPE. Used by readfile() to determine whether read autocommands
+  /// triggered EVENT_FILETYPE.
   ///
   /// Relying on this value requires one to reset it prior calling
   /// apply_autocmds_group().
@@ -1142,7 +1142,7 @@ struct window_S {
   linenr_T w_last_cursorline;       ///< where last 'cursorline' was drawn
 
   // the next seven are used to update the visual part
-  char w_old_visual_mode;           ///< last known VIsual_mode
+  char w_old_visual_mode;           ///< last known Visual.mode
   linenr_T w_old_cursor_lnum;       ///< last known end of visual part
   colnr_T w_old_cursor_fcol;        ///< first column for block visual part
   colnr_T w_old_cursor_lcol;        ///< last column for block visual part
@@ -1307,8 +1307,8 @@ struct window_S {
   char w_stl_empty;                  // true if elements show 0-1 (empty line)
   int w_stl_recording;               // reg_recording when last redrawn
   int w_stl_state;                   // get_real_state() when last redrawn
-  int w_stl_visual_mode;             // VIsual_mode when last redrawn
-  pos_T w_stl_visual_pos;            // VIsual when last redrawn
+  int w_stl_visual_mode;             // Visual.mode when last redrawn
+  pos_T w_stl_visual_pos;            // Visual.start when last redrawn
 
   int w_alt_fnum;                   // alternate file (for # and CTRL-^)
 

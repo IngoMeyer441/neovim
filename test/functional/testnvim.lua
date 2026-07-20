@@ -9,7 +9,6 @@ local SocketStream = uv_stream.SocketStream
 local ProcStream = uv_stream.ProcStream
 
 local check_cores = t.check_cores
-local pcall_err = t.pcall_err
 local check_logs = t.check_logs
 local dedent = t.dedent
 local eq = t.eq
@@ -133,7 +132,7 @@ end
 --- @return any
 function M.request(method, ...)
   assert(session, 'no Nvim session')
-  assert(not session.eof_err, 'sending request after EOF from Nvim')
+  assert(not session.eof_err, 'RPC request after Nvim EOF')
   local status, rv = session:request(method, ...)
   if not status then
     if loop_running then
@@ -331,12 +330,11 @@ end
 -- Use for commands which expect nvim to quit.
 -- The first argument can also be a timeout.
 function M.expect_exit(fn_or_timeout, ...)
-  local eof_err_msg = 'EOF was received from Nvim. Likely the Nvim process crashed.'
   if type(fn_or_timeout) == 'function' then
-    t.matches(vim.pesc(eof_err_msg), t.pcall_err(fn_or_timeout, ...))
+    t.matches(vim.pesc(Session.eof_err_msg), t.pcall_err(fn_or_timeout, ...))
   else
     t.matches(
-      vim.pesc(eof_err_msg),
+      vim.pesc(Session.eof_err_msg),
       t.pcall_err(function(timeout, fn, ...)
         fn(...)
         assert(session)
@@ -955,6 +953,65 @@ function M.exec_lua(code, ...)
 
   assert(session, 'no Nvim session')
   return require('test.functional.testnvim.exec_lua')(session, 2, code, ...)
+end
+
+--- Runs `cmd` via `vim.system()` in the Nvim-under-test and returns its result.
+---
+--- Asserts the child process is gone afterward, polling to absorb the brief lag between the
+--- exit-handler and nvim_get_proc() reporting it (seen on Windows).
+---
+--- @param cmd string[]
+--- @param opts? vim.SystemOpts
+--- @param async? boolean  Wait via the on_exit callback instead of a blocking `obj:wait()`.
+--- @return vim.SystemCompleted
+local function system(cmd, opts, async)
+  return M.exec_lua(function()
+    local res --- @type vim.SystemCompleted?
+    local obj
+    if async then
+      local done = false
+      obj = vim.system(cmd, opts, function(o)
+        done = true
+        res = o
+      end)
+      assert(
+        vim.wait(10000, function()
+          return done
+        end),
+        'process did not exit'
+      )
+    else
+      obj = vim.system(cmd, opts)
+      if opts and opts.timeout then
+        -- Minor delay before calling wait() so the timeout uv timer can have a headstart over the
+        -- internal call to vim.wait() in wait().
+        vim.wait(10)
+      end
+      res = obj:wait()
+    end
+
+    -- Assert that the process terminated.
+    -- XXX: Poll bc nvim_get_proc() can briefly lag the exit callback (on Windows): `uv_close`
+    -- completes on a later tick, thus the PID is still briefly resolvable.
+    assert(
+      vim.wait(1000, function()
+        return not vim.api.nvim_get_proc(obj.pid)
+      end),
+      'process still exists'
+    )
+
+    return res
+  end)
+end
+
+--- Runs `cmd` via `vim.system()` in the Nvim-under-test and waits (synchronously) for it to exit.
+function M.system_sync(cmd, opts)
+  return system(cmd, opts, false)
+end
+
+--- Like `system_sync()` but waits via the `vim.system()` on_exit callback.
+function M.system_async(cmd, opts)
+  return system(cmd, opts, true)
 end
 
 --- Benchmarks `fn` in the Nvim-under-test: runs it `opts.n` times, timing each run in-session, then reports.

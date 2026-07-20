@@ -1233,6 +1233,7 @@ M.funcs = {
       	echo charidx('a😊😊', 4, 0, 1)	" returns 2
       <
     ]=],
+    fast = true,
     name = 'charidx',
     params = {
       { 'string', 'string' },
@@ -1721,61 +1722,6 @@ M.funcs = {
     },
     returns = 'integer',
     signature = 'count({comp}, {expr} [, {ic} [, {start}]])',
-  },
-  ctxget = {
-    args = { 0, 1 },
-    desc = [=[
-      Returns a |Dictionary| representing the |context| at {index}
-      from the top of the |context-stack| (see |context-dict|).
-      If {index} is not given, it is assumed to be 0 (i.e.: top).
-    ]=],
-    name = 'ctxget',
-    params = { { 'index', 'integer' } },
-    returns = 'table',
-    signature = 'ctxget([{index}])',
-  },
-  ctxpop = {
-    desc = [=[
-      Pops and restores the |context| at the top of the
-      |context-stack|.
-    ]=],
-    name = 'ctxpop',
-    params = {},
-    signature = 'ctxpop()',
-  },
-  ctxpush = {
-    args = { 0, 1 },
-    desc = [=[
-      Pushes the current editor state (|context|) on the
-      |context-stack|.
-      If {types} is given and is a |List| of |String|s, it specifies
-      which |context-types| to include in the pushed context.
-      Otherwise, all context types are included.
-    ]=],
-    name = 'ctxpush',
-    params = { { 'types', 'string[]' } },
-    signature = 'ctxpush([{types}])',
-  },
-  ctxset = {
-    args = { 1, 2 },
-    desc = [=[
-      Sets the |context| at {index} from the top of the
-      |context-stack| to that represented by {context}.
-      {context} is a Dictionary with context data (|context-dict|).
-      If {index} is not given, it is assumed to be 0 (i.e.: top).
-    ]=],
-    name = 'ctxset',
-    params = { { 'context', 'table' }, { 'index', 'integer' } },
-    returns = 'integer',
-    signature = 'ctxset({context} [, {index}])',
-  },
-  ctxsize = {
-    desc = [=[
-      Returns the size of the |context-stack|.
-    ]=],
-    name = 'ctxsize',
-    params = {},
-    signature = 'ctxsize()',
   },
   cursor = {
     args = { 1, 3 },
@@ -4420,7 +4366,8 @@ M.funcs = {
       If the optional {buf} argument is specified, returns the
       local marks defined in buffer {buf}.  For the use of {buf},
       see |bufname()|.  If {buf} is invalid, an empty list is
-      returned.
+      returned.  For a |prompt-buffer| the result includes the
+      |':| mark.
 
       Each item in the returned List is a |Dict| with the following:
           mark   name of the mark prefixed by "'"
@@ -6560,6 +6507,7 @@ M.funcs = {
       <	<C-Home>
 
     ]=],
+    fast = true,
     name = 'keytrans',
     params = { { 'string', 'string' } },
     returns = 'string',
@@ -8153,6 +8101,7 @@ M.funcs = {
       string, thus results in an empty string.
 
     ]=],
+    fast = true,
     name = 'nr2char',
     params = { { 'expr', 'integer' }, { 'utf8', 'boolean' } },
     returns = 'string',
@@ -11872,6 +11821,7 @@ M.funcs = {
       	echo str2list("á")		" returns [97, 769]
       <
     ]=],
+    fast = true,
     name = 'str2list',
     params = { { 'string', 'string' }, { 'utf8', 'boolean' } },
     signature = 'str2list({string} [, {utf8}])',
@@ -11919,6 +11869,7 @@ M.funcs = {
       Also see |strlen()|, |strdisplaywidth()| and |strwidth()|.
 
     ]=],
+    fast = true,
     name = 'strcharlen',
     params = { { 'string', 'string' } },
     returns = 'integer',
@@ -11985,6 +11936,7 @@ M.funcs = {
           endif
       <
     ]=],
+    fast = true,
     name = 'strchars',
     params = { { 'string', 'string' }, { 'skipcc', '0|1|boolean' } },
     returns = 'integer',
@@ -12012,6 +11964,7 @@ M.funcs = {
       Also see |strlen()|, |strwidth()| and |strchars()|.
 
     ]=],
+    fast = true,
     name = 'strdisplaywidth',
     params = { { 'string', 'string' }, { 'col', 'integer' } },
     returns = 'integer',
@@ -12059,6 +12012,7 @@ M.funcs = {
       Also see |strcharpart()| and |strchars()|.
 
     ]=],
+    fast = true,
     name = 'strgetchar',
     params = { { 'str', 'string' }, { 'index', 'integer' } },
     returns = 'integer',
@@ -12145,6 +12099,7 @@ M.funcs = {
       Also see |len()|, |strdisplaywidth()| and |strwidth()|.
 
     ]=],
+    fast = true,
     name = 'strlen',
     params = { { 'string', 'string' } },
     returns = 'integer',
@@ -13139,6 +13094,7 @@ M.funcs = {
       <returns "{blob}"
 
     ]=],
+    fast = true,
     name = 'tr',
     params = { { 'src', 'string' }, { 'fromstr', 'string' }, { 'tostr', 'string' } },
     returns = 'string',
@@ -13176,6 +13132,7 @@ M.funcs = {
       <returns "  vim"
 
     ]=],
+    fast = true,
     name = 'trim',
     params = { { 'text', 'string' }, { 'mask', 'string' }, { 'dir', '0|1|2' } },
     returns = 'string',
@@ -13371,6 +13328,7 @@ M.funcs = {
       	echo utf16idx('a😊😊', 9)	" returns -1
       <
     ]=],
+    fast = true,
     name = 'utf16idx',
     params = {
       { 'string', 'string' },

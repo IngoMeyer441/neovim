@@ -1946,7 +1946,7 @@ static void win_exchange(int Prenum)
 
   if (wp->w_buffer != curbuf) {
     reset_VIsual_and_resel();
-  } else if (VIsual_active) {
+  } else if (Visual.active) {
     wp->w_cursor = curwin->w_cursor;
   }
 
@@ -2517,8 +2517,8 @@ void leaving_window(win_T *const win)
   // When leaving the window (or closing the window) was done from a
   // callback we need to break out of the Insert mode loop and restart Insert
   // mode when entering the window again.
-  if ((State & MODE_INSERT) && !stop_insert_mode) {
-    stop_insert_mode = true;
+  if ((State & MODE_INSERT) && !Ins.stop_insert_mode) {
+    Ins.stop_insert_mode = true;
     if (win->w_buffer->b_prompt_insert == NUL) {
       win->w_buffer->b_prompt_insert = 'A';
     }
@@ -2540,7 +2540,7 @@ void entering_window(win_T *const win)
   // When switching to a prompt buffer that was in Insert mode, don't stop
   // Insert mode, it may have been set in leaving_window().
   if (win->w_buffer->b_prompt_insert != NUL) {
-    stop_insert_mode = false;
+    Ins.stop_insert_mode = false;
   }
 
   // When entering the prompt window restart Insert mode if we were in Insert
@@ -3265,6 +3265,13 @@ bool win_close_othertab(win_T *win, int free_buf, tabpage_T *tp, bool force)
     if (h != tabline_height()) {
       win_new_screen_rows();
     }
+  }
+
+  if (ui_has(kUIMultigrid)) {
+    ui_call_win_close(win->w_grid_alloc.handle);
+  }
+  if (win->w_floating) {
+    ui_comp_remove_grid(&win->w_grid_alloc);
   }
 
   // About to free the window. Remember its final buffer for terminal_check_size/TabClosed,
@@ -4561,7 +4568,7 @@ tabpage_T *win_new_tabpage(int after, char *filename, bool enter, win_T **first)
     }
 
     // Trigger autocommands in the context of the new window. Let ctx_switch handle stuff
-    // like temporarily resetting VIsual_active.
+    // like temporarily resetting Visual.active.
     CtxSwitch switchwin;
     const bool sw_ok = ctx_switch(&switchwin, newtp->tp_curwin, newtp, NULL, kCtxNoDisplay);
     assert(sw_ok);  // tp_curwin is valid in newtp
@@ -5032,7 +5039,7 @@ void win_goto(win_T *wp)
   if (wp->w_buffer != curbuf) {
     // careful: triggers ModeChanged autocommand
     reset_VIsual_and_resel();
-  } else if (VIsual_active) {
+  } else if (Visual.active) {
     wp->w_cursor = curwin->w_cursor;
   }
 

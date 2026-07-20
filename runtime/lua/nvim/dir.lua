@@ -121,7 +121,7 @@ end
 ---@param path string
 local function edit(path)
   navigating = true
-  api.nvim_cmd({ cmd = 'edit', args = { path }, magic = { file = false, bar = false } }, {})
+  api.nvim_cmd({ cmd = 'edit', args = { path }, magic = { file = false, bar = false } })
   navigating = false
 end
 
@@ -185,8 +185,15 @@ local function set_maps(buf)
       vim.keymap.set('n', lhs, plug, { buffer = buf, silent = true })
     end
   end
+  ---@param lhs string
+  ---@param plug string
+  local function default_map(lhs, plug)
+    if vim.fn.mapcheck(lhs, 'n') == '' and vim.fn.hasmapto(plug, 'n') == 0 then
+      vim.keymap.set('n', lhs, plug, { buffer = buf, silent = true })
+    end
+  end
   map('<CR>', '<Plug>(nvim-dir-open)')
-  map('-', '<Plug>(nvim-dir-up)')
+  default_map('-', '<Plug>(nvim-dir-up)')
   map('R', '<Plug>(nvim-dir-reload)')
 end
 

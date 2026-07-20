@@ -96,8 +96,8 @@ static void change_other_buffer_prepare(cob_T *cob, buf_T *buf)
 
   // Set "curbuf" to the buffer being changed.  Then make sure there is a
   // window for it to handle any side effects.
-  cob->cob_save_VIsual_active = VIsual_active;
-  VIsual_active = false;
+  cob->cob_save_VIsual_active = Visual.active;
+  Visual.active = false;
   cob->cob_curwin_save = curwin;
   curbuf = buf;
   find_win_for_curbuf();  // simplest: find existing window for "buf"
@@ -119,7 +119,7 @@ static void change_other_buffer_restore(cob_T *cob)
     curwin = cob->cob_curwin_save;
     curbuf = curwin->w_buffer;
   }
-  VIsual_active = cob->cob_save_VIsual_active;
+  Visual.active = cob->cob_save_VIsual_active;
 }
 
 /// Set line or list of lines in buffer "buf" to "lines".
@@ -775,33 +775,6 @@ void f_setline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   linenr_T lnum = tv_get_lnum(&argvars[0]);
   if (did_emsg == did_emsg_before) {
     set_buffer_lines(curbuf, lnum, false, &argvars[1], rettv);
-  }
-}
-
-/// Make "buf" the current buffer.
-///
-/// restore_buffer() MUST be called to undo.
-/// No autocommands will be executed. Use ctx_switch() if there are any.
-void switch_buffer(bufref_T *save_curbuf, buf_T *buf)
-{
-  block_autocmds();
-  set_bufref(save_curbuf, curbuf);
-  curbuf->b_nwindows--;
-  curbuf = buf;
-  curwin->w_buffer = buf;
-  curbuf->b_nwindows++;
-}
-
-/// Restore the current buffer after using switch_buffer().
-void restore_buffer(bufref_T *save_curbuf)
-{
-  unblock_autocmds();
-  // Check for valid buffer, just in case.
-  if (bufref_valid(save_curbuf)) {
-    curbuf->b_nwindows--;
-    curwin->w_buffer = save_curbuf->br_buf;
-    curbuf = save_curbuf->br_buf;
-    curbuf->b_nwindows++;
   }
 }
 
