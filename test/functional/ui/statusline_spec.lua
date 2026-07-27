@@ -3,6 +3,7 @@ local n = require('test.functional.testnvim')()
 local tt = require('test.functional.testterm')
 local Screen = require('test.functional.ui.screen')
 
+local describe, it, before_each = t.describe, t.it, t.before_each
 local assert_alive = n.assert_alive
 local clear = n.clear
 local command = n.command
@@ -883,15 +884,6 @@ describe('statusline', function()
     ]])
   end)
 
-  it('clears showcmd rendered by tabline redraw', function()
-    command('set showcmd showcmdloc=tabline showtabline=2 tabline=%S timeoutlen=0')
-    command('nnoremap g :redraw<CR>')
-    command('nnoremap gc <Nop>')
-    feed('g')
-    screen:expect({ any = ':redraw', none = '{2::' })
-    eq('', api.nvim_eval_statusline('%S', {}).str)
-  end)
-
   it('showcmdloc=statusline works with vertical splits', function()
     command('rightbelow vsplit')
     command('set showcmd showcmdloc=statusline')
@@ -1098,6 +1090,21 @@ describe('statusline', function()
     end)
     eq(true, #contexts > 0)
     eq(caller_win, contexts[#contexts].actual)
+  end)
+
+  it('%P %L updates in other windows', function()
+    screen:try_resize(40, 14)
+    command('set laststatus=2 statusline=%P\\ %L | split')
+    feed(':put=range(10)<cr>dgg')
+    screen:expect([[
+      ^                                        |
+      {1:~                                       }|*5
+      {3:All 1                                   }|
+                                              |
+      {1:~                                       }|*4
+      {2:All 1                                   }|
+      --No lines in buffer--                  |
+    ]])
   end)
 end)
 

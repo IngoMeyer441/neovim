@@ -1,6 +1,7 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 
+local describe, it, before_each = t.describe, t.it, t.before_each
 local clear = n.clear
 local command = n.command
 local eq, neq = t.eq, t.neq
@@ -591,6 +592,39 @@ describe('nvim_set_keymap, nvim_del_keymap', function()
     eq('Invalid (empty) LHS', pcall_err(api.nvim_set_keymap, '', '', 'rhs', {}))
     eq('Invalid (empty) LHS', pcall_err(api.nvim_set_keymap, '', '', '', {}))
     eq('Invalid (empty) LHS', pcall_err(api.nvim_del_keymap, '', ''))
+  end)
+
+  it('del_keymap preserves {rhs} fallback by default #30258', function()
+    api.nvim_set_keymap('n', 'ge', 'q', {})
+    api.nvim_del_keymap('n', 'q')
+    eq({}, get_mapargs('n', 'ge'))
+  end)
+
+  it('del_keymap with opts.lhs matches only {lhs}, never {rhs} #30258', function()
+    api.nvim_set_keymap('n', 'ge', 'q', {})
+    eq('E31: No such mapping', pcall_err(api.nvim_del_keymap, 'n', 'q', { lhs = true }))
+    eq(generate_mapargs('n', 'ge', 'q'), get_mapargs('n', 'ge'))
+
+    api.nvim_del_keymap('n', 'ge', { lhs = true })
+    eq({}, get_mapargs('n', 'ge'))
+  end)
+
+  it('del_keymap for abbreviations with opts.lhs matches only {lhs}, never {rhs} #30258', function()
+    api.nvim_set_keymap('ia', 'foo', 'bar', {})
+    eq('E31: No such mapping', pcall_err(api.nvim_del_keymap, 'ia', 'bar', { lhs = true }))
+    eq(generate_mapargs('ia', 'foo', 'bar'), get_mapargs('ia', 'foo'))
+
+    api.nvim_del_keymap('ia', 'foo', { lhs = true })
+    eq({}, get_mapargs('ia', 'foo'))
+  end)
+
+  it('buf_del_keymap with opts.lhs matches only {lhs}, never {rhs} #30258', function()
+    api.nvim_buf_set_keymap(0, 'n', 'ge', 'q', {})
+    eq('E31: No such mapping', pcall_err(api.nvim_buf_del_keymap, 0, 'n', 'q', { lhs = true }))
+    eq(generate_mapargs('n', 'ge', 'q', { buffer = 1 }), get_mapargs('n', 'ge'))
+
+    api.nvim_buf_del_keymap(0, 'n', 'ge', { lhs = true })
+    eq({}, get_mapargs('n', 'ge'))
   end)
 
   it('error if LHS longer than MAXMAPLEN', function()

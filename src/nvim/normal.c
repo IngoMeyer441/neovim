@@ -781,7 +781,7 @@ static void normal_get_additional_char(NormalState *s)
       // Typing CTRL-K gets a digraph.
       if (*cp == Ctrl_K && ((nv_cmds[s->idx].cmd_flags & NV_LANG)
                             || cp == &s->ca.extra_char)
-          && vim_strchr(p_cpo, CPO_DIGRAPH) == NULL) {
+          && vim_strchr(p_cpo, kCpoDigraph) == NULL) {
         s->c = get_digraph(false);
         if (s->c > 0) {
           *cp = s->c;
@@ -1379,7 +1379,7 @@ static void normal_redraw(NormalState *s)
   }
 
   // show fileinfo after redraw
-  if (need_fileinfo && !shortmess(SHM_FILEINFO)) {
+  if (need_fileinfo && !shortmess(kShmFileinfo)) {
     fileinfo(false, true, false);
     need_fileinfo = false;
   }
@@ -1851,6 +1851,7 @@ void may_clear_cmdline(void)
 
 // Routines for displaying a partly typed command
 static char old_showcmd_buf[SHOWCMD_BUFLEN];    // For push_showcmd()
+static bool showcmd_is_clear = true;
 static bool showcmd_visual = false;
 
 void clear_showcmd(void)
@@ -2043,12 +2044,17 @@ void pop_showcmd(void)
   display_showcmd();
 }
 
-static void display_showcmd(void)
+void showcmd_update_clear_state(void)
 {
   showcmd_is_clear = (showcmd_buf[0] == NUL);
+}
+
+static void display_showcmd(void)
+{
+  showcmd_update_clear_state();
 
   if (*p_sloc == 's') {
-    if (showcmd_is_clear) {
+    if (showcmd_is_clear && !vgetc_busy) {
       curwin->w_redr_status = true;
     } else {
       win_redr_status(curwin);
@@ -2057,7 +2063,7 @@ static void display_showcmd(void)
     return;
   }
   if (*p_sloc == 't') {
-    if (showcmd_is_clear) {
+    if (showcmd_is_clear && !vgetc_busy) {
       redraw_tabline = true;
     } else {
       draw_tabline();
@@ -2302,7 +2308,7 @@ static void nv_gd(oparg_T *oap, int nchar, int thisblock)
     foldOpenCursor();
   }
   // clear any search statistics
-  if (messaging() && !msg_silent && !shortmess(SHM_SEARCHCOUNT)) {
+  if (messaging() && !msg_silent && !shortmess(kShmSearchcount)) {
     clear_cmdline = true;
   }
 }
@@ -4394,7 +4400,7 @@ static void nv_percent(cmdarg_T *cap)
     // Skip matching parens inside C-style comments, like the "=" operator
     // does, but not when "%" is in 'cpoptions' (Vi-compatible) or the
     // cursor sits in a line comment (so a match there can still be found).
-    if (vim_strchr(p_cpo, CPO_MATCH) == NULL && buf_has_cstyle_comments()) {
+    if (vim_strchr(p_cpo, kCpoMatch) == NULL && buf_has_cstyle_comments()) {
       int comment_col = check_linecomment(get_cursor_line_ptr());
       if (comment_col == MAXCOL || curwin->w_cursor.col < (colnr_T)comment_col) {
         flags = FM_SKIPCOMM;
@@ -5765,7 +5771,7 @@ static void n_opencmd(cmdarg_T *cap)
   if (u_save(curwin->w_cursor.lnum - (cap->cmdchar == 'O' ? 1 : 0),
              curwin->w_cursor.lnum + (cap->cmdchar == 'o' ? 1 : 0))
       && open_line(cap->cmdchar == 'O' ? BACKWARD : FORWARD,
-                   has_format_option(FO_OPEN_COMS) ? OPENLINE_DO_COM : 0,
+                   has_format_option(kFoOpenComs) ? OPENLINE_DO_COM : 0,
                    0, NULL)) {
     if (win_cursorline_standout(curwin)) {
       // force redraw of cursorline
@@ -5991,7 +5997,7 @@ static void nv_wordcmd(cmdarg_T *cap)
       // Another strangeness: When standing on the end of a word "ce" will
       // change until the end of the next word, but "cw" will change only one
       // character!  This is done by setting "flag".
-      if (vim_strchr(p_cpo, CPO_CHANGEW) != NULL) {
+      if (vim_strchr(p_cpo, kCpoChangew) != NULL) {
         cap->oap->inclusive = true;
         word_end = true;
       }
@@ -6409,9 +6415,12 @@ static void nv_record(cmdarg_T *cap)
       emsg(_(e_cmdline_window_already_open));
       return;
     }
+    bool insert_range = Visual.active && cap->nchar == ':';
     char fc[2] = { (char)cap->nchar, 0 };
     typval_T tv_args[] = {
       { .v_type = VAR_STRING, .vval.v_string = fc },
+      { .v_type = VAR_STRING, .vval.v_string = insert_range ? "'<,'>" : "" },
+      { .v_type = VAR_NUMBER, .vval.v_number = insert_range ? 5 : 1 },
       { .v_type = VAR_UNKNOWN },
     };
     nlua_call_typval("vim._core.cmdwin", "open", tv_args, NULL);

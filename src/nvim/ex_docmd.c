@@ -4006,7 +4006,7 @@ int expand_filename(exarg_T *eap, char **cmdlinep, const char **errormsgp)
   // Decide to expand wildcards *before* replacing '%', '#', etc.  If
   // the file name contains a wildcard it should not cause expanding.
   // (it will be expanded anyway if there is a wildcard before replacing).
-  bool has_wildcards = path_has_wildcard(p);
+  bool has_wildcards = path_has_wildcard(p, true);
   while (*p != NUL) {
     // Skip over `=expr`, wildcards in it are not expanded.
     if (p[0] == '`' && p[1] == '=') {
@@ -4109,7 +4109,7 @@ int expand_filename(exarg_T *eap, char **cmdlinep, const char **errormsgp)
           || vim_strchr(eap->arg, '~') != NULL) {
         expand_env_esc(eap->arg, NameBuff, MAXPATHL, (char *)(" \t" PATH_ESC_WILDCARDS), true,
                        NULL);
-        has_wildcards = path_has_wildcard(NameBuff);
+        has_wildcards = path_has_wildcard(NameBuff, true);
         p = NameBuff;
       } else {
         p = NULL;
@@ -4251,7 +4251,7 @@ void separate_nextcmd(exarg_T *eap)
                || *p == '\n') {
       // We remove the '\' before the '|', unless EX_CTRLV is used
       // AND 'b' is present in 'cpoptions'.
-      if ((vim_strchr(p_cpo, CPO_BAR) == NULL
+      if ((vim_strchr(p_cpo, kCpoBar) == NULL
            || !(eap->argt & EX_CTRLV)) && *(p - 1) == '\\') {
         STRMOVE(p - 1, p);  // remove the '\'
         p--;
@@ -5079,9 +5079,6 @@ static void ex_restart(exarg_T *eap)
 
   dict_T *env = create_environment(NULL, false, false, false, NULL);
   tv_dict_add_str(env, S_LEN(ENV_STARTREASON), startreason);
-#ifdef MSWIN
-  tv_dict_add_str(env, S_LEN(ENV_RESTART_ALLOC_CONSOLE), "1");
-#endif
 
   CallbackReader on_err = CALLBACK_READER_INIT;
 #ifdef MSWIN
@@ -5257,6 +5254,8 @@ static void ex_pclose(exarg_T *eap)
       break;
     }
   }
+
+  win_float_close(kWinPreview);
 }
 
 /// Close window "win" and take care of handling closing the last window for a
@@ -5763,6 +5762,18 @@ bool set_ref_in_findfunc(int copyID)
   return abort;
 }
 
+static void set_browse_edit_arg(exarg_T *eap)
+{
+  if ((cmdmod.cmod_flags & CMOD_BROWSE) && *eap->arg == NUL
+      && (eap->cmdidx == CMD_edit
+          || eap->cmdidx == CMD_split
+          || eap->cmdidx == CMD_vsplit
+          || eap->cmdidx == CMD_tabedit
+          || eap->cmdidx == CMD_tabnew)) {
+    eap->arg = ".";
+  }
+}
+
 /// :sview [+command] file       split window with new file, read-only
 /// :split [[+command] file]     split window with current or new file
 /// :vsplit [[+command] file]    split window vertically with current or new file
@@ -5776,6 +5787,7 @@ bool set_ref_in_findfunc(int copyID)
 /// :tabfind [+command] file     open new Tab page and find "file"
 void ex_splitview(exarg_T *eap)
 {
+  set_browse_edit_arg(eap);
   win_T *old_curwin = curwin;
   char *fname = NULL;
   const bool use_tab = eap->cmdidx == CMD_tabedit
@@ -6112,6 +6124,7 @@ static void ex_find(exarg_T *eap)
 /// ":edit", ":badd", ":balt", ":visual".
 static void ex_edit(exarg_T *eap)
 {
+  set_browse_edit_arg(eap);
   char *ffname = eap->cmdidx == CMD_enew ? NULL : eap->arg;
 
   // Exclude commands which keep the window's current buffer
@@ -6354,7 +6367,7 @@ static void ex_read(exarg_T *eap)
     i = readfile(curbuf->b_ffname, curbuf->b_fname,
                  eap->line2, 0, (linenr_T)MAXLNUM, eap, 0, false);
   } else {
-    if (vim_strchr(p_cpo, CPO_ALTREAD) != NULL) {
+    if (vim_strchr(p_cpo, kCpoAltread) != NULL) {
       setaltfname(eap->arg, eap->arg, 1);
     }
     i = readfile(eap->arg, NULL,
@@ -6454,7 +6467,7 @@ static void post_chdir(CdScope scope, bool trigger_dirchanged)
   }
 
   last_chdir_reason = NULL;
-  shorten_fnames(vim_strchr(p_cpo, CPO_NOSYMLINKS) == NULL);
+  shorten_fnames(vim_strchr(p_cpo, kCpoNosymlinks) == NULL);
 
   if (trigger_dirchanged) {
     do_autocmd_dirchanged(cwd, scope, kCdCauseManual, false);
@@ -6864,7 +6877,7 @@ static void ex_at(exarg_T *eap)
   }
 
   // Put the register in the typeahead buffer with the "silent" flag.
-  if (do_execreg(c, true, vim_strchr(p_cpo, CPO_EXECBUF) != NULL, true) == FAIL) {
+  if (do_execreg(c, true, vim_strchr(p_cpo, kCpoExecbuf) != NULL, true) == FAIL) {
     beep_flush();
     return;
   }
@@ -7380,6 +7393,10 @@ static void ex_normal(exarg_T *eap)
 /// ":startinsert", ":startreplace" and ":startgreplace"
 static void ex_startinsert(exarg_T *eap)
 {
+  if (!curbuf->b_p_ma && !curbuf->terminal) {
+    emsg(_(e_modifiable));
+    return;
+  }
   if (eap->forceit) {
     // cursor line can be zero on startup
     if (!curwin->w_cursor.lnum) {
@@ -7556,7 +7573,7 @@ static void prepare_preview_window(void)
 {
   // Open the preview window or popup and make it the current window.
   g_do_tagpreview = (int)p_pvh;
-  prepare_tagpreview(true);
+  prepare_tagpreview(true, *p_pvp != NUL);
 }
 
 static void back_to_current_window(win_T *curwin_save)

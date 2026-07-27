@@ -2,6 +2,8 @@ local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
+local describe, it, before_each, after_each, setup, teardown, finally =
+  t.describe, t.it, t.before_each, t.after_each, t.setup, t.teardown, t.finally
 local clear = n.clear
 local eq = t.eq
 local ok = t.ok
@@ -2502,6 +2504,20 @@ describe('api/buf', function()
       api.nvim_buf_delete(b, { unload = true })
       ok(not api.nvim_buf_is_loaded(b))
       ok(api.nvim_buf_is_valid(b))
+    end)
+
+    it('does not crash if WinClosed closes the next tabpage #40852', function()
+      exec_lua(function()
+        vim.cmd.tabnew()
+        vim.api.nvim_create_autocmd('WinClosed', {
+          callback = function()
+            pcall(vim.api.nvim_win_close, 0, true)
+          end,
+        })
+        local bufs = vim.api.nvim_list_bufs()
+        vim.api.nvim_buf_delete(bufs[#bufs - 1], { force = true })
+      end)
+      assert_alive()
     end)
   end)
 

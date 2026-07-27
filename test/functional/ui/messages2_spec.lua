@@ -4,6 +4,8 @@ local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
+local describe, it, before_each, after_each, finally =
+  t.describe, t.it, t.before_each, t.after_each, t.finally
 local api, clear, command, exec_lua, feed = n.api, n.clear, n.command, n.exec_lua, n.feed
 
 local msg_timeout = 400
@@ -445,6 +447,27 @@ describe('messages2', function()
       ^                                                     |
       {1:~                                                    }|*12
       {9:E354: Invalid register name: '^@'}                    |
+    ]])
+  end)
+
+  it('showmode does not overwrite Visual word count #40824', function()
+    if t.is_os('win') then
+      t.pending('FIXME #40843')
+    end
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'one two', 'three four' })
+    feed('Vj')
+    screen:expect([[
+      {17:one two}                                              |
+      ^t{17:hree four}                                           |
+      {1:~                                                    }|*11
+      {5:-- VISUAL LINE --}                                    |
+    ]])
+    feed('g<C-G>')
+    screen:expect([[
+      {17:one two}                                              |
+      ^t{17:hree four}                                           |
+      {1:~                                                    }|*11
+      Selected 2 of 2 Lines; 4 of 4 Words; 19 of 19 Bytes  |
     ]])
   end)
 

@@ -461,7 +461,7 @@ static int str_to_mapargs(const char *strargs, bool is_unmap, MapArguments *mapa
   // With :unmap, literal white space is included in the {lhs}; there is no
   // separate {rhs}.
   const char *lhs_end = to_parse;
-  bool do_backslash = (vim_strchr(p_cpo, CPO_BSLASH) == NULL);
+  bool do_backslash = (vim_strchr(p_cpo, kCpoBslash) == NULL);
   while (*lhs_end && (is_unmap || !ascii_iswhite(*lhs_end))) {
     if ((lhs_end[0] == Ctrl_V || (do_backslash && lhs_end[0] == '\\'))
         && lhs_end[1] != NUL) {
@@ -1202,7 +1202,7 @@ static char *translate_mapping(const char *const str_in, const char *const cpo_v
   garray_T ga;
   ga_init(&ga, 1, 40);
 
-  const bool cpo_bslash = (vim_strchr(cpo_val, CPO_BSLASH) != NULL);
+  const bool cpo_bslash = (vim_strchr(cpo_val, kCpoBslash) != NULL);
 
   for (; *str; str++) {
     int c = *str;
@@ -2738,11 +2738,13 @@ void ex_abclear(exarg_T *eap)
 /// Arguments are handled like @ref nvim_set_keymap unless noted.
 /// @param  buffer    Buffer handle for a specific buffer, or 0 for the current
 ///                   buffer, or -1 to signify global behavior ("all buffers")
-/// @param  is_unmap  When true, removes the mapping that matches {lhs}.
-void modify_keymap(uint64_t channel_id, Buffer buffer, bool is_unmap, String mode, String lhs,
+/// @param  maptype   MAPTYPE_MAP to set a mapping, MAPTYPE_UNMAP to remove the mapping that
+///                   matches {lhs} or {rhs}, MAPTYPE_UNMAP_LHS to only match {lhs}.
+void modify_keymap(uint64_t channel_id, Buffer buffer, int maptype, String mode, String lhs,
                    String rhs, Dict(keymap) *opts, Error *err)
 {
   LuaRef lua_funcref = LUA_NOREF;
+  bool is_unmap = maptype == MAPTYPE_UNMAP || maptype == MAPTYPE_UNMAP_LHS;
   bool global = (buffer == -1);
   if (global) {
     buffer = 0;
@@ -2834,14 +2836,11 @@ void modify_keymap(uint64_t channel_id, Buffer buffer, bool is_unmap, String mod
   }
 
   // buf_do_map() reads noremap/unmap as its own argument.
-  int maptype_val = MAPTYPE_MAP;
-  if (is_unmap) {
-    maptype_val = MAPTYPE_UNMAP;
-  } else if (is_noremap) {
-    maptype_val = MAPTYPE_NOREMAP;
+  if (maptype == MAPTYPE_MAP && is_noremap) {
+    maptype = MAPTYPE_NOREMAP;
   }
 
-  switch (buf_do_map(maptype_val, &parsed_args, mode_val, is_abbrev, target_buf)) {
+  switch (buf_do_map(maptype, &parsed_args, mode_val, is_abbrev, target_buf)) {
   case 0:
     break;
   case 1:

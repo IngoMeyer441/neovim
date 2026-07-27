@@ -1,6 +1,7 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 
+local describe, it, before_each, finally = t.describe, t.it, t.before_each, t.finally
 local clear = n.clear
 local command = n.command
 local eq = t.eq
@@ -109,6 +110,7 @@ describe(':help', function()
     check_tag('help :[range]', '*:[range]*')
     check_tag('help [<space>', '[<Space>')
     check_tag('help ]_^D', ']_CTRL-D')
+    check_tag('help :set^=', '*:set^=*')
 
     check_tag([[help $HOME]], [[*$HOME*]])
 
@@ -131,6 +133,12 @@ describe(':help', function()
     check_tag([[help i^x^y]], '*i_CTRL-X_CTRL-Y*')
     check_tag([[help CTRL-\_CTRL-N]], [[*CTRL-\_CTRL-N*]])
     check_tag([[help i_CTRL-U-default]], [[*i_CTRL-U-default*]])
+    check_tag([[help expr-=~?]], [[*expr-=~?*]])
+    check_tag([[help map-CTRL-C]], '*map-CTRL-C*')
+    check_tag([=[help telnet-CTRL-]]=], '*telnet-CTRL-]*')
+    check_tag([[help c_CTRL-SHIFT-V]], '*c_CTRL-SHIFT-V*')
+    check_tag([[help i_CTRL-SHIFT-V]], '*i_CTRL-SHIFT-V*')
+    check_tag([[help c_CTRL-SHIFT-Q]], '*c_CTRL-SHIFT-Q*')
 
     check_tag([[exe "help i\<C-\>\<C-G>"]], [[*i_CTRL-\_CTRL-G*]])
     check_tag([[exe "help \<C-V>"]], '*CTRL-V*')

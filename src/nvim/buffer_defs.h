@@ -971,6 +971,12 @@ typedef enum {
   kFloatRelativeLaststatus = 5,
 } FloatRelative;
 
+typedef enum {
+  kWinNormal = 0,  ///< Non-special window (split or float).
+  kWinInfo,        ///< Completion-menu "info" popup.
+  kWinPreview,     ///< 'previewpopup' window.
+} WinKind;
+
 /// Keep in sync with win_split_str[] in nvim_win_get_config() (api/win_config.c)
 typedef enum {
   kWinSplitLeft = 0,
@@ -1202,6 +1208,12 @@ struct window_S {
   pos_save_T w_save_cursor;         // backup of cursor pos and topline
   bool w_do_win_fix_cursor;         // if true cursor may be invalid
 
+  // Screen pos 'previewpopup' anchors to (original cursor pos). Separate from WinConfig because
+  // win_float_update_preview() re-autosizes as content updates, and re-decides the flip
+  // above/below. WinConfig.row/col hold the placed (offset, flipped, clamped) result.
+  int w_wantline;
+  int w_wantcol;
+
   int w_winrow_off;  ///< offset from winrow to the inner window area
   int w_wincol_off;  ///< offset from wincol to the inner window area
                      ///< this includes float border but excludes special columns
@@ -1283,8 +1295,8 @@ struct window_S {
   int w_nrwidth;                    // width of 'number' and 'relativenumber'
                                     // column being used
   int w_scwidth;                    // width of 'signcolumn'
-  int w_minscwidth;                 // minimum width or SCL_NO/SCL_NUM
-  int w_maxscwidth;                 // maximum width or SCL_NO/SCL_NUM
+  int w_minscwidth;                 // minimum 'signcolumn' width, or SCL_NO/SCL_NUM
+  int w_maxscwidth;                 // maximum 'signcolumn' width, or SCL_NO/SCL_NUM
 
   // === end of cached values ===
 
@@ -1371,7 +1383,7 @@ struct window_S {
   ScreenGrid w_grid_alloc;              // the grid specific to the window
   bool w_pos_changed;                   // true if window position changed
   bool w_floating;                      ///< whether the window is floating
-  bool w_float_is_info;                 // the floating window is info float
+  WinKind w_kind;                       ///< mutually-exclusive window role
   WinConfig w_config;
 
   // w_fraction is the fractional row of the cursor within the window, from

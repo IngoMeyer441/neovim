@@ -612,7 +612,7 @@ bool do_mouse(oparg_T *oap, int c, int dir, int count, bool fixindent)
 
   pos_T end_visual = { 0 };
   pos_T start_visual = { 0 };
-  bool mouse_can_visual = ui_mouse_has(MOUSE_VISUAL);
+  bool mouse_can_visual = ui_mouse_has(kMouseVisual);
   if ((State & (MODE_NORMAL | MODE_INSERT))
       && !(mod_mask & (MOD_MASK_SHIFT | MOD_MASK_CTRL))) {
     if (which_button == MOUSE_LEFT && mouse_can_visual) {
@@ -1176,7 +1176,7 @@ bool cmdline_mousescroll(int dir)
 
   // Only scroll when the mouse is on top of the info popup.
   win_T *wp = mouse_find_win_inner(&grid, &row, &col);
-  if (wp == NULL || !wp->w_float_is_info) {
+  if (wp == NULL || wp->w_kind != kWinInfo) {
     return false;
   }
 

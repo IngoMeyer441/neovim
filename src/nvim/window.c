@@ -2617,7 +2617,7 @@ void close_windows(buf_T *buf, bool keep_curwin)
           }
           if (!win_close_othertab(wp, false, tp, false)) {
             // If closing the window fails give up, to avoid looping forever.
-            break;
+            goto theend;
           }
 
           // Start all over, the tab page may be closed and
@@ -5504,7 +5504,8 @@ win_T *win_alloc(win_T *after, bool hidden)
   new_wp->w_botline = 2;
   new_wp->w_cursor.lnum = 1;
   new_wp->w_scbind_pos = 1;
-  new_wp->w_floating = 0;
+  new_wp->w_floating = false;
+  new_wp->w_kind = kWinNormal;
   new_wp->w_config = WIN_CONFIG_INIT;
   new_wp->w_viewport_invalid = true;
   new_wp->w_viewport_last_topline = 1;

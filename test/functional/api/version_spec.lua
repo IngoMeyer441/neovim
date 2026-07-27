@@ -1,6 +1,7 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 
+local describe, it, before_each, setup = t.describe, t.it, t.before_each, t.setup
 local clear, fn, eq = n.clear, n.fn, t.eq
 local api = n.api
 local matches = t.matches
@@ -91,6 +92,9 @@ describe('api metadata', function()
       if old_param[3] and new_param and not new_param[3] then
         error(('"%s": parameter %d was optional, now required'):format(old_fn.name, idx))
       end
+    end
+    while #new_fn.parameters > #old_fn.parameters and new_fn.parameters[#new_fn.parameters][3] do
+      table.remove(new_fn.parameters)
     end
     old_fn = normalize_func_metadata(old_fn)
     new_fn = normalize_func_metadata(new_fn)
@@ -247,6 +251,22 @@ describe('api metadata', function()
     )
   end)
 
+  it('optional param may be added', function()
+    assert_func_backcompat({
+      name = 'nvim_example',
+      method = false,
+      since = 1,
+      return_type = 'void',
+      parameters = { { 'String', 'src', false } },
+    }, {
+      name = 'nvim_example',
+      method = false,
+      since = 1,
+      return_type = 'void',
+      parameters = { { 'String', 'src', false }, { 'Dict', 'opts', true } },
+    })
+  end)
+
   it('UI events are compatible with old metadata or have new level', function()
     local ui_events_new = name_table(api_info.ui_events)
     local ui_events_compat = {}
@@ -333,10 +353,10 @@ describe('api: optional parameters', function()
   end)
 
   it('omitted is equivalent to empty dict', function()
-    eq(api.nvim_get_context({}), api.nvim_get_context()) -- RPC path
+    eq(n.parse_context(api.nvim_get_context({})), n.parse_context(api.nvim_get_context())) -- RPC path
     eq(
-      n.exec_lua('return vim.api.nvim_get_context({})'),
-      n.exec_lua('return vim.api.nvim_get_context()')
+      n.parse_context(n.exec_lua('return vim.api.nvim_get_context({})')),
+      n.parse_context(n.exec_lua('return vim.api.nvim_get_context()'))
     ) -- Lua-binding path
   end)
 

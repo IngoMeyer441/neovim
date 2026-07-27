@@ -1,6 +1,8 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 
+local describe, it, before_each, setup, teardown =
+  t.describe, t.it, t.before_each, t.setup, t.teardown
 local clear = n.clear
 local eq = t.eq
 local pcall_err = t.pcall_err
@@ -50,8 +52,12 @@ describe("'tagcase' option", function()
     -- does not.  The first of these (setting the local value to <empty>) should
     -- succeed; the other two should fail.
     n.command('setl tc=')
-    eq('Vim(setglobal):E474: Invalid argument: tc=', pcall_err(n.command, 'setg tc='))
-    eq('Vim(set):E474: Invalid argument: tc=', pcall_err(n.command, 'set tc='))
+    local one_of = 'expected one of: followic, ignore, match, followscs, smart'
+    eq(
+      "Vim(setglobal):E474: Invalid value '', " .. one_of .. ': tc=',
+      pcall_err(n.command, 'setg tc=')
+    )
+    eq("Vim(set):E474: Invalid value '', " .. one_of .. ': tc=', pcall_err(n.command, 'set tc='))
   end)
 
   it("should work with 'ignorecase' correctly in all combinations", function()

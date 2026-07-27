@@ -38,6 +38,12 @@ LUA
 • pos.to_cursor() returns a (`row,` `col)` tuple
   instead of returning them as separate values.
 • Renamed current_level param of vim.log.new().
+• `vim.opt.{option}:get()` has improved structure for dict-like options.
+  Some shapes changed:
+  - "key:value" list options (e.g. 'diffopt', 'mousescroll') return a map
+    `{ key = value }` instead of an array of `"key:value"` strings.
+  - The `,,` literal-comma convention (e.g. 'isfname') is not reconstructed in
+    the structured view; the raw string value is unchanged.
 
 DIAGNOSTICS
 
@@ -316,6 +322,7 @@ LUA
 • |vim.pack.get()| can fetch new updates before computing the output.
 • |vim.o| now accepts table style values for assignment.
 • |vim.keycode()| returns structured info as return value 2.
+• |Iter:count()| counts items in the iterator.
 
 OPTIONS
 
@@ -330,6 +337,7 @@ OPTIONS
   'titlestring', and 'iconstring'.
 • 'winpinned' prevents window from closing unless specifically targeted.
 • 'packlockfile' sets the path used for |vim.pack-lockfile|.
+• 'previewpopup' decides how the preview window is displayed.
 
 PERFORMANCE
 
@@ -363,6 +371,7 @@ TREESITTER
   capture.
 • |vim.treesitter.select()| starts or adjusts a visual selection at cursor,
   based on tree nodes.
+• The `diff` treesitter parser is bundled.
 
 TUI
 
@@ -374,6 +383,9 @@ TUI
 UI
 
 • |:checkhealth| shows filewatcher info in the Performance section.
+• Floating window border highlights (|hl-FloatBorder|, |hl-FloatTitle|,
+  |hl-FloatFooter|) combine with the window-local |hl-Normal| background
+  instead of falling back to the global background.
 • These builtin "picker" menus delegate to |vim.ui.select()|:
   • :browse oldfiles
   • |:recover|
@@ -420,6 +432,8 @@ These existing features changed their behavior.
 • |vim.lsp.util.open_floating_preview()| windows (e.g. |vim.lsp.buf.hover()|)
   converted to normal windows (e.g. with |CTRL-W_H|) are no longer closed
   automatically.
+• |nvim_del_keymap()|, |nvim_buf_del_keymap()| and |vim.keymap.del()| can
+  match only {lhs}, not {rhs}, with `opts.lhs=true`.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*

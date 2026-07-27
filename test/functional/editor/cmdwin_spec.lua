@@ -3,6 +3,7 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 
+local describe, it, before_each = t.describe, t.it, t.before_each
 local feed = n.feed
 local api = n.api
 local fn = n.fn
@@ -185,4 +186,19 @@ describe('cmdwin', function()
     feed('<C-C>')
     eq({ 'enter::', 'leave::' }, exec_lua('return _G.events'))
   end)
+
+  it([[q: in visual mode automatically inserts "'<,'>"]], function()
+    feed('vq:')
+    eq(':', fn.getcmdwintype())
+    eq({ [['<,'>]] }, api.nvim_buf_get_lines(0, -2, -1, false))
+    eq(4, api.nvim_win_get_cursor(0)[2])
+  end)
+
+  for _, ty in ipairs({ '/', '?' }) do
+    it(('q%s in visual mode inserts nothing in current line'):format(ty), function()
+      feed('vq' .. ty)
+      eq(ty, fn.getcmdwintype())
+      eq({ '' }, api.nvim_buf_get_lines(0, -2, -1, false))
+    end)
+  end
 end)

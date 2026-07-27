@@ -3,6 +3,7 @@ local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
+local describe, it, before_each = t.describe, t.it, t.before_each
 local nvim_prog = n.nvim_prog
 local fn = n.fn
 local api = n.api
@@ -3046,6 +3047,23 @@ describe('vim.keymap', function()
     eq(1, exec_lua [[return GlobalCount]])
     eq('\nNo mapping found', n.exec_capture('nmap ghjk'))
     eq('\nNo mapping found', n.exec_capture('nmap qwer'))
+  end)
+
+  it('unmap with lhs option', function()
+    eq(
+      'q',
+      exec_lua [[
+      vim.keymap.set('n', 'ge', 'q')
+      local ok, err = pcall(vim.keymap.del, 'n', 'q', { lhs = true })
+      assert(not ok and err:match('E31: No such mapping'), err)
+      return vim.fn.maparg('ge', 'n')
+    ]]
+    )
+
+    exec_lua [[
+      vim.keymap.del('n', 'ge', { lhs = true })
+    ]]
+    eq('\nNo mapping found', n.exec_capture('nmap ge'))
   end)
 
   it('buffer-local mappings', function()

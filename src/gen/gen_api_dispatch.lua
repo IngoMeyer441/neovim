@@ -4,6 +4,7 @@
 -- to obtain how the script is invoked, look in build/build.ninja and grep for
 -- "gen_api_dispatch.lua"
 local hashy = require 'gen.hashy'
+local keyset = require('gen.keyset')
 local c_grammar = require('gen.c_grammar')
 
 -- output h file with generated dispatch functions (dispatch_wrappers.generated.h)
@@ -356,63 +357,49 @@ local keysets_defs = assert(io.open(keysets_outputf, 'wb'))
 
 keysets_defs:write('// IWYU pragma: private, include "nvim/api/private/dispatch.h"\n\n')
 
-for _, k in ipairs(keysets) do
-  local neworder, hashfun = hashy.hashy_hash(k.name, k.keys, function(idx)
-    return k.name .. '_table[' .. idx .. '].str'
-  end)
-
-  keysets_defs:write('extern KeySetLink ' .. k.name .. '_table[' .. (1 + #neworder) .. '];\n')
-
-  local function typename(type)
-    if type == 'HLGroupID' then
-      return 'kObjectTypeInteger'
-    elseif not type or startswith(type, 'Union') then
-      return 'kObjectTypeNil'
-    elseif type == 'StringArray' then
-      return 'kUnpackTypeStringArray'
-    end
-    return 'kObjectType' .. real_type(type)
+local function typename(type)
+  if type == 'HLGroupID' then
+    return 'kObjectTypeInteger'
+  elseif not type or startswith(type, 'Union') then
+    return 'kObjectTypeNil'
+  elseif type == 'StringArray' then
+    return 'kUnpackTypeStringArray'
   end
+  return 'kObjectType' .. real_type(type)
+end
 
-  output:write('KeySetLink ' .. k.name .. '_table[] = {\n')
-  for i, key in ipairs(neworder) do
+for _, k in ipairs(keysets) do
+  local order, hashfun = keyset.hash(k.name, k.keys)
+  keysets_defs:write('extern KeySetLink ' .. k.name .. '_table[' .. (1 + #order) .. '];\n')
+
+  local entry = {} --- @type table<string, gen.keyset.entry>
+  for i, key in ipairs(order) do
+    -- Only keysets with optional keys carry a per-key HAS_KEY index (and its `KEYSET_OPTIDX` define).
     local ind = -1
     if k.has_optional then
       ind = i
       keysets_defs:write('#define KEYSET_OPTIDX_' .. k.name .. '__' .. key .. ' ' .. ind .. '\n')
     end
-    output:write(
-      '  {"'
-        .. key
-        .. '", offsetof(KeyDict_'
-        .. k.name
-        .. ', '
-        .. (k.c_names[key] or key)
-        .. '), '
-        .. typename(k.types[key])
-        .. ', '
-        .. ind
-        .. ', '
-        .. (k.types[key] == 'HLGroupID' and 'true' or 'false')
-        .. '},\n'
-    )
+    entry[key] = {
+      field = k.c_names[key] or key,
+      type = typename(k.types[key]),
+      opt_index = ind,
+      is_hlgroup = k.types[key] == 'HLGroupID',
+    }
   end
-  output:write('  {NULL, 0, kObjectTypeNil, -1, false},\n')
-  output:write('};\n\n')
 
-  output:write(hashfun)
-
-  output:write([[
-KeySetLink *KeyDict_]] .. k.name .. [[_get_field(const char *str, size_t len)
-{
-  int hash = ]] .. k.name .. [[_hash(str, len);
-  if (hash == -1) {
-    return NULL;
-  }
-  return &]] .. k.name .. [[_table[hash];
-}
-
-]])
+  keyset.emit(function(s)
+    output:write(s .. '\n')
+  end, {
+    name = k.name,
+    get_field = 'KeyDict_' .. k.name .. '_get_field',
+    struct = 'KeyDict_' .. k.name,
+    order = order,
+    hashfun = hashfun,
+    entry = entry,
+    static = false,
+  })
+  output:write('\n')
 end
 
 keysets_defs:close()
@@ -952,7 +939,9 @@ local function process_function(fn)
   for i = 1, #free_code do
     local rev_i = #free_code - i + 1
     local code = free_code[rev_i]
-    if i == 1 and not real_type(fn.parameters[1][1]):match('^KeyDict_') then
+    local cur_is_keydict = real_type(fn.parameters[i][1]):match('^KeyDict_')
+    local prev_is_keydict = i > 1 and real_type(fn.parameters[i - 1][1]):match('^KeyDict_')
+    if not cur_is_keydict and (i == 1 or prev_is_keydict) then
       free_at_exit_code = free_at_exit_code .. ('\n%s'):format(code)
     else
       free_at_exit_code = free_at_exit_code .. ('\nexit_%u:\n%s'):format(rev_i, code)

@@ -2,6 +2,8 @@ local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
+local describe, it, before_each, after_each, finally =
+  t.describe, t.it, t.before_each, t.after_each, t.finally
 local clear = n.clear
 local command = n.command
 local get_pathsep = n.get_pathsep
@@ -180,6 +182,22 @@ describe(':mksession', function()
     command('edit ' .. link_dir)
     local expected = cwd_dir .. '/' .. link_dir .. '/'
     eq(expected, api.nvim_buf_get_name(0))
+    command('mksession ' .. session_file)
+    command('%bwipeout!')
+    command('source ' .. session_file)
+    eq(expected, api.nvim_buf_get_name(0))
+  end)
+
+  it('restores a directory buffer for the CWD #40939', function()
+    local cwd_dir = t.fix_slashes(fn.getcwd())
+    local expected = cwd_dir .. '/'
+
+    command('set sessionoptions=buffers,curdir')
+    command('edit ' .. cwd_dir)
+    command('cd ' .. cwd_dir)
+    neq('', fn.bufname('%'))
+    eq(expected, api.nvim_buf_get_name(0))
+
     command('mksession ' .. session_file)
     command('%bwipeout!')
     command('source ' .. session_file)

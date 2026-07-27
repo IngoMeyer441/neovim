@@ -1,6 +1,8 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 
+local describe, it, before_each, setup, teardown =
+  t.describe, t.it, t.before_each, t.setup, t.teardown
 local clear = n.clear
 local eq = t.eq
 local exec_lua = n.exec_lua
@@ -180,6 +182,11 @@ describe('fnamemodify()', function()
       eq('//?/UNC/server', fnamemodify('//?/UNC/server', ':h'))
       eq('//?/UNC/server/share', fnamemodify('//?/UNC/server/share', ':h'))
       eq('//?/UNC/server/share/', fnamemodify('//?/UNC/server/share/foo', ':h'))
+
+      -- relative "./" and ".\" prefixes
+      eq('./path/to', fnamemodify('./path/to/hello.txt', ':h'))
+      eq('./path', fnamemodify('./path/to/hello.txt', ':h:h'))
+      eq('./path/to', fnamemodify([[.\path\to\hello.txt]], ':h'))
     end
   end)
 

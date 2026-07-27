@@ -1,6 +1,8 @@
 local n = require('test.functional.testnvim')()
 local t = require('test.testutil')
 
+local describe, it, after_each, pending, finally =
+  t.describe, t.it, t.after_each, t.pending, t.finally
 local api = n.api
 local command = n.command
 local eq = t.eq
@@ -188,7 +190,165 @@ describe('nvim.dir', function()
     assert_directory(root)
   end)
 
-  it('maps - to open parent directories', function()
+  it('opens a custom listing provider', function()
+    n.clear({ args_rm = { '-u' } })
+
+    exec_lua(function()
+      require('nvim.dir').open(0, 'custom://root', {
+        list = function(_, name, cb)
+          vim.g.nvim_dir_list_name = name
+          cb(nil, {
+            { name = 'child', dir = true },
+            { name = 'file.txt', dir = false },
+          })
+        end,
+        open = function(_, name, entry)
+          vim.g.nvim_dir_opened = entry.name .. ':' .. name
+        end,
+        open_parent = function(_, name)
+          vim.g.nvim_dir_parent = name
+        end,
+        init = function(buf)
+          vim.bo[buf].filetype = 'customdir'
+        end,
+      })
+    end)
+
+    eq('custom://root', api.nvim_buf_get_name(0))
+    eq('customdir', bufopt('filetype'))
+    eq({ 'child/', 'file.txt' }, lines())
+    eq('custom://root', exec_lua('return vim.g.nvim_dir_list_name'))
+
+    api.nvim_win_set_cursor(0, { 2, 0 })
+    api.nvim_set_option_value('modifiable', true, { buf = 0 })
+    api.nvim_set_current_line('renamed.txt')
+    feed('<CR>')
+    poke_eventloop()
+    eq('renamed.txt:custom://root', exec_lua('return vim.g.nvim_dir_opened'))
+
+    feed('-')
+    poke_eventloop()
+    eq('custom://root', exec_lua('return vim.g.nvim_dir_parent'))
+  end)
+
+  it('reports custom listing provider errors', function()
+    n.clear({ args_rm = { '-u' } })
+
+    exec_lua(function()
+      require('nvim.dir').open(0, 'custom://error', {
+        list = function(_, _, cb)
+          cb('simulated error')
+        end,
+        open = function() end,
+        open_parent = function() end,
+      })
+    end)
+
+    ok(exec_capture('messages'):find('simulated error', 1, true) ~= nil)
+    eq(false, exec_lua([[return vim.b.nvim_dir ~= nil]]))
+  end)
+
+  it('reloads custom listing providers', function()
+    n.clear({ args_rm = { '-u' } })
+
+    exec_lua(function()
+      require('nvim.dir').open(0, 'custom://root', {
+        list = function(buf, _, cb)
+          vim.b[buf].custom_count = (vim.b[buf].custom_count or 0) + 1
+          cb(nil, { { name = 'file' .. vim.b[buf].custom_count .. '.txt', dir = false } })
+        end,
+        open = function() end,
+        open_parent = function() end,
+      })
+    end)
+
+    eq({ 'file1.txt' }, lines())
+    feed('R')
+    poke_eventloop()
+    eq({ 'file2.txt' }, lines())
+  end)
+
+  it('ignores callbacks from replaced listings', function()
+    n.clear({ args_rm = { '-u' } })
+
+    exec_lua(function()
+      local dir = require('nvim.dir')
+      dir.open(0, 'custom://old', {
+        list = function(_, _, cb)
+          _G.nvim_dir_stale_callback = cb
+        end,
+        open = function() end,
+        open_parent = function() end,
+      })
+      dir.open(0, 'custom://new', {
+        list = function(_, _, cb)
+          cb(nil, { { name = 'current.txt', dir = false } })
+        end,
+        open = function() end,
+        open_parent = function() end,
+      })
+    end)
+
+    eq('custom://new', api.nvim_buf_get_name(0))
+    eq({ 'current.txt' }, lines())
+
+    exec_lua(function()
+      _G.nvim_dir_stale_callback(nil, { { name = 'stale.txt', dir = false } })
+    end)
+
+    eq('custom://new', api.nvim_buf_get_name(0))
+    eq({ 'current.txt' }, lines())
+  end)
+
+  it('replaces listing providers', function()
+    n.clear({ args_rm = { '-u' } })
+
+    exec_lua(function()
+      local dir = require('nvim.dir')
+      local function provider(label)
+        return {
+          list = function(buf, _, cb)
+            local key = 'nvim_dir_' .. label .. '_lists'
+            vim.b[buf][key] = (vim.b[buf][key] or 0) + 1
+            vim.g.nvim_dir_provider_list = label .. ':' .. vim.b[buf][key]
+            cb(nil, { { name = label .. '.txt', dir = false } })
+          end,
+          open = function(_, _, entry)
+            vim.g.nvim_dir_provider_open = label .. ':' .. entry.name
+          end,
+          open_parent = function()
+            vim.g.nvim_dir_provider_parent = label
+          end,
+        }
+      end
+      dir.open(0, 'custom://old', provider('old'))
+      dir.open(0, 'custom://new', provider('new'))
+    end)
+
+    eq({ 'new.txt' }, lines())
+    eq('new:1', exec_lua('return vim.g.nvim_dir_provider_list'))
+    for _, plug in ipairs({
+      '<Plug>(nvim-dir-open)',
+      '<Plug>(nvim-dir-up)',
+      '<Plug>(nvim-dir-reload)',
+    }) do
+      eq(0, fn.maparg(plug, 'n', false, true).buffer)
+    end
+
+    feed('<CR>')
+    poke_eventloop()
+    eq('new:new.txt', exec_lua('return vim.g.nvim_dir_provider_open'))
+
+    feed('-')
+    poke_eventloop()
+    eq('new', exec_lua('return vim.g.nvim_dir_provider_parent'))
+
+    feed('R')
+    poke_eventloop()
+    eq('new:2', exec_lua('return vim.g.nvim_dir_provider_list'))
+  end)
+
+  it('maps [count]- to open parent directories', function()
     make_fixture()
     n.clear({ args_rm = { '-u', '--cmd' } })
 
@@ -201,6 +361,57 @@ describe('nvim.dir', function()
 
     -- Ensure the cursor stays on the entry we navigated up from.
     eq('alpha.txt', api.nvim_get_current_line())
+
+    edit(file)
+    feed('1-')
+    poke_eventloop()
+
+    assert_directory(root)
+    eq('alpha.txt', api.nvim_get_current_line())
+
+    edit(file)
+    feed('2-')
+    poke_eventloop()
+
+    assert_directory(vim.fs.dirname(root))
+    eq(vim.fs.basename(root) .. '/', api.nvim_get_current_line())
+  end)
+
+  it('maps - to open the current directory from an unnamed buffer', function()
+    make_fixture()
+    n.clear({ args_rm = { '-u', '--cmd' } })
+    local cwd = fn.getcwd()
+    cd(root)
+    finally(function()
+      cd(cwd)
+    end)
+
+    eq('', api.nvim_buf_get_name(0))
+    feed('-')
+    poke_eventloop()
+
+    assert_directory(root)
+  end)
+
+  it('preserves a modified unnamed buffer when opening the current directory', function()
+    make_fixture()
+    n.clear({ args_rm = { '-u', '--cmd' } })
+    local cwd = fn.getcwd()
+    cd(root)
+    finally(function()
+      cd(cwd)
+    end)
+    local old_buf = api.nvim_get_current_buf()
+    api.nvim_buf_set_lines(old_buf, 0, -1, false, { 'unsaved' })
+
+    feed('-')
+    poke_eventloop()
+
+    assert_directory(root)
+    eq(old_buf, fn.bufnr('#'))
+    eq(true, api.nvim_buf_is_valid(old_buf))
+    eq(true, api.nvim_get_option_value('modified', { buf = old_buf }))
+    eq({ 'unsaved' }, api.nvim_buf_get_lines(old_buf, 0, -1, false))
   end)
 
   it('does not shadow startup plugin `-` mappings in directory buffers', function()
@@ -254,11 +465,15 @@ describe('nvim.dir', function()
 
   it('normalizes edited directory names', function()
     make_fixture()
+    local literal = root .. '/$HOME'
+    t.mkdir(literal)
     n.clear({ args_rm = { '-u' } })
 
-    edit(root .. '///')
+    edit(literal .. '///')
 
-    assert_directory(root)
+    eq(literal .. '/', api.nvim_buf_get_name(0))
+    eq('directory', bufopt('filetype'))
+    eq({ '' }, lines())
   end)
 
   it('does not show a parent entry at the filesystem root', function()
@@ -472,19 +687,29 @@ describe('nvim.dir', function()
     eq('netrw', api.nvim_get_option_value('filetype', { buf = 0 }))
   end)
 
-  it('supports the FileExplorer browse contract', function()
-    if t.is_zig_build() then
-      return pending('broken with build.zig: TMPDIR relative cwd')
-    end
-    make_fixture()
-    n.clear({ args_rm = { '-u' } })
-    local cwd = fn.getcwd()
+  for _, case in ipairs({
+    { command = 'edit', windows = 1, tabs = 1 },
+    { command = 'split', windows = 2, tabs = 1 },
+    { command = 'vsplit', windows = 2, tabs = 1 },
+    { command = 'tabedit', windows = 1, tabs = 2 },
+    { command = 'tabnew', windows = 1, tabs = 2 },
+  }) do
+    it(('":browse %s"'):format(case.command), function()
+      if t.is_zig_build() then
+        return pending('broken with build.zig: TMPDIR relative cwd')
+      end
+      make_fixture()
+      n.clear({ args_rm = { '-u' } })
+      local cwd = fn.getcwd()
 
-    cd(root)
-    command('browse edit .')
-    cd(cwd)
+      cd(root)
+      command('browse ' .. case.command)
+      cd(cwd)
 
-    assert_directory(root)
-    line_of('alpha.txt')
-  end)
+      eq(case.windows, #api.nvim_tabpage_list_wins(0))
+      eq(case.tabs, #api.nvim_list_tabpages())
+      assert_directory(root)
+      line_of('alpha.txt')
+    end)
+  end
 end)
