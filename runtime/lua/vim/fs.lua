@@ -191,10 +191,9 @@ end
 --- (default: `false`)
 --- @field follow? boolean
 ---
---- Normalize {path} via |vim.fs.normalize()|. Set `false` to use {path} literally, e.g. to list a
---- directory whose name contains `~` or `$`.
---- (default: `true`)
---- @field normalize? boolean
+--- Do not expand special forms like "~" and "$" in {path}.
+--- (default: `false`)
+--- @field plain? boolean
 
 --- Gets an iterator over items found in `path` (normalized via |vim.fs.normalize()|).
 ---
@@ -211,7 +210,7 @@ end
 ---@since 10
 ---@param path (string) Directory to iterate over, normalized via |vim.fs.normalize()| unless
 ---            `opts.normalize=false`.
----@param opts? vim.fs.dir.Opts Optional keyword arguments:
+---@param opts? vim.fs.dir.Opts
 ---@return fun(): string?, string?, string? # Iterator over items in {path}, yielding (name, type, err):
 ---        - name: Basename of the item relative to {path}.
 ---        - type: One of: "file", "directory", "link", "fifo", "socket", "char", "block", "unknown".
@@ -225,9 +224,9 @@ function M.dir(path, opts)
   vim.validate('err', opts.err, 'boolean', true)
   vim.validate('follow', opts.follow, 'boolean', true)
   vim.validate('skip', opts.skip, 'function', true)
-  vim.validate('normalize', opts.normalize, 'boolean', true)
+  vim.validate('plain', opts.plain, 'boolean', true)
 
-  if opts.normalize ~= false then
+  if opts.plain ~= true then
     path = M.normalize(path)
   end
 
@@ -678,10 +677,10 @@ end
 --- (default: `true` in Windows, `false` otherwise)
 --- @field win? boolean
 
---- Normalize a path to a standard format. A tilde (~) character at the beginning of the path is
---- expanded to the user's home directory and environment variables are also expanded. "." and ".."
---- components are also resolved, except when the path is relative and trying to resolve it would
---- result in an absolute path.
+--- Normalize a path to a standard format. Expands environment variables, and tilde "~" at the
+--- beginning of the path. Resolves "." and ".." components, except when the path is relative and
+--- resolving it would produce an absolute path.
+---
 --- - "." as the only part in a relative path:
 ---   - "." => "."
 ---   - "././" => "."
@@ -691,20 +690,20 @@ end
 --- - ".." in the root directory returns the root directory.
 ---   - "/../../" => "/"
 ---
---- On Windows, backslash (\) characters are converted to forward slashes (/).
+--- On Windows, backslashes (`\`) are converted to forward slashes (`/`).
 ---
 --- Examples:
---- ```
---- [[C:\Users\jdoe]]                         => "C:/Users/jdoe"
---- "~/src/neovim"                            => "/home/jdoe/src/neovim"
---- "$XDG_CONFIG_HOME/nvim/init.vim"          => "/Users/jdoe/.config/nvim/init.vim"
---- "~/src/nvim/api/../tui/./tui.c"           => "/home/jdoe/src/nvim/tui/tui.c"
---- "./foo/bar"                               => "foo/bar"
---- "foo/../../../bar"                        => "../../bar"
---- "/home/jdoe/../../../bar"                 => "/bar"
---- "C:foo/../../baz"                         => "C:../baz"
---- "C:/foo/../../baz"                        => "C:/baz"
---- [[\\?\UNC\server\share\foo\..\..\..\bar]] => "//?/UNC/server/share/bar"
+--- ```lua
+--- [[C:\Users\jdoe]]                         --> "C:/Users/jdoe"
+--- "~/src/neovim"                            --> "/home/jdoe/src/neovim"
+--- "$XDG_CONFIG_HOME/nvim/init.vim"          --> "/Users/jdoe/.config/nvim/init.vim"
+--- "~/src/nvim/api/../tui/./tui.c"           --> "/home/jdoe/src/nvim/tui/tui.c"
+--- "./foo/bar"                               --> "foo/bar"
+--- "foo/../../../bar"                        --> "../../bar"
+--- "/home/jdoe/../../../bar"                 --> "/bar"
+--- "C:foo/../../baz"                         --> "C:../baz"
+--- "C:/foo/../../baz"                        --> "C:/baz"
+--- [[\\?\UNC\server\share\foo\..\..\..\bar]] --> "//?/UNC/server/share/bar"
 --- ```
 ---
 ---@since 10
@@ -866,21 +865,37 @@ function M.rm(path, opts)
   end
 end
 
---- Converts `path` to an absolute path. Expands tilde (~) at the beginning of the path
---- to the user's home directory. Does not check if the path exists, normalize the path, resolve
---- symlinks or hardlinks (including `.` and `..`), or expand environment variables. If the path is
---- already absolute, it is returned unchanged. Also converts `\` path separators to `/`.
+--- @class vim.fs.abspath.Opts
+--- @inlinedoc
+---
+--- Resolve the path relative to this directory.
+--- @field cwd? string
+---
+--- Do not expand tilde (~).
+--- @field plain? boolean
+
+--- Converts `path` to an absolute path. Expands tilde (~) at the beginning of the path (unless
+--- plain=true). Does not check if the path exists, normalize the path, resolve symlinks or
+--- hardlinks (including "." and ".."), or expand environment variables. If the path is already
+--- absolute, it is returned unchanged. Converts `\` path separators to `/`.
 ---
 --- @since 13
 --- @param path string Path
+--- @param opts? vim.fs.abspath.Opts
 --- @return string Absolute path
-function M.abspath(path)
+function M.abspath(path, opts)
   -- TODO(justinmk): mark f_fnamemodify as API_FAST and use it, ":p:h" should be safe...
+  --
+  opts = opts or {}
 
   vim.validate('path', path, 'string')
+  vim.validate('cwd', opts.cwd, 'string', true)
+  vim.validate('plain', opts.plain, 'boolean', true)
 
   -- Expand ~ to user's home directory
-  path = expand_home(path)
+  if not opts.plain then
+    path = expand_home(path)
+  end
 
   -- Convert path separator to `/`
   path = path:gsub(os_sep, '/')
@@ -898,7 +913,8 @@ function M.abspath(path)
 
   -- Windows allows paths like C:foo/bar, these paths are relative to the current working directory
   -- of the drive specified in the path
-  local cwd = assert((iswin and prefix:match('^%w:$')) and uv.fs_realpath(prefix) or uv.cwd())
+  local cwd =
+    assert((iswin and prefix:match('^%w:$')) and uv.fs_realpath(prefix) or opts.cwd or uv.cwd())
   -- Convert cwd path separator to `/`
   cwd = cwd:gsub(os_sep, '/')
 

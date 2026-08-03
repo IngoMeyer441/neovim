@@ -65,6 +65,7 @@
 ^src/po/.*\.desktop
 ^src/po/.*sjis
 ^src/proto
+^src/testdir/.*_ramp.vim
 ^src/testdir/dumps/
 ^src/testdir/keycode_check\.
 ^src/testdir/python
@@ -96,6 +97,7 @@ _example\.vim$
 /tags$
 README_[a-z]\+\.txt$
 [_.]cp125[0-1]
+helptoc
 netbeans
 textprop
 vimtutor

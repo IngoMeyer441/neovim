@@ -1060,7 +1060,7 @@ theend:
 int diff_internal(void)
   FUNC_ATTR_PURE
 {
-  return (diff_flags & DIFF_INTERNAL) != 0 && *p_dex == NUL;
+  return (diff_flags & DIFF_INTERNAL) != 0 && p_dex.type == kCallbackNone;
 }
 
 /// Completely update the diffs for the buffers involved.
@@ -1183,7 +1183,7 @@ static int check_external_diff(diffio_T *diffio)
     }
 
     // When using 'diffexpr' break here.
-    if (*p_dex != NUL) {
+    if (p_dex.type != kCallbackNone) {
       break;
     }
 
@@ -1263,7 +1263,7 @@ static int diff_file(diffio_T *dio)
   char *tmp_orig = dio->dio_orig.din_fname;
   char *tmp_new = dio->dio_new.din_fname;
   char *tmp_diff = dio->dio_diff.dout_fname;
-  if (*p_dex != NUL) {
+  if (p_dex.type != kCallbackNone) {
     // Use 'diffexpr' to generate the diff file.
     eval_diff(tmp_orig, tmp_new, tmp_diff);
     return OK;
@@ -1368,7 +1368,7 @@ void ex_diffpatch(exarg_T *eap)
   }
 #endif
 
-  if (*p_pex != NUL) {
+  if (p_pex.type != kCallbackNone) {
     // Use 'patchexpr' to generate the new file.
 #ifdef UNIX
     eval_patch(tmp_orig, (fullname != NULL ? fullname : eap->arg), tmp_new);
@@ -1519,7 +1519,7 @@ static void set_diff_option(win_T *wp, bool value)
   curwin = wp;
   curbuf = curwin->w_buffer;
   curbuf->b_ro_locked++;
-  set_option_value_give_err(kOptDiff, BOOLEAN_OPTVAL(value), OPT_LOCAL);
+  set_option_value_give_err(kOptDiff, BOOLEAN_OBJ(value), OPT_LOCAL);
   curbuf->b_ro_locked--;
   curwin = old_curwin;
   curbuf = curwin->w_buffer;
@@ -1561,7 +1561,7 @@ void diff_win_options(win_T *wp, bool addbuf)
     }
     wp->w_p_fdm_save = xstrdup(wp->w_p_fdm);
   }
-  set_option_direct_for(kOptFoldmethod, STATIC_CSTR_AS_OPTVAL("diff"), OPT_LOCAL, 0,
+  set_option_direct_for(kOptFoldmethod, STATIC_CSTR_AS_OBJ("diff"), OPT_LOCAL, 0,
                         kOptScopeWin, wp);
 
   if (!wp->w_p_diff) {

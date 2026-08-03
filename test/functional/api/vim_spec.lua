@@ -1898,6 +1898,11 @@ describe('API', function()
       ok(not api.nvim_get_option_value('equalalways', {}))
     end)
 
+    it('Lua funcref RPC value is a `:map`-style "<Lua …>" string', function()
+      exec_lua('vim.o.operatorfunc = function() end')
+      matches('^<Lua %d+.*>$', api.nvim_get_option_value('operatorfunc', {}))
+    end)
+
     it('works to get global value of local options', function()
       eq(false, api.nvim_get_option_value('lisp', {}))
       eq(8, api.nvim_get_option_value('shiftwidth', {}))
@@ -5317,30 +5322,16 @@ describe('API', function()
       )
     end)
     it('does not interfere with printing line in Ex mode #19400', function()
-      local screen = Screen.new(60, 7)
+      local screen = Screen.new(60, 12)
       insert([[
         foo
         bar]])
-      feed('gQ1')
-      screen:expect([[
-        foo                                                         |
-        bar                                                         |
-        {1:~                                                           }|*2
-        {3:                                                            }|
-        Entering Ex mode.  Type "visual" to go to Normal mode.      |
-        :1^                                                          |
-      ]])
+      feed('1q:1')
+      screen:expect({ any = vim.pesc('{1::}1^') })
       eq('Parsing command-line', pcall_err(api.nvim_parse_cmd, '', {}))
+      -- Executing the line still auto-prints it.
       feed('<CR>')
-      screen:expect([[
-        foo                                                         |
-        bar                                                         |
-        {3:                                                            }|
-        Entering Ex mode.  Type "visual" to go to Normal mode.      |
-        :1                                                          |
-        foo                                                         |
-        :^                                                           |
-      ]])
+      screen:expect({ any = vim.pesc('" foo') })
     end)
     it('does not move cursor or change search history/pattern #19878 #19890', function()
       api.nvim_buf_set_lines(0, 0, -1, true, { 'foo', 'bar', 'foo', 'bar' })

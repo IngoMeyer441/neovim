@@ -271,6 +271,7 @@ func s:GetFilenameChecks() abort
     \ 'dylanlid': ['file.lid'],
     \ 'earthfile': ['Earthfile'],
     \ 'ecd': ['file.ecd'],
+    \ 'ed': ['file.ed'],
     \ 'edif': ['file.edf', 'file.edif', 'file.edo'],
     \ 'editorconfig': ['.editorconfig'],
     \ 'eelixir': ['file.eex', 'file.leex'],
@@ -504,6 +505,7 @@ func s:GetFilenameChecks() abort
     \ 'manconf': ['/etc/man.conf', 'man.config', 'any/etc/man.conf'],
     \ 'maple': ['file.mv', 'file.mpl', 'file.mws'],
     \ 'markdown': ['file.markdown', 'file.mdown', 'file.mkd', 'file.mkdn', 'file.mdwn', 'file.md'],
+    \ 'marko': ['file.marko'],
     \ 'masm': ['file.masm'],
     \ 'mason': ['file.mason', 'file.mhtml'],
     \ 'master': ['file.mas', 'file.master'],
@@ -890,7 +892,7 @@ func s:GetFilenameChecks() abort
     \ 'taskdata': ['pending.data', 'completed.data', 'undo.data'],
     \ 'taskedit': ['file.task'],
     \ 'tcl': ['file.tcl', 'file.tm', 'file.tk', 'file.itcl', 'file.itk', 'file.jacl', '.tclshrc', 'tclsh.rc', '.wishrc', '.tclsh-history',
-    \         '.xsctcmdhistory', '.xsdbcmdhistory', 'vivado.jou', 'vivado.log'],
+    \         '.xsctcmdhistory', '.xsdbcmdhistory', 'vivado.jou', 'vivado.log', 'file.xdc'],
     \ 'teal': ['file.tl'],
     \ 'templ': ['file.templ'],
     \ 'template': ['file.tmpl'],
@@ -1155,7 +1157,8 @@ func s:GetScriptChecks() abort
       \ 'janet':  [['#!/path/janet']],
       \ 'dart':   [['#!/path/dart']],
       \ 'bpftrace':  [['#!/path/bpftrace']],
-      \ 'vim':   [['#!/path/vim']],
+      \ 'vim':    [['#!/path/vim']],
+      \ 'ed':     [['#!/usr/bin/ed -f']],
       \ }
 endfunc
 

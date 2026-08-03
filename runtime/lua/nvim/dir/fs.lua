@@ -47,7 +47,7 @@ end
 
 ---@param path string
 function M.open_parent_path(path)
-  if path == '' then
+  if path == '' or path:find('^%a[%w+.-]*://') then
     navigate('.')
     return
   end
@@ -60,7 +60,7 @@ end
 ---@param cb fun(err?: string, entries?: nvim.dir.Entry[])
 function M.list(_, path, cb)
   local entries = {} ---@type nvim.dir.Entry[]
-  for name, type, err in fs.dir(path, { err = true, normalize = false }) do
+  for name, type, err in fs.dir(path, { err = true, plain = true }) do
     if err then
       cb(err)
       return

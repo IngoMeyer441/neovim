@@ -137,11 +137,8 @@ void check_buf_options(buf_T *buf)
   check_string_option(&buf->b_p_ff);
   check_string_option(&buf->b_p_def);
   check_string_option(&buf->b_p_inc);
-  check_string_option(&buf->b_p_inex);
-  check_string_option(&buf->b_p_inde);
   check_string_option(&buf->b_p_indk);
   check_string_option(&buf->b_p_fp);
-  check_string_option(&buf->b_p_fex);
   check_string_option(&buf->b_p_kp);
   check_string_option(&buf->b_p_mps);
   check_string_option(&buf->b_p_fo);
@@ -167,8 +164,6 @@ void check_buf_options(buf_T *buf)
   check_string_option(&buf->b_p_cinsd);
   check_string_option(&buf->b_p_cot);
   check_string_option(&buf->b_p_cpt);
-  check_string_option(&buf->b_p_cfu);
-  check_string_option(&buf->b_p_ofu);
   check_string_option(&buf->b_p_keymap);
   check_string_option(&buf->b_p_gefm);
   check_string_option(&buf->b_p_gp);
@@ -177,13 +172,10 @@ void check_buf_options(buf_T *buf)
   check_string_option(&buf->b_p_ep);
   check_string_option(&buf->b_p_path);
   check_string_option(&buf->b_p_tags);
-  check_string_option(&buf->b_p_ffu);
-  check_string_option(&buf->b_p_tfu);
   check_string_option(&buf->b_p_tc);
   check_string_option(&buf->b_p_dict);
   check_string_option(&buf->b_p_dia);
   check_string_option(&buf->b_p_tsr);
-  check_string_option(&buf->b_p_tsrfu);
   check_string_option(&buf->b_p_lw);
   check_string_option(&buf->b_p_bkc);
   check_string_option(&buf->b_p_menc);
@@ -574,7 +566,7 @@ const char *did_set_background(optset_T *args)
     return errmsg;
   }
 
-  if (args->os_oldval.string.data[0] == *p_bg) {
+  if (args->os_oldval.data.string.data[0] == *p_bg) {
     // Value was not changed
     return NULL;
   }
@@ -621,7 +613,7 @@ const char *did_set_backspace(optset_T *args FUNC_ATTR_UNUSED)
 const char *did_set_backupcopy(optset_T *args)
 {
   buf_T *buf = (buf_T *)args->os_buf;
-  const char *oldval = args->os_oldval.string.data;
+  const char *oldval = args->os_oldval.data.string.data;
   int opt_flags = args->os_flags;
   char *bkc = p_bkc;
   unsigned *flags = &bkc_flags;
@@ -725,7 +717,7 @@ const char *did_set_buftype(optset_T *args)
   // buftype=prompt:
   if (buf->b_p_bt[0] == 'p') {
     // Set default value for 'comments'
-    set_option_direct(kOptComments, STATIC_CSTR_AS_OPTVAL(""), OPT_LOCAL, SID_NONE);
+    set_option_direct(kOptComments, STATIC_CSTR_AS_OBJ(""), OPT_LOCAL, SID_NONE);
     // set the prompt start position to lastline.
     pos_T next_prompt = { .lnum = buf->b_ml.ml_line_count, .col = buf->b_prompt_start.mark.col,
                           .coladd = 0 };
@@ -1202,7 +1194,7 @@ int expand_set_eventignore(optexpand_T *args, int *numMatches, char ***matches)
 const char *did_set_fileformat(optset_T *args)
 {
   buf_T *buf = (buf_T *)args->os_buf;
-  const char *oldval = args->os_oldval.string.data;
+  const char *oldval = args->os_oldval.data.string.data;
   int opt_flags = args->os_flags;
   if (!MODIFIABLE(buf) && !(opt_flags & OPT_GLOBAL)) {
     return e_modifiable;
@@ -1244,7 +1236,7 @@ const char *did_set_filetype_or_syntax(optset_T *args)
     return e_invarg;
   }
 
-  args->os_value_changed = strcmp(args->os_oldval.string.data, *varp) != 0;
+  args->os_value_changed = strcmp(args->os_oldval.data.string.data, *varp) != 0;
 
   // Since we check the value, there is no need to set kOptFlagInsecure,
   // even when the value comes from a modeline.
@@ -1257,7 +1249,6 @@ const char *did_set_filetype_or_syntax(optset_T *args)
 const char *did_set_foldexpr(optset_T *args)
 {
   win_T *win = (win_T *)args->os_win;
-  did_set_optexpr(args);
   if (foldmethodIsExpr(win)) {
     foldUpdateAll(win);
   }
@@ -1570,22 +1561,6 @@ const char *did_set_mousescroll(optset_T *args FUNC_ATTR_UNUSED)
   return has_dir ? NULL : e_invarg;
 }
 
-/// One of the '*expr' options is changed:, 'diffexpr', 'foldexpr', 'foldtext',
-/// 'formatexpr', 'includeexpr', 'indentexpr', 'patchexpr' and 'charconvert'.
-const char *did_set_optexpr(optset_T *args)
-{
-  char **varp = (char **)args->os_varp;
-
-  // If the option value starts with <SID> or s:, then replace that with
-  // the script identifier.
-  char *name = get_scriptlocal_funcname(*varp);
-  if (name != NULL) {
-    free_string_option(*varp);
-    *varp = name;
-  }
-  return NULL;
-}
-
 /// The 'rulerformat' option is changed.
 const char *did_set_rulerformat(optset_T *args)
 {
@@ -1615,7 +1590,7 @@ const char *did_set_sessionoptions(optset_T *args)
   }
   if ((ssop_flags & kOptSsopFlagCurdir) && (ssop_flags & kOptSsopFlagSesdir)) {
     // Don't allow both "sesdir" and "curdir".
-    const char *oldval = args->os_oldval.string.data;
+    const char *oldval = args->os_oldval.data.string.data;
     opt_strings_flags(oldval, opt_ssop_values, &ssop_flags, true, NULL, 0);
     return e_invarg;
   }
@@ -1676,7 +1651,7 @@ const char *did_set_shellpipe_redir(optset_T *args)
 {
   bool seen = false;
 
-  for (char *p = args->os_newval.string.data; *p != NUL; p++) {
+  for (char *p = args->os_newval.data.string.data; *p != NUL; p++) {
     if (*p != '%') {
       continue;
     }
@@ -1745,7 +1720,7 @@ const char *did_set_signcolumn(optset_T *args)
 {
   win_T *win = (win_T *)args->os_win;
   char **varp = (char **)args->os_varp;
-  const char *oldval = args->os_oldval.string.data;
+  const char *oldval = args->os_oldval.data.string.data;
   if (check_signcolumn(*varp, varp == &win->w_p_scl ? win : NULL) != OK) {
     return e_invarg;
   }
@@ -1796,7 +1771,7 @@ const char *did_set_spelloptions(optset_T *args)
 {
   win_T *win = (win_T *)args->os_win;
   int opt_flags = args->os_flags;
-  const char *val = args->os_newval.string.data;
+  const char *val = args->os_newval.data.string.data;
 
   if (!(opt_flags & OPT_LOCAL)) {
     const char *errmsg = opt_strings_flags(val, opt_spo_values, &spo_flags, true, args->os_errbuf,
@@ -1868,7 +1843,9 @@ static const char *did_set_statustabline_rulerformat(optset_T *args, bool rulerf
       && ((args->os_flags & OPT_GLOBAL) || !(args->os_flags & OPT_LOCAL))
       && s[0] == NUL) {
     xfree(*varp);
-    *varp = xstrdup(get_option_default(args->os_idx, args->os_flags).data.string.data);
+    Object def = get_option_default(args->os_idx, args->os_flags);
+    *varp = xstrdup(def.data.string.data);
+    optval_free_read(args->os_idx, def);
     s = *varp;
   }
 
@@ -2056,7 +2033,7 @@ const char *did_set_virtualedit(optset_T *args)
                                            args->os_errbuflen);
     if (errmsg != NULL) {
       return errmsg;
-    } else if (strcmp(ve, args->os_oldval.string.data) != 0) {
+    } else if (strcmp(ve, args->os_oldval.data.string.data) != 0) {
       // Recompute cursor position in case the new 've' setting
       // changes something.
       validate_virtcol(win);

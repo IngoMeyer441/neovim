@@ -302,7 +302,7 @@ do
   local function cmd(opts)
     local ok, err = pcall(vim.api.nvim_cmd, opts, {})
     if not ok then
-      vim.api.nvim_echo({ { err:sub(#'Vim:' + 1) } }, true, { err = true })
+      vim.api.nvim_echo({ { require('vim._core.util').cmd_errmsg(err) } }, true, { err = true })
     end
   end
 
@@ -446,14 +446,12 @@ do
 
     -- Add empty lines
     vim.keymap.set('n', '[<Space>', function()
-      -- TODO: update once it is possible to assign a Lua function to options #25672
-      vim.go.operatorfunc = "v:lua.require'vim._core.util'.space_above"
+      vim.go.operatorfunc = require('vim._core.util').space_above
       return 'g@l'
     end, { expr = true, desc = 'Add empty line above cursor' })
 
     vim.keymap.set('n', ']<Space>', function()
-      -- TODO: update once it is possible to assign a Lua function to options #25672
-      vim.go.operatorfunc = "v:lua.require'vim._core.util'.space_below"
+      vim.go.operatorfunc = require('vim._core.util').space_below
       return 'g@l'
     end, { expr = true, desc = 'Add empty line below cursor' })
   end

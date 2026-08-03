@@ -1319,10 +1319,8 @@ win_T *win_split_ins(int size, int flags, win_T *new_wp, int dir, frame_T *to_fl
 
       win_setheight_win(oldwin->w_height + new_size + STATUS_HEIGHT,
                         oldwin, true);
+      // w_height now excludes the status line
       oldwin_height = oldwin->w_height;
-      if (need_status) {
-        oldwin_height -= STATUS_HEIGHT;
-      }
     }
 
     // Only make all windows the same height if one of them (except oldwin)
@@ -3791,7 +3789,7 @@ void frame_new_height(frame_T *topfrp, int height, bool topfirst, bool wfh, bool
     OptInt new_ch = MAX(min_set_ch, p_ch + topfrp->fr_height - height);
     if (new_ch != p_ch) {
       const OptInt save_ch = min_set_ch;
-      set_option_value(kOptCmdheight, NUMBER_OPTVAL(new_ch), 0);
+      set_option_value(kOptCmdheight, INTEGER_OBJ(new_ch), 0);
       min_set_ch = save_ch;
     }
     height = (int)MIN(ROWS_AVAIL, height);
@@ -4777,7 +4775,7 @@ static void enter_tabpage(tabpage_T *tp, buf_T *old_curbuf, bool trigger_enter_a
     OptInt new_ch = p_ch;
     p_ch = prev_p_ch;
     command_frame_height = false;
-    set_option_value(kOptCmdheight, NUMBER_OPTVAL(new_ch), 0);
+    set_option_value(kOptCmdheight, INTEGER_OBJ(new_ch), 0);
     command_frame_height = true;
   } else if (old_curtab != curtab) {
     tabpage_check_windows(old_curtab);
@@ -6948,13 +6946,14 @@ void scroll_to_fraction(win_T *wp, int prev_height)
       wp->w_wrow = line_size;
       if (wp->w_wrow >= wp->w_view_height
           && (wp->w_view_width - win_col_off(wp)) > 0) {
-        wp->w_skipcol += wp->w_view_width - win_col_off(wp);
+        // The cursor must be visible, override the scroll position.
+        colnr_T skipcol = wp->w_view_width - win_col_off(wp);
         wp->w_wrow--;
         while (wp->w_wrow >= wp->w_view_height) {
-          wp->w_skipcol += wp->w_view_width - win_col_off(wp)
-                           + win_col_off2(wp);
+          skipcol += wp->w_view_width - win_col_off(wp) + win_col_off2(wp);
           wp->w_wrow--;
         }
+        wp->w_skipcol = skipcol;
       }
     } else if (sline > 0) {
       while (sline > 0 && lnum > 1) {
@@ -7034,7 +7033,11 @@ void win_set_inner_size(win_T *wp, bool valid_cursor)
     // There is no point in adjusting the scroll position when exiting.  Some
     // values might be invalid.
     if (valid_cursor && !exiting && (*p_spk == 'c' || wp->w_floating)) {
-      wp->w_skipcol = 0;
+      // With 'smoothscroll' w_skipcol is the scroll position, keep it.
+      // Otherwise it only keeps the cursor visible and is computed again.
+      if (!wp->w_p_sms) {
+        wp->w_skipcol = 0;
+      }
       scroll_to_fraction(wp, prev_height);
     }
     redraw_later(wp, UPD_SOME_VALID);

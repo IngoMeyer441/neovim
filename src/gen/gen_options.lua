@@ -118,18 +118,24 @@ local function get_flags(o)
     end
   end
 
+  -- Callback option: `type='func'` (funcref/lambda/Lua fn) or `type='expr'` (Vimscript expr).
+  if o.type == 'func' then
+    add_flag('kOptFlagFunc')
+  elseif o.type == 'expr' then
+    add_flag('kOptFlagExpr')
+  end
+
   for _, flag_desc in ipairs({
-    { 'nodefault', 'NoDefault' },
-    { 'no_mkrc', 'NoMkrc' },
-    { 'secure' },
-    { 'gettext' },
-    { 'noglob', 'NoGlob' },
-    { 'normal_fname_chars', 'NFname' },
-    { 'normal_dname_chars', 'NDname' },
-    { 'pri_mkrc', 'PriMkrc' },
     { 'deny_duplicates', 'NoDup' },
+    { 'gettext' },
     { 'modelineexpr', 'MLE' },
-    { 'func' },
+    { 'no_mkrc', 'NoMkrc' },
+    { 'nodefault', 'NoDefault' },
+    { 'noglob', 'NoGlob' },
+    { 'normal_dname_chars', 'NDname' },
+    { 'normal_fname_chars', 'NFname' },
+    { 'pri_mkrc', 'PriMkrc' },
+    { 'secure' },
   }) do
     local key_name, flag_suffix = flag_desc[1], flag_desc[2]
     if o[key_name] then
@@ -144,7 +150,13 @@ end
 --- @param opt_type vim.option_type
 --- @return string
 local function opt_type_enum(opt_type)
-  return ('kOptValType%s'):format(lowercase_to_titlecase(opt_type))
+  return ('kObjectType%s'):format(({
+    boolean = 'Boolean',
+    number = 'Integer',
+    string = 'String',
+    func = 'String',
+    expr = 'String',
+  })[opt_type])
 end
 
 --- @param scope vim.option_scope
@@ -213,7 +225,10 @@ local function get_opt_val(v)
     end
   end
 
-  return ('{ .type = %s, .data.%s = %s }'):format(opt_type_enum(v_type), v_type, v)
+  -- def_val is stored as an API Object.
+  local obj_type = ({ boolean = 'Boolean', number = 'Integer', string = 'String' })[v_type]
+  local obj_field = ({ boolean = 'boolean', number = 'integer', string = 'string' })[v_type]
+  return ('{ .type = kObjectType%s, .data.%s = %s }'):format(obj_type, obj_field, v)
 end
 
 --- @param d vim.option_value|function
@@ -281,11 +296,12 @@ local function dump_option(i, o, write)
   end
 
   if not o.defaults then
-    write('    .def_val=NIL_OPTVAL')
+    write('    .def_val={ .type = kObjectTypeNil }')
   elseif o.defaults.condition then
     write(('#if defined(%s)'):format(o.defaults.condition))
     write('    .def_val=', get_defaults(o.defaults.if_true, o.full_name))
-    if o.defaults.if_false then
+    -- Check against nil: `if_false=false` is a valid default and must still emit the `#else`.
+    if o.defaults.if_false ~= nil then
       write('#else')
       write('    .def_val=', get_defaults(o.defaults.if_false, o.full_name))
     end

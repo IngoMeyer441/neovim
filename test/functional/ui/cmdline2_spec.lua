@@ -287,6 +287,22 @@ describe('cmdline2', function()
     ]])
   end)
 
+  it('is empty after backspace', function()
+    feed(':')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*12
+      {16::}^                                                    |
+    ]])
+
+    feed('<BS>')
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+                                                           |
+    ]])
+  end)
+
   it('matchparen highlights', function()
     exec('source $VIMRUNTIME/plugin/matchparen.lua')
     feed(':call foo(bar())')
@@ -307,6 +323,16 @@ describe('cmdline2', function()
       {1:~                                                    }|*12
       {16::}{15:call} {25:foo}{16:(}{25:bar}{16:(}^                                       |
     ]])
+  end)
+
+  it("doesn't interfere with :$q", function()
+    exec('split b')
+    exec('wincmd J')
+    exec('wincmd p')
+    exec('$q') -- this would close a ui2 window, not the second visible window
+
+    local nwins = vim.fn.winnr('$')
+    assert(nwins == 1)
   end)
 end)
 

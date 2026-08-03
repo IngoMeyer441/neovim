@@ -1315,7 +1315,7 @@ vim.lua_omnifunc({find_start})                            *vim.lua_omnifunc()*
     Omnifunc for completing Lua values from the runtime Lua interpreter,
     similar to the builtin completion for the `:lua` command.
 
-    Activate using `set omnifunc=v:lua.vim.lua_omnifunc` in a Lua buffer.
+    Activate using `vim.bo.omnifunc = vim.lua_omnifunc` in a Lua buffer.
 
     Parameters: ~
       • {find_start}  (`1|0`)
@@ -2594,18 +2594,22 @@ Example: >lua
 <
 
 
-vim.fs.abspath({path})                                      *vim.fs.abspath()*
+vim.fs.abspath({path}, {opts})                              *vim.fs.abspath()*
     Converts `path` to an absolute path. Expands tilde (~) at the beginning of
-    the path to the user's home directory. Does not check if the path exists,
-    normalize the path, resolve symlinks or hardlinks (including `.` and
-    `..`), or expand environment variables. If the path is already absolute,
-    it is returned unchanged. Also converts `\` path separators to `/`.
+    the path (unless plain=true). Does not check if the path exists, normalize
+    the path, resolve symlinks or hardlinks (including "." and ".."), or
+    expand environment variables. If the path is already absolute, it is
+    returned unchanged. Converts `\` path separators to `/`.
 
     Attributes: ~
         Since: 0.11.0
 
     Parameters: ~
       • {path}  (`string`) Path
+      • {opts}  (`table?`) A table with the following fields:
+                • {cwd}? (`string`) Resolve the path relative to this
+                  directory.
+                • {plain}? (`boolean`) Do not expand tilde (~).
 
     Return: ~
         (`string`) Absolute path
@@ -2640,17 +2644,15 @@ vim.fs.dir({path}, {opts})                                      *vim.fs.dir()*
     Parameters: ~
       • {path}  (`string`) Directory to iterate over, normalized via
                 |vim.fs.normalize()| unless `opts.normalize=false`.
-      • {opts}  (`table?`) Optional keyword arguments:
+      • {opts}  (`table?`) A table with the following fields:
                 • {depth}? (`integer`, default: `1`) How deep to traverse.
                 • {err}? (`boolean`, default: `false`) Report errors via the
                   iterator's third value ("err"), instead of silently
                   skipping.
                 • {follow}? (`boolean`, default: `false`) Follow symbolic
                   links.
-                • {normalize}? (`boolean`, default: `true`) Normalize {path}
-                  via |vim.fs.normalize()|. Set `false` to use {path}
-                  literally, e.g. to list a directory whose name contains `~`
-                  or `$`.
+                • {plain}? (`boolean`, default: `false`) Do not expand special
+                  forms like "~" and "$" in {path}.
                 • {skip}? (`fun(dir_name: string): boolean`) Predicate to
                   control traversal. Return false to stop searching the
                   current directory. Only useful when depth > 1 Return an
@@ -2797,11 +2799,10 @@ vim.fs.mkdir({path}, {opts})                                  *vim.fs.mkdir()*
                   directories as necessary.
 
 vim.fs.normalize({path}, {opts})                          *vim.fs.normalize()*
-    Normalize a path to a standard format. A tilde (~) character at the
-    beginning of the path is expanded to the user's home directory and
-    environment variables are also expanded. "." and ".." components are also
-    resolved, except when the path is relative and trying to resolve it would
-    result in an absolute path.
+    Normalize a path to a standard format. Expands environment variables, and
+    tilde "~" at the beginning of the path. Resolves "." and ".." components,
+    except when the path is relative and resolving it would produce an
+    absolute path.
     • "." as the only part in a relative path:
       • "." => "."
       • "././" => "."
@@ -2811,19 +2812,19 @@ vim.fs.normalize({path}, {opts})                          *vim.fs.normalize()*
     • ".." in the root directory returns the root directory.
       • "/../../" => "/"
 
-    On Windows, backslash (\) characters are converted to forward slashes (/).
+    On Windows, backslashes (`\`) are converted to forward slashes (`/`).
 
-    Examples: >
-        [[C:\Users\jdoe]]                         => "C:/Users/jdoe"
-        "~/src/neovim"                            => "/home/jdoe/src/neovim"
-        "$XDG_CONFIG_HOME/nvim/init.vim"          => "/Users/jdoe/.config/nvim/init.vim"
-        "~/src/nvim/api/../tui/./tui.c"           => "/home/jdoe/src/nvim/tui/tui.c"
-        "./foo/bar"                               => "foo/bar"
-        "foo/../../../bar"                        => "../../bar"
-        "/home/jdoe/../../../bar"                 => "/bar"
-        "C:foo/../../baz"                         => "C:../baz"
-        "C:/foo/../../baz"                        => "C:/baz"
-        [[\\?\UNC\server\share\foo\..\..\..\bar]] => "//?/UNC/server/share/bar"
+    Examples: >lua
+        [[C:\Users\jdoe]]                         --> "C:/Users/jdoe"
+        "~/src/neovim"                            --> "/home/jdoe/src/neovim"
+        "$XDG_CONFIG_HOME/nvim/init.vim"          --> "/Users/jdoe/.config/nvim/init.vim"
+        "~/src/nvim/api/../tui/./tui.c"           --> "/home/jdoe/src/nvim/tui/tui.c"
+        "./foo/bar"                               --> "foo/bar"
+        "foo/../../../bar"                        --> "../../bar"
+        "/home/jdoe/../../../bar"                 --> "/bar"
+        "C:foo/../../baz"                         --> "C:../baz"
+        "C:/foo/../../baz"                        --> "C:/baz"
+        [[\\?\UNC\server\share\foo\..\..\..\bar]] --> "//?/UNC/server/share/bar"
 <
 
     Attributes: ~
@@ -4582,7 +4583,8 @@ cursor({buf}, {pos})                                        *vim.pos.cursor()*
     Creates a new |vim.Pos| from cursor position (see |api-indexing|).
 
     If {pos} is omitted, the first argument is treated as {win} instead of
-    {buf}, and the current cursor position of {win} is used.
+    {buf}, and the current cursor position of {win} is used. If {win} is also
+    omitted, it defaults to the current window.
 
     Example: >lua
         local buf = vim.api.nvim_win_get_buf(0)
@@ -4597,7 +4599,7 @@ cursor({buf}, {pos})                                        *vim.pos.cursor()*
       • {pos}  (`[integer, integer]`) (lnum, col) tuple
 
     Overloads: ~
-      • `fun(win: integer): vim.Pos`
+      • `fun(win?: integer): vim.Pos`
 
     Return: ~
         (`vim.Pos`) See |vim.Pos|.
@@ -5033,8 +5035,10 @@ vim.re.updatelocale()                                  *vim.re.updatelocale()*
 ==============================================================================
 Lua module: vim.regex                                              *vim.regex*
 
-Vim regexes can be used directly from Lua. Currently they only allow matching
-within a single line.
+The `vim.regex` interface allows Lua code to use Vim regexes.
+• Matches within a single line.
+• Does not check for interrupts (CTRL-C), so can be used from an |api-fast|
+  context.
 
 
                                                           *regex:match_line()*

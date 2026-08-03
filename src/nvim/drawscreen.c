@@ -370,9 +370,8 @@ void screen_resize(int width, int height)
     // - While at the more prompt or executing an external command, don't
     //   redraw, but position the cursor.
     // - While editing the command line, only redraw that. TODO: lies
-    // - in Ex mode, don't redraw anything.
     // - Otherwise, redraw right now, and position the cursor.
-    if (State == MODE_ASKMORE || State == MODE_EXTERNCMD || exmode_active
+    if (State == MODE_ASKMORE || State == MODE_EXTERNCMD
         || ((State & MODE_CMDLINE) && get_cmdline_info()->one_key)) {
       if (State & MODE_CMDLINE) {
         update_screen();
@@ -2248,7 +2247,8 @@ static void win_update(win_T *wp)
           syntax_end_parsing(wp, syntax_last_parsed + 1);
         }
 
-        bool display_buf_line = !concealed && (foldinfo.fi_lines == 0 || *wp->w_p_fdt == NUL);
+        bool display_buf_line = !concealed
+                                && (foldinfo.fi_lines == 0 || wp->w_p_fdt.type == kCallbackNone);
 
         // Display one line
         spellvars_T zero_spv = { 0 };
