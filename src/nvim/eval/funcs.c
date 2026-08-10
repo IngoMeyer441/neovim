@@ -1293,7 +1293,7 @@ static void f_expand(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   rettv->v_type = VAR_STRING;
   if (argvars[1].v_type != VAR_UNKNOWN
       && argvars[2].v_type != VAR_UNKNOWN
-      && tv_get_number_chk(&argvars[2], &error)
+      && tv_get_bool_chk(&argvars[2], &error)
       && !error) {
     tv_list_set_ret(rettv, NULL);
   }
@@ -1324,7 +1324,7 @@ static void f_expand(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     // When the optional second argument is non-zero, don't remove matches
     // for 'wildignore' and don't put matches for 'suffixes' at the end.
     if (argvars[1].v_type != VAR_UNKNOWN
-        && tv_get_number_chk(&argvars[1], &error)) {
+        && tv_get_bool_chk(&argvars[1], &error)) {
       options |= WILD_KEEP_ALL;
     }
     if (!error) {
@@ -2380,9 +2380,9 @@ static void f_getreg(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   if (argvars[0].v_type != VAR_UNKNOWN && argvars[1].v_type != VAR_UNKNOWN) {
     bool error = false;
-    arg2 = (int)tv_get_number_chk(&argvars[1], &error);
+    arg2 = (int)tv_get_bool_chk(&argvars[1], &error);
     if (!error && argvars[2].v_type != VAR_UNKNOWN) {
-      return_list = (bool)tv_get_number_chk(&argvars[2], &error);
+      return_list = (bool)tv_get_bool_chk(&argvars[2], &error);
     }
     if (error) {
       return;
@@ -2838,7 +2838,7 @@ static void f_index(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       assert(item != NULL);
     }
     if (argvars[3].v_type != VAR_UNKNOWN) {
-      ic = !!tv_get_number_chk(&argvars[3], &error);
+      ic = !!tv_get_bool_chk(&argvars[3], &error);
       if (error) {
         item = NULL;
       }
@@ -4771,46 +4771,6 @@ static void f_printf(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 }
 
-/// "prompt_getprompt({buffer})" function
-static void f_prompt_getprompt(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-  FUNC_ATTR_NONNULL_ALL
-{
-  // return an empty string by default, e.g. it's not a prompt buffer
-  rettv->v_type = VAR_STRING;
-  rettv->vval.v_string = NULL;
-
-  buf_T *const buf = tv_get_buf_from_arg(&argvars[0]);
-  if (buf == NULL) {
-    return;
-  }
-
-  if (!bt_prompt(buf)) {
-    return;
-  }
-
-  rettv->vval.v_string = xstrdup(buf_prompt_text(buf));
-}
-
-/// "prompt_getinput({buffer})" function
-static void f_prompt_getinput(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-  FUNC_ATTR_NONNULL_ALL
-{
-  // return an empty string by default, e.g. it's not a prompt buffer
-  rettv->v_type = VAR_STRING;
-  rettv->vval.v_string = NULL;
-
-  buf_T *const buf = tv_get_buf_from_arg(&argvars[0]);
-  if (buf == NULL) {
-    return;
-  }
-
-  if (!bt_prompt(buf)) {
-    return;
-  }
-
-  rettv->vval.v_string = prompt_get_input(buf);
-}
-
 /// "pum_getpos()" function
 static void f_pum_getpos(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
@@ -6539,7 +6499,7 @@ static void f_setreg(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
         pointreg = *stropt;
         regname = pointreg;
       }
-    } else if (tv_dict_get_number(d, "isunnamed")) {
+    } else if (tv_dict_get_bool(d, "isunnamed", -1) > 0) {
       pointreg = regname;
     }
   } else {

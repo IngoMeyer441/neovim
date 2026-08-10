@@ -800,15 +800,27 @@ static void draw_statuscol(win_T *wp, winlinevars_T *wlv, int col_rows, statusco
   draw_col_fill(wlv, schar_from_ascii(' '), stcp->width - width, cur_attr);
 }
 
-static void handle_breakindent(win_T *wp, winlinevars_T *wlv)
+/// Whether "attr" draws an underline, undercurl, strikethrough, or overline: a line tied to text
+/// glyphs that looks broken drawn over blank filler cells, unlike a plain background/reverse-video
+/// highlight.
+static bool attr_has_line_deco(int attr)
+{
+  HlAttrs ae = syn_attr2entry(attr);
+  int32_t const mask = HL_UNDERLINE_MASK | HL_STRIKETHROUGH | HL_OVERLINE;
+  return (ae.rgb_ae_attr & mask) != 0 || (ae.cterm_ae_attr & mask) != 0;
+}
+
+static void handle_breakindent(win_T *wp, winlinevars_T *wlv, int gap_decor_attr)
 {
   // draw 'breakindent': indent wrapped text accordingly
   // if wlv->need_showbreak is set, breakindent also applies
   if (wp->w_p_bri && (wlv->row > wlv->startrow + wlv->filler_lines
                       || wlv->need_showbreak)) {
-    int attr = 0;
+    // Extend the still-active decoration/syntax highlight (e.g. a full-width code-block background)
+    // into the indent; it is not ending here, just skipping over screen cells with no buffer text.
+    int attr = gap_decor_attr;
     if (wlv->diff_hlf != (hlf_T)0) {
-      attr = win_hl_attr(wp, (int)wlv->diff_hlf);
+      attr = hl_combine_attr(attr, win_hl_attr(wp, (int)wlv->diff_hlf));
     }
     int num = get_breakindent_win(wp, ml_get_buf(wp->w_buffer, wlv->lnum));
     if (wlv->row == wlv->startrow) {
@@ -850,7 +862,7 @@ static void handle_breakindent(win_T *wp, winlinevars_T *wlv)
   }
 }
 
-static void handle_showbreak_and_filler(win_T *wp, winlinevars_T *wlv)
+static void handle_showbreak_and_filler(win_T *wp, winlinevars_T *wlv, int gap_decor_attr)
 {
   int remaining = wp->w_view_width - wlv->off;
   if (wlv->filler_todo > wlv->filler_lines - wlv->n_virt_lines) {
@@ -866,8 +878,10 @@ static void handle_showbreak_and_filler(win_T *wp, winlinevars_T *wlv)
   char *const sbr = get_showbreak_value(wp);
   if (*sbr != NUL && wlv->need_showbreak) {
     // Draw 'showbreak' at the start of each broken line.
-    // Combine 'showbreak' with 'cursorline', prioritizing 'showbreak'.
-    int attr = hl_combine_attr(wlv->cul_attr, win_hl_attr(wp, HLF_AT));
+    // Combine 'showbreak' with 'cursorline' and the still-active decoration/syntax highlight,
+    // prioritizing 'showbreak'.
+    int attr = hl_combine_attr(wlv->cul_attr, gap_decor_attr);
+    attr = hl_combine_attr(attr, win_hl_attr(wp, HLF_AT));
     colnr_T vcol_before = wlv->vcol;
     draw_col_buf(wp, wlv, sbr, strlen(sbr), attr, NULL, true);
     wlv->vcol_sbr = wlv->vcol;
@@ -1132,6 +1146,8 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
   int search_attr = 0;                  // attributes desired by 'hlsearch' or ComplMatchIns
   int vcol_save_attr = 0;               // saved attr for 'cursorcolumn'
   int decor_attr = 0;                   // attributes desired by syntax and extmarks
+  int syntax_attr = 0;                  // syntax-only part of "decor_attr"
+  int gap_attr_save = 0;                // attr for gaps showing no buffer text
   bool has_syntax = false;              // this buffer has syntax highl.
   int folded_attr = 0;                  // attributes for folded line
   int eol_hl_off = 0;                   // 1 if highlighted char after EOL
@@ -1839,13 +1855,15 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
         }
       }
 
-      // Check if 'breakindent' applies and show it.
+      // Check if 'breakindent' applies and show it. Like the 'linebreak' filler, attrs must not
+      // extend into this gap either (see attr_has_line_deco()).
+      int const gap_decor_attr = attr_has_line_deco(gap_attr_save) ? 0 : gap_attr_save;
       if (!wp->w_briopt_sbr) {
-        handle_breakindent(wp, &wlv);
+        handle_breakindent(wp, &wlv, gap_decor_attr);
       }
-      handle_showbreak_and_filler(wp, &wlv);
+      handle_showbreak_and_filler(wp, &wlv, gap_decor_attr);
       if (wp->w_briopt_sbr) {
-        handle_breakindent(wp, &wlv);
+        handle_breakindent(wp, &wlv, gap_decor_attr);
       }
 
       wlv.col = wlv.off;
@@ -2258,6 +2276,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
       ptr++;
 
       decor_attr = 0;
+      syntax_attr = 0;
       if (extra_check) {
         const bool no_plain_buffer = (wp->w_s->b_p_spo_flags & kOptSpoFlagNoplainbuffer) != 0;
         bool can_spell = !no_plain_buffer;
@@ -2298,6 +2317,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
 
         if (has_decor && v > 0) {
           // extmarks take preceedence over syntax.c
+          syntax_attr = decor_attr;
           decor_attr = hl_combine_attr(decor_attr, extmark_attr);
           decor_conceal = decor_state.conceal;
           can_spell = TRISTATE_TO_BOOL(decor_state.spell, can_spell);
@@ -2380,6 +2400,11 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
                                           wlv.char_attr);
         }
 
+        // Gaps ('linebreak' filler, 'breakindent'/'showbreak' padding) show no buffer text, so only
+        // an "hl_eol" decoration draws there.
+        gap_attr_save = has_decor ? hl_combine_attr(syntax_attr, decor_state.current_hl_eol)
+                                  : decor_attr;
+
         // we don't want linebreak to apply for lines that start with
         // leading spaces, followed by long letters (since it would add
         // a break at the beginning of a line and this might be unexpected)
@@ -2403,11 +2428,22 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
           wlv.n_extra = win_charsize(cstype, wlv.vcol, p, utf_ptr2CharInfo(p).value,
                                      &csarg).width - 1;
 
-          if (on_last_col && mb_c != TAB) {
-            // Do not continue search/match highlighting over the
-            // line break, but for TABs the highlighting should
-            // include the complete width of the character
-            search_attr = 0;
+          // Do not bleed attrs into the filler for the pushed-down word (TABs keep their own
+          // full-width highlight; see attr_has_line_deco()). search_attr also resets when its own
+          // span ends exactly here (on_last_col), matching its pre-existing semantics.
+          if (mb_c != TAB) {
+            if (on_last_col || attr_has_line_deco(search_attr)) {
+              search_attr = 0;
+            }
+            if (has_decor) {
+              decor_attr = gap_attr_save;
+            }
+            if (attr_has_line_deco(decor_attr)) {
+              decor_attr = 0;
+            }
+            if (attr_has_line_deco(area_attr)) {
+              area_attr = 0;
+            }
           }
 
           if (mb_c == TAB && wlv.n_extra + wlv.col > view_width) {
@@ -2639,7 +2675,8 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
           wlv.n_attr = 1;
           mb_c = schar_get_first_codepoint(mb_schar);
         } else if (mb_schar != NUL) {
-          wlv.p_extra = transchar_buf(wp->w_buffer, mb_c);
+          xstrlcpy(wlv.extra, transchar_buf(wp->w_buffer, mb_c), sizeof(wlv.extra));
+          wlv.p_extra = wlv.extra;
           if (wlv.n_extra == 0) {
             wlv.n_extra = byte2cells(mb_c) - 1;
           }

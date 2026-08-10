@@ -147,6 +147,112 @@ function M.joinpath(...)
   return (path:gsub(iswin and '[/\\][/\\]*' or '//+', '/'))
 end
 
+--- Gets a filesystem-safe, mnemonic slug (readable prefix + short hash) of an arbitrary filepath or
+--- other "identity string".
+---
+--- - The input is normalized so equivalent paths produce the same result.
+--- - A hash of the normalized input is appended to prevent collisions.
+--- - Unsafe chars are replaced with "-".
+--- - `$HOME` is replaced with "~".
+--- - UNC paths (Windows) are prefixed with "=unc-".
+--- - If `opts.maxlen` is exceeded, the result will be truncated to `{head}~~~{tail}-{hash8}`.
+--- - If the sanitized name is empty, the reserved label `=special` will be used.
+---
+--- Examples:
+---
+--- ```lua
+--- vim.print(vim.fs.slug('/tmp/test/foo.md'))           --> "tmp-test-foo.md-{hash}"
+--- vim.print(vim.fs.slug('C:/src/project/main.c'))      --> "C--src-project-main.c-{hash}"
+--- vim.print(vim.fs.slug(vim.fn.expand('~/file.txt')))  --> "~-file.txt-{hash}"
+--- vim.print(vim.fs.slug('---'))                        --> "=special-{hash}"
+--- vim.print(vim.fs.slug(('/a/very/long/path'):rep(10) .. '/file.txt', { maxlen = 60 }))
+---    --> "a-very-long-~~~-path-a-very-long-path-file.txt-{hash}"
+--- ```
+---
+---@since 15
+---@param path string Filepath (or other identity string).
+---@param opts? table
+---  - maxlen: (integer, default: 180) Max length (bytes) of the result.
+---@return string # Filesystem-safe, mnemonic slug.
+function M.slug(path, opts)
+  vim.validate('path', path, 'string')
+  opts = opts or {}
+  vim.validate('maxlen', opts.maxlen, function(v)
+    return type(v) == 'number' and v >= 8
+  end, true, '`opts.maxlen` must be >= 8')
+  local maxlen = opts.maxlen or 180
+
+  -- Normalize before computing the hash so equivalent paths produce the same result
+  path = vim.fs.normalize(path, { plain = true })
+  local s = path
+
+  -- Replace $HOME with `~`
+  -- `fnamemodify` resolves relative paths against CWD, so only call it on absolute paths
+  if vim.startswith(s, '/') or (iswin and s:match('^%w:/')) then
+    s = vim.fn.fnamemodify(s, ':~')
+  end
+
+  -- Replace UNC `//...` (Windows only) with `=unc-`
+  -- `//?/` and `//./` are NT namespace prefixes, not UNC
+  if
+    iswin
+    and vim.startswith(s, '//')
+    and not vim.startswith(s, '//?/')
+    and not vim.startswith(s, '//./')
+  then
+    s = '=unc-' .. s:sub(3)
+  end
+
+  -- Sanitize unsafe chars and trim trailing "-" and "."
+  s = s:gsub('[%c%s/\\:*?"<>|]', '-')
+  s = s:gsub('[.-]+$', '')
+  -- Strip the leading "-" from an absolute path
+  s = s:gsub('^-', '')
+
+  -- Always compute the hash to prevent collisions
+  local hash8 = vim.fn.sha256(path):sub(1, 8)
+
+  -- Fully scrubbed path uses the reserved prefix
+  if s == '' then
+    s = '=special'
+  end
+
+  -- Within maxlen: "{name}-{hash8}"
+  if #s + 1 + #hash8 <= maxlen then
+    return s .. '-' .. hash8
+  end
+
+  -- "{head}~~~{tail}-{hash8}"
+  local budget = maxlen - 12 -- 3 for "~~~", 1 for "-", 8 for hash
+  if budget < 1 then
+    -- No room for a readable form: degrade to a plain hash (maxlen >= 8 == #hash8).
+    return hash8
+  end
+  local head_len = math.floor(budget / 3)
+  local h = s:sub(1, head_len):match('^.*()-') or head_len -- byte position where {head} ends
+  if h == head_len and h >= 1 then
+    -- No "-" found in prefix: ensure we don't split a UTF-8 character.
+    -- `vim.str_utf_start` returns an offset (<= 0) from the byte position to the character start.
+    -- `vim.str_utf_end` returns an offset (>= 0) to the character's last byte.
+    local char_start = h + vim.str_utf_start(s, h) ---@type integer
+    if char_start + vim.str_utf_end(s, char_start) > h then
+      h = char_start - 1
+    end
+  end
+  -- Always in [h + 4, #s]: the "{name}-{hash8}" case above handled #s <= budget + 3.
+  local tail_start = #s - budget + h + 1
+  local t = s:find('-', tail_start, true) or tail_start -- byte position where {tail} starts
+  -- If we fall back to a byte position, step forward past a split character
+  if t == tail_start then
+    local offset_start = vim.str_utf_start(s, t)
+    if offset_start < 0 then
+      local char_start = t + offset_start ---@type integer
+      t = char_start + vim.str_utf_end(s, char_start) + 1
+    end
+  end
+  return s:sub(1, h) .. '~~~' .. s:sub(t) .. '-' .. hash8
+end
+
 --- Wrapper around `uv.fs_scandir_next()` that ensures a file type is returned.
 ---
 --- @param fs uv.uv_fs_t
@@ -208,8 +314,8 @@ end
 --- ```
 ---
 ---@since 10
----@param path (string) Directory to iterate over, normalized via |vim.fs.normalize()| unless
----            `opts.normalize=false`.
+---@param path (string) Directory to iterate over, expanded (unless
+---                     `opts.plain=true`) and normalized.
 ---@param opts? vim.fs.dir.Opts
 ---@return fun(): string?, string?, string? # Iterator over items in {path}, yielding (name, type, err):
 ---        - name: Basename of the item relative to {path}.
@@ -226,9 +332,7 @@ function M.dir(path, opts)
   vim.validate('skip', opts.skip, 'function', true)
   vim.validate('plain', opts.plain, 'boolean', true)
 
-  if opts.plain ~= true then
-    path = M.normalize(path)
-  end
+  path = M.normalize(path, { plain = opts.plain })
 
   local rootfs, rooterr = uv.fs_scandir(path)
 
@@ -667,9 +771,13 @@ end
 --- @class vim.fs.normalize.Opts
 --- @inlinedoc
 ---
---- Expand environment variables.
+--- Expand environment variables (deprecated).
 --- (default: `true`)
---- @field expand_env? boolean
+--- @field package expand_env? boolean
+---
+--- Do not expand environment variables and leading tildes "~".
+--- (default: `false`)
+--- @field plain? boolean
 ---
 --- @field package _fast? boolean
 ---
@@ -715,7 +823,7 @@ function M.normalize(path, opts)
 
   if not opts._fast then
     vim.validate('path', path, 'string')
-    vim.validate('expand_env', opts.expand_env, 'boolean', true)
+    vim.validate('plain', opts.plain, 'boolean', true)
     vim.validate('win', opts.win, 'boolean', true)
   end
 
@@ -727,17 +835,19 @@ function M.normalize(path, opts)
     return ''
   end
 
-  -- Expand ~ to user's home directory
-  path = expand_home(path, os_sep_local)
+  if not opts.plain then
+    -- Expand ~ to user's home directory
+    path = expand_home(path, os_sep_local)
 
-  -- Expand environment variables if `opts.expand_env` isn't `false`
-  if opts.expand_env == nil or opts.expand_env then
-    path = path:gsub('%$([%w_]+)', uv.os_getenv) --- @type string
+    -- Expand environment variables
+    if opts.expand_env == nil or opts.expand_env then
+      path = path:gsub('%$([%w_]+)', uv.os_getenv) --- @type string
+    end
   end
 
   if win then
     -- Convert path separator to `/`
-    path = path:gsub(os_sep_local, '/')
+    path = path:gsub(os_sep_local, '/') --- @type string
   end
 
   -- Check for double slashes at the start of the path because they have special meaning

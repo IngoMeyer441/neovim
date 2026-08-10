@@ -14,7 +14,7 @@
 --- @field generics? string[] Used to write `---@generic` annotations over a function.
 --- @field signature? string
 --- @field desc? string
---- @field params [string, string, string][]
+--- @field params [string, string, string?][] Each entry is `{name, type, desc?}`; `desc` is only present in API-meta entries.
 --- @field notes? string[]
 --- @field see? string[]
 ---
@@ -1113,9 +1113,12 @@ M.funcs = {
       See |channel-bytes| for more information.
 
       {data} may be a string, string convertible, |Blob|, or a list.
+
       If {data} is a list, the items will be joined by newlines; any
-      newlines in an item will be sent as NUL. To send a final
-      newline, include a final empty string. Example: >vim
+      newlines in an item will be sent as NUL; to send a final
+      newline, include a final empty string. |NL-used-for-Nul|
+
+      Example: >vim
       	call chansend(id, ["abc", "123\n456", ""])
       <will send "abc<NL>123<NUL>456<NL>".
 
@@ -1125,9 +1128,9 @@ M.funcs = {
     ]=],
     name = 'chansend',
     params = { { 'id', 'number' }, { 'data', 'string|string[]' } },
-    returns = '0|1',
+    returns = 'integer',
     signature = 'chansend({id}, {data})',
-    see_lua = { '|nvim_chan_send()| for string data; list input and the return value differ' },
+    see_lua = { '|nvim_chan_send()| for string (binary) data' },
   },
   char2nr = {
     args = { 1, 2 },
@@ -1251,25 +1254,22 @@ M.funcs = {
     args = { 1, 2 },
     base = 1,
     desc = [=[
-      Changes the current working directory to {dir}.  The scope of
-      the change is determined as follows:
-      If {scope} is not present, the current working directory is
-      changed to the scope of the current directory:
-          - If the window local directory (|:lcd|) is set, it
-            changes the current working directory for that scope.
-          - Otherwise, if the tabpage local directory (|:tcd|) is
-            set, it changes the current directory for that scope.
-          - Otherwise, changes the global directory for that scope.
+      Sets the |current-directory| of the given {scope}:
+          - "buffer"    Changes the buffer-local directory.  |:bcd|
+          - "window"    Changes the window-local directory.  |:lcd|
+          - "tabpage"   Changes the tabpage-local directory.  |:tcd|
+          - "global"    Changes the global directory.  |:cd|
 
-      If {scope} is present, changes the current working directory
-      for the specified scope:
-          "window"	Changes the window local directory.  |:lcd|
-          "tabpage"	Changes the tabpage local directory.  |:tcd|
-          "global"	Changes the global directory.  |:cd|
+      If {scope} is not given it is decided as follows:
+          - If buffer-local directory (|:bcd|) is set, scope is
+            "buffer".
+          - If the window-local directory (|:lcd|) is set, scope is
+            "window".
+          - If the tabpage-local directory (|:tcd|) is set, scope is
+            "tabpage".
+          - Otherwise, scope is "global".
 
-      {dir} must be a String.
-      If successful, returns the previous working directory.  Pass
-      this to another chdir() to restore the directory.
+      If successful, returns the previous working directory.
       On failure, returns an empty string.
 
       Example: >vim
@@ -1285,9 +1285,6 @@ M.funcs = {
     params = { { 'dir', 'string' }, { 'scope', 'string' } },
     returns = 'string',
     signature = 'chdir({dir} [, {scope}])',
-    see_lua = {
-      '|nvim_set_current_dir()| for the global directory; tab-local, window-local, and return semantics differ',
-    },
   },
   cindent = {
     args = 1,
@@ -4089,35 +4086,46 @@ M.funcs = {
     signature = 'getcursorcharpos([{winid}])',
   },
   getcwd = {
-    args = { 0, 2 },
+    args = { 0, 3 },
     base = 1,
     desc = [=[
-      With no arguments, returns the name of the effective
-      |current-directory|. With {winnr} or {tabnr} the working
-      directory of that scope is returned, and 'autochdir' is
-      ignored. Tabs and windows are identified by their respective
-      numbers, 0 means current tab or window. Missing tab number
-      implies 0. Thus the following are equivalent: >vim
-      	getcwd(0)
-      	getcwd(0, 0)
-      <If {winnr} is -1 it is ignored, only the tab is resolved.
-      {winnr} is a |window-number| or |window-ID|.
-      If both {winnr} and {tabnr} are -1 the global working
-      directory is returned.
-      Note: When {tabnr} is -1 Vim returns an empty string to
-      signal that it is invalid, whereas Nvim returns either the
-      global working directory if {winnr} is -1 or the working
-      directory of the window indicated by {winnr}.
-      Throw error if the arguments are invalid. |E5000| |E5001| |E5002|
+      Without arguments, returns the effective |current-directory|.
+      With {winnr} (|window-number| or |window-ID|), {tabnr} or
+      {bufnr} the working directory of that scope is returned,
+      ignoring 'autochdir'.
 
+      - If {winnr} is -1: gets the tabpage directory.
+      - If {winnr} and {tabnr} are both -1: gets the global
+        directory.
+        - Note: Vim returns an empty string when {tabnr} is -1.
+      - If {bufnr} is given: gets the buffer-local directory.
+        ({winnr} and {tabnr} must be -1.)
+      - An argument may be -1 only if preceding args are -1. *E5001*
+
+      Tabs, windows and buffers are identified by their respective
+      numbers, 0 means current tab/window/buffer. Missing {tabnr}
+      implies 0 (missing {bufnr} does not; see below). Thus the
+      following are equivalent: >vim
+          getcwd(0)
+          getcwd(0, 0)
+      <
+      Each form reports its own scope or "wider", so e.g. {winnr}
+      never reports a buffer-local directory.  The {bufnr} form
+      falls back to the global directory, because a buffer belongs
+      to no particular window or tabpage.
+
+      Examples: >vim
+            getcwd(-1, -1, 0)  " Get current buffer's directory
+            getcwd(-1, -1, 3)  " Get directory of buffer 3
+            getcwd(-1, -1, -1) " Get global directory
+            getcwd(-1, -1)     " Get global directory
+      <
     ]=],
     name = 'getcwd',
-    params = { { 'winnr', 'integer' }, { 'tabnr', 'integer' } },
+    params = { { 'winnr', 'integer' }, { 'tabnr', 'integer' }, { 'bufnr', 'integer' } },
     returns = 'string',
-    signature = 'getcwd([{winnr} [, {tabnr}]])',
-    see_lua = {
-      '|uv.cwd()| for the global working directory; tab-local and window-local scopes differ',
-    },
+    signature = 'getcwd([{winnr} [, {tabnr} [, {bufnr}]]])',
+    tags = { 'E5000', 'E5002', 'E5006', 'E5007' },
   },
   getenv = {
     args = 1,
@@ -5410,16 +5418,18 @@ M.funcs = {
     see_lua = { '`dict[key] ~= nil`' },
   },
   haslocaldir = {
-    args = { 0, 2 },
+    args = { 0, 3 },
     base = 1,
     desc = [=[
-      Checks whether the window or tabpage has set a local working
-      directory.  Returns 1 when the window has set a local path
-      via |:lcd| or when {winnr} is -1 and the tabpage has set a
-      local path via |:tcd|, otherwise 0.
+      Checks whether the tabpage, window or buffer has set a local
+      working directory.  Returns 1 when the window has set a local
+      path via |:lcd|, or when {winnr} is -1 and the tabpage has set
+      a local path via |:tcd|, or when {winnr} and {tabnr} are -1
+      and {bufnr} has set a local path via |:bcd|, otherwise 0.
 
-      Tabs and windows are identified by their respective numbers,
-      0 means current tab or window. Missing argument implies 0.
+      Tabs, windows and buffers are identified by their respective
+      numbers, 0 means current tab/window/buffer. Missing {winnr}
+      or {tabnr} implies 0 (missing {bufnr} does not; see below).
       Thus the following are equivalent: >vim
       	echo haslocaldir()
       	echo haslocaldir(0)
@@ -5428,13 +5438,20 @@ M.funcs = {
       With {winnr} and {tabnr} use the window in that tabpage.
       {winnr} is a |window-number| or |window-ID|.
       If {winnr} is -1 it is ignored, only the tab is resolved.
-      Throw error if the arguments are invalid. |E5000| |E5001| |E5002|
+      If {bufnr} is provided, {winnr} and {tabnr} must be -1 and
+      only the buffer is resolved.  An argument may be -1 only if
+      all preceding arguments are -1.
+      Examples of buffer usage: >vim
+        haslocaldir(-1, -1, 0) " Current buf has a local directory?
+        haslocaldir(-1, -1, 3) " Buf #3 has a local directory?
+      <Throw error if the arguments are invalid.
+      |E5000| |E5001| |E5002| |E5006| |E5007|
 
     ]=],
     name = 'haslocaldir',
-    params = { { 'winnr', 'integer' }, { 'tabnr', 'integer' } },
+    params = { { 'winnr', 'integer' }, { 'tabnr', 'integer' }, { 'bufnr', 'integer' } },
     returns = '0|1',
-    signature = 'haslocaldir([{winnr} [, {tabnr}]])',
+    signature = 'haslocaldir([{winnr} [, {tabnr} [, {bufnr} ]]])',
   },
   hasmapto = {
     args = { 1, 3 },
@@ -13601,22 +13618,18 @@ M.funcs = {
     args = { 0, 1 },
     base = 1,
     desc = [=[
-      Return the type of the window:
-      	"autocmd"	autocommand window.  Temporary window
-      			used to execute autocommands.
-      	"command"	command-line window |cmdwin|
-      	(empty)		normal window
-      	"loclist"	|location-list-window|
-      	"popup"		floating window |api-floatwin|
-      	"preview"	preview window |preview-window|
-      	"quickfix"	|quickfix-window|
-      	"unknown"	window {nr} not found
+      Gets the type of the given window, or current window if {nr}
+      is omitted:
+      - (empty)     Normal window
+      - "autocmd"   Internal "context-switch" window.
+      - "command"   Command-line window |cmdwin|
+      - "loclist"   |location-list-window|
+      - "popup"     Floating window |api-floatwin|
+      - "preview"   Preview window |preview-window|
+      - "quickfix"  |quickfix-window|
+      - "unknown"   Window {nr} not found
 
-      When {nr} is omitted return the type of the current window.
-      When {nr} is given (|window-number| or |window-ID|) return the
-      type of that window.
-
-      Also see the 'buftype' option.
+      See also the 'buftype' option.
 
     ]=],
     name = 'win_gettype',

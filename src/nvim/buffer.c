@@ -1023,6 +1023,8 @@ static void free_buffer_stuff(buf_T *buf, int free_flags)
   map_clear_mode(buf, MAP_ALL_MODES, true, false);  // clear local mappings
   map_clear_mode(buf, MAP_ALL_MODES, true, true);   // clear local abbrevs
   XFREE_CLEAR(buf->b_start_fenc);
+  XFREE_CLEAR(buf->b_localdir);
+  XFREE_CLEAR(buf->b_prevdir);
 
   buf_free_callbacks(buf);
 }
@@ -1771,6 +1773,9 @@ void set_curbuf(buf_T *buf, int action, bool update_jumplist)
   if (bufref_valid(&prevbufref) && prevbuf->terminal != NULL) {
     terminal_check_size(prevbuf->terminal);
   }
+
+  // Maybe cd to buffer-local directory
+  update_cwd(kCdCauseBuffer);
 }
 
 /// Enter a new current buffer.
@@ -3258,7 +3263,7 @@ static bool otherfile_buf(buf_T *buf, char *ffname, FileID *file_id_p, bool file
   if (ffname == NULL || *ffname == NUL || buf->b_ffname == NULL) {
     return true;
   }
-  if (path_fnamecmp(ffname, buf->b_ffname) == 0) {
+  if (path_equal(ffname, buf->b_ffname, kPathCmpLiteral)) {
     return false;
   }
   {

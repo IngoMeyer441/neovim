@@ -257,7 +257,7 @@ static bool is_other_file(int fnum, char *ffname)
       && *curbuf->b_sfname != NUL) {
     // This occurs with unsaved buffers. In which case `ffname`
     // actually corresponds to curbuf->b_sfname
-    return path_fnamecmp(ffname, curbuf->b_sfname) != 0;
+    return !path_equal(ffname, curbuf->b_sfname, kPathCmpLiteral);
   }
 
   return otherfile(ffname);
@@ -5825,11 +5825,15 @@ static void ex_tabs(exarg_T *eap)
 /// ":%detach" detaches all UIs _except_ the current UI.
 static void ex_detach(exarg_T *eap)
 {
-  if (!current_ui) {
+  Channel *chan = find_channel(current_ui);
+  if (!chan) {
     emsg(_(e_noui));
     return;
-  } else if (eap && eap->forceit) {
-    emsg("bang (!) not supported yet");
+  }
+
+  if (eap && eap->forceit) {
+    chan->detach = true;
+    msg(_("Nvim will continue running if the UI disconnects"), 0);
     return;
   }
 
@@ -6201,28 +6205,35 @@ void free_cd_dir(void)
 
 #endif
 
-/// Get the previous directory for the given chdir scope.
-static char *get_prevdir(CdScope scope)
+/// Gets the previous-directory slot for the given chdir scope.
+static char **get_prevdir(CdScope scope)
 {
   switch (scope) {
   case kCdScopeTabpage:
-    return curtab->tp_prevdir;
-    break;
+    return &curtab->tp_prevdir;
+  case kCdScopeBuffer:
+    return &curbuf->b_prevdir;
   case kCdScopeWindow:
-    return curwin->w_prevdir;
-    break;
+    return &curwin->w_prevdir;
   default:
-    return prev_dir;
+    return &prev_dir;
   }
 }
 
 /// Deal with the side effects of changing the current directory.
 ///
-/// @param scope  Scope of the function call (global, tab or window).
+/// @param scope  Scope of the function call (global, tab, window or buffer).
 static void post_chdir(CdScope scope, bool trigger_dirchanged)
 {
-  // Always overwrite the window-local CWD.
-  XFREE_CLEAR(curwin->w_localdir);
+  // Only :bcd overwrites the buffer-local CWD.
+  if (scope == kCdScopeBuffer) {
+    XFREE_CLEAR(curbuf->b_localdir);
+  }
+
+  // Overwrite the window-local CWD for :cd, :tcd, :lcd.
+  if (scope >= kCdScopeWindow) {
+    XFREE_CLEAR(curwin->w_localdir);
+  }
 
   // Overwrite the tab-local CWD for :cd, :tcd.
   if (scope >= kCdScopeTabpage) {
@@ -6230,7 +6241,7 @@ static void post_chdir(CdScope scope, bool trigger_dirchanged)
   }
 
   if (scope < kCdScopeGlobal) {
-    char *pdir = get_prevdir(scope);
+    char *pdir = *get_prevdir(scope);
     // If still in global directory, set CWD as the global directory.
     if (globaldir == NULL && pdir != NULL) {
       globaldir = xstrdup(pdir);
@@ -6244,10 +6255,17 @@ static void post_chdir(CdScope scope, bool trigger_dirchanged)
   switch (scope) {
   case kCdScopeGlobal:
     // We are now in the global directory, no need to remember its name.
+    // Unless a buffer-local CWD is active, then it is in effect and must be remembered.
     XFREE_CLEAR(globaldir);
+    if (curbuf->b_localdir != NULL) {
+      globaldir = xstrdup(cwd);
+    }
     break;
   case kCdScopeTabpage:
     curtab->tp_localdir = xstrdup(cwd);
+    break;
+  case kCdScopeBuffer:
+    curbuf->b_localdir = xstrdup(cwd);
     break;
   case kCdScopeWindow:
     curwin->w_localdir = xstrdup(cwd);
@@ -6264,11 +6282,13 @@ static void post_chdir(CdScope scope, bool trigger_dirchanged)
   }
 }
 
-/// Change directory function used by :cd/:tcd/:lcd Ex commands and the chdir() function.
-/// @param new_dir  The directory to change to.
-/// @param scope    Scope of the function call (global, tab or window).
-/// @return true if the directory is successfully changed.
-bool changedir_func(char *new_dir, CdScope scope)
+/// Performs explicit (user) chdir (:cd/:tcd/:lcd/:bcd/chdir()/nvim_set_current_dir()).  Unlike
+/// do_autochdir() and update_cwd(), this sets the `scope` dir and reports kCdCauseManual.
+///
+/// @param new_dir  Directory to change to.
+/// @param scope    Set the directory on this scope.
+/// @return true if the directory was successfully changed.
+bool do_chdir(char *new_dir, CdScope scope)
 {
   if (new_dir == NULL || allbuf_locked()) {
     return false;
@@ -6277,7 +6297,7 @@ bool changedir_func(char *new_dir, CdScope scope)
   char *pdir = NULL;
   // ":cd -": Change to previous directory
   if (strcmp(new_dir, "-") == 0) {
-    pdir = get_prevdir(scope);
+    pdir = *get_prevdir(scope);
     if (pdir == NULL) {
       emsg(_("E186: No previous directory"));
       return false;
@@ -6301,9 +6321,16 @@ bool changedir_func(char *new_dir, CdScope scope)
 
   new_dir = TO_SLASH_SAVE(new_dir);
 
-  bool dir_differs = pdir == NULL || pathcmp(pdir, new_dir, -1) != 0;
+  // Buffer-local CWD is never "cleared" by :lcd/:tcd/:cd, so it stays in effect.
+  const bool bcd_active = scope != kCdScopeBuffer && curbuf->b_localdir != NULL;
+
+  bool dir_differs = pdir == NULL || !path_equal(pdir, new_dir, kPathCmpLiteral);
   if (dir_differs) {
-    do_autocmd_dirchanged(new_dir, scope, kCdCauseManual, true);
+    if (!bcd_active) {
+      do_autocmd_dirchanged(new_dir, scope, kCdCauseManual, true);
+    }
+    // Enter `new_dir` even if it will not apply (because of buf-local dir):
+    // post_chdir() reads back its resolved name.
     if (vim_chdir(new_dir) != 0) {
       emsg(_(e_failed));
       xfree(new_dir);
@@ -6313,40 +6340,51 @@ bool changedir_func(char *new_dir, CdScope scope)
   }
   xfree(new_dir);
 
-  char **pp;
-  switch (scope) {
-  case kCdScopeTabpage:
-    pp = &curtab->tp_prevdir;
-    break;
-  case kCdScopeWindow:
-    pp = &curwin->w_prevdir;
-    break;
-  default:
-    pp = &prev_dir;
-  }
+  char **pp = get_prevdir(scope);
   xfree(*pp);
   *pp = pdir;
 
-  post_chdir(scope, dir_differs);
+  post_chdir(scope, dir_differs && !bcd_active);
+  if (bcd_active) {
+    os_chdir(curbuf->b_localdir);
+    shorten_fnames(true);
+  }
+  ctx_did_chdir();
 
   return true;
 }
 
-/// ":cd", ":tcd", ":lcd", ":chdir", "tchdir" and ":lchdir".
+/// ":lcd!", ":tcd!", ":bcd!": Clears the scope-local directory. No-op if scope has no local dir.
+static void chdir_clear(CdScope scope)
+{
+  char **localdir = &curtab->tp_localdir;
+  if (scope == kCdScopeBuffer) {
+    localdir = &curbuf->b_localdir;
+  } else if (scope == kCdScopeWindow) {
+    localdir = &curwin->w_localdir;
+  }
+  if (*localdir == NULL) {
+    return;
+  }
+  XFREE_CLEAR(*localdir);
+  update_cwd(kCdCauseManual);
+  ctx_did_chdir();
+}
+
+/// ":cd", ":tcd", ":lcd", ":bcd", ":chdir", ":tchdir", ":lchdir", and ":bchdir".
 void ex_cd(exarg_T *eap)
 {
   char *new_dir = eap->arg;
-  // for non-UNIX ":cd" means: print current directory unless 'cdhome' is set
-  if (*new_dir == NUL && !p_cdh) {
-    ex_pwd(NULL);
-    return;
-  }
 
   CdScope scope = kCdScopeGlobal;
   switch (eap->cmdidx) {
   case CMD_tcd:
   case CMD_tchdir:
     scope = kCdScopeTabpage;
+    break;
+  case CMD_bcd:
+  case CMD_bchdir:
+    scope = kCdScopeBuffer;
     break;
   case CMD_lcd:
   case CMD_lchdir:
@@ -6355,7 +6393,23 @@ void ex_cd(exarg_T *eap)
   default:
     break;
   }
-  if (changedir_func(new_dir, scope)) {
+
+  // ":lcd!", ":tcd!", ":bcd!": unset that scope.
+  if (eap->forceit && *new_dir == NUL && scope != kCdScopeGlobal) {
+    chdir_clear(scope);
+    if (KeyTyped || p_verbose >= 5) {
+      ex_pwd(eap);
+    }
+    return;
+  }
+
+  // for non-UNIX ":cd" means: print current directory unless 'cdhome' is set
+  if (*new_dir == NUL && !p_cdh) {
+    ex_pwd(NULL);
+    return;
+  }
+
+  if (do_chdir(new_dir, scope)) {
     // Echo the new current directory if the command was typed.
     if (KeyTyped || p_verbose >= 5) {
       ex_pwd(eap);
@@ -6374,6 +6428,8 @@ static void ex_pwd(exarg_T *eap)
       char *context = "global";
       if (last_chdir_reason != NULL) {
         context = last_chdir_reason;
+      } else if (curbuf->b_localdir != NULL) {
+        context = "buffer";
       } else if (curwin->w_localdir != NULL) {
         context = "window";
       } else if (curtab->tp_localdir != NULL) {

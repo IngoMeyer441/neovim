@@ -936,7 +936,7 @@ describe('ui/ext_messages', function()
   end)
 
   it("supports 'showcmd' and 'ruler(format)'", function()
-    command('set showcmd ruler')
+    command('set showcmd ruler rulerformat=%12(%l,%c%V%=%P%)')
     command('hi link MsgArea ErrorMsg')
     screen:expect({
       grid = [[
@@ -1890,25 +1890,11 @@ describe('ui/builtin messages', function()
   end)
 
   it('supports ruler with laststatus=0', function()
-    command('set ruler laststatus=0')
+    command('set laststatus=0 ruler rulerformat=%-15(%c%V\\ %p%%%)')
     screen:expect([[
       ^                                                            |
       {1:~                                                           }|*5
-                                                0,0-1         All |
-    ]])
-
-    command('hi MsgArea guibg=#333333')
-    screen:expect([[
-      ^                                                            |
-      {1:~                                                           }|*5
-      {101:                                          0,0-1         All }|
-    ]])
-
-    command('set rulerformat=%15(%c%V\\ %p%%%)')
-    screen:expect([[
-      ^                                                            |
-      {1:~                                                           }|*5
-      {101:                                          0,0-1 100%        }|
+                                                   0-1 100%       |
     ]])
 
     -- Ruler is cleared when it is no longer drawn.
@@ -1916,7 +1902,21 @@ describe('ui/builtin messages', function()
     screen:expect([[
       ^                                                            |
       {1:~                                                           }|*5
-      {101:                                                            }|
+                                                                  |
+    ]])
+
+    command('set ruler rulerformat&')
+    screen:expect([[
+      ^                                                            |
+      {1:~                                                           }|*5
+                                                0,0-1          All|
+    ]])
+
+    command('hi MsgArea guibg=#333333')
+    screen:expect([[
+      ^                                                            |
+      {1:~                                                           }|*5
+      {101:                                          0,0-1          All}|
     ]])
   end)
 
@@ -3909,6 +3909,60 @@ describe('progress-message', function()
       id = 'str-id',
       data = {},
     })
+  end)
+
+  it('emitted by :write, not by :read #41193', function()
+    local fname = 'Xtest_progress_bufwrite'
+    finally(function()
+      os.remove(fname)
+    end)
+    command('write ' .. fname)
+    assert_progress_autocmd({
+      data = {},
+      id = ('nvim.bufwrite "%s"'):format(fname),
+      source = 'nvim',
+      status = 'success',
+      text = { ('"%s" [New] 0L, 0B written'):format(fname) },
+      title = '',
+    })
+
+    -- ":read" is not a write: it must not start a progress that never ends.
+    command('read ' .. fname)
+    assert_progress_autocmd(nil)
+
+    -- A failed write ends the progress-msg.
+    local events = exec_lua(function(f)
+      local out = {}
+      vim.api.nvim_create_autocmd('Progress', {
+        callback = function(ev)
+          table.insert(out, { id = ev.data.id, status = ev.data.status, text = ev.data.text[1] })
+        end,
+      })
+      pcall(vim.cmd.write, ('%s/nodir'):format(f))
+      return out
+    end, fname)
+    eq({ 'running', 'failed' }, { events[1].status, events[2].status })
+    eq(events[1].id, events[2].id)
+    t.matches('^E%d+:', events[2].text)
+  end)
+
+  it('emitted by ins-completion scan', function()
+    fn.writefile({ 'foobar', 'foobaz' }, 'Xdict')
+    finally(function()
+      os.remove('Xdict')
+    end)
+    exec_lua(function()
+      _G.events = {}
+      vim.api.nvim_create_autocmd('Progress', {
+        callback = function(ev)
+          table.insert(_G.events, ('%s %s'):format(ev.data.id, ev.data.status))
+        end,
+      })
+    end)
+    command('set shortmess-=C complete=kXdict')
+    -- Ends when scanning ends, regardless of whether popupmenu is open.
+    feed('ifoo<C-n>')
+    eq({ 'nvim.completion running', 'nvim.completion success' }, exec_lua('return _G.events'))
   end)
 
   it('tui displays progress message in proper format', function()

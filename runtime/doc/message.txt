@@ -852,7 +852,10 @@ This message is given when the |ui2| modal dialog is active.
 Only when the 'more' option is on.
 Highlighted with the |hl-MoreMsg| group.
 
-With |ui2|: use "g<" to show messages in the pager.
+With |ui2|: use "g<" to show messages in the pager.  When a command emits a
+message while a previous message is still displayed, the messages are
+collected in the pager window without focusing it: type "g<" to focus it, or
+any other typed key to dismiss it.
 
      Type					Effect ~
      <CR> or <NL> or j or <Down>		one more line
@@ -887,6 +890,10 @@ Create or update a progress-message by calling |nvim_echo()| with
 `kind='progress'`. Each message has a unique message-id, returned by
 `nvim_echo`. You can specify the id when calling `nvim_echo` to update an
 existing progress-message.
+
+Note: To avoid a "dangling" progress-message, always emit a non-"running"
+`status`, when your task is done; otherwise consumers (including Nvim itself)
+tracking the task by its message-id cannot know when the task is done.
 
 Events: ~
     • msg_show |ui-messages| event is fired for ext-ui upon creation/update of

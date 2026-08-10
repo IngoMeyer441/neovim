@@ -154,6 +154,8 @@ OPTIONS
   To restore the previous truncation from the left, add a `%<` to the start.
   The same applies to 'rulerformat', 'statuscolumn', 'tabline', 'winbar',
   'titlestring', and 'iconstring'.
+• 'rulerformat' can no longer be set empty, the new default expression will be
+  restored instead.
 
 PLUGINS
 
@@ -162,6 +164,12 @@ PLUGINS
 TREESITTER
 
 • todo
+
+UI
+
+• The bottom right cell of the screen is no longer left empty when the ruler
+  is shown. This was originally intended to prevent unwanted scrolling on
+  quirky terminals.
 
 VIMSCRIPT
 
@@ -187,6 +195,8 @@ API
     -- After:
     vim.print(vim.api.nvim_get_mark('A'))
 • |nvim_buf_call()| and |nvim_win_call()| now preserve multiple return values.
+• |nvim_del_keymap()|, |nvim_buf_del_keymap()| and |vim.keymap.del()| can
+  match only {lhs}, not {rhs}, with `opts.lhs=true`.
 • |nvim_set_hl()| supports "font" key.
 • |nvim_open_win()| `zindex` controls whether the UI will use a dimmed cursor
   shape when an unfocused float is on top of the cursor.
@@ -220,10 +230,15 @@ BUILD
   (empty string) to assume that target binaries can run on the host during the
   build process (e.g. if target is x86 on a x86_64 system, or if emulation set
   up with binfmt or similar).
+• zig build: Nvim can now be built to produce a WebAssembly binary via
+  "-Dtarget=wasm32-emscripten", which can run inside a web browser. A basic
+  browser-based demo for running it is also included. Still very
+  experimental.
 
 DEFAULTS
 
-• todo
+• 'rulerformat' default is exposed as a statusline expression (previously it
+  was implemented as an internal C routine).
 
 DIAGNOSTICS
 
@@ -234,6 +249,9 @@ DIAGNOSTICS
 
 EDITOR
 
+• |:bcd| sets a buffer-local directory. |getcwd()| and |haslocaldir()| take
+  `bufnr` as a third parameter.
+• |:lcd!| |:tcd!| |:bcd!| unsets the directory of that scope.
 • |:command-completion-customlist| can return a list of dictionaries with
   kind/menu/info/abbr for the popup menu.
 • |cmdwin| (|q:|, |q/|, |q?|, |c_CTRL-F|) is implemented as a "normal"
@@ -252,6 +270,10 @@ EDITOR
   • |:restart!| (with a bang "!") does not save/restore the session.
 • |ZR| restarts Nvim (|:restart|).
 • |:detach| with range "%" detaches all UIs except the current one.
+• |:detach!| (with bang "!") marks the current UI as detachable: Nvim will
+  continue running if the UI disconnects unexpectedly (e.g. if you
+  accidentally close your terminal, ssh connection lost, etc.).
+  Use |:connect| to reattach.
 • |:uptime| displays uptime.
 • |:packupdate| and |:packdel| for managing |vim.pack|.
 • 'scrollback' is now also valid in |prompt-buffer| buffers to limit the
@@ -308,6 +330,8 @@ LSP
   while a completion item is selected accepts the item as with
   |complete_CTRL-Y|, then inserts the character. Previously
   `commitCharacters` had no effect.
+• The `reuse_client` predicate now passes the target buffer. See |vim.lsp.Config| and
+  |vim.lsp.start()|
 
 LUA
 
@@ -324,6 +348,8 @@ LUA
 • |vim.fs.find()| returns a list of errors as its second return value.
 • |vim.fs.mkdir()| creates directories, including parent directories with
   `opts.parents=true`.
+• |vim.fs.slug()| generates a filesystem-safe file name from an arbitrary
+  identity string, with an optional length bound.
 • |vim.filetype.inspect()| returns a copy of the internal tables used for
   filetype detection.
 • Added `__eq` metamethod to |vim.VersionRange|. 2 distinct but representing
@@ -465,8 +491,10 @@ These existing features changed their behavior.
 • |vim.lsp.util.open_floating_preview()| windows (e.g. |vim.lsp.buf.hover()|)
   converted to normal windows (e.g. with |CTRL-W_H|) are no longer closed
   automatically.
-• |nvim_del_keymap()|, |nvim_buf_del_keymap()| and |vim.keymap.del()| can
-  match only {lhs}, not {rhs}, with `opts.lhs=true`.
+• |vim.fs.normalize()| `opts.expand_env=false` key was renamed to
+  `opts.plain=true` and now does not expand leading tildes ("~") in addition
+  to environment variables ("expand_env" is still accepted, for backwards
+  compatibility).
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*

@@ -2642,8 +2642,8 @@ vim.fs.dir({path}, {opts})                                      *vim.fs.dir()*
         Since: 0.8.0
 
     Parameters: ~
-      • {path}  (`string`) Directory to iterate over, normalized via
-                |vim.fs.normalize()| unless `opts.normalize=false`.
+      • {path}  (`string`) Directory to iterate over, expanded (unless
+                `opts.plain=true`) and normalized.
       • {opts}  (`table?`) A table with the following fields:
                 • {depth}? (`integer`, default: `1`) How deep to traverse.
                 • {err}? (`boolean`, default: `false`) Report errors via the
@@ -2833,8 +2833,8 @@ vim.fs.normalize({path}, {opts})                          *vim.fs.normalize()*
     Parameters: ~
       • {path}  (`string`) Path to normalize
       • {opts}  (`table?`) A table with the following fields:
-                • {expand_env}? (`boolean`, default: `true`) Expand
-                  environment variables.
+                • {plain}? (`boolean`, default: `false`) Do not expand
+                  environment variables and leading tildes "~".
                 • {win}? (`boolean`, default: `true` in Windows, `false`
                   otherwise) Path is a Windows path.
 
@@ -2950,6 +2950,40 @@ vim.fs.root({source}, {marker})                                *vim.fs.root()*
     Return: ~
         (`string?`) Directory path containing one of the given markers, or nil
         if no directory was found.
+
+vim.fs.slug({path}, {opts})                                    *vim.fs.slug()*
+    Gets a filesystem-safe, mnemonic slug (readable prefix + short hash) of an
+    arbitrary filepath or other "identity string".
+    • The input is normalized so equivalent paths produce the same result.
+    • A hash of the normalized input is appended to prevent collisions.
+    • Unsafe chars are replaced with "-".
+    • `$HOME` is replaced with "~".
+    • UNC paths (Windows) are prefixed with "=unc-".
+    • If `opts.maxlen` is exceeded, the result will be truncated to
+      `{head}~~~{tail}-{hash8}`.
+    • If the sanitized name is empty, the reserved label `=special` will be
+      used.
+
+    Examples: >lua
+        vim.print(vim.fs.slug('/tmp/test/foo.md'))           --> "tmp-test-foo.md-{hash}"
+        vim.print(vim.fs.slug('C:/src/project/main.c'))      --> "C--src-project-main.c-{hash}"
+        vim.print(vim.fs.slug(vim.fn.expand('~/file.txt')))  --> "~-file.txt-{hash}"
+        vim.print(vim.fs.slug('---'))                        --> "=special-{hash}"
+        vim.print(vim.fs.slug(('/a/very/long/path'):rep(10) .. '/file.txt', { maxlen = 60 }))
+           --> "a-very-long-~~~-path-a-very-long-path-file.txt-{hash}"
+<
+
+    Attributes: ~
+        Since: 0.13.0
+
+    Parameters: ~
+      • {path}  (`string`) Filepath (or other identity string).
+      • {opts}  (`table?`)
+                • maxlen: (integer, default: 180) Max length (bytes) of the
+                  result.
+
+    Return: ~
+        (`string`) Filesystem-safe, mnemonic slug.
 
 
 ==============================================================================
