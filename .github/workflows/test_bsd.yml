@@ -29,7 +29,7 @@ jobs:
           persist-credentials: false
 
       - name: Build
-        uses: vmactions/freebsd-vm@77ed28d336d03fe19a3f4f7266c1d2c4714dd79d # v1.5.2
+        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
         with:
           usesh: true
           cache-after-prepare: true
@@ -51,7 +51,7 @@ jobs:
           persist-credentials: false
 
       - name: Build
-        uses: vmactions/openbsd-vm@c941015845c0f0c429676840963dc63b226d4f69 # v1.4.5
+        uses: vmactions/openbsd-vm@e6c68b637a12e83519688d115d57d5b0b53923cd # v1.4.6
         with:
           usesh: true
           cache-after-prepare: true

@@ -983,6 +983,47 @@ describe('API/extmarks', function()
     eq(2, #rv)
   end)
 
+  it('undo and redo of a mark created during an edit #30331', function()
+    local function range(id)
+      local m = get_extmark_by_id(ns, id, { details = true })
+      return { m[1], m[2], m[3].end_row, m[3].end_col, m[3].invalid }
+    end
+    -- Create the marks over text the edit added, while the undo block is still open.
+    feed('ggdGifoobar')
+    set_extmark(ns, marks[1], 0, 3, { end_col = 6 })
+    set_extmark(ns, marks[2], 0, 3, { end_col = 6, invalidate = true })
+    feed('<esc>')
+    eq({ 0, 3, 0, 6 }, range(marks[1]))
+    feed('u')
+    -- The text is gone, so the range collapses; the invalidating mark also goes invalid.
+    eq({ 0, 0, 0, 0 }, range(marks[1]))
+    eq({ 0, 0, 0, 0, true }, range(marks[2]))
+    feed('<c-r>')
+    -- Redo re-applies the position each side of the range was set to, and revives the
+    -- invalidated mark; replaying the splices alone leaves the range collapsed.
+    eq({ 0, 3, 0, 6 }, range(marks[1]))
+    eq({ 0, 3, 0, 6 }, range(marks[2]))
+  end)
+
+  it('undo and redo of a mark explicitly moved during an edit', function()
+    feed('ggdGiabcdef<esc>')
+    set_extmark(ns, marks[1], 0, 4)
+    -- Insert at col 0; while the undo block is still open, explicitly
+    -- move the mark.
+    feed('0i!!')
+    set_extmark(ns, marks[1], 0, 1)
+    feed('<esc>')
+    eq({ 0, 1 }, get_extmark_by_id(ns, marks[1]))
+    feed('u')
+    -- Back where it was before the edit (the recorded set-time position,
+    -- shifted back by the splice reversal).
+    eq({ 0, 4 }, get_extmark_by_id(ns, marks[1]))
+    feed('<c-r>')
+    -- Redo restores the explicit position: splice adjustment alone would
+    -- leave the mark at col 6.
+    eq({ 0, 1 }, get_extmark_by_id(ns, marks[1]))
+  end)
+
   it('undo and redo of marks deleted during edits', function()
     -- test extmark_adjust
     feed('A<cr>12345<esc>')

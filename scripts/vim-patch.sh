@@ -930,9 +930,13 @@ is_na_patch() {
       runtime/doc/*.txt | runtime/pack/dist/opt/*/doc/*.txt)
         HUNKS=$(git -c core.attributesfile="$NVIM_SOURCE_DIR"/.gitattributes -c 'diff.helphelp.xfuncname=^.*\*[^*]+\*$' -C "${VIM_SOURCE_DIR}" \
           diff-tree --no-commit-id -r -b -U0 \
-          '-I\*\s+For Vim version [0-9]\.[0-9]\.\s+Last change: [0-9]+ [A-Z][a-z]+ [0-9]+' \
-          '-I compiled \(with\|without\) .*(\|.*\|) feature\.$' \
+          '-I^\s+$' \
           '-I^=+$' \
+          '-I^popup_[_a-z]+\(' \
+          '-I\*\s+For Vim version [0-9]\.[0-9]\.\s+Last change: [0-9]+ [A-Z][a-z]+ [0-9]+' \
+          '-I compiled (with|without) .*\(\|.+\|\) feature\.$' \
+          '-I\|popup-windows\|' \
+          '-I\spopup window\s' \
           "$patch" -- "${file}" |
           grep -v -e '{.\+ \(available\|compiled\) \(with\|without\) .\+}' |
           grep -Pzo '(?<=\n)@@ -[0-9][^@\n]+\+[0-9][^@\n]* @@[^@\n]*\n(?=([-+][^\n]*\n)+(@|$))' |
@@ -958,11 +962,18 @@ is_na_patch() {
         HUNKS=$(git -C "${VIM_SOURCE_DIR}" diff-tree --no-commit-id -r -b -U0 \
           '-I^\s+$' \
           '-I^\s*/?\*/?$' \
-          '-I^\s*(//|/?\*).*\s[vV]im9' \
-          '-I^#\s*((ifdef|ifndef|define|undef)|(if|elif)\s.*defined\().*FEAT_' \
+          '-I^\s*(//|/?\*).*\s([vV]im9|channel|job|popup|sound|terminal)' \
+          '-I^#\s*((ifdef|ifndef|undef)|(if|elif)\s.*defined\().*FEAT_' \
           '-I^#\s*(else|endif)' \
-          '-I#\s*define\s+XDG_' \
+          '-I^#\s*define\s+(FEAT|POPUPWIN|XDG)_' \
+          '-IEVENT_TERMINALWINOPEN' \
+          '-I^#\s*define\s+POPF_CURSORLINE\s' \
+          '-I^typedef enum \{$' \
+          '-I^\s+POPCLOSE_[A-Z]+,?$' \
+          '-I^\} popclose_T;$' \
+          '-I^EXTERN\schar\s+\*popup_transparent' \
           '-I^EXTERN type_T t_.* INIT[2-9]\(' \
+          '-I^EXTERN\swin_T\s+\*popup_dragwin' \
           '-I^EXTERN char e_(abstract|class|enum|interface|type)_' \
           '-I^EXTERN char e_.*def_function' \
           '-I^EXTERN char e_.*enddef' \
@@ -976,6 +987,12 @@ is_na_patch() {
           '-I\sINIT\(= .+"E[0-9]+: .*[vV]im9' \
           '-I\sINIT\(= .+"E1016: Cannot declare .* variable: ' \
           '-I\s+INIT\(= .+"E1103: Dictionary not set' \
+          '-I\schar.*\s+\*w_popup_title;' \
+          '-I\sint\s+ch_[_a-zA-Z]+;' \
+          '-I\sint\s+w_(filter_mode|firstline|popup_drag|want_scrollbar);' \
+          '-I\slist_T\s+\*w_popup_mask;' \
+          '-I\spopclose_T\sw_popup_close;' \
+          '-I\s\*?w_popup_prop_[_a-z]+;' \
           "$patch" -- "${file}" |
           grep '^@@ .* @@')
         if test -n "$HUNKS"; then
@@ -987,16 +1004,22 @@ is_na_patch() {
         HUNKS=$(git -C "${VIM_SOURCE_DIR}" diff-tree --no-commit-id -r -b -U0 \
           '-I^\s+$' \
           '-I^\s*/?\*/?$' \
-          '-I^\s*(//|/?\*).*\s[vV]im9' \
-          '-I^#\s*((ifdef|ifndef|define|undef)\s|(if|elif)\s.*defined\().*FEAT_' \
+          '-I^\s*(//|/?\*).*\s([vV]im9|channel|job|popup|sound|terminal)' \
+          '-I^#\s*((ifdef|ifndef|undef)|(if|elif)\s.*defined\().*FEAT_' \
           '-I^#\s*(else|endif)' \
+          '-I^#\s*define\s+(FEAT|POPUPWIN|XDG)_' \
+          '-IEVENT_TERMINALWINOPEN' \
           '-I^#\s*include\s+<proto/' \
-          '-I^\s+\{"prop_[a-z]+",.*f_prop_[a-z]+},$' \
+          '-I^\s+\{"(popup|prop|sound)_[_a-z]+",.*f_(popup|prop|sound)_[_a-z]+},$' \
+          '-I^\s*(static)?\svoid$' \
+          '-I^static\svoid\s.+\(.+\);$' \
           '-I#\s*define.*ex_ni$' \
           '-I[_.>]sc_version = ' \
           '-I[_.>]uf_script_ctx_version = ' \
           '-I = skip_type\(.+\);$' \
           '-Icheck_typval_type\(.+\)' \
+          '-I\spopup_set_firstline\(.+\);' \
+          '-I\svim_free\(.*w_popup_title\);' \
           "$patch" -- "${file}" |
           grep '^@@ .* @@')
         if test -n "$HUNKS"; then

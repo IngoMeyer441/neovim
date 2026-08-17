@@ -35,6 +35,7 @@ runtime/doc/os_risc.txt
 runtime/doc/os_unix.txt
 runtime/doc/os_vms.txt
 runtime/doc/pi_logipat.txt
+runtime/doc/popup.txt
 runtime/doc/print.txt
 runtime/doc/quotes.txt
 runtime/doc/test_urls.vim
@@ -93,6 +94,7 @@ src/po/zh_CN.po
 src/po/zh_TW.po
 src/sixel.c
 src/socketserver.c
+src/sound.c
 src/tabpanel.c
 src/terminal.c
 src/termlib.c
@@ -130,6 +132,7 @@ src/testdir/test_remote.vim
 src/testdir/test_restricted.vim
 src/testdir/test_short_sleep.py
 src/testdir/test_shortpathname.vim
+src/testdir/test_sound.vim
 src/testdir/test_suspend.vim
 src/testdir/test_tabpanel.vim
 src/testdir/test_tcl.vim

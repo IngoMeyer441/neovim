@@ -3525,7 +3525,7 @@ linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, bool skip, 
         goto error;
       }
       if (skip) {                       // skip "/pat/"
-        cmd = skip_regexp(cmd, c, magic_isset());
+        cmd = skip_regexp(cmd, c, p_magic);
         if (*cmd == c) {
           cmd++;
         }
@@ -3550,7 +3550,7 @@ linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, bool skip, 
         curwin->w_cursor.col = (c == '/' && curwin->w_cursor.lnum > 0) ? MAXCOL : 0;
         Search.cmdlen = 0;
         flags = silent ? SEARCH_KEEP : SEARCH_HIS | SEARCH_MSG;
-        if (!do_search(NULL, c, c, cmd, strlen(cmd), 1, flags, NULL)) {
+        if (!do_search(NULL, c, c, cmd, strlen(cmd), 1, flags, p_magic, NULL)) {
           curwin->w_cursor = pos;
           cmd = NULL;
           goto error;
@@ -3587,7 +3587,7 @@ linenr_T get_address(exarg_T *eap, char **ptr, cmd_addr_T addr_type, bool skip, 
         pos.coladd = 0;
         if (searchit(curwin, curbuf, &pos, NULL,
                      *cmd == '?' ? BACKWARD : FORWARD,
-                     "", 0, 1, SEARCH_MSG, i, NULL) != FAIL) {
+                     "", 0, 1, SEARCH_MSG, i, p_magic, NULL) != FAIL) {
           lnum = pos.lnum;
         } else {
           cmd = NULL;
@@ -5005,7 +5005,7 @@ static void ex_restart(exarg_T *eap)
   Channel *channel = channel_job_start(argv, exepath,
                                        CALLBACK_READER_INIT, on_err, CALLBACK_NONE,
                                        false, true, true, detach, kChannelStdinPipe,
-                                       NULL, 0, 0, env, &exit_status);
+                                       globaldir, 0, 0, env, &exit_status);
   if (!channel) {
     emsg("cannot create a channel job");
     goto fail_1;
@@ -6666,28 +6666,6 @@ void ex_may_print(exarg_T *eap)
   }
 }
 
-/// ":smagic" and ":snomagic".
-static void ex_submagic(exarg_T *eap)
-{
-  const optmagic_T saved = magic_overruled;
-
-  magic_overruled = eap->cmdidx == CMD_smagic ? OPTION_MAGIC_ON : OPTION_MAGIC_OFF;
-  ex_substitute(eap);
-  magic_overruled = saved;
-}
-
-/// ":smagic" and ":snomagic" preview callback.
-static int ex_submagic_preview(exarg_T *eap, int cmdpreview_ns, handle_T cmdpreview_bufnr)
-{
-  const optmagic_T saved = magic_overruled;
-
-  magic_overruled = eap->cmdidx == CMD_smagic ? OPTION_MAGIC_ON : OPTION_MAGIC_OFF;
-  int retv = ex_substitute_preview(eap, cmdpreview_ns, cmdpreview_bufnr);
-  magic_overruled = saved;
-
-  return retv;
-}
-
 /// ":join".
 static void ex_join(exarg_T *eap)
 {
@@ -7097,9 +7075,7 @@ void update_topline_cursor(void)
 }
 
 /// Save the current State and go to Normal mode.
-///
-/// @return  true if the typeahead could be saved.
-bool save_current_state(save_state_T *sst)
+void save_current_state(save_state_T *sst)
   FUNC_ATTR_NONNULL_ALL
 {
   sst->save_msg_scroll = msg_scroll;
@@ -7118,7 +7094,6 @@ bool save_current_state(save_state_T *sst)
   // from an event handler and makes sure we don't hang when the argument
   // ends with half a command.
   save_typeahead(&sst->tabuf);
-  return sst->tabuf.typebuf_valid;
 }
 
 void restore_current_state(save_state_T *sst)
@@ -7207,21 +7182,20 @@ static void ex_normal(exarg_T *eap)
 
   ex_normal_busy++;
   save_state_T save_state;
-  if (save_current_state(&save_state)) {
-    // Repeat the :normal command for each line in the range.  When no
-    // range given, execute it just once, without positioning the cursor
-    // first.
-    do {
-      if (eap->addr_count != 0) {
-        curwin->w_cursor.lnum = eap->line1++;
-        curwin->w_cursor.col = 0;
-        check_cursor_moved(curwin);
-      }
+  save_current_state(&save_state);
+  // Repeat the :normal command for each line in the range.  When no
+  // range given, execute it just once, without positioning the cursor
+  // first.
+  do {
+    if (eap->addr_count != 0) {
+      curwin->w_cursor.lnum = eap->line1++;
+      curwin->w_cursor.col = 0;
+      check_cursor_moved(curwin);
+    }
 
-      exec_normal_cmd((arg != NULL ? arg : eap->arg),
-                      eap->forceit ? REMAP_NONE : REMAP_YES, false);
-    } while (eap->addr_count > 0 && eap->line1 <= eap->line2 && !got_int);
-  }
+    exec_normal_cmd((arg != NULL ? arg : eap->arg),
+                    eap->forceit ? REMAP_NONE : REMAP_YES, false);
+  } while (eap->addr_count > 0 && eap->line1 <= eap->line2 && !got_int);
 
   // Might not return to the main loop when in an event handler.
   update_topline_cursor();
@@ -7363,7 +7337,7 @@ static void ex_findpat(exarg_T *eap)
   if (*eap->arg == '/') {   // Match regexp, not just whole words
     whole = false;
     eap->arg++;
-    char *p = skip_regexp(eap->arg, '/', magic_isset());
+    char *p = skip_regexp(eap->arg, '/', p_magic);
     if (*p) {
       *p++ = NUL;
       p = skipwhite(p);

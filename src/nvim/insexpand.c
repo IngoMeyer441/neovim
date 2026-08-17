@@ -228,11 +228,9 @@ static compl_T *compl_old_match = NULL;
 static compl_T *compl_preselect_match = NULL;
 
 /// Hashtab with the strings of the matches in the list above, except the
-/// original-text entries.  Used to make the duplicate check O(1) instead of
-/// a scan of the whole list.  Each entry owns a copy of the string and
-/// counts the matches with that string, so that when matches were added
-/// with "adup" the entry remains until the last match with the string is
-/// removed.
+/// original-text entries.  Each entry owns a copy of the string and counts
+/// the matches with that string, so that when matches were added with "adup"
+/// the entry remains until the last match with the string is removed.
 typedef struct {
   int cse_count;   // number of matches with this string
   char cse_str[];  // the string
@@ -244,8 +242,7 @@ typedef struct {
 static hashtab_T compl_strings_ht;
 
 /// Count the string of a new match in the duplicate-check hashtab.
-/// "hash" is the hash of "str" when it is not zero, saving hashing the
-/// string again.
+/// "hash" is the hash of "str" when it is not zero.
 static void compl_strings_add(const char *str, size_t len, hash_T hash)
 {
   if (compl_strings_ht.ht_array == NULL) {
@@ -1008,8 +1005,7 @@ static int ins_compl_add(char *const str, int len, char *const fname, char *cons
 
   // If the same match is already present, don't add it.
   if (compl_first_match != NULL && !adup && compl_strings_ht.ht_used > 0) {
-    // Use a stack buffer for the NUL-terminated key when it fits, so
-    // that rejecting a duplicate does not allocate memory.
+    // The key must be NUL terminated.
     char keybuf[128];
     char *key;
     if (len < (int)sizeof(keybuf)) {
@@ -1964,7 +1960,7 @@ static void ins_compl_dictionaries(char *dict_start, char *pat, int flags, bool 
     xfree(pat_esc);
     xfree(ptr);
   } else {
-    regmatch.regprog = vim_regcomp(pat, magic_isset() ? RE_MAGIC : 0);
+    regmatch.regprog = vim_regcomp(pat, p_magic ? RE_MAGIC : 0);
     if (regmatch.regprog == NULL) {
       goto theend;
     }
@@ -2785,7 +2781,7 @@ static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
     }
 
     // only format when something was inserted
-    if (!Ins.arrow_used && !ins_need_undo_get() && c != Ctrl_E) {
+    if (Ins.moved == kInsNone && !Ins.need_undo && c != Ctrl_E) {
       insertchar(NUL, 0, -1);
     }
 
@@ -3016,10 +3012,10 @@ static void ins_compl_fixRedoBufForLeader(char *ptr_arg)
     }
     // Add backspace characters for each remaining character in original text
     for (p += len; *p != NUL; MB_PTR_ADV(p)) {
-      AppendCharToRedobuff(K_BS);
+      redo_append_char(K_BS);
     }
   }
-  AppendToRedobuffLit(ptr + len, -1);
+  redo_append_lit(ptr + len, -1);
 }
 
 /// Loops through the list of windows, loaded-buffers or non-loaded-buffers
@@ -4401,7 +4397,7 @@ static int get_next_default_completion(ins_compl_next_state_T *st, pos_T *start_
       found_new_match = searchit(NULL, st->ins_buf, st->cur_match_pos,
                                  NULL, compl_direction, compl_pattern.data,
                                  compl_pattern.size,
-                                 1, SEARCH_KEEP + SEARCH_NFMSG, RE_LAST, NULL);
+                                 1, SEARCH_KEEP + SEARCH_NFMSG, RE_LAST, p_magic, NULL);
     }
     msg_silent--;
     if (!compl_started || st->set_match_pos) {
@@ -6440,7 +6436,7 @@ static unsigned quote_meta(char *dest, char *src, int len)
       }
       FALLTHROUGH;
     case '~':
-      if (!magic_isset()) {  // quote these only if magic is set
+      if (!p_magic) {  // quote these only if magic is set
         break;
       }
       FALLTHROUGH;
@@ -6498,7 +6494,7 @@ static void spell_back_to_badword(void)
   pos_T tpos = curwin->w_cursor;
   spell_bad_len = spell_move_to(curwin, BACKWARD, SMT_ALL, true, NULL);
   if (curwin->w_cursor.col != tpos.col) {
-    start_arrow(&tpos);
+    start_arrow(&tpos, true, NUL);
   }
 }
 

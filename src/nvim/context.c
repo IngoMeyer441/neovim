@@ -43,14 +43,14 @@
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/fs.h"
+#include "nvim/register.h"
 #include "nvim/shada.h"
+#include "nvim/state_defs.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
 #include "context.c.generated.h"
-
-int kCtxAll = (kCtxRegs | kCtxJumps | kCtxBufs | kCtxGVars | kCtxSFuncs | kCtxFuncs);
 
 /// Nesting depth of ctx_switch() calls that changed curwin.
 static int _ctx_switch_depth = 0;
@@ -74,17 +74,22 @@ void ctx_free(Context *ctx)
   api_free_array(ctx->funcs);
 }
 
-/// Saves the editor state to a context.
-///
-/// Use "flags" to select particular types of context.
+/// Saves the editor state (ALL THE THINGS!!!1) to a context.
 ///
 /// @param  ctx    Save to this context.
-/// @param  flags  Flags, see ContextTypeFlags enum.
-void ctx_save(Context *ctx, const int flags)
+/// @param  flags  State types to save.
+void ctx_save(Context *ctx, const CtxStateFlags flags)
   FUNC_ATTR_NONNULL_ALL
 {
+  ctx->buf = curbuf->handle;
+  ctx->pos = (pos_T) {
+    .lnum = curwin->w_cursor.lnum,
+    .col = curwin->w_cursor.col,
+    .coladd = curwin->w_cursor.coladd,
+  };
+
   if (flags & kCtxRegs) {
-    ctx->regs = shada_encode_regs();
+    ctx->regs = shada_encode_regs(false, 0);
   }
 
   if (flags & kCtxJumps) {
@@ -125,32 +130,37 @@ void ctx_save(Context *ctx, const int flags)
   }
 }
 
-/// Loads (restores) the editor state from a Context snapshot.
-///
-/// Use "flags" to select particular types of context.
+/// Loads (restores) the editor state from a Context snapshot. Restores registers EXACTLY, unless
+/// kCtxMergeReg is specified.
 ///
 /// @param  ctx    Load from this context.
-/// @param  flags  Flags, see ContextTypeFlags enum.
-void ctx_load(Context *ctx, const int flags)
+/// @param  flags  State types to load.
+/// @param  loadflags  Controls load behavior.
+void ctx_load(Context *ctx, const CtxStateFlags flags, const CtxLoadFlags loadflags)
   FUNC_ATTR_NONNULL_ALL
 {
-  Object op_shada = get_option_value(kOptShada, OPT_GLOBAL);
-  set_option_value(kOptShada, STATIC_CSTR_AS_OBJ("!,'100,%"), OPT_GLOBAL);
+  // TODO(jkeyes): restore window, mode, pos?
 
   if (flags & kCtxRegs) {
-    shada_read_string(ctx->regs, kShaDaWantInfo | kShaDaForceit);
+    if (!(loadflags & kCtxMergeReg)) {
+      // Avoid shada "merge" behavior for registers; restore "exact", don't merge.
+      for (int i = 0; i < NUM_SAVED_REGISTERS; i++) {
+        free_register(get_y_register(i));
+      }
+    }
+    shada_read_string(ctx->regs, kShaDaWantInfo | kShaDaForceit | kShaDaNanos | kShaDaNoHistory);
   }
 
   if (flags & kCtxJumps) {
-    shada_read_string(ctx->jumps, kShaDaWantInfo | kShaDaForceit);
+    shada_read_string(ctx->jumps, kShaDaWantInfo | kShaDaForceit | kShaDaNoHistory);
   }
 
   if (flags & kCtxBufs) {
-    shada_read_string(ctx->bufs, kShaDaWantInfo | kShaDaForceit);
+    shada_read_string(ctx->bufs, kShaDaWantInfo | kShaDaForceit | kShaDaNoHistory | kShaDaNoOpt);
   }
 
   if (flags & kCtxGVars) {
-    shada_read_string(ctx->gvars, kShaDaWantInfo | kShaDaForceit);
+    shada_read_string(ctx->gvars, kShaDaWantInfo | kShaDaForceit | kShaDaNoHistory | kShaDaNoOpt);
   }
 
   if (flags & kCtxFuncs) {
@@ -158,9 +168,6 @@ void ctx_load(Context *ctx, const int flags)
       do_cmdline_cmd(ctx->funcs.items[i].data.string.data);
     }
   }
-
-  set_option_value(kOptShada, op_shada, OPT_GLOBAL);
-  optval_free(op_shada);
 }
 
 /// Convert readfile()-style array to String
@@ -215,12 +222,12 @@ Dict ctx_to_dict(Context *ctx, Arena *arena)
 /// @param[out]  err   Error object.
 ///
 /// @return types of included context items.
-int ctx_from_dict(Dict dict, Context *ctx, Error *err)
+CtxStateFlags ctx_from_dict(Dict dict, Context *ctx, Error *err)
   FUNC_ATTR_NONNULL_ALL
 {
   assert(ctx != NULL);
 
-  int types = 0;
+  CtxStateFlags types = 0;
   for (size_t i = 0; i < dict.size && !ERROR_SET(err); i++) {
     KeyValuePair item = dict.items[i];
     if (item.value.type != kObjectTypeArray) {
@@ -304,19 +311,23 @@ static void ctx_localdirs_restore(CtxSwitch *cs, win_T *cwp, tabpage_T *tp, bool
   if (!(persist && cs->cs_globaldir == NULL && globaldir != NULL)) {
     xfree(globaldir);
     globaldir = cs->cs_globaldir;
+    cs->cs_globaldir = NULL;
   }
 }
 
 /// Saves the dir state to be restored by ctx_dirs_restore():
-/// - kCtxKeepCwd or kCtxKeepDirs: the CWD, so any directory change caused by switching to `wp`
-///   ('autochdir', win/tab-local directories) can be undone.
-/// - kCtxKeepDirs: also copies of the target context's dir scopes (w/b/tp-local, global).
+/// - kCtxKeepCwd or kCtxKeepDirs: the CWD and `globaldir`, so any directory change caused by
+///   switching to `wp` ('autochdir', win/tab-local directories) can be undone.
+/// - kCtxKeepDirs: also copies of the target context's dir scopes (w/b/tp-local).
 static void ctx_dirs_save(CtxSwitch *cs, win_T *wp, tabpage_T *tp, buf_T *buf)
   FUNC_ATTR_NONNULL_ARG(1, 2, 3)
 {
   if (!(cs->cs_flags & (kCtxKeepCwd | kCtxKeepDirs))) {
     return;
   }
+
+  // `globaldir` is where to return when no local dir applies (NULL: the CWD is already there).
+  cs->cs_globaldir = globaldir == NULL ? NULL : xstrdup(globaldir);
 
   // kCtxKeepDirs: also save copies of the target context's dir scopes.
   if (cs->cs_flags & kCtxKeepDirs) {
@@ -325,18 +336,10 @@ static void ctx_dirs_save(CtxSwitch *cs, win_T *wp, tabpage_T *tp, buf_T *buf)
     cs->cs_w_localdir = wp->w_localdir == NULL ? NULL : xstrdup(wp->w_localdir);
     cs->cs_b_localdir = target_buf->b_localdir == NULL ? NULL : xstrdup(target_buf->b_localdir);
     cs->cs_tp_localdir = tp->tp_localdir == NULL ? NULL : xstrdup(tp->tp_localdir);
-    cs->cs_globaldir = globaldir == NULL ? NULL : xstrdup(globaldir);
   }
 
-  // Getting and setting directory can be slow on some systems, only do this when the current or
-  // target window/tab have a local directory or 'acd' is set, or if kCtxKeepDirs was set.
   char cwd[MAXPATHL];
-  if ((cs->cs_flags & kCtxKeepDirs)
-      || (curwin != wp
-          && (curwin->w_localdir != NULL || wp->w_localdir != NULL
-              || curbuf->b_localdir != NULL || wp->w_buffer->b_localdir != NULL
-              || (curtab != tp && (curtab->tp_localdir != NULL || tp->tp_localdir != NULL))
-              || p_acd))) {
+  if ((cs->cs_flags & kCtxKeepDirs) || curwin != wp) {
     if (os_dirname(cwd, MAXPATHL) == OK) {
       cs->cs_cwd = xstrdup(cwd);  // allocated on demand: keeps CtxSwitch small
     }
@@ -360,8 +363,12 @@ static void ctx_dirs_save(CtxSwitch *cs, win_T *wp, tabpage_T *tp, buf_T *buf)
 /// target window/buffer/tab may have been closed meanwhile.
 static void ctx_dirs_restore(CtxSwitch *cs)
 {
-  // kCtxKeepDirs: restore the saved dir scopes. But not for hidden buf (ctx_win).
-  if ((cs->cs_flags & kCtxKeepDirs) && cs->cs_ctxwin_idx < 0) {
+  if (cs->cs_ctxwin_idx >= 0) {
+    return;  // Hidden-buffer target: ctx_localdirs_restore() already restored dirs.
+  }
+
+  // kCtxKeepDirs: restore the saved dir scopes.
+  if (cs->cs_flags & kCtxKeepDirs) {
     tabpage_T *dirs_tab = NULL;
     FOR_ALL_TABS(tp) {
       if (tp->handle == cs->cs_dirs_tab) {
@@ -370,19 +377,27 @@ static void ctx_dirs_restore(CtxSwitch *cs)
       }
     }
     ctx_localdirs_restore(cs, NULL, dirs_tab, false);
+  } else if (cs->cs_cwd != NULL && !_ctx_did_chdir) {
+    // Pairs with the CWD restore below.
+    xfree(globaldir);
+    globaldir = cs->cs_globaldir;
+    cs->cs_globaldir = NULL;
   }
+  XFREE_CLEAR(cs->cs_globaldir);
 
-  // Restore the CWD itself.
+  // Restore the CWD itself. After an explicit chdir, ctx_restore() re-derives it instead.
   if (cs->cs_apply_acd) {
     xfree(cs->cs_save_sfname);
     do_autochdir();
-  } else if (cs->cs_cwd != NULL) {
+  } else if (cs->cs_cwd != NULL && ((cs->cs_flags & kCtxKeepDirs) || !_ctx_did_chdir)) {
     os_chdir(cs->cs_cwd);
     if (cs->cs_save_sfname != NULL) {
       xfree(curbuf->b_sfname);
       curbuf->b_sfname = cs->cs_save_sfname;
       curbuf->b_fname = curbuf->b_sfname;
     }
+  } else {
+    xfree(cs->cs_save_sfname);
   }
   XFREE_CLEAR(cs->cs_cwd);
 }

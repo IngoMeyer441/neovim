@@ -585,11 +585,16 @@ void spell_suggest(int count)
     }
   } else {
     // Hand off to (async) vim.ui.select().
+    curwin->w_p_spell = wo_spell_save;
     select_spell_suggestion(&sug);
 
     lines_left = Rows;                  // avoid more prompt
     // don't delay for 'smd' in normal_cmd()
     msg_scroll = msg_scroll_save;
+
+    spell_find_cleanup(&sug);
+    xfree(line);
+    return;
   }
 
   if (selected > 0 && selected <= sug.su_ga.ga_len && u_save_cursor() == OK) {
@@ -620,11 +625,10 @@ void spell_suggest(int count)
     strcat(p, sug.su_badptr + stp->st_orglen);
 
     // For redo we use a change-word command.
-    ResetRedobuff();
-    AppendToRedobuff("ciw");
-    AppendToRedobuffLit(p + c,
-                        stp->st_wordlen + sug.su_badlen - stp->st_orglen);
-    AppendCharToRedobuff(ESC);
+    redo_new((CmdSpec){ 0 });
+    redo_append_str(S_LEN("ciw"));
+    redo_append_lit(p + c, stp->st_wordlen + sug.su_badlen - stp->st_orglen);
+    redo_append_char(ESC);
 
     // "p" may be freed here
     ml_replace(curwin->w_cursor.lnum, p, false);
