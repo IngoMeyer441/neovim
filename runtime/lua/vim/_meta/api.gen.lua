@@ -226,8 +226,8 @@ function vim.api.nvim_buf_add_highlight(buffer, ns_id, hl_group, line, col_start
 --- Not for Lua callbacks.
 --- @param opts vim.api.keyset.buf_attach? Optional parameters.
 --- - on_bytes: Called on granular changes (compared to on_lines). Not called on buffer
----   reload (`:checktime`, `:edit`, …), see `on_reload:`. Return a [lua-truthy] value
----   to detach. Args:
+---   reload (`:checktime`, `:edit`, …), see `on_reload`. Returning [lua-truthy] deletes
+---   the callback. Args:
 ---   - the string "bytes"
 ---   - buffer id
 ---   - b:changedtick
@@ -247,11 +247,12 @@ function vim.api.nvim_buf_add_highlight(buffer, ns_id, hl_group, line, col_start
 ---   - the string "changedtick"
 ---   - buffer id
 ---   - b:changedtick
---- - on_detach: Called on detach. Args:
+--- - on_detach: Called on detach, or when the buffer is unloaded or deleted. Not called
+---   when a callback returns [lua-truthy] to delete itself. Args:
 ---   - the string "detach"
 ---   - buffer id
 --- - on_lines: Called on linewise changes. Not called on buffer reload (`:checktime`,
----   `:edit`, …), see `on_reload:`. Return a [lua-truthy] value to detach. Args:
+---   `:edit`, …), see `on_reload`. Returning [lua-truthy] deletes the callback. Args:
 ---   - the string "lines"
 ---   - buffer id
 ---   - b:changedtick
@@ -671,7 +672,8 @@ function vim.api.nvim_buf_line_count(buf) end
 ---   display of the text, except 'tabstop' is used for hard tabs. The 'wrap' and
 ---   'linebreak' options do not take effect, so the number of extra screen lines will
 ---   match the list-size (but see `virt_lines_overflow`). By default lines are placed
----   below the marked line.
+---   below the marked line. Special case: If the last `text_chunk` is empty,
+---   the corresponding `hl` will extend to the end of the line.
 --- - virt_lines_above: Place virtual lines above instead.
 --- - virt_lines_leftcol: Place virtual lines in the leftmost column of the window,
 ---   bypassing sign and number columns.
@@ -953,7 +955,8 @@ function vim.api.nvim_create_augroup(name, opts) end
 ---
 --- @see `:help autocommand`
 --- @see vim.api.nvim_del_autocmd
---- @param event vim.api.keyset.events|vim.api.keyset.events[] Event(s) that will trigger the handler (`callback` or `command`).
+--- @param event vim.api.keyset.events|vim.api.keyset.events[] Event(s) that will trigger the handler (`callback` or `command`): one handler is
+--- created for each event name.
 --- @param opts vim.api.keyset.create_autocmd? Options dict:
 --- - buf (`integer?`) Buffer id for buffer-local autocommands `autocmd-buflocal`.
 ---   Not allowed with {pattern}.
@@ -971,7 +974,8 @@ function vim.api.nvim_create_augroup(name, opts) end
 --- - desc (`string?`) Description (for documentation and troubleshooting).
 --- - group (`string|integer?`) Group name or id to match against.
 --- - nested (`boolean?`, default: false) Run nested autocommands `autocmd-nested`.
---- - once (`boolean?`, default: false) Handle the event only once `autocmd-once`.
+--- - once (`boolean?`, default: false) Handle the event only once `autocmd-once`. If {event}
+---   is a list, each handler will fire once.
 --- - pattern (`string|array?`) Pattern(s) to match literally `autocmd-pattern`.
 --- @return integer # Autocommand id (number)
 function vim.api.nvim_create_autocmd(event, opts) end
@@ -1349,12 +1353,18 @@ function vim.api.nvim_get_color_map() end
 --- @return table<string,vim.api.keyset.command_info> # Map of maps describing commands.
 function vim.api.nvim_get_commands(opts) end
 
---- Gets a map of the current editor state.
+--- Gets a map (msgpack encoding) of the current editor state:
+---
+--- - "bufs"    [buffer-list]
+--- - "funcs"   Vimscript global and [script-local] functions
+--- - "gvars"   [global-variable]s
+--- - "jumps"   [jumplist]
+--- - "regs"    [registers]
+--- - "sfuncs"  Vimscript [script-local] functions
 ---
 --- @param opts vim.api.keyset.context? Optional parameters.
---- - types:  List of `context-types` ("regs", "jumps", "bufs",
----   "gvars", …) to gather, or empty for "all".
---- @return table<string,any> # map of global |context|.
+--- - types:  List of context types (see above) to gather, or empty for "all".
+--- @return table<string,any> # Editor state as a msgpack-encoded map.
 function vim.api.nvim_get_context(opts) end
 
 --- Gets the current buffer.
@@ -1658,9 +1668,9 @@ function vim.api.nvim_list_uis() end
 --- @return integer[] # List of |window-ID|s
 function vim.api.nvim_list_wins() end
 
---- Sets the current editor state from the given `context` map.
+--- Sets the current editor state from the given map.
 ---
---- @param dict table<string,any> `Context` map.
+--- @param dict table<string,any> Msgpack-encoded editor state, in the form returned by [nvim_get_context()].
 --- @return any
 function vim.api.nvim_load_context(dict) end
 

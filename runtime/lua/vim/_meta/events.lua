@@ -6,20 +6,21 @@ error('Cannot require a meta file')
 
 --- Data for the CmdAtom event.
 --- @class vim.event.cmdatom.data
---- @field arg? string Typed operand of `cmd` ("fx" => "x").
 --- @field atoms? vim.event.cmdatom.data[] Subatoms of a composite (mapping, Visual sequence).
---- @field cascade boolean Queued for multicursor replay.
 --- @field changed boolean Changed the buffer.
 --- @field cmd? string Command/motion/object name ("w", "f", "iw", "gJ").
+--- @field cmdarg? string Operand of `cmd` ("fx" => "x").
 --- @field count? integer Effective count.
---- @field keys string Resolved keysequence, raw bytes: feed to nvim_feedkeys() to replay.
---- @field lhs? string Mapping LHS or macro register ("gj", "@q"). Raw bytes, like `keys`.
+--- @field keys? string Resolved keysequence, raw bytes. Replay via `feedkeys(keys, 'n')`. Nil: lossy capture, replay via `feedkeys(lhs, 'm')` instead. Empty: unreplayable.
+--- @field lhs string High-level user input: mapping LHS + any payload it read, or macro register ("gj", "ds'", "@q"). Raw bytes.
 --- @field motionforce? 'v'|'V'|'<C-V>' forced-motion type.
+--- @field moved? boolean Moved the cursor.
 --- @field operator? string Operator name ("d", "g~", "g@"). key-notation.
---- @field pending? 'operator'|'visual' Mapping ended mid-operation.
+--- @field pos? [integer,integer] Cursor before the action: 1-indexed row, 0-indexed column.
 --- @field reg? string Register name.
 --- @field text? string Inserted text, or the Ex/search cmdline.
---- @field type 'command'|'ex'|'insert'|'jump'|'mapping'|'motion'|'mouse'|'operator'|'scroll'|'visual'
+--- @field type 'excmd'|'insert'|'jump'|'mapping'|'motion'|'mouse'|'normal'|'operator'|'scroll'|'visual'
+--- @field undoseq? integer Undo state after the action (`undotree().seq_cur`). Decreases on undo.
 
 --- @class vim.event.lspattach.data
 --- @field client_id integer

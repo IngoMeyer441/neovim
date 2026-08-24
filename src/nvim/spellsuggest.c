@@ -502,7 +502,6 @@ static void select_spell_suggestion(suginfo_T *sug)
 /// When "count" is non-zero use that suggestion.
 void spell_suggest(int count)
 {
-  pos_T prev_cursor = curwin->w_cursor;
   int badlen = 0;
   int msg_scroll_save = msg_scroll;
   const int wo_spell_save = curwin->w_p_spell;
@@ -511,6 +510,9 @@ void spell_suggest(int count)
     parse_spelllang(curwin);
     curwin->w_p_spell = true;
   }
+  // Autocommands may have changed the buffer and made the cursor invalid
+  check_cursor(curwin);
+  pos_T prev_cursor = curwin->w_cursor;
 
   if (*curwin->w_s->b_p_spl == NUL) {
     emsg(_(e_no_spell));
@@ -625,8 +627,7 @@ void spell_suggest(int count)
     strcat(p, sug.su_badptr + stp->st_orglen);
 
     // For redo we use a change-word command.
-    redo_new((CmdSpec){ 0 });
-    redo_append_str(S_LEN("ciw"));
+    prep_redo(false, false, (CmdSpec){ .op = 'c', .cmd = 'i', .cmd2 = 'w' });
     redo_append_lit(p + c, stp->st_wordlen + sug.su_badlen - stp->st_orglen);
     redo_append_char(ESC);
 

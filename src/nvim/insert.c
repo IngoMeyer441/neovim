@@ -220,17 +220,13 @@ static void insert_enter(InsertState *s)
   if (s->cmdchar != NUL && restart_edit == 0) {
     if (s->cmdchar == 'V' || s->cmdchar == 'v') {
       // "gR" or "gr" command
-      redo_new((CmdSpec){ .count = s->count, .cmd = 'g', .cmd2 = (s->cmdchar == 'v') ? 'r' : 'R' });
-      redo_append_char('g');
-      redo_append_char((s->cmdchar == 'v') ? 'r' : 'R');
+      prep_redo(false, false, (CmdSpec){ .count = s->count, .cmd = 'g',
+                                         .cmd2 = (s->cmdchar == 'v') ? 'r' : 'R' });
     } else {
-      redo_new((CmdSpec){ .count = s->count, .cmd = s->cmdchar,
-                          .cmd2 = (s->cmdchar == 'g') ? 'I' : NUL });
-      redo_append_char(s->cmdchar);
-      if (s->cmdchar == 'g') {          // "gI" command
-        redo_append_char('I');
-      } else if (s->cmdchar == 'r') {  // "r<CR>" command
-        s->count = 1;                  // insert only one <CR>
+      prep_redo(false, false, (CmdSpec){ .count = s->count, .cmd = s->cmdchar,
+                                         .cmd2 = (s->cmdchar == 'g') ? 'I' : NUL });
+      if (s->cmdchar == 'r') {  // "r<CR>" command
+        s->count = 1;           // insert only one <CR>
       }
     }
   }
@@ -338,7 +334,7 @@ static void insert_enter(InsertState *s)
 
   // Get the current length of the redo buffer, those characters have to be
   // skipped if we want to get to the inserted characters.
-  String redo = redo_keys();
+  String redo = redo_keys(NULL);
   Ins.new_insert_skip = (int)redo.size;
   if (redo.data != NULL) {
     xfree(redo.data);
@@ -2234,13 +2230,12 @@ int stop_arrow(void)
     if (jumped) {
       // Non-captured cursor-move (mouse, <PageUp>, …): restart the capture as a "1i" insertion.
       // The count is a spec field (not body bytes), so "[count]." replaces it ("3i…").
-      redo_new((CmdSpec){ .count = 1, .cmd = 'i' });
-      redo_append_char('i');
+      prep_redo(false, false, (CmdSpec){ .count = 1, .cmd = 'i' });
       Ins.new_insert_skip = 2;
     } else {
       // Cursor-move was captured (start_arrow()): the atom mc-cascade will replay it.
       // Only `last_insert` (the ". register, i_CTRL-A) restarts here, like Vim.
-      String redo = redo_keys();
+      String redo = redo_keys(NULL);
       Ins.new_insert_skip = (int)redo.size;
       xfree(redo.data);
     }
@@ -2279,7 +2274,7 @@ static void stop_insert(pos_T *end_insert_pos, int esc, int nomove)
   // Save the inserted text for later redo with ^@ and CTRL-A.
   // Don't do it when "restart_edit" was set and nothing was inserted,
   // otherwise CTRL-O w and then <Left> will clear "last_insert".
-  String redo = redo_keys();
+  String redo = redo_keys(NULL);
   int added = redo.data == NULL ? 0 : (int)redo.size - Ins.new_insert_skip;
   if (Ins.did_restart_edit == 0 || added > 0) {
     xfree(last_insert.data);

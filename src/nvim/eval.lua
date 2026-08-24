@@ -8920,7 +8920,7 @@ M.funcs = {
       Each time {expr} is evaluated |v:val| is set to the entry name.
       When {expr} is a function the name is passed as the argument.
       For example, to get a list of files ending in ".txt": >vim
-        echo readdir(dirname, {n -> n =~ '.txt$'})
+        echo readdir(dirname, {n -> n =~ '\.txt$'})
       <To skip hidden and backup files: >vim
         echo readdir(dirname, {n -> n !~ '^\.\|\~$'})
 
@@ -10090,8 +10090,11 @@ M.funcs = {
     desc = [=[
       Set option or local variable {varname} (string, without "b:")
       in buffer {buf} to {val}. Also works for a global or
-      window-local option (not variable). When targeting
-      a window-local option, the global option is unchanged.
+      window-local option (not variable). A window-local option is
+      set in a window of the current tabpage that displays {buf},
+      and the global value is unchanged. When no window in the
+      current tabpage displays {buf} the option is not set and no
+      error is given; use |setwinvar()| or |win_execute()| for that.
 
       For the use of {buf}, see |bufname()| above.
 

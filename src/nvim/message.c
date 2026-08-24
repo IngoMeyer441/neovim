@@ -415,6 +415,9 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
   if (hl_msg_updated && !(history && kv_size(hl_msg))) {
     hl_msg_free(hl_msg);
   }
+  // Release the id: it belongs to this message, and a String id only borrows the caller's storage
+  // (often a stack buffer). Redundant unless nothing was emitted (e.g. 'msg_silent').
+  msg_ext_id = INTEGER_OBJ(msg_id_next);
   return id;
 }
 
@@ -1510,7 +1513,7 @@ void wait_return(int redraw)
         // Also accept scroll-down commands when messages fill the screen,
         // to avoid that typing one 'j' too many makes the messages
         // disappear.
-        if (p_more) {
+        if (KeyTyped && p_more) {
           if (c == 'b' || c == Ctrl_B || c == 'k' || c == 'u' || c == 'g'
               || c == K_UP || c == K_PAGEUP) {
             if (msg_scrolled > Rows) {
@@ -1549,7 +1552,8 @@ void wait_return(int redraw)
       if (c == K_LEFTMOUSE || c == K_MIDDLEMOUSE || c == K_RIGHTMOUSE
           || c == K_X1MOUSE || c == K_X2MOUSE) {
         jump_to_mouse(MOUSE_SETPOS, NULL, 0);
-      } else if (vim_strchr("\r\n ", c) == NULL && c != Ctrl_C && c != 'q') {
+      } else if (!KeyTyped
+                 || (vim_strchr("\r\n ", c) == NULL && c != Ctrl_C && c != 'q')) {
         // Put the character back in the typeahead buffer.  Don't use the
         // stuff buffer, because lmaps wouldn't work.
         requeue_key(vgetc_char, vgetc_mod_mask, 0,
@@ -3461,7 +3465,10 @@ void msg_ext_ui_flush(void)
     msg_ext_append = false;
     msg_ext_fast = true;
     msg_ext_kind = NULL;
-    msg_id_next += (msg_ext_id.data.integer == msg_id_next);
+    // Consume the pre-allocated id, if the message did not get one from msg_multihl().
+    if (msg_ext_id.type == kObjectTypeInteger && msg_ext_id.data.integer == msg_id_next) {
+      msg_id_next++;
+    }
     msg_ext_id = INTEGER_OBJ(msg_id_next);
   }
 }

@@ -138,8 +138,7 @@ describe("preserve and (R)ecover with custom 'directory'", function()
     -- n.exec_lua([[vim.uv.kill(vim.fn.jobpid(vim.bo.channel), 'sigterm')]])
     command('call chanclose(&channel)') -- Kill the child process.
     -- Wait for the child process to stop.
-    -- FIXME: SIGHUP sometimes isn't caught with ASAN.
-    screen0:expect({ any = t.is_asan() and '%[Process exited %d+%]' or '%[Process exited 1%]' })
+    screen0:expect({ any = '%[Process exited 1%]' })
     neq(nil, uv.fs_stat(swappath1))
     test_recover(swappath1)
   end)
@@ -433,6 +432,46 @@ describe('swapfile detection', function()
     ]])
     eq(('\n' .. msg_expected):rep(3):sub(2), n.exec_capture('messages'))
     command('bwipe!')
+
+    nvim1:close()
+  end)
+
+  -- ui2 opens windows to show a message, which chdirs in and out of the target window's context.
+  -- readfile() aliases the buffer name across that.
+  it('ui2 message from the SwapExists handler does not abort the read #41454', function()
+    exec(init)
+    write_file('Xfile1', 'some text...\n')
+    command('edit Xfile1')
+    command('preserve') -- Make sure the swap file exists.
+
+    local initfile = 'Xtest_swapdialog_init.lua'
+    write_file(
+      initfile,
+      ('vim.opt.directory:prepend(%q)\nrequire("vim._core.ui2").enable()\n'):format(swapdir .. '//')
+    )
+    finally(function()
+      os.remove(initfile)
+      os.remove('Xfile1')
+    end)
+
+    local nvim1 = n.new_session(true)
+    set_session(nvim1)
+    local screen = Screen.new(75, 10)
+    -- ui2 needs a UI attached while the file argument is read, i.e. a real TTY.
+    fn.jobstart({ nvim_prog, '-i', 'NONE', '--noplugin', '-u', initfile, 'Xfile1' }, {
+      term = true,
+      env = { VIMRUNTIME = os.getenv('VIMRUNTIME') },
+    })
+    screen:expect({
+      grid = [[
+        ^some text...                                                               |
+        ~                                                                          |*6
+        Xfile1                                                   1,1            All|
+        {MATCH:W325: Ignoring swapfile from Nvim process %d+ *}|
+                                                                                   |
+      ]],
+      attr_ids = {},
+    })
 
     nvim1:close()
   end)

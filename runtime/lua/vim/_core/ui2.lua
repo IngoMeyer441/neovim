@@ -10,7 +10,7 @@
 ---   msg = { -- Options related to the message module.
 ---     ---@type string|table<string, 'cmd'|'msg'|'pager'> Default message target
 ---     ---or table mapping |ui-messages| kinds, triggers and IDs to a target.
----     ---Table keys are are matched as a Lua pattern to the message ID. 'default'
+---     ---Table keys are matched as a Lua pattern to the message ID. 'default'
 ---     ---mapping applies to any omitted kind: { default = 'cmd', progress = 'msg' }.
 ---     targets = 'cmd',
 ---     cmd = { -- Options related to messages in the cmdline window.
@@ -28,6 +28,7 @@
 ---     pager = { -- Options related to message window.
 ---       height = 0.999, -- Maximum height.
 ---     },
+---     pager_char = nil, -- Key checked after interactive messages.
 ---   },
 --- })
 --- ```
@@ -47,6 +48,10 @@
 --- indicates the spilled lines. To see the full messages, do either:
 --- - ENTER immediately after interactive |:| cmdline shows a message and returns to |Normal-mode|.
 --- - |g<| at any time.
+---
+--- If you'd like behavior similar to the old hit-enter prompt, pass `pager_char = "<CR>"` on
+--- the `cfg` table. When the pager is shown, hitting `<CR>` (in this example) will enter the
+--- pager.
 
 local api = vim.api
 local nvim_on = require('vim._core.util').nvim_on

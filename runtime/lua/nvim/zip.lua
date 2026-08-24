@@ -157,8 +157,9 @@ local function unzip_error(code, stderr)
   return stderr ~= '' and stderr or ('unzip exited with %d'):format(code)
 end
 
---- Returned when Info-ZIP wants a password. It only reads one from a terminal, never from a
---- pipe, and `-P` would expose it in the process arguments, so this is retried on a pty.
+--- Returned when the empty password `extract_path` supplies is rejected, so a real one is
+--- needed. It cannot go in `-P`, which would expose it in the process arguments, and Info-ZIP
+--- reads a password from nowhere but a terminal, so it is asked for on a pty.
 local ENCRYPTED = 'zip:encrypted'
 
 --- Extract one entry into `dir`, prompting for the archive password on a pty.
@@ -196,10 +197,18 @@ local function extract_with_password(command, source, path, dir)
     return 'could not start unzip'
   end
 
+  -- Info-ZIP prints the prompt before disabling echo, and disables it with TCSAFLUSH, which
+  -- drops a password sent in that window. Echo is still on there, so an echo means "resend".
+  local sent = ''
+  local function echoed()
+    return sent ~= '' and buffered:find(sent .. '\r', 1, true) ~= nil
+  end
+
   local function wanted()
     return exited ~= nil
-      or buffered:find('password: $') ~= nil
-      or buffered:find('reenter: $') ~= nil
+      or buffered:find('password: ', 1, true) ~= nil
+      or buffered:find('reenter: ', 1, true) ~= nil
+      or echoed()
   end
 
   local reenter = false
@@ -213,15 +222,21 @@ local function extract_with_password(command, source, path, dir)
     if exited ~= nil then
       break
     end
-    local label = reenter and 'Password incorrect, try again: '
-      or ('Password for %s: '):format(path)
-    local password = vim.fn.inputsecret(label)
-    if password == '' then
-      vim.fn.jobstop(job)
-      return 'cancelled'
+    if echoed() then
+      -- Wait for its read(), else the resend is dropped too.
+      vim.wait(10)
+    else
+      local label = reenter and 'Password incorrect, try again: '
+        or ('Password for %s: '):format(path)
+      sent = vim.fn.inputsecret(label)
+      if sent == '' then
+        vim.fn.jobstop(job)
+        return 'cancelled'
+      end
+      reenter = true
     end
-    reenter, buffered = true, ''
-    vim.fn.chansend(job, password .. '\r')
+    buffered = ''
+    vim.fn.chansend(job, sent .. '\r')
   end
 
   if exited ~= 0 then
@@ -240,9 +255,10 @@ local function extract_path(command, source, path, target)
     return err
   end
   local write_err ---@type string?
+  -- An empty `-P` inhibits the prompt Info-ZIP would open a terminal for.
   local ok, system = pcall(
     vim.system,
-    { command, '-p', '--', literal_pattern(source), literal_pattern(path) },
+    { command, '-p', '-P', '', '--', literal_pattern(source), literal_pattern(path) },
     {
       stdout = function(pipe_err, data)
         if pipe_err then
@@ -265,12 +281,11 @@ local function extract_path(command, source, path, target)
   if write_err then
     return write_err
   end
+  if result.code == 82 then
+    return ENCRYPTED
+  end
   if result.code ~= 0 then
-    local stderr = vim.trim(result.stderr or '')
-    if stderr:find('unable to get password', 1, true) then
-      return ENCRYPTED
-    end
-    return unzip_error(result.code, stderr)
+    return unzip_error(result.code, vim.trim(result.stderr or ''))
   end
 end
 
@@ -553,6 +568,8 @@ function M._extract()
     command,
     '-o',
     '-j',
+    '-P',
+    '',
     '--',
     literal_pattern(state.source),
     literal_pattern(path),

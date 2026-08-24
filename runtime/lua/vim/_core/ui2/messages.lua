@@ -239,7 +239,8 @@ function M.expand_msg(src, tgt, focus)
 
     api.nvim_buf_set_lines(ui.bufs[tgt], srow, -1, false, lines)
     for _, m in ipairs(marks) do
-      hlopts.hl_group, hlopts.end_col, hlopts.end_row = m[4].hl_group, m[4].end_col, m[4].end_row
+      hlopts.hl_group, hlopts.end_col, hlopts.end_row =
+        m[4].hl_group, m[4].end_col, srow + m[4].end_row
       api.nvim_buf_set_extmark(ui.bufs[tgt], ui.ns, srow + m[2], m[3], hlopts)
     end
   else
@@ -581,8 +582,8 @@ local typed_g = false
 local function cmd_on_key(key, typed)
   -- Don't dismiss for non-typed keys and mouse movement. When 'g' is passed (typed
   -- or mapped), wait until the next key to avoid flickering when the pager is opened.
-  if typed == '' or (not typed_g and (typed == '<MouseMove>' or typed == 'g' or key == 'g')) then
-    typed_g = typed == 'g' or key == 'g'
+  if not typed_g and (typed == '' or (typed == '<MouseMove>' or typed == 'g' or key == 'g')) then
+    typed_g = typed ~= '' and (typed == 'g' or key == 'g')
     return
   end
   if typed == ':' or ui.cmd.level > 0 or fn.getcmdtype() ~= '' then
@@ -597,7 +598,8 @@ local function cmd_on_key(key, typed)
   -- Check if window was entered and reopen with original config. A shown (but not entered)
   -- pager is dismissed instead; "g<" passes through to reopen and enter it.
   local can_enter = not api.nvim_get_mode().mode:match('[it]') and not pager_shown()
-  local enter = can_enter and (typed == '<CR>' or typed_g and (typed == '<lt>' or key == '<'))
+  local enter = can_enter
+      and (typed == ui.cfg.pager_char or typed_g and (typed == '<lt>' or key == '<'))
     or (typed:find('LeftMouse') and fn.getmousepos().winid == ui.wins.cmd)
   if enter then
     M.expand_msg('cmd', 'pager', true)

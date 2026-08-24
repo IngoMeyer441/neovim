@@ -361,7 +361,7 @@ static void draw_virt_text(win_T *wp, buf_T *buf, int col_off, int *end_col, int
     if (vt) {
       int vcol = item->draw_col - col_off;
       int col = draw_virt_text_item(buf, item->draw_col, vt->data.virt_text,
-                                    vt->hl_mode, max_col, vcol, 0);
+                                    vt->hl_mode, max_col, vcol, 0, false);
       if (do_eol && ((vt->pos == kVPosEndOfLine) || (vt->pos == kVPosEndOfLineRightAlign))) {
         state->eol_col = col + 1;
       }
@@ -373,14 +373,20 @@ static void draw_virt_text(win_T *wp, buf_T *buf, int col_off, int *end_col, int
   }
 }
 
+/// @param eol_hl Extend highlight to EOL.
 static int draw_virt_text_item(buf_T *buf, int col, VirtText vt, HlMode hl_mode, int max_col,
-                               int vcol, int skip_cells)
+                               int vcol, int skip_cells, bool eol_hl)
 {
   const char *virt_str = "";
   int virt_attr = 0;
   size_t virt_pos = 0;
+  eol_hl &= kv_size(vt) && *kv_A(vt, kv_size(vt) - 1).text == NUL;
 
   while (col < max_col) {
+    // extending last highlight till the end of line
+    if (eol_hl && *virt_str == NUL && virt_pos == kv_size(vt)) {
+      virt_str = " ";
+    }
     if (skip_cells >= 0 && *virt_str == NUL) {
       if (virt_pos >= kv_size(vt)) {
         break;
@@ -912,13 +918,11 @@ static void apply_cursorline_highlight(win_T *wp, winlinevars_T *wlv)
   //  * high-priority ("same as Vim" priority) CursorLine if fg is set
   if (ae.rgb_fg_color == -1 && ae.cterm_fg_color == 0) {
     wlv->line_attr_lowprio = wlv->cul_attr;
+  } else if (!(State & MODE_INSERT) && bt_quickfix(wp->w_buffer)
+             && qf_current_entry(wp) == wlv->lnum) {
+    wlv->line_attr = hl_combine_attr(wlv->cul_attr, wlv->line_attr);
   } else {
-    if (!(State & MODE_INSERT) && bt_quickfix(wp->w_buffer)
-        && qf_current_entry(wp) == wlv->lnum) {
-      wlv->line_attr = hl_combine_attr(wlv->cul_attr, wlv->line_attr);
-    } else {
-      wlv->line_attr = wlv->cul_attr;
-    }
+    wlv->line_attr = wlv->cul_attr;
   }
 }
 
@@ -2422,8 +2426,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
           char *p = ptr - (mb_off + 1);
 
           CharsizeArg csarg;
-          // lnum == 0, do not want virtual text to be counted here
-          CSType cstype = init_charsize_arg(&csarg, wp, 0, line);
+          CSType cstype = init_charsize_arg_skip_cur_text(&csarg, wp, lnum, line);
           // TODO(zeertzjq): consider using CharSize.tail here
           wlv.n_extra = win_charsize(cstype, wlv.vcol, p, utf_ptr2CharInfo(p).value,
                                      &csarg).width - 1;
@@ -2983,7 +2986,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, b
       }
 
       if (kv_size(fold_vt) > 0) {
-        draw_virt_text_item(buf, win_col_offset, fold_vt, kHlModeCombine, view_width, 0, 0);
+        draw_virt_text_item(buf, win_col_offset, fold_vt, kHlModeCombine, view_width, 0, 0, false);
       }
       draw_virt_text(wp, buf, win_col_offset, &wlv.col, wlv.row);
       // Set increasing virtual columns in grid->vcols[] to set correct curswant
@@ -3261,7 +3264,7 @@ end_check:
                             kHlModeReplace,
                             view_width,
                             0,
-                            virt_line_skip_cells);
+                            virt_line_skip_cells, true);
       } else if (wlv.filler_todo <= 0) {
         draw_virt_text(wp, buf, win_col_offset, &draw_col, wlv.row);
       }

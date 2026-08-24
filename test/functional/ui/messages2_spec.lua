@@ -188,7 +188,8 @@ describe('messages2', function()
       foo                                                  |*6
       foo [+9]                                             |
     ]])
-    -- Do enter the pager in normal mode.
+    -- Do enter the pager in normal mode (with keybinding setup).
+    exec_lua([[require('vim._core.ui2').cfg.pager_char = '<CR>']])
     command('nmap <Esc> <Cmd>fclose<CR>')
     feed('<CR>')
     screen:expect([[
@@ -196,6 +197,7 @@ describe('messages2', function()
       foo                                                  |*12
                                          1,1            Top|
     ]])
+    exec_lua([[require('vim._core.ui2').cfg.pager_char = nil]])
     -- Changing 'laststatus' reveals the global statusline with a pager height
     -- exceeding the available lines: #38008.
     command('set laststatus=3')
@@ -564,6 +566,7 @@ describe('messages2', function()
 
   it('pager for consecutive command messages is not focused #41061', function()
     local win = api.nvim_get_current_win()
+    command('nnoremap j gj')
     command('echo "foo\nbar"')
     feed(':echo "baz"<CR>')
     screen:expect([[
@@ -605,6 +608,11 @@ describe('messages2', function()
     n.poke_eventloop()
     t.eq(win, api.nvim_get_current_win())
     feed('j')
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      {16::}{15:echo} {26:"baz"}                                          |
+    ]])
     -- A typed command that emits no message keeps the pager; the next key dismisses it.
     command('echo "foo\nbar"')
     feed(':echo "baz"<CR>')
@@ -1343,5 +1351,45 @@ describe('messages2', function()
       vim.diagnostic.set(ns, 1, { { lnum = 0, message = 'random error' } }, {})
     end)
     screen:expect_unchanged()
+  end)
+
+  it('correct end_row for highlights copied to pager #41419', function()
+    command('echo "a" | echo "b"') -- Two lines; end_row should be offset by 2
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*10
+      {3:                                                     }|
+      a                                                    |
+      b                                                    |
+    ]])
+    feed('g<lt>')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*9
+      {3:                                                     }|
+      ^a                                                    |
+      b                                                    |
+                                                           |
+    ]])
+    command('echohl WarningMsg | echo "c" | echohl ErrorMsg | echo "de"')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*7
+      {3:                                                     }|
+      ^a                                                    |
+      b                                                    |
+      {19:c}                                                    |
+      {9:de}                                                   |
+                                                           |
+    ]])
+    feed('g<lt>')
+    screen:expect([[
+                                                           |
+      {1:~                                                    }|*9
+      {3:                                                     }|
+      {19:^c}                                                    |
+      {9:de}                                                   |
+                                                           |
+    ]])
   end)
 end)

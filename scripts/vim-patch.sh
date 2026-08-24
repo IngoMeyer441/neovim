@@ -582,7 +582,12 @@ list_vim_commits() { (
 # Prints all (sorted) "vim-patch:xxx" tokens found in the Nvim git log.
 list_vimpatch_tokens() {
   # Use sed…{7,7} to normalize (internal) Git hashes (for tokens caches).
-  _git -C "${NVIM_SOURCE_DIR}" log -E --grep='vim-patch:[^ ,{]{7,}' \
+  diff "${NVIM_SOURCE_DIR}/scripts/vimpatch_commit_ignore.txt" <(
+    _git -C "${NVIM_SOURCE_DIR}" log --format="%H" -E --grep='vim-patch:[^ ,{]{7,}'
+  ) |
+    grep -e '^> ' |
+    sed -e 's/^> //' |
+    _git -C "${NVIM_SOURCE_DIR}" log --no-walk --stdin \
     | grep -oE 'vim-patch:[^ ,{:]{7,}' \
     | sort \
     | uniq \
@@ -597,15 +602,17 @@ list_vimpatch_tokens() {
 # Filter reverted Vim tokens.
 list_vimpatch_numbers() {
   local patch_pat='(8\.[12]|9\.[0-9])\.[0-9]{1,4}'
-  diff "${NVIM_SOURCE_DIR}/scripts/vimpatch_token_reverts.txt" <(
-    _git -C "${NVIM_SOURCE_DIR}" log --format="%s%n%b" -E --grep="^[* ]*vim-patch:${patch_pat}" |
+  diff "${NVIM_SOURCE_DIR}/scripts/vimpatch_commit_ignore.txt" <(
+    _git -C "${NVIM_SOURCE_DIR}" log --format="%H" -E --grep="^[* ]*vim-patch:${patch_pat}"
+  ) |
+    grep -e '^> ' |
+    sed -e 's/^> //' |
+    _git -C "${NVIM_SOURCE_DIR}" log --no-walk --stdin --format="%s%n%b" |
     grep -oE "^[* ]*vim-patch:${patch_pat}" |
     sed -nEe 's/^[* ]*vim-patch:('"${patch_pat}"').*$/\1/p' |
     awk '{split($0, a, "."); printf "%d.%d.%04d\n", a[1], a[2], a[3]}' |
     sort |
-    uniq ) |
-    grep -e '^> ' |
-    sed -e 's/^> //'
+    uniq
 }
 
 declare -A tokens
@@ -928,21 +935,22 @@ is_na_patch() {
   for file in $FILES_REMAINING; do
     case ${file} in
       runtime/doc/*.txt | runtime/pack/dist/opt/*/doc/*.txt)
+        # TODO(@janlazo): ignore (multi-line) phrases based on regexp '{.\+ \(available\|compiled\) \(with\|without\) .\+}'
         HUNKS=$(git -c core.attributesfile="$NVIM_SOURCE_DIR"/.gitattributes -c 'diff.helphelp.xfuncname=^.*\*[^*]+\*$' -C "${VIM_SOURCE_DIR}" \
           diff-tree --no-commit-id -r -b -U0 \
           '-I^\s+$' \
           '-I^=+$' \
+          '-I^\|:redrawtabpanel\|' \
+          '-I^\|popup_[_a-z]+\(\)\|' \
           '-I^popup_[_a-z]+\(' \
           '-I\*\s+For Vim version [0-9]\.[0-9]\.\s+Last change: [0-9]+ [A-Z][a-z]+ [0-9]+' \
           '-I compiled (with|without) .*\(\|.+\|\) feature\.$' \
           '-I\|popup-windows\|' \
+          '-I\|tabpanel\|' \
           '-I\spopup window\s' \
-          "$patch" -- "${file}" |
-          grep -v -e '{.\+ \(available\|compiled\) \(with\|without\) .\+}' |
-          grep -Pzo '(?<=\n)@@ -[0-9][^@\n]+\+[0-9][^@\n]* @@[^@\n]*\n(?=([-+][^\n]*\n)+(@|$))' |
-          tr '\0' '\n')
+          "$patch" -- "${file}")
         if test -n "$HUNKS"; then
-          HUNK_NUM_FINAL=$(echo "$HUNKS" | sed 's/^@@ .* @@ \?//' | grep -cv -f "$NA_HUNKS_VIM")
+          HUNK_NUM_FINAL=$(echo "$HUNKS" | grep '^@@ .* @@' | sed 's/^@@ .* @@ //' | grep -cv -f "$NA_HUNKS_VIM")
           test "$HUNK_NUM_FINAL" -ne 0 && return 1
         fi
         ;;
@@ -962,16 +970,18 @@ is_na_patch() {
         HUNKS=$(git -C "${VIM_SOURCE_DIR}" diff-tree --no-commit-id -r -b -U0 \
           '-I^\s+$' \
           '-I^\s*/?\*/?$' \
-          '-I^\s*(//|/?\*).*\s([vV]im9|channel|job|popup|sound|terminal)' \
-          '-I^#\s*((ifdef|ifndef|undef)|(if|elif)\s.*defined\().*FEAT_' \
+          '-I^\s*(//|/?\*).*\s([vV]im9|E[0-9]{4} - |FEAT_|channel|job|popup|sound|terminal)' \
+          '-I^#\s*((ifdef|ifndef|undef)|(if|elif)\s.*defined\().*FEAT_[^_]' \
           '-I^#\s*(else|endif)' \
-          '-I^#\s*define\s+(FEAT|POPUPWIN|XDG)_' \
+          '-I^#\s*define\s+(FEAT|POPUPWIN|XDG|t)_[^_]' \
+          '-I^\s+(&&|\|\|)\s.*defined\(.*FEAT_[^_]' \
           '-IEVENT_TERMINALWINOPEN' \
           '-I^#\s*define\s+POPF_CURSORLINE\s' \
           '-I^typedef enum \{$' \
           '-I^\s+POPCLOSE_[A-Z]+,?$' \
           '-I^\} popclose_T;$' \
           '-I^EXTERN\schar\s+\*popup_transparent' \
+          '-I^EXTERN type_T static_types\[' \
           '-I^EXTERN type_T t_.* INIT[2-9]\(' \
           '-I^EXTERN\swin_T\s+\*popup_dragwin' \
           '-I^EXTERN char e_(abstract|class|enum|interface|type)_' \
@@ -979,24 +989,26 @@ is_na_patch() {
           '-I^EXTERN char e_.*enddef' \
           '-I^EXTERN char e_.*vim9' \
           '-I^EXTERN char e_cannot_declare_.*variable_str' \
+          '-I^EXTERN char e_cannot_define_new_.+_as_static' \
           '-I^EXTERN char e_dictionary_not_set' \
           '-I^EXTERN char e_dictnull' \
           '-I\sINIT\(= .+"E[0-9]+: (Abstract|Class|Enum|Interface|Type) ' \
           '-I\sINIT\(= .+"E[0-9]+: .*:def ' \
           '-I\sINIT\(= .+"E[0-9]+: .*enddef"' \
-          '-I\sINIT\(= .+"E[0-9]+: .*[vV]im9' \
+          '-I\sINIT\(= .+"E[0-9]+: .*([vV]im9|interface)' \
           '-I\sINIT\(= .+"E1016: Cannot declare .* variable: ' \
-          '-I\s+INIT\(= .+"E1103: Dictionary not set' \
-          '-I\schar.*\s+\*w_popup_title;' \
+          '-I\sINIT\(= .+"E1103: Dictionary not set' \
+          '-I\sINIT\(= .+"E1370: Cannot define a .+ as static' \
+          '-I\s(bool|char(|_u))\s+w_popup_image_[_a-zA-Z]+;' \
+          '-I\schar(|_u)\s+\*w_popup_title;' \
           '-I\sint\s+ch_[_a-zA-Z]+;' \
           '-I\sint\s+w_(filter_mode|firstline|popup_drag|want_scrollbar);' \
           '-I\slist_T\s+\*w_popup_mask;' \
           '-I\spopclose_T\sw_popup_close;' \
           '-I\s\*?w_popup_prop_[_a-z]+;' \
-          "$patch" -- "${file}" |
-          grep '^@@ .* @@')
+          "$patch" -- "${file}")
         if test -n "$HUNKS"; then
-          HUNK_NUM_FINAL=$(echo "$HUNKS" | sed 's/^@@ .* @@ \?//' | grep -cv -f "$NA_HUNKS_H")
+          HUNK_NUM_FINAL=$(echo "$HUNKS" | grep '^@@ .* @@' | sed 's/^@@ .* @@ //' | grep -cv -f "$NA_HUNKS_H")
           test "$HUNK_NUM_FINAL" -ne 0 && return 1
         fi
         ;;
@@ -1004,26 +1016,28 @@ is_na_patch() {
         HUNKS=$(git -C "${VIM_SOURCE_DIR}" diff-tree --no-commit-id -r -b -U0 \
           '-I^\s+$' \
           '-I^\s*/?\*/?$' \
-          '-I^\s*(//|/?\*).*\s([vV]im9|channel|job|popup|sound|terminal)' \
-          '-I^#\s*((ifdef|ifndef|undef)|(if|elif)\s.*defined\().*FEAT_' \
+          '-I^\s*(//|/?\*).*\s([vV]im9|E[0-9]{4} - |FEAT_|channel|job|popup|sound|terminal)' \
+          '-I^#\s*((ifdef|ifndef|undef)|(if|elif)\s.*defined\().*FEAT_[^_]' \
           '-I^#\s*(else|endif)' \
-          '-I^#\s*define\s+(FEAT|POPUPWIN|XDG)_' \
+          '-I^#\s*define\s+(FEAT|POPUPWIN|XDG|t)_[^_]' \
+          '-I^\s+(&&|\|\|)\s.*defined\(.*FEAT_[^_]' \
           '-IEVENT_TERMINALWINOPEN' \
           '-I^#\s*include\s+<proto/' \
           '-I^\s+\{"(popup|prop|sound)_[_a-z]+",.*f_(popup|prop|sound)_[_a-z]+},$' \
-          '-I^\s*(static)?\svoid$' \
-          '-I^static\svoid\s.+\(.+\);$' \
+          '-I^\s*(static)?\s(char(|_u)|hashtab_T|int|void)( \*)?$' \
+          '-I^static\s(char(|_u)|hashtab_T|int|void)\s\*?[^*]+\(.+\);$' \
           '-I#\s*define.*ex_ni$' \
+          '-I[.>]b_p_key' \
           '-I[_.>]sc_version = ' \
           '-I[_.>]uf_script_ctx_version = ' \
           '-I = skip_type\(.+\);$' \
           '-Icheck_typval_type\(.+\)' \
+          '-Icrypt_get_method_nr\(.+\)' \
           '-I\spopup_set_firstline\(.+\);' \
           '-I\svim_free\(.*w_popup_title\);' \
-          "$patch" -- "${file}" |
-          grep '^@@ .* @@')
+          "$patch" -- "${file}")
         if test -n "$HUNKS"; then
-          HUNK_NUM_FINAL=$(echo "$HUNKS" | sed 's/^@@ .* @@ \?//' | grep -cv -f "$NA_HUNKS_C")
+          HUNK_NUM_FINAL=$(echo "$HUNKS" | grep '^@@ .* @@' | sed 's/^@@ .* @@ //' | grep -cv -f "$NA_HUNKS_C")
           test "$HUNK_NUM_FINAL" -ne 0 && return 1
         fi
         ;;

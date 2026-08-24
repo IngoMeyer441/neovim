@@ -3728,6 +3728,7 @@ describe('decorations: inline virtual text', function()
       [21] = { reverse = true, foreground = Screen.colors.SlateBlue },
       [22] = { background = Screen.colors.Gray90 },
       [23] = { background = Screen.colors.Gray90, foreground = Screen.colors.Blue, bold = true },
+      [24] = { foreground = Screen.colors.Blue },
     }
 
     ns = api.nvim_create_namespace 'test'
@@ -5650,6 +5651,41 @@ describe('decorations: inline virtual text', function()
     }
   end)
 
+  it('is counted when linebreak decides if a word fits', function()
+    screen:try_resize(20, 4)
+    exec([[
+      setlocal linebreak
+      call setline(1, repeat('a', 12) .. ' bbcc dd')
+    ]])
+    api.nvim_buf_set_extmark(0, ns, 0, 19, { virt_text = { { '[hint]' } }, virt_text_pos = 'inline' })
+    -- "dd" plus the virtual text does not fit in the 2 remaining cells, so the whole word moves
+    -- down instead of the virtual text being split across the boundary.
+    screen:expect([[
+      ^aaaaaaaaaaaa bbcc   |
+      d[hint]d            |
+      {1:~                   }|
+                          |
+    ]])
+  end)
+
+  it('before a TAB affects its width in linebreak lookahead', function()
+    screen:try_resize(20, 4)
+    exec([[
+      setlocal linebreak tabstop=8
+      let &l:breakat = ' '
+      call setline(1, 'aaaa ' .. "\t" .. repeat('b', 11))
+    ]])
+    api.nvim_buf_set_extmark(0, ns, 0, 5, {
+      virt_text = { { 'VV' } },
+      virt_text_pos = 'inline',
+    })
+    screen:expect([[
+      ^aaaa VV bbbbbbbbbbb |
+      {1:~                   }|*2
+                          |
+    ]])
+  end)
+
   it('before double-width char that wraps', function()
     exec([[
       call setline(1, repeat('a', 40) .. '口' .. '12345')
@@ -7272,6 +7308,82 @@ if (h->n_buckets < new_n_buckets) { // expand
       {7:  }ne3                                             |
       {7:  }                                                |
       {1:~                                                 }|
+                                                        |
+    ]])
+  end)
+
+  it('highlight till eol with virt_lines_overflow=trunc', function()
+    insert('line1')
+    api.nvim_buf_set_extmark(0, ns, 0, 0, {
+      virt_lines = { { { 'VIRT LINE1', 'String' }, { '', 'Visual' } }, { { 'VIRT LINE2', 'String' } } },
+    })
+    screen:expect([[
+      line^1                                             |
+      {26:VIRT LINE1}{17:                                        }|
+      {26:VIRT LINE2}                                        |
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+  end)
+
+  it('highlight till eol with virt_lines_overflow=wrap', function()
+    insert('line1')
+    api.nvim_buf_set_extmark(0, ns, 0, 0, {
+      virt_lines = { { { 'VIRT LINE', 'String' }, { string.rep('-', 50), 'Visual' }, { '', 'Visual' } } },
+      virt_lines_overflow = 'wrap',
+    })
+    screen:expect([[
+      line^1                                             |
+      {26:VIRT LINE}{17:-----------------------------------------}|
+      {17:---------                                         }|
+      {1:~                                                 }|*8
+                                                        |
+    ]])
+  end)
+
+  it('highlight till eol with virt_lines_overflow=scroll', function()
+    command('set nowrap')
+    insert('abcdefghijklmnopqrstuvwxyz')
+    api.nvim_buf_set_extmark(0, ns, 0, 0, {
+      virt_lines = { { { 'VIRT LINE', 'String' }, { '', 'Visual' } } },
+      virt_lines_overflow = 'scroll',
+    })
+    screen:expect([[
+      abcdefghijklmnopqrstuvwxy^z                        |
+      {26:VIRT LINE}{17:                                         }|
+      {1:~                                                 }|*9
+                                                        |
+    ]])
+
+    feed('zl')
+    screen:expect([[
+      bcdefghijklmnopqrstuvwxy^z                         |
+      {26:IRT LINE}{17:                                          }|
+      {1:~                                                 }|*9
+                                                        |
+    ]])
+
+    feed('zl')
+    screen:expect([[
+      cdefghijklmnopqrstuvwxy^z                          |
+      {26:RT LINE}{17:                                           }|
+      {1:~                                                 }|*9
+                                                        |
+    ]])
+
+    feed('6zl')
+    screen:expect([[
+      ijklmnopqrstuvwxy^z                                |
+      {26:E}{17:                                                 }|
+      {1:~                                                 }|*9
+                                                        |
+    ]])
+
+    feed('zl')
+    screen:expect([[
+      jklmnopqrstuvwxy^z                                 |
+      {17:                                                  }|
+      {1:~                                                 }|*9
                                                         |
     ]])
   end)
