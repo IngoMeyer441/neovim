@@ -188,6 +188,9 @@ assign_commit_details() {
   # Extract co-authors from the commit message.
   vim_coauthors="$(echo "${vim_message}" | (grep -E '^Co-[Aa]uthored-[Bb]y: ' || true) | (grep -Fxv "${vim_coauthor0}" || true))"
   vim_coauthors="$(echo "${vim_coauthor0}"; echo "${vim_coauthors}")"
+  # Upstream may credit an AI tool; we don't advertise those, see AGENTS.md.
+  vim_coauthors="$(echo "${vim_coauthors}" \
+      | (grep -Eiv '^Co-authored-by: .*(aider|anthropic|chatgpt|claude|codex|copilot|cursor|devin|gemini|openai|opencode|windsurf)' || true))"
   # Remove Co-authored-by and Signed-off-by lines from the commit message.
   vim_message="$(echo "${vim_message}" | grep -Ev '^(Co-[Aa]uthored|Signed-[Oo]ff)-[Bb]y: ')"
   if [[ ${munge_commit_line} == "true" ]]; then
@@ -925,6 +928,7 @@ is_na_patch() {
   local NA_FILELIST="$NVIM_SOURCE_DIR/scripts/vim_na_files.txt"
   local NA_HUNKS_C="$NVIM_SOURCE_DIR/scripts/vim_na_hunks_c.txt"
   local NA_HUNKS_H="$NVIM_SOURCE_DIR/scripts/vim_na_hunks_h.txt"
+  local NA_HUNKS_HELP="$NVIM_SOURCE_DIR/scripts/vim_na_hunks_help.txt"
   local NA_HUNKS_VIM="$NVIM_SOURCE_DIR/scripts/vim_na_hunks_vim.txt"
 
   local FILES_REMAINING HUNKS HUNK_NUM_FINAL
@@ -940,17 +944,18 @@ is_na_patch() {
           diff-tree --no-commit-id -r -b -U0 \
           '-I^\s+$' \
           '-I^=+$' \
-          '-I^\|:redrawtabpanel\|' \
+          '-I^\|:(export|import|redrawtabpanel)\|' \
           '-I^\|popup_[_a-z]+\(\)\|' \
           '-I^popup_[_a-z]+\(' \
           '-I\*\s+For Vim version [0-9]\.[0-9]\.\s+Last change: [0-9]+ [A-Z][a-z]+ [0-9]+' \
           '-I compiled (with|without) .*\(\|.+\|\) feature\.$' \
+          '-I\|channel-open-[^|]+\|' \
           '-I\|popup-windows\|' \
           '-I\|tabpanel\|' \
           '-I\spopup window\s' \
           "$patch" -- "${file}")
         if test -n "$HUNKS"; then
-          HUNK_NUM_FINAL=$(echo "$HUNKS" | grep '^@@ .* @@' | sed 's/^@@ .* @@ //' | grep -cv -f "$NA_HUNKS_VIM")
+          HUNK_NUM_FINAL=$(echo "$HUNKS" | grep '^@@ .* @@' | sed 's/^@@ .* @@ //' | grep -cv -f "$NA_HUNKS_HELP")
           test "$HUNK_NUM_FINAL" -ne 0 && return 1
         fi
         ;;
@@ -966,6 +971,14 @@ is_na_patch() {
           "$patch" -- "${file}")
         test -n "$HUNKS" && return 1
         ;;
+      src/testdir/*.vim)
+        HUNKS=$(git -C "${VIM_SOURCE_DIR}" diff-tree --no-commit-id -r -b -U0 \
+          "$patch" -- "${file}")
+        if test -n "$HUNKS"; then
+          HUNK_NUM_FINAL=$(echo "$HUNKS" | grep '^@@ .* @@' | sed 's/^@@ .* @@ //' | grep -cv -f "$NA_HUNKS_VIM")
+          test "$HUNK_NUM_FINAL" -ne 0 && return 1
+        fi
+        ;;
       *.h)
         HUNKS=$(git -C "${VIM_SOURCE_DIR}" diff-tree --no-commit-id -r -b -U0 \
           '-I^\s+$' \
@@ -976,11 +989,12 @@ is_na_patch() {
           '-I^#\s*define\s+(FEAT|POPUPWIN|XDG|t)_[^_]' \
           '-I^\s+(&&|\|\|)\s.*defined\(.*FEAT_[^_]' \
           '-IEVENT_TERMINALWINOPEN' \
-          '-I^#\s*define\s+POPF_CURSORLINE\s' \
+          '-I^#\s*define\s+(ASSIGN_VAR|POPF_CURSORLINE)\s' \
           '-I^typedef enum \{$' \
-          '-I^\s+POPCLOSE_[A-Z]+,?$' \
+          '-I^\s+(CH_MODE|POPCLOSE)_[A-Z]+,?$' \
           '-I^\} popclose_T;$' \
           '-I^EXTERN\schar\s+\*popup_transparent' \
+          '-I^EXTERN\sint\s+disable_vterm_title_for_testing' \
           '-I^EXTERN type_T static_types\[' \
           '-I^EXTERN type_T t_.* INIT[2-9]\(' \
           '-I^EXTERN\swin_T\s+\*popup_dragwin' \
@@ -988,20 +1002,25 @@ is_na_patch() {
           '-I^EXTERN char e_.*def_function' \
           '-I^EXTERN char e_.*enddef' \
           '-I^EXTERN char e_.*vim9' \
+          '-I^EXTERN char e_[_a-z]+_channel' \
           '-I^EXTERN char e_cannot_declare_.*variable_str' \
           '-I^EXTERN char e_cannot_define_new_.+_as_static' \
+          '-I^EXTERN char e_cannot_use_a_return_type_with_new' \
           '-I^EXTERN char e_dictionary_not_set' \
           '-I^EXTERN char e_dictnull' \
           '-I\sINIT\(= .+"E[0-9]+: (Abstract|Class|Enum|Interface|Type) ' \
           '-I\sINIT\(= .+"E[0-9]+: .*:def ' \
           '-I\sINIT\(= .+"E[0-9]+: .*enddef"' \
           '-I\sINIT\(= .+"E[0-9]+: .*([vV]im9|interface)' \
+          '-I\sINIT\(= .+"E[0-9]+: .* (ch|channel)_[_a-z]+\(\)' \
           '-I\sINIT\(= .+"E1016: Cannot declare .* variable: ' \
           '-I\sINIT\(= .+"E1103: Dictionary not set' \
+          '-I\sINIT\(= .+"E1365: Cannot use a return type with the \\"new\\" function"' \
           '-I\sINIT\(= .+"E1370: Cannot define a .+ as static' \
           '-I\s(bool|char(|_u))\s+w_popup_image_[_a-zA-Z]+;' \
           '-I\schar(|_u)\s+\*w_popup_title;' \
           '-I\sint\s+ch_[_a-zA-Z]+;' \
+          '-I\sint\s+sv_const;' \
           '-I\sint\s+w_(filter_mode|firstline|popup_drag|want_scrollbar);' \
           '-I\slist_T\s+\*w_popup_mask;' \
           '-I\spopclose_T\sw_popup_close;' \
@@ -1016,7 +1035,7 @@ is_na_patch() {
         HUNKS=$(git -C "${VIM_SOURCE_DIR}" diff-tree --no-commit-id -r -b -U0 \
           '-I^\s+$' \
           '-I^\s*/?\*/?$' \
-          '-I^\s*(//|/?\*).*\s([vV]im9|E[0-9]{4} - |FEAT_|channel|job|popup|sound|terminal)' \
+          '-I^\s*(//|/?\*).*\s([vV]im9|E[0-9]{4} - |FEAT_|channel|job|popup|sound|terminal|uf_type_list)' \
           '-I^#\s*((ifdef|ifndef|undef)|(if|elif)\s.*defined\().*FEAT_[^_]' \
           '-I^#\s*(else|endif)' \
           '-I^#\s*define\s+(FEAT|POPUPWIN|XDG|t)_[^_]' \
@@ -1024,16 +1043,20 @@ is_na_patch() {
           '-IEVENT_TERMINALWINOPEN' \
           '-I^#\s*include\s+<proto/' \
           '-I^\s+\{"(popup|prop|sound)_[_a-z]+",.*f_(popup|prop|sound)_[_a-z]+},$' \
+          '-I^\s+ret_[a-z]+,\s+JOB_FUNC\(f_.+\)},$' \
           '-I^\s*(static)?\s(char(|_u)|hashtab_T|int|void)( \*)?$' \
           '-I^static\s(char(|_u)|hashtab_T|int|void)\s\*?[^*]+\(.+\);$' \
           '-I#\s*define.*ex_ni$' \
           '-I[.>]b_p_key' \
           '-I[_.>]sc_version = ' \
           '-I[_.>]uf_script_ctx_version = ' \
+          '-I[_.>]uf_type_list' \
           '-I = skip_type\(.+\);$' \
           '-Icheck_typval_type\(.+\)' \
           '-Icrypt_get_method_nr\(.+\)' \
           '-I\spopup_set_firstline\(.+\);' \
+          '-I\sterm_focus_change\(.+\);$' \
+          '-I\supdate_vim9_script_var\(.+\);$' \
           '-I\svim_free\(.*w_popup_title\);' \
           "$patch" -- "${file}")
         if test -n "$HUNKS"; then

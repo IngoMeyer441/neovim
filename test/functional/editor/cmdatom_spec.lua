@@ -320,7 +320,7 @@ describe('CmdAtom', function()
     )
   end)
 
-  it('"!" operator captures its stuffed cmdline continuation', function()
+  it('"!" operator captures its stuffed cmdline', function()
     -- ":.,.+1!" + typed "{prg}<CR>" completes the operator atom, like "d/END<CR>". #41447
     local prg = n.testprg('shell-test') .. ' REP 2 X'
     fn.setline(1, { 'b', 'a', '', 'e', 'c', 'd' })
@@ -356,6 +356,59 @@ describe('CmdAtom', function()
       { type = 'operator', operator = 'gq', keys = 'gqip' },
       pick(atom_last(), 'type', 'operator', 'keys')
     )
+  end)
+
+  it('stuffed translations execute within their command (exec_stuffed)', function()
+    -- A register prefix crosses into the "." replay; an explicit register must not touch the
+    -- small-delete register.
+    atoms_start()
+    fn.setline(1, { 'aaa bbb', 'ccc ddd' })
+    feed('gg0dw')
+    eq('aaa ', fn.getreg('-'))
+    feed('j0"z.')
+    eq('ccc ', fn.getreg('z'))
+    eq('aaa ', fn.getreg('-'))
+    eq({ 'bbb', 'ddd' }, get_lines())
+    -- One atom: the stuffed replay collects into the "."-labeled composite.
+    eq(
+      { type = 'operator', lhs = k('"z.'), keys = '"zdw', reg = 'z' },
+      pick(atom_last(), 'type', 'lhs', 'keys', 'reg')
+    )
+    -- i_CTRL-O inside a stuffed translation's insert session ("S" == "cc"): the session resumes
+    -- after ONE normal command.
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'xxxx', 'yyyy' })
+    feed('ggSabc<C-o>0def<Esc>')
+    eq({ 'defabc', 'yyyy' }, get_lines())
+    -- i_CTRL-O resolution is lossy: keys=nil, replay the "S"-labeled `lhs` instead.
+    eq(
+      { type = 'mapping', lhs = k('Sabc<C-o>0def<Esc>') },
+      pick(atom_last(), 'type', 'lhs', 'keys')
+    )
+    -- r<Tab> under 'expandtab'/'smarttab' ("{count}R<Tab><Esc>": edit() does the tab).
+    command('set expandtab shiftwidth=4 tabstop=4')
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'abcdefgh', 'ABCDEFGH' })
+    feed('gg03r<Tab>')
+    eq('            defgh', fn.getline(1))
+    eq(
+      { type = 'insert', lhs = k('3r<Tab>'), keys = k('3R<Tab><Esc>') },
+      pick(atom_last(), 'type', 'lhs', 'keys')
+    )
+    feed('j0.')
+    eq('            DEFGH', fn.getline(2))
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'abcdefgh' })
+    feed('gg0r<C-v><Tab>')
+    eq('\tbcdefgh', fn.getline(1))
+    command('set noexpandtab smarttab shiftwidth=4 tabstop=8')
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'abcdefgh' })
+    feed('gg02r<Tab>')
+    eq('\tcdefgh', fn.getline(1))
+    command('set expandtab& smarttab& shiftwidth& tabstop&')
+    -- "&" and "count&" (":.,.+Ns").
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'blue a', 'blue b', 'blue c', 'blue d' })
+    command('1s/blue/red/')
+    feed('2G&3G2&')
+    eq({ 'red a', 'red b', 'red c', 'red d' }, get_lines())
+    eq({ type = 'excmd', lhs = '2&', keys = ':.,.+1s\n' }, pick(atom_last(), 'type', 'lhs', 'keys'))
   end)
 
   it('mapping that enters :terminal mode', function()
@@ -939,7 +992,7 @@ describe('CmdAtom', function()
     )
   end)
 
-  it('an insert session atom captures its text', function()
+  it('insert-session atom captures its text', function()
     fn.setline(1, { 'aaa' })
     feed('gg0')
     atoms_start()
@@ -964,6 +1017,38 @@ describe('CmdAtom', function()
     -- session's inserted text as fields.
     feed('3iZ<Esc>')
     eq({ type = 'insert', count = 3, text = 'Z' }, pick(atom_last(), 'type', 'count', 'text'))
+  end)
+
+  it('insert-session entered programmatically, still captures *user* input #41516', function()
+    atoms_start()
+    n.exec_lua([[
+      vim.keymap.set('i', '<C-j>', function()
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', false)
+        vim.schedule(function()
+          vim.api.nvim_feedkeys('i', 'n', false)
+        end)
+      end)
+    ]])
+    local before = #atoms()
+    feed('i')
+    n.exec_lua('vim.wait(50)')
+    feed('<C-j>')
+    n.exec_lua('vim.wait(50)')
+    feed('<Esc>')
+    local evs = atoms()
+    eq(before + 2, #evs)
+    eq({ k('1i<Esc>'), k('1i<Esc>') }, { evs[#evs - 1].keys, evs[#evs].keys })
+    -- Typed text within such a session lands in its atom...
+    n.exec_lua([[vim.schedule(function() vim.api.nvim_feedkeys('i', 'n', false) end)]])
+    n.exec_lua('vim.wait(50)')
+    feed('hi<Esc>')
+    eq({ text = 'hi', keys = k('1ihi<Esc>') }, pick(atom_last(), 'text', 'keys'))
+    -- ...but with NO typed input within it, the session emits nothing.
+    before = #atoms()
+    n.exec_lua([[vim.schedule(function() vim.api.nvim_feedkeys('i', 'n', false) end)]])
+    n.exec_lua('vim.wait(50)')
+    n.exec_lua([[vim.api.nvim_feedkeys('\27', 'n', false)]])
+    eq(before, #atoms())
   end)
 
   it("operatorfunc atom includes the getchar()'d payload", function()
@@ -1041,6 +1126,130 @@ describe('CmdAtom', function()
       { type = 'motion', keys = 'f(', lhs = 'f(' },
       { type = 'excmd', keys = ':call DelSurround()\n)', lhs = 'ds)' },
     }, atoms_tail(2, 'type', 'keys', 'lhs'))
+
+    -- Same, mid-op ("t(" + "ds" in one batch): the next mapping is not the pending op's operand.
+    command('nnoremap ,D d')
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'a x(one)' })
+    feed('gg0')
+    n.poke_eventloop()
+    feed(',Dt(ds)')
+    eq({ 'one' }, get_lines())
+    eq({
+      { type = 'operator', keys = 'dt(', lhs = ',Dt(' },
+      { type = 'excmd', keys = ':call DelSurround()\n)', lhs = 'ds)' },
+    }, atoms_tail(2, 'type', 'keys', 'lhs'))
+  end)
+
+  it('replay of deleted/redefined Lua mapping fails (E5117)', function()
+    n.exec_lua([[
+      vim.keymap.set('o', 'gt', function()
+        vim.cmd('normal! viw')
+      end)
+    ]])
+    fn.setline(1, { 'k1 k2', 'k3 k4' })
+    atoms_start()
+    feed('gg0dgt')
+    eq(' k2', fn.getline(1))
+    local ev = atom_last()
+    n.exec_lua([[
+      vim.keymap.del('o', 'gt')
+      vim.keymap.set('o', 'gt', function()
+        vim.cmd('normal! viw')
+      end)
+    ]])
+    feed('j0')
+    n.exec_lua(([[vim.api.nvim_feedkeys(%q, 'nx', false)]]):format(ev.keys))
+    eq('k3 k4', fn.getline(2))
+    t.matches('E5117', fn.execute('messages'))
+    -- Running the (re-defined) mapping emits CmdAtom.keys with the updated id.
+    feed('dgt')
+    eq(' k4', fn.getline(2))
+    n.exec_lua(([[vim.api.nvim_feedkeys(%q, 'nx', false)]]):format(atom_last().keys))
+    eq('k4', fn.getline(2))
+  end)
+
+  it('operator completed by a Lua textobject (:omap) #41482', function()
+    -- Lua :omap textobject (starts Visual mode, |omap-info|) captures the operator: `keys` is the
+    -- redobuff (K_LUA + mapping-id).
+    n.exec_lua([[
+      vim.keymap.set('o', 'gt', function()
+        vim.cmd('normal! viw')
+      end)
+    ]])
+    fn.setline(1, { 'aaa xxx', 'bbb yyy', 'ccc zzz' })
+    atoms_start()
+    feed('gg0wdgt')
+    eq('aaa ', fn.getline(1))
+    local ev = atom_last()
+    eq(
+      { type = 'operator', operator = 'd', lhs = 'dgt', changed = true },
+      pick(ev, 'type', 'operator', 'lhs', 'cmd', 'changed')
+    )
+    t.matches('^d\128', ev.keys) -- "d" + K_LUA…: the redobuf.
+    feed('j0w')
+    n.exec_lua(([[vim.api.nvim_feedkeys(%q, 'nx', false)]]):format(ev.keys))
+    eq('bbb ', fn.getline(2))
+    -- "." repeats it, captured as one "."-labeled operator atom.
+    feed('j0w.')
+    eq('ccc ', fn.getline(3))
+    eq(
+      { type = 'operator', operator = 'd', lhs = '.' },
+      pick(atom_last(), 'type', 'operator', 'lhs')
+    )
+
+    -- 'operatorfunc' + Lua textobject: "ghgt". Non-edit, still emits its operator atom.
+    n.exec_lua([[
+      _G.oplog = {}
+      vim.keymap.set('n', 'gh', function()
+        vim.o.operatorfunc = function(mtype)
+          table.insert(_G.oplog, mtype)
+        end
+        return 'g@'
+      end, { expr = true })
+    ]])
+    feed('gg0ghgt')
+    eq({ 'char' }, n.exec_lua('return _G.oplog'))
+    ev = atom_last()
+    eq(
+      { type = 'operator', operator = 'g@', lhs = 'ghgt', changed = false },
+      pick(ev, 'type', 'operator', 'lhs', 'cmd', 'changed')
+    )
+    t.matches('^g@\128', ev.keys) -- "g@" + K_LUA….
+    n.exec_lua(([[vim.api.nvim_feedkeys(%q, 'nx', false)]]):format(ev.keys))
+    eq({ 'char', 'char' }, n.exec_lua('return _G.oplog'))
+
+    -- Lua 'operatorfunc' editing via ":norm!" must not clobber the captured "g@" redo/atom.
+    n.exec_lua([[
+      vim.keymap.set('n', 'gr', function()
+        vim.o.operatorfunc = function()
+          vim.cmd([=[normal! `[v`]rX]=])
+        end
+        return 'g@'
+      end, { expr = true })
+    ]])
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'mmm nnn', 'ooo ppp' })
+    feed('gg0grgt')
+    eq('XXX nnn', fn.getline(1))
+    ev = atom_last()
+    eq(
+      { type = 'operator', operator = 'g@', lhs = 'grgt', changed = true },
+      pick(ev, 'type', 'operator', 'lhs', 'changed')
+    )
+    t.matches('^g@\128', ev.keys) -- "g@" + K_LUA….
+    feed('j0')
+    n.exec_lua(([[vim.api.nvim_feedkeys(%q, 'nx', false)]]):format(ev.keys))
+    eq('XXX ppp', fn.getline(2))
+
+    -- Aborted operator (cpo+=E empty region) cancels its redo: no atom captured.
+    command('set cpo+=E')
+    n.exec_lua([[vim.keymap.set('o', 'ge', function() end)]])
+    feed('dge')
+    eq('XXX ppp', fn.getline(2))
+    eq(
+      { type = 'mapping', lhs = 'dge', changed = false },
+      pick(atom_last(), 'type', 'lhs', 'changed')
+    )
+    command('set cpo-=E')
   end)
 
   it('|restore-undo-cursor|: `pos` + `undoseq` restore across every undo form', function()
@@ -1221,12 +1430,15 @@ describe('CmdAtom', function()
     )
   end)
 
-  it('"." mapping repeats the last edit atom, plugin operations included', function()
+  it('"." mapping (|edit-repeat| example in repeat.txt)', function()
     n.exec_lua([[
       local last ---@type vim.event.cmdatom.data?
       vim.api.nvim_create_autocmd('CmdAtom', {
         callback = function(ev)
-          if ev.data.changed and ev.data.lhs ~= '.' then
+          local is_redo_or_undo = ev.data.changed
+            and (ev.data.undoseq or 0) <= (vim.b[ev.buf].maxseq or 0)
+          vim.b[ev.buf].maxseq = math.max(vim.b[ev.buf].maxseq or 0, ev.data.undoseq or 0)
+          if ev.data.changed and not is_redo_or_undo and ev.data.lhs ~= '.' then
             last = ev.data
           end
         end,
@@ -1255,6 +1467,29 @@ describe('CmdAtom', function()
     feed('3G0f(.')
     retry(nil, 1000, function()
       eq('b two', fn.getline(3))
+    end)
+
+    -- Edit fed by nvim_feedkeys(…, "mt") #41485.
+    n.exec_lua([[
+      vim.keymap.set('n', '<M-m>', function()
+        vim.api.nvim_feedkeys('dl', 'mt', false)
+      end)
+    ]])
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'abcd' })
+    feed('gg0<M-m>')
+    n.poke_eventloop()
+    eq('bcd', fn.getline(1))
+    feed('.')
+    retry(nil, 1000, function()
+      eq('cd', fn.getline(1))
+    end)
+    -- Undo is not captured: "." still repeats the edit.
+    feed('u')
+    n.poke_eventloop()
+    eq('bcd', fn.getline(1))
+    feed('.')
+    retry(nil, 1000, function()
+      eq('cd', fn.getline(1))
     end)
   end)
 

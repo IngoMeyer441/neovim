@@ -28,6 +28,7 @@
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
 #include "nvim/macros_defs.h"
+#include "nvim/mapping.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/normal.h"
@@ -73,11 +74,18 @@ static uint64_t atom_captures = 0;
 static bool atom_suppressed = false;
 /// Mapping edited the buffer, or its insert-session cascaded: cascades as one unit, incl. motions.
 static bool map_edit = false;
-/// Ticks per command frame (CmdFrame.id).
+/// Incremented per command frame (CmdFrame.id).
 static uint64_t frame_id = 0;
+/// The executing command's frame; its `parent` chain spans nested `normal_execute()`.
+static CmdFrame *cur_frame = NULL;
 
-/// Accumulating composite atom: an executing mapping/macro. See `vatom` for Visual composite.
+/// The pending atom, while it spans CmdFrames (a mapping's commands, an operator awaiting its
+/// motion, i_CTRL-O). See `vatom` for Visual composite.
+///
+/// Also used by undo, to restore cursor position.
 static struct {
+  bool open;          ///< True from the atom's first toplevel frame until it resolves.
+  CmdOrigin origin;   ///< State at the atom's start.
   CmdAtomVec atoms;   ///< Subatoms of the mapping/macro.
   char *lhs;          ///< Label: mapping LHS or macro "@x" (NULL: not collecting).
   bool queued;        ///< A cascadable atom was queued (g_atoms) while collecting.
@@ -86,11 +94,7 @@ static struct {
   bool macro;         ///< Macro execution: captured as an "@x"-labeled atom.
   uint64_t frame;     ///< CmdFrame already executing when a lookahead resolved this mapping
                       ///< ("f(" + mapped key in one batch). 0: none.
-  CmdOrigin origin;   ///< State at start.
 } composite;
-
-/// The executing command's frame; its `parent` chain spans nested `normal_execute()`.
-static CmdFrame *cur_frame = NULL;
 
 /// State of a Visual composite atom.
 typedef enum {
@@ -112,7 +116,7 @@ static struct {
 
 /// Per-command capture scratch.
 static struct {
-  uint64_t redo_frame;  ///< The CmdFrame that prepped redo (prep_redo*()). 0: none.
+  uint64_t redo_frame;  ///< Frame whose redobuf (potentially) defines the atom. 0: none.
   char *cmdline;      ///< The ":" payload captured at cmdline accept. NULL: none.
                       ///< Note: search payloads ("/pat<CR>") travel on `cmdarg.searchbuf`.
   bool ins_cascaded;  ///< Did the command's insert-session already cascade?
@@ -194,7 +198,7 @@ CmdSpec atom_cmd_spec(const cmdarg_T *cap)
 static CmdOrigin atom_origin(void)
 {
   CmdOrigin origin = { .win = curwin, .pos = curwin->w_cursor,
-                       .tick = buf_get_changedtick(curbuf) };
+                       .tick = buf_get_changedtick(curbuf), .maptick = maptick };
   set_bufref(&origin.buf, curbuf);
   return origin;
 }
@@ -217,6 +221,17 @@ static bool atom_origin_moved(CmdOrigin origin)
 static int atom_origin_undoseq(CmdOrigin origin)
 {
   return bufref_valid(&origin.buf) ? origin.buf.br_buf->b_u_seq_cur : 0;
+}
+
+/// Cursor position from the pending atom's start, or else `w_cursor`.
+pos_T atom_origin_pos(buf_T *buf)
+{
+  CmdOrigin o = composite.origin;
+  if (composite.open && o.buf.br_buf == buf && bufref_valid(&o.buf)
+      && buf_get_changedtick(buf) == o.tick) {
+    return o.pos;
+  }
+  return curwin->w_cursor;
 }
 
 /// Composes a CmdSpec into `redo_keys` format.
@@ -280,7 +295,7 @@ static String atoms_concat_keys(CmdAtomVec atoms)
 /// Renders a (cmd, arg, op) char for CmdAtom: key-notation for special keys, else UTF-8. NUL => "".
 static char *atom_key_name(int c)
 {
-  if (c == NUL) {
+  if (c == NUL || c == K_LUA) {
     return xstrdup("");
   }
   if (IS_SPECIAL(c) || c < ' ') {
@@ -521,7 +536,7 @@ bool atom_composite_active(void)
   return composite.lhs != NULL;
 }
 
-/// Starts a composite: accumulate a mapping/macro's subatoms.
+/// Starts collecting subatoms.
 static void atom_composite_start(const char *lhs, size_t len)
 {
   xfree(composite.lhs);
@@ -529,7 +544,6 @@ static void atom_composite_start(const char *lhs, size_t len)
   composite.queued = false;
   composite.lossy = false;
   composite.frame = 0;
-  composite.origin = atom_origin();
 }
 
 /// Emits the composite atom with its collected subatoms (`CmdAtom.atoms`).
@@ -574,20 +588,23 @@ static void atom_composite_end(void)
   atom_free(&atom);
 }
 
-/// Entering :terminal mode ends the composite.
-void atom_term_enter(void)
-{
-  if (!mc_replaying()) {
-    atom_composite_end();
-  }
-}
-
-/// Discards the collecting composite (its subatoms): error/interrupt voided it.
+/// Discards the pending atom and its subatoms: error/interrupt voided it (but the continuation
+/// keys, typeahead/stuff, were flushed).
 void atom_composite_abort(void)
 {
   composite.macro = false;
   XFREE_CLEAR(composite.lhs);
   atoms_free(&composite.atoms);
+  composite.open = false;
+}
+
+/// Entering :terminal mode resolves (ends) the pending atom. Terminal keys are never captured.
+void atom_term_enter(void)
+{
+  if (!mc_replaying()) {
+    atom_composite_end();
+    composite.open = false;
+  }
 }
 
 /// True if the just-executed command is user input. Excludes re-execution of captured
@@ -796,11 +813,11 @@ void atom_typed_del(size_t len)
   kv_size(typed.keys) -= MIN(len, kv_size(typed.keys));
 }
 
-/// Forgets the redo-atom: new command, or a policy exclusion.
-/// Only toplevel commands track it: a nested ":normal!" must not disturb it.
+/// Discards the redo-atom: new or invalid command. Only at toplevel: a nested frame (":normal!",
+/// an exec_stuffed() drain) must not disturb the enclosing command's.
 static void atom_redo_reset(void)
 {
-  if (!atom_is_user_cmd()) {
+  if (!atom_is_user_cmd() || (cur_frame != NULL && cur_frame->parent != NULL)) {
     return;
   }
   curcmd.redo_frame = 0;
@@ -824,17 +841,18 @@ void atom_op_global_set(void)
   curcmd.op_global = true;
 }
 
-/// Sets `curcmd.redo_frame`: at frame end, the redobuf defines `CmdAtom.keys`.
-/// Not for nested frames (":norm"), nor Lua operators.
-void atom_redo_set(CmdSpec spec)
+/// Declares that the current frame prepped redo. Not for nested frames (":norm").
+void atom_redo_prepped(void)
 {
-  if (spec.cmd == K_LUA) {
-    atom_redo_reset();
-    return;
-  }
   if (atom_is_user_cmd()) {
     curcmd.redo_frame = cur_frame != NULL ? cur_frame->id : 0;
   }
+}
+
+/// Redo-prep was canceled (aborted operation).
+void atom_redo_cancel(void)
+{
+  curcmd.redo_frame = 0;
 }
 
 /// Starts accumulating a composite for a macro's commands, labeled "@x".
@@ -850,7 +868,7 @@ void atom_macro_start(int regname)
   }
 }
 
-/// Starts accumulating a composite for a command that stuffs its "translation" ("x" => "dl").
+/// Starts accumulating composite for a cmd that stuffs its translation ("x" => "dl", "." => redo).
 void atom_stuff_start(const cmdarg_T *cap)
 {
   // Not while another composite collects: a mapping's own label wins ("nnoremap <F6> xw").
@@ -873,6 +891,10 @@ void atom_map_start(const char *lhs, size_t len, bool peeked)
     return;
   }
   if (atom_composite_active()) {
+    if (get_real_state() == MODE_OP_PENDING) {
+      // The pending operator's own composite ("gr" <expr> mapping => "g@") absorbs its operand.
+      return;
+    }
     // Mapping resolved from another's trailing prefix ("nmap x j," + "nnoremap ,w w"): end the
     // pending composite, so each `lhs` owns only the keys it produced.
     typed.map_start = kv_size(typed.keys);
@@ -1098,7 +1120,8 @@ void atom_capture_op(oparg_T *oap, cmdarg_T *cap, bool redo_yank)
         XFREE_CLEAR(repeat_cmdline);
       }
     } else if (cap->cmdchar == K_LUA) {
-      redo_append_num(repeat_luaref);
+      char buf[NUMBUFLEN];
+      redo_append_str(buf, snprintf(buf, sizeof(buf), "%d", repeat_luamap));
       redo_append_str(S_LEN(NL_STR));
     }
   } else if (Visual.active && redoable && oap->motion_force == NUL) {
@@ -1167,9 +1190,12 @@ InsSession atom_ins_start(int cmd, long count, VisualIns vis, bool vblock)
 void atom_ins_end(const InsSession *session, bool busy)
 {
   bool visual = session->vis != kVInsNone;
-  if (!session->typed || busy || restart_edit != 0 || !atom_buf_has_consumers()
+  bool user_input = session->typed
+                    // A session is user input, if user input occurred during it. #41516
+                    || maptick != session->origin.maptick;
+  if (!user_input || busy || restart_edit != 0 || !atom_buf_has_consumers()
       || (visual && session->vis != kVInsKeys)) {
-    if (session->typed && (busy || restart_edit != 0) && atom_composite_active()) {
+    if (user_input && (busy || restart_edit != 0) && atom_composite_active()) {
       // Incomplete session (i_CTRL-O): its resolution is never captured.
       composite.lossy = true;
     }
@@ -1194,11 +1220,14 @@ static void atom_ins_push(const InsSession *session, bool cascade)
   atom_push_raw(cascade, &atom);
 }
 
-/// Samples the pre-command state at normal_execute() entry; atom_cmd_end() diffs against it to
-/// classify the command (motion, Visual-mode transition, edit). Pushes the frame (`cur_frame`).
+/// Toplevel entry: starts a new atom. Samples the pre-cmd state (`origin`); pushes the frame.
 void atom_cmd_start(CmdFrame *old)
 {
   old->origin = atom_origin();
+  if (cur_frame == NULL && !composite.open) {
+    composite.open = true;
+    composite.origin = old->origin;
+  }
   old->visual = Visual;
   old->keytyped = KeyTyped;
   old->captures = atom_captures;
@@ -1214,10 +1243,7 @@ void atom_cmd_start(CmdFrame *old)
   old->parent = cur_frame;
   cur_frame = old;
   curcmd.op_global = false;
-  // A stuffed continuation frame keeps the redo-prep. "!ipsort<CR>" spans both frames.
-  if (!(KeyStuffed && curcmd.redo_frame == old->id)) {
-    atom_redo_reset();
-  }
+  atom_redo_reset();
 }
 
 /// Captures the typed command's atom: one atom per command, produced from the CmdFrame diff and
@@ -1250,7 +1276,9 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
                    && (!Visual.active
                        || (equalpos(old->visual.start, Visual.start)
                            && old->visual.mode == Visual.mode));
-  if (opaque && unchanged) {
+  if (opaque && unchanged
+      // Operator atom? (non-edit Lua/<Cmd> 'operatorfunc'). #41482
+      && curcmd.redo_frame != old->id) {
     return;
   }
   bool ins_cascaded = user && curcmd.ins_cascaded;
@@ -1302,11 +1330,6 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
   //
   // Capture: does this command own an atom?
   //
-  if (!stuff_empty() && curcmd.redo_frame == old->id && !Visual.active && !old->visual.active) {
-    // The stuffed continuation completes the redo (op_filter/do_bang()), and is the next frame
-    // (stuff precedes typeahead). Flushed instead? atom_cmd_start() checks KeyStuffed.
-    curcmd.redo_frame = old->id + 1;
-  }
   if ((vis && atom_captures == old->captures && ca->oap->op_type == OP_NOP)
       || (!Visual.active
           && !old->visual.active
@@ -1340,8 +1363,7 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
     // Route: decide the atom type and push it.
     //
     if (curcmd.redo_frame == old->id && !mouse_cmd) {
-      // Not for mouse commands (middle-click paste): pasting at every cursor would use
-      // viewport-dependent positions.
+      // Redoable edit ("dw", "p", "rX", "g@…"): this frame's redobuf defines the atom.
       CmdAtom atom = atom_from_redo(kAOperator);
       // The payload ('operatorfunc' getchar()) is not in the captured redo, append it.
       atom_payload_append(&atom, old);
@@ -1356,7 +1378,7 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
       }
     } else if (ca->searchbuf != NULL && (ca->cmdchar == '/' || ca->cmdchar == '?')
                && !(vis && unchanged)) {
-      // Payload typed in the cmdline ("/pat<CR>"). Emit-only. Not if pattern was not found.
+      // Payload typed in search cmdline ("/pat<CR>"). Emit-only. Not if pattern was not found.
       CmdAtom atom = atom_from_cmdline(kAMotion, ca, ca->searchbuf);
       atom.origin = old->origin;
       atom_push(false, &atom);
@@ -1402,8 +1424,8 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
   }
 }
 
-/// Completes a cmd at normal_execute() exit: captures its atom, pushes its staged one, ends the
-/// composite. Pops the frame.
+/// Completes a normal_execute(): captures its atom, pushes its staged one, ends the composite.
+/// Pops the frame.
 void atom_cmd_end(cmdarg_T *ca, CmdFrame *old)
 {
   atom_capture_cmd(ca, old);
@@ -1415,15 +1437,17 @@ void atom_cmd_end(cmdarg_T *ca, CmdFrame *old)
   }
 
   // The clock edge. Only at toplevel: cascading from a nested normal_execute() would recurse.
-  // Deferred while a mapping executes (its keys are still in typebuf), so its commands collapse as
-  // one unit; likewise for a macro's LAST command, which may stuff a translation ("x" => "dl").
+  // Deferred while a mapping executes (keys in typebuf), so its commands collapse as one unit;
+  // likewise while stuffed keys are pending (i_CTRL-O dance, or exec_stuffed() deferred under
+  // textlock).
   if (old->parent == NULL && !mc_replaying() && typebuf_typed() && stuff_empty()) {
     mc_clock_edge(map_edit);
     map_edit = false;
-    // Mapping contains its continuation. While op-pending, selection-active, or insert-will-resume
-    // (i_CTRL-O), composite keeps collecting: ",Dw" (":nnoremap ,D d") is one atom, `keys="dw"`.
+    // One atom spans its continuation: while op-pending, selection-active, or insert-will-resume
+    // (i_CTRL-O), it stays open. ",Dw" (":nnoremap ,D d") is one atom, `keys="dw"`.
     if (ca->oap->op_type == OP_NOP && !Visual.active && restart_edit == 0) {
       atom_composite_end();
+      composite.open = false;  // Resolved.
     }
   }
   cur_frame = old->parent;

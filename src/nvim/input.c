@@ -1,4 +1,4 @@
-// input.c: The input engine "bytes layer" (input_cmdatom.c. is the "policy layer").
+// input.c: The input engine "bytes layer" (input_cmdatom.c is the "policy layer").
 //
 // - Get a character from the user, a script file, or the keybufs described below.
 // - Apply mappings and abbreviations to typed keys (the :map tables live in mapping.c; the
@@ -8,7 +8,12 @@
 //
 // Concepts:
 // - "Stuffing" = when some internal logic pushes keys to execute next. This is how a cmd
-//   "translates" into another cmd: "x" stuffs "dl" (nv_optrans()), "." stuffs the redo buf.
+//   "translates" into another cmd: "x" stuffs "dl", "." stuffs the redo buf.
+//   - XXX NOTE: stuffed keys must have a consumer in the current codepath (not "later on the main
+//     loop"). There are 3 different rituals, depending on the consumer:
+//     1. basic translation: stuff, then exec_stuffed(); runs as CmdFrames of the stuffing command.
+//     2. input staged for a nested reader (getcmdline(), edit()): stuff only.
+//     3. main-loop wakeup (K_NOP): stuffed so it precedes input (unlike an event).
 // - TYPEAHEAD vs READ-AHEAD:
 //   - typeahead = external input that arrived faster than can be executed (user typed fast).
 //   - readahead = Nvim's own self-input.
@@ -18,10 +23,14 @@
 //       (KeyStuffed).
 //
 // These buffers are used:
-// - stuff buffers (`readbuf1`, `readbuf2`) are readahead buffers.
-//   - TWO stuff buffers, because stuffing nests: a cmd executed FROM redo keys (readbuf2) may
+//
+//   input ──► [ typebuf │ readbuf2 (redo) │ readbuf1 (stuff) ] ──► vgetc() ──► exec
+//               ▲ mappings expand at typebuf front
+//
+// - typeahead (`typebuf`).
+// - readahead/stuff buffers (`readbuf1`, `readbuf2`).
+//   - Two stuff buffers, because stuffing nests: a cmd executed FROM redo keys (readbuf2) may
 //     itself stuff a translation (readbuf1), which must be consumed before the remaining redo.
-// - `typebuf`: typeahead (see below).
 // - `redobuff` (RedoState): the current + previous change.
 // - `recordbuff`: accumulates the keys of a recording ("q").
 //
@@ -132,6 +141,8 @@ static kvec_withinit_t(char, MAXMAPLEN + 1) on_key_buf = KVI_INITIAL_VALUE(on_ke
 
 /// Number of following bytes that should not be stored for vim.on_key().
 static size_t on_key_ignore_len = 0;
+/// Nesting depth of getchar()/getcharstr(). Will skip vim.on_key() callbacks. #40010
+static int getchar_depth = 0;
 
 static int typeahead_char = 0;  ///< typeahead char that's not flushed
 
@@ -185,6 +196,7 @@ static const char e_cmd_mapping_must_end_with_cr[]
   = N_("E1255: <Cmd> mapping must end with <CR>");
 static const char e_cmd_mapping_must_end_with_cr_before_second_cmd[]
   = N_("E1136: <Cmd> mapping must end with <CR> before second <Cmd>");
+static const char e_lua_mapping_gone[] = N_("E5117: Lua mapping no longer exists");
 
 /// Frees the buffer's memory; it becomes empty.
 static void free_buff(StuffBuf *buf)
@@ -564,7 +576,7 @@ void redo_free_all(void)
 void prep_redo(bool as_atom, bool arg_meta, CmdSpec spec)
 {
   if (as_atom) {
-    atom_redo_set(spec);
+    atom_redo_prepped();
   }
   redo_new(spec);
   if (block_redo) {
@@ -582,7 +594,7 @@ void prep_redo_visual(const char *keys, size_t len, CmdSpec spec)
   CmdSpec stored = spec;
   stored.regname = 0;
   stored.count = 0;
-  atom_redo_set(stored);
+  atom_redo_prepped();
   redo_new(stored);
   if (block_redo) {
     return;
@@ -600,6 +612,7 @@ void redo_cancel(void)
     return;
   }
 
+  atom_redo_cancel();
   kv_destroy(redobuff.cur.body);
   redobuff.cur = redobuff.old;
   redobuff.old = (CmdSpec){ 0 };
@@ -722,14 +735,6 @@ void redo_append_char(int c)
   }
 }
 
-// Append a number to the redo buffer.
-void redo_append_num(int n)
-{
-  if (!block_redo) {
-    kv_printf(redobuff.cur.body, "%d", n);
-  }
-}
-
 /// Appends string `s` (must be typeahead encoding) to the stuff buffer.
 void stuffReadbuff(const char *s)
   FUNC_ATTR_NONNULL_ALL
@@ -756,7 +761,7 @@ void stuffReadbuffLen(const char *s, ptrdiff_t len)
 /// Stuff "s" into the stuff buffer, leaving special key codes unmodified and
 /// escaping other K_SPECIAL bytes.
 /// Change CR, LF and ESC into a space.
-void stuffReadbuffSpec(const char *s)
+void stuffReadbuffSpecial(const char *s)
   FUNC_ATTR_NONNULL_ALL
 {
   while (*s != NUL) {
@@ -1811,7 +1816,7 @@ int vgetc(void)
 
   // Execute Lua on_key callbacks.
   kvi_push(on_key_buf, NUL);
-  if (nlua_exec_on_key(c, on_key_buf.items)) {
+  if (getchar_depth == 0 && nlua_exec_on_key(c, on_key_buf.items)) {
     // Keys following K_COMMAND/K_LUA/K_PASTE_START aren't normally received by
     // vim.on_key() callbacks, so discard them along with the current key.
     if (c == K_COMMAND) {
@@ -1948,6 +1953,7 @@ static void getchar_common(typval_T *argvars, typval_T *rettv, bool allow_number
 
   no_mapping++;
   allow_keys++;
+  getchar_depth++;
   if (!simplify) {
     no_reduce_keys++;
   }
@@ -1994,6 +2000,7 @@ static void getchar_common(typval_T *argvars, typval_T *rettv, bool allow_number
   atom_payload_end();
   no_mapping--;
   allow_keys--;
+  getchar_depth--;
   if (!simplify) {
     no_reduce_keys--;
   }
@@ -3412,12 +3419,12 @@ char *getcmdkeycmd(int promptc, void *cookie, int indent, bool do_concat)
   return line_ga.ga_data;
 }
 
-/// Handle a Lua mapping: get its LuaRef from typeahead and execute it.
+/// Handle a Lua mapping: get its id from typeahead and execute its callback.
 ///
-/// @param may_repeat  save the LuaRef for redoing with "." later
-/// @param discard     discard the keys instead of executing the LuaRef
+/// @param may_repeat  Save the mapping-id for redoing with "." later
+/// @param discard     Discard the keys instead of executing the callback.
 ///
-/// @return  false if getting the LuaRef was aborted, true otherwise
+/// @return  false if getting the id was aborted or mapping no longer exists, true otherwise.
 bool map_execute_lua(bool may_repeat, bool discard)
 {
   garray_T line_ga;
@@ -3449,9 +3456,15 @@ bool map_execute_lua(bool may_repeat, bool discard)
     return !aborted;
   }
 
-  LuaRef ref = (LuaRef)atoi(line_ga.ga_data);
+  const int id = atoi(line_ga.ga_data);
+  const LuaRef ref = map_luaid_get(id);
+  if (ref == LUA_NOREF) {
+    ga_clear(&line_ga);
+    emsg(_(e_lua_mapping_gone));
+    return false;
+  }
   if (may_repeat) {
-    repeat_luaref = ref;
+    repeat_luamap = id;
   }
 
   Error err = ERROR_INIT;

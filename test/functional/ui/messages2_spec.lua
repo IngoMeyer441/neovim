@@ -11,7 +11,8 @@ local api, clear, command, exec_lua, feed = n.api, n.clear, n.command, n.exec_lu
 local msg_timeout = 400
 local function set_msg_target_zero_ch()
   exec_lua(function()
-    require('vim._core.ui2').enable({ msg = { targets = 'msg', msg = { timeout = msg_timeout } } })
+    vim.o.messagesopt = 'hit-enter,history:500,progress:c,timeout:' .. msg_timeout
+    require('vim._core.ui2').enable({ msg = { targets = 'msg' } })
     vim.o.cmdheight = 0
   end)
 end
@@ -189,7 +190,8 @@ describe('messages2', function()
       foo [+9]                                             |
     ]])
     -- Do enter the pager in normal mode (with keybinding setup).
-    exec_lua([[require('vim._core.ui2').cfg.pager_char = '<CR>']])
+    -- Also checks that "messagesopt=pager:…" is normalized to the keytrans() form.
+    command('set messagesopt+=pager:<cr>')
     command('nmap <Esc> <Cmd>fclose<CR>')
     feed('<CR>')
     screen:expect([[
@@ -197,7 +199,7 @@ describe('messages2', function()
       foo                                                  |*12
                                          1,1            Top|
     ]])
-    exec_lua([[require('vim._core.ui2').cfg.pager_char = nil]])
+    command('set messagesopt-=pager:<cr>')
     -- Changing 'laststatus' reveals the global statusline with a pager height
     -- exceeding the available lines: #38008.
     command('set laststatus=3')
@@ -263,24 +265,26 @@ describe('messages2', function()
                                                            |
     ]])
     feed(':messages<CR>')
+    -- Cmdwin stays open behind the pager: it is a regular window (#40312).
     screen:expect([[
       ^foo                                                  |
       foo                                                  |*4
-      {1:~                                                    }|*7
+      {1::}echo "foo" | echo "bar\nbaz\n"->repeat(&lines)      |
+      {1::}                                                    |
+      {1:~                                                    }|*5
       {3:[Pager]                            1,1            Top}|
       {16::}{15:messages}                                            |
     ]])
-    -- Cmdwin is restored after pager is closed.
+    -- Closing the pager returns to the cmdwin, unchanged (it was never closed).
     feed('q')
     screen:expect([[
       x                                                    |
       {1:~                                                    }|*3
       ─────────────────────────────────────────────────────|
       {1::}echo "foo" | echo "bar\nbaz\n"->repeat(&lines)      |
-      {1::}messages                                            |
       {1::}^                                                    |
-      {1:~                                                    }|*4
-      {3:[Command Line]                     3,0-1          All}|
+      {1:~                                                    }|*5
+      {3:[Command Line]                     2,0-1          All}|
       {16::}{15:messages}                                            |
     ]])
     -- Configured maximum height.
@@ -397,11 +401,22 @@ describe('messages2', function()
     feed([[echo "bar\n"->repeat(&lines)<CR>]])
     screen:expect([[
       ^                                                     |
-      {1:~                                                    }|*4
-      {3:                                                     }|
+      {1:~                                                    }|*5
       foo                                                  |
       bar                                                  |*5
       bar [+8]                                             |
+    ]])
+  end)
+
+  it('does not draw the message seperator with cmdheight=0', function()
+    command('set laststatus=2 statusline=%f')
+    command('set cmdheight=0')
+    command('echo "hello"')
+
+    screen:expect([[
+      ^                                                     |
+      {1:~                                                    }|*12
+      hello                                                |
     ]])
   end)
 
@@ -983,8 +998,7 @@ describe('messages2', function()
     command('ls!')
     screen:expect([[
       ^                                                     |
-      {1:~                                                    }|
-      {3:                                                     }|
+      {1:~                                                    }|*2
       foo                                                  |*2
       {14:f}oo [+6]                                             |
     ]])
@@ -1093,7 +1107,8 @@ describe('messages2', function()
 
   it('msg window timer does not trigger ModeChanged #40780', function()
     exec_lua(function()
-      require('vim._core.ui2').enable({ msg = { targets = 'msg', msg = { timeout = 50 } } })
+      vim.o.messagesopt = 'hit-enter,history:500,progress:c,timeout:50'
+      require('vim._core.ui2').enable({ msg = { targets = 'msg' } })
     end)
     command('let g:modechanged = []')
     command([[autocmd ModeChanged i:n call add(g:modechanged, copy(v:event))]])
@@ -1195,7 +1210,7 @@ describe('messages2', function()
   end)
 
   it('configured cmd window height prevents expanded message #39375', function()
-    exec_lua('require("vim._core.ui2").enable({ msg = { cmd = { height = 1 } } })')
+    command('set messagesopt+=maxheight:1') -- Rounds up to a single row.
     command('echo "foo\nbar"')
     screen:expect([[
       ^                                                     |

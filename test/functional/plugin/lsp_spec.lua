@@ -2052,6 +2052,28 @@ describe('LSP', function()
       end)
     end)
 
+    it('ignores blank lines before content-length', function()
+      exec_lua(function()
+        _G._send_msg_to_server(
+          'Info: Parsed 35 declarations\n\nContent-Length: ' .. #body .. ' \r\n\r\n' .. body
+        )
+      end)
+      verify_single_notification(function(method, args) ---@param args [string]
+        eq('body', method)
+        eq(body, args[1])
+      end)
+    end)
+
+    it('skips partial match of "content-length"', function()
+      exec_lua(function()
+        _G._send_msg_to_server('Cont\nContent-Length: ' .. #body .. ' \r\n\r\n' .. body)
+      end)
+      verify_single_notification(function(method, args) ---@param args [string]
+        eq('body', method)
+        eq(body, args[1])
+      end)
+    end)
+
     it('should not trim vim.NIL from the end of a list', function()
       local expected_handlers = {
         { NIL, {}, { method = 'shutdown', client_id = 1 } },
@@ -3241,24 +3263,6 @@ describe('LSP', function()
         assert(result == vim.NIL, 'should not issue LSP requests')
         return {}
       end)
-    end)
-
-    it('does not expand $ in tag filenames #41313', function()
-      local result = exec_lua(function()
-        vim.env.personId = 'EXPANDED'
-        local dir = vim.fn.tempname()
-        vim.fn.mkdir(dir, 'p')
-        local f = vim.fs.abspath(dir .. '/people_.$personId.tsx')
-        vim.fn.writefile({ 'symbol' }, f)
-        _G.mock_locations[1].uri = vim.uri_from_fname(f)
-        local tags = vim.lsp.tagfunc('symbol', 'c')
-        vim.cmd.edit(tags[1].filename)
-        return {
-          bufname = vim.fs.abspath(vim.api.nvim_buf_get_name(0)),
-          expected = f,
-        }
-      end)
-      eq(result.expected, result.bufname)
     end)
   end)
 

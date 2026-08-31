@@ -1489,14 +1489,23 @@ M.funcs = {
       Returns a |Dictionary| with information about Insert mode
       completion.  See |ins-completion|.
       The items are:
+         auto		|TRUE| when Vim started this completion by
+      		itself, which is what 'autocomplete' does,
+      		and |FALSE| when a key asked for it, such as
+      		|i_CTRL-X_CTRL-O|.  A |complete-functions|
+      		function can read this to tell the two apart.
+      		Returned only when asked for in {what}.
          completed	Return a dictionary containing the entries of
       		the currently selected index item.
          items	List of all completion candidates.  Each item
       		is a dictionary containing the entries "word",
-      		"abbr", "menu", "kind", "info" and
-      		"user_data".  "equal", "preselect" and
-      		"commit_chars" are included only for items that
-      		set them.
+      		"abbr", "menu", "kind", "info",
+      		"abbr_hlgroup", "kind_hlgroup" and
+      		"user_data". The highlight group entries hold
+      		the name that the item was added with,
+      		or an empty string.
+      		"equal", "preselect" and "commit_chars" are
+      		included only for items that set them.
       		See |complete-items|.
          matches	Same as "items", but only returns items that
       		are matching current query.  If both "matches"

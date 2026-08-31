@@ -48,9 +48,9 @@ describe('API/win', function()
     it('works', function()
       command('new')
       local windows = api.nvim_list_wins()
-      neq(api.nvim_win_get_buf(windows[2]), api.nvim_win_get_buf(windows[1]))
+      neq(api.nvim_win_get_buf(windows[1]), api.nvim_win_get_buf(windows[2]))
       api.nvim_win_set_buf(windows[2], api.nvim_win_get_buf(windows[1]))
-      eq(api.nvim_win_get_buf(windows[2]), api.nvim_win_get_buf(windows[1]))
+      eq(api.nvim_win_get_buf(windows[1]), api.nvim_win_get_buf(windows[2]))
     end)
 
     it('validates args', function()
@@ -70,9 +70,9 @@ describe('API/win', function()
       })
       feed('q:')
       n.poke_eventloop()
-      -- Replacing the cmdwin's own buffer is blocked by 'winfixbuf'.
-      matches('winfixbuf', pcall_err(api.nvim_win_set_buf, 0, new_buf))
-      -- But other windows can be touched freely.
+      -- Replacing the cmdwin's own buffer is allowed.
+      api.nvim_win_set_buf(0, new_buf)
+      -- Also other windows can be touched freely.
       local next_buf = api.nvim_create_buf(true, true)
       api.nvim_win_set_buf(new_win, next_buf)
       eq(next_buf, api.nvim_win_get_buf(new_win))
@@ -651,13 +651,13 @@ describe('API/win', function()
     end)
   end)
 
-  describe('get_position', function()
+  describe('get_tabpage', function()
     it('works', function()
       command('tabnew')
       command('vsplit')
-      eq(api.nvim_win_get_tabpage(api.nvim_list_wins()[1]), api.nvim_list_tabpages()[1])
-      eq(api.nvim_win_get_tabpage(api.nvim_list_wins()[2]), api.nvim_list_tabpages()[2])
-      eq(api.nvim_win_get_tabpage(api.nvim_list_wins()[3]), api.nvim_list_tabpages()[2])
+      eq(api.nvim_list_tabpages()[1], api.nvim_win_get_tabpage(api.nvim_list_wins()[1]))
+      eq(api.nvim_list_tabpages()[2], api.nvim_win_get_tabpage(api.nvim_list_wins()[2]))
+      eq(api.nvim_list_tabpages()[2], api.nvim_win_get_tabpage(api.nvim_list_wins()[3]))
     end)
   end)
 
@@ -1693,8 +1693,8 @@ describe('API/win', function()
         row = 1,
         col = 1,
       })
-      eq(api.nvim_win_get_tabpage(win), first_tab)
-      eq(api.nvim_get_current_tabpage(), new_tab)
+      eq(first_tab, api.nvim_win_get_tabpage(win))
+      eq(new_tab, api.nvim_get_current_tabpage())
     end)
 
     it('switches to new windows in non-current tabpages when enter=true', function()
@@ -1709,8 +1709,8 @@ describe('API/win', function()
         row = 1,
         col = 1,
       })
-      eq(api.nvim_win_get_tabpage(win), first_tab)
-      eq(api.nvim_get_current_tabpage(), first_tab)
+      eq(first_tab, api.nvim_win_get_tabpage(win))
+      eq(first_tab, api.nvim_get_current_tabpage())
     end)
 
     local function setup_tabbed_autocmd_test()

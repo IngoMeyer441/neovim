@@ -44,6 +44,20 @@ local M = {
   cmd_on_key = nil, ---@type integer? vim.on_key namespace while cmdline is expanded.
 }
 
+--- Resolved options values from 'messagesopt', 'fillchars'.
+local mopt = { maxrows = 0, msgsep = ' ', pager = nil, timeout = 4000 } ---@type table<string,any>
+
+--- Resolves the option values used by this module.
+function M.on_option_changed()
+  mopt.msgsep = vim.opt.fcs:get().msgsep or ' '
+  local v = vim.opt.messagesopt:get() --[[@as table<string,string|boolean>]]
+  mopt.maxrows = math.ceil(o.lines * (tonumber(v.maxheight) or 50) / 100)
+  mopt.timeout = tonumber(v.timeout) or 4000
+  -- Normalize to the keytrans() form that cmd_on_key() compares against: "<cr>" => "<CR>".
+  local key = v.pager
+  mopt.pager = type(key) == 'string' and key ~= '' and fn.keytrans(vim.keycode(key)) or nil
+end
+
 -- An external redraw indicates the start of a new batch of messages in the cmdline.
 api.nvim_set_decoration_provider(ui.ns, {
   on_start = function()
@@ -88,7 +102,7 @@ function M.msg:start_timer(buf, id)
     else
       self:clear()
     end
-  end, ui.cfg.msg.msg.timeout)
+  end, mopt.timeout)
 end
 
 --- Place or delete a virtual text mark in the cmdline or message window.
@@ -330,7 +344,7 @@ function M.show_msg(tgt, kind, content, replace_last, append, id)
         M.cmd.msg_row = texth.end_row
 
         -- Expand the cmdline for a non-error message that doesn't fit.
-        local expand = ui.cfg.msg.cmd.height < 1 or ui.cfg.msg.cmd.height > ui.cmdheight
+        local expand = mopt.maxrows > ui.cmdheight
         local error_kinds = { rpc_error = 1, emsg = 1, echoerr = 1, lua_error = 1 }
         if expand and texth.all > ui.cmdheight and (ui.cmdheight == 0 or not error_kinds[kind]) then
           tgt, buf = M.expand_msg(tgt)
@@ -598,8 +612,7 @@ local function cmd_on_key(key, typed)
   -- Check if window was entered and reopen with original config. A shown (but not entered)
   -- pager is dismissed instead; "g<" passes through to reopen and enter it.
   local can_enter = not api.nvim_get_mode().mode:match('[it]') and not pager_shown()
-  local enter = can_enter
-      and (typed == ui.cfg.pager_char or typed_g and (typed == '<lt>' or key == '<'))
+  local enter = can_enter and (typed == mopt.pager or typed_g and (typed == '<lt>' or key == '<'))
     or (typed:find('LeftMouse') and fn.getmousepos().winid == ui.wins.cmd)
   if enter then
     M.expand_msg('cmd', 'pager', true)
@@ -652,17 +665,17 @@ local dialog_on_key = function(_, typed)
   end
 end
 
-local was_cmdwin = ''
 ---@param min integer Minimum window height.
 local function win_row_height_border(tgt, min)
-  local cfgmin = ui.cfg.msg[tgt].height --[[@as number]]
-  min = math.min(min, cfgmin < 1 and math.ceil(o.lines * cfgmin) or cfgmin)
+  local h = (tgt ~= 'cmd' and ui.cfg.msg[tgt].height or 0) --[[@as number]]
+  min = math.min(min, tgt == 'cmd' and mopt.maxrows or h < 1 and math.ceil(o.lines * h) or h)
   if tgt ~= 'pager' then
     return (tgt == 'msg' and 0 or 1) - ui.cmd.wmnumode,
       math.max(1, min),
-      min < o.lines - ui.cmdheight
+      min < o.lines - ui.cmdheight and ui.cmdheight > 0
   end
-  local cmdwin = fn.getcmdwintype() ~= was_cmdwin and api.nvim_win_get_height(0) or 0
+  local cmdwin_win = require('vim._core.cmdwin').win()
+  local cmdwin = cmdwin_win and api.nvim_win_get_height(cmdwin_win) or 0
   local global_stl = (cmdwin > 0 or o.laststatus == 3) and 1 or 0
   local row = 1 - cmdwin - global_stl
   local top = min < o.lines - ui.cmdheight - global_stl - cmdwin
@@ -671,15 +684,15 @@ local function win_row_height_border(tgt, min)
 end
 
 local function enter_pager()
-  -- Cannot leave the cmdwin to enter the pager, so close and re-open it.
-  in_pager, was_cmdwin = true, fn.getcmdwintype()
-  if was_cmdwin ~= '' then
-    api.nvim_command('quit')
-  elseif M.cmd_on_key then
+  in_pager = true
+  if M.cmd_on_key then
     api.nvim_feedkeys(vim.keycode('<Esc>'), 'tn', false)
   end
-  -- Cmdwin is closed one event iteration later so schedule in case it was open.
+  -- Schedule: the fed <Esc> above is processed one event iteration later.
   vim.schedule(function()
+    if not api.nvim_win_is_valid(ui.wins.pager) then
+      return -- Pager was already closed somehow.
+    end
     local height, id = api.nvim_win_get_height(ui.wins.pager), 0
     api.nvim_set_option_value('eiw', '', { scope = 'local', win = ui.wins.pager })
     api.nvim_set_current_win(ui.wins.pager)
@@ -703,10 +716,6 @@ local function enter_pager()
       else
         pcall(api.nvim_set_option_value, 'eiw', 'all', { scope = 'local', win = ui.wins.pager })
         api.nvim_del_autocmd(id)
-        if was_cmdwin ~= '' then
-          api.nvim_feedkeys('q' .. was_cmdwin, 'n', false)
-          was_cmdwin = ''
-        end
       end
       pcall(api.nvim_win_set_config, ui.wins.pager, cfg)
     end)
@@ -724,7 +733,7 @@ function M.set_pos(tgt, focus)
       and api.nvim_win_get_config(win)
     if cfg and (tgt or not cfg.hide) then
       local texth = api.nvim_win_text_height(win, { max_height = o.lines })
-      local top = { vim.opt.fcs:get().msgsep or ' ', 'MsgSeparator' }
+      local top = { mopt.msgsep, 'MsgSeparator' }
       cfg = { hide = false, relative = 'laststatus', col = 10000 } ---@type table
       cfg.row, cfg.height, cfg.border = win_row_height_border(t, texth.all)
       cfg.border = cfg.border and t ~= 'msg' and { '', top, '', '', '', '', '', '' } or nil

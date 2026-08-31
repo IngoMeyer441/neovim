@@ -174,6 +174,10 @@ describe('TUI :detach', function()
       nvim_set .. ' laststatus=2 background=dark',
     }, { env = env_notermguicolors, cols = opts.cols })
     tt.override_screen_expect_for_conpty(screen)
+    -- The child's `--listen` socket is created asynchronously wrt its PTY output.
+    t.retry(nil, 2000, function()
+      assert(vim.uv.fs_stat(child_server))
+    end)
   end
 
   it('does not stop server', function()
@@ -3666,15 +3670,13 @@ describe('TUI', function()
     local chan = api.nvim_get_option_value('channel', { buf = 0 })
     local pid = fn.jobpid(chan)
     fn.chanclose(chan)
-    retry(nil, 2000, function()
-      eq(vim.NIL, api.nvim_get_proc(pid))
-    end)
     -- On Windows the console terminates the child with STATUS_CONTROL_C_EXIT (-1073741510).
     screen:expect({
       any = is_os('win') and '%[Process exited %-?%d+%]' or '%[Process exited 1%]',
     })
     -- Closing stdin must skip the DA1 wait.
     t.assert_nolog('timed out waiting for DA1 response', testlog, 100)
+    eq(vim.NIL, api.nvim_get_proc(pid))
   end)
 end)
 
