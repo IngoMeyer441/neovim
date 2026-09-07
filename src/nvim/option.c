@@ -78,6 +78,7 @@
 #include "nvim/macros_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mbyte.h"
+#include "nvim/mcursor.h"
 #include "nvim/memfile.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -6836,6 +6837,11 @@ bool can_bs(int what)
     return false;
   }
 
+  // Multicursor replays may join lines only if the primary's own span did.
+  if (what == BS_EOL && !mc_ins_replay_can_join()) {
+    return false;
+  }
+
   // support for number values was removed but we keep '2' since it is used in
   // legacy tests
   if (*p_bs == '2') {
@@ -7145,7 +7151,7 @@ int64_t get_scrolloff_value(win_T *wp)
 /// global value when appropriate.
 int64_t get_scrolloffpad_value(win_T *wp)
 {
-  return wp->w_p_sop == -1 ? p_sop : curwin->w_p_sop;
+  return wp->w_p_sop == -1 ? p_sop : wp->w_p_sop;
 }
 
 /// Return the effective 'sidescrolloff' value for the current window, using the

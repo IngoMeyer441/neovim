@@ -30,6 +30,7 @@
 #include "nvim/macros_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mbyte.h"
+#include "nvim/mcursor.h"
 #include "nvim/memory.h"
 #include "nvim/normal.h"
 #include "nvim/normal_defs.h"
@@ -44,32 +45,12 @@
 
 #include "input_cmdatom.c.generated.h"
 
-static bool mc_replaying(void)
-{
-  return false;
-}
-
-static void mc_vsel_refresh(void)
-{
-}
-
-static void mc_vsel_clear(void)
-{
-}
-
-static bool mc_following(void)
-{
-  return false;
-}
-
-static void mc_clock_edge(bool map_edit)
-{
-}
-
 CmdAtomVec g_atoms = KV_INITIAL_VALUE;
 /// Capture clock: ticks on any kind of capture (atom push, Visual subatom). Used to answer "was
 /// anything captured during this command (including its nested frames)?".
 static uint64_t atom_captures = 0;
+/// "Cursor-global" op (undo, "g CTRL-A"), possibly in a nested frame. Command must not cascade.
+static uint64_t global_ops = 0;
 /// Suppresses atom pushes.
 static bool atom_suppressed = false;
 /// Mapping edited the buffer, or its insert-session cascaded: cascades as one unit, incl. motions.
@@ -96,22 +77,31 @@ static struct {
                       ///< ("f(" + mapped key in one batch). 0: none.
 } composite;
 
-/// State of a Visual composite atom.
+/// State of a Visual session atom.
 typedef enum {
   kVatomNone = 0,   ///< No pending Visual atom.
 
   // Kind:
-  kVatomTyped = 1,  ///< User input (typed, or mapping/macro): emitted/cascaded at end.
-  kVatomFed = 2,    ///< Fed input (":norm! vjd", scheduled feedkeys): preps redo, no emit/cascade.
+  kVatomTyped = 1,  ///< User input (typed, or mapping/macro): emit/cascade.
+  kVatomFed = 2,    ///< Non-user input (programmatic). See `atom_visual_typed`.
 
   kVatomVoid = 4,   ///< Not replayable: tainted/poisoned (by mouse, gv, …). But may emit CmdAtom.
 } VatomState;
 
-/// Accumulating Visual composite: the full Visual keysequence (selection keys + operator).
+/// Accumulating Visual session atom: the full Visual keysequence (selection keys + operator).
+///
+/// NOTE: Visual session is not modeled as `composite` bc they may overlap (not clean nesting):
+/// a mapping can open before `v` and end mid-selection ("nmap X vjj" followed by "d").
+///
+/// Visual session can overlap CmdFrames: ":norm!" keys run as child frames, which are never user
+/// input; the enclosing _user_ frame owns whatever selection they leave pending. #41705
+/// - ":norm! viwd" completes op in a child frame => no emit/cascade (primary only).
+/// - ":norm! viw" leaves the selection open => enclosing frame cascades (dry-runs) the selection.
 static struct {
   CmdAtomVec atoms;  ///< Accumulated subatoms. A void session collects them as the `lhs` label.
   VatomState state;
   CmdOrigin origin;  ///< State at session start (before the "v").
+  uint64_t frame;    ///< Last subatom frame; enclosing frames must not recapture its keys.
 } vatom;
 
 /// Per-command capture scratch.
@@ -120,7 +110,6 @@ static struct {
   char *cmdline;      ///< The ":" payload captured at cmdline accept. NULL: none.
                       ///< Note: search payloads ("/pat<CR>") travel on `cmdarg.searchbuf`.
   bool ins_cascaded;  ///< Did the command's insert-session already cascade?
-  bool op_global;     ///< Already applied to every cursor (undo, "g CTRL-A"): must not cascade.
 } curcmd;
 
 /// Interactively typed keys of the executing command. Collected during a composite (its `lhs`
@@ -238,6 +227,7 @@ pos_T atom_origin_pos(buf_T *buf)
 /// @return Allocated key sequence.
 static char *atom_redo_keys(CmdSpec spec)
 {
+  assert(!mc_replaying());  // Captured material is never re-captured.
   char *keys = redo_keys(&spec).data;
   assert(keys != NULL);  // A spec with no chars/count/reg composes to nothing.
   return keys;
@@ -424,6 +414,7 @@ void atom_push_raw(bool cascade, CmdAtom *atom)
       atom_captures++;
     }
     kv_push(vatom.atoms, *atom);
+    vatom.frame = cur_frame->id;
     return;
   }
   atom_captures++;
@@ -468,7 +459,7 @@ static void atom_push(bool cascade, CmdAtom *atom)
     atom_free(atom);
     return;
   }
-  atom_push_raw(cascade, atom);
+  atom_push_raw(cascade && mc_buf_has_cursors(curbuf), atom);
 }
 
 /// Stages an atom built before its command executes (do_pending_operator() prep-exempt, Visual
@@ -517,8 +508,7 @@ static char *atom_composite_lhs(void)
   return keys.items;
 }
 
-/// Queues an LHS-replay atom: a mapping that edited invisibly (:normal/:call, "ds'") re-runs
-/// per cursor from its LHS + payload keys. Cascade only.
+/// Queues an internal-only (no emit) atom for mcursor cascade.
 void atom_lhs_replay_queue(void)
 {
   kv_push(g_atoms, ((CmdAtom){ .type = kAMapping, .keys = atom_composite_lhs(), .remap = true }));
@@ -561,21 +551,15 @@ static void atom_composite_end(void)
   char *lhs = atom_composite_lhs();
   XFREE_CLEAR(composite.lhs);
   CmdAtom atom;
-  if (kv_size(composite.atoms) == 0) {
-    // The mapping's commands captured nothing (Ex/Lua commands, no-ops): but it is still a user
-    // action, so emit it with empty keys (identified by `lhs`).
-    atom = (CmdAtom){ .type = kAMapping, .keys = xstrdup(""), .lhs = lhs, .remap = remap,
-                      .origin = composite.origin,
-                      .changed = atom_origin_changed(composite.origin),
-                      .moved = atom_origin_moved(composite.origin),
-                      .undoseq = atom_origin_undoseq(composite.origin) };
-  } else if (kv_size(composite.atoms) == 1) {
+  if (kv_size(composite.atoms) == 1) {
     // Single subatom. "Unwrap" it so e.g. a motion mapping reports kAMotion, not kAMapping.
     atom = kv_pop(composite.atoms);
     xfree(atom.lhs);
     atom.lhs = lhs;
     atom.remap = remap;
   } else {
+    // Zero subatoms (captured nothing (Ex/Lua, no-op); still a user action, identified by `lhs`),
+    // or multiple subatoms.
     atom = (CmdAtom){ .type = kAMapping, .keys = atoms_concat_keys(composite.atoms).data,
                       .lhs = lhs, .remap = remap, .origin = composite.origin,
                       .changed = atom_origin_changed(composite.origin),
@@ -612,7 +596,8 @@ void atom_term_enter(void)
 bool atom_is_user_cmd(void)
 {
   // reg_executing is already reset for a macro's LAST command (its trailing "x" stuffs "dl").
-  return ((reg_executing == 0 && !pending_end_reg_executing) || composite.macro)
+  return !mc_replaying()
+         && ((reg_executing == 0 && !pending_end_reg_executing) || composite.macro)
          && ex_normal_busy == 0;
 }
 
@@ -646,13 +631,13 @@ static bool atom_capturable(bool consumers, bool keytyped)
 /// True if anything consumes atoms from `curbuf`. For performance: skip capture if no consumers.
 static bool atom_buf_has_consumers(void)
 {
-  return has_event(EVENT_CMDATOM);
+  return mc_buf_has_cursors(curbuf) || has_event(EVENT_CMDATOM);
 }
 
 /// XXX: Checks consumers for ANY buffer: a mapping/macro may navigate into a buffer w/ cursors...
 static bool atom_has_consumers(void)
 {
-  return has_event(EVENT_CMDATOM);
+  return mc_count() > 0 || has_event(EVENT_CMDATOM);
 }
 
 /// Classifies key/command `cmd` (`arg` is its argument char, for two-char commands like "g;").
@@ -742,12 +727,11 @@ unsigned atom_key_class(int cmd, int arg)
 /// Captures an accepted ":" or "<Cmd>" cmdline payload.
 void atom_cmdline_set(int firstc, const char *line, size_t len)
 {
-  // Not for nested cmdlines opened by a command's own execution (":normal", macros): they would
-  // overwrite the user command's payload, e.g. `:exe "normal! :echo 1\r"`.
-  if (!atom_is_user_cmd() || (firstc != ':' && firstc != K_COMMAND)) {
+  // Not for nested cmdlines (":norm", macros), nor a second accept (":put ." => ":put _"
+  // translation): the first accept is the payload.
+  if (!atom_is_user_cmd() || (firstc != ':' && firstc != K_COMMAND) || curcmd.cmdline != NULL) {
     return;
   }
-  xfree(curcmd.cmdline);
   curcmd.cmdline = xmemdupz(line, len);
 }
 
@@ -758,10 +742,11 @@ static bool atom_typed_collecting(void)
          || (cur_frame != NULL && cur_frame->payload_start != SIZE_MAX);
 }
 
-/// Opens the CmdFrame's payload slice: keys from getchar(), input() append to `CmdAtom.keys`.
+/// Opens the CmdFrame's payload slice: keys from getchar()/input()/… append to `CmdAtom.keys`.
 void atom_payload_start(void)
 {
-  if (cur_frame != NULL && cur_frame->payload_start == SIZE_MAX && !mc_replaying()) {
+  if (expr_map_lock == 0  // Do not append input read during expr EVALUATION.
+      && cur_frame != NULL && cur_frame->payload_start == SIZE_MAX && !mc_replaying()) {
     cur_frame->payload_start = cur_frame->payload_end = kv_size(typed.keys);
   }
 }
@@ -769,7 +754,8 @@ void atom_payload_start(void)
 /// Closes (or extends) the payload slice.
 void atom_payload_end(void)
 {
-  if (cur_frame != NULL && cur_frame->payload_start != SIZE_MAX && !mc_replaying()) {
+  if (expr_map_lock == 0 && cur_frame != NULL && cur_frame->payload_start != SIZE_MAX
+      && !mc_replaying()) {
     cur_frame->payload_end = kv_size(typed.keys);
   }
 }
@@ -834,11 +820,12 @@ static void atom_redo_reset(void)
   }
 }
 
-/// Marks the running command as already applying to every cursor (see `curcmd.op_global`).
-/// Called by u_doit() and mc_counter().
-void atom_op_global_set(void)
+/// Flags the running command as already applying to every cursor. E.g.: undo, "g CTRL-A"
+void atom_did_global_op(void)
 {
-  curcmd.op_global = true;
+  if (!mc_replaying()) {
+    global_ops++;
+  }
 }
 
 /// Declares that the current frame prepped redo. Not for nested frames (":norm").
@@ -885,9 +872,8 @@ void atom_stuff_start(const cmdarg_T *cap)
 /// @param peeked  Resolved by a peek: the executing command did not consume the mapping's keys.
 void atom_map_start(const char *lhs, size_t len, bool peeked)
 {
-  if (!atom_has_consumers()
-      || reg_executing != 0 || ex_normal_busy != 0 || !(State & MODE_NORMAL)
-      || Visual.active) {
+  if (!atom_has_consumers() || mc_replaying()
+      || reg_executing != 0 || ex_normal_busy != 0 || !(State & MODE_NORMAL)) {
     return;
   }
   if (atom_composite_active()) {
@@ -923,6 +909,7 @@ static void atom_visual_reset(void)
   vatom.state = kVatomNone;
   atoms_free(&vatom.atoms);
   vatom.origin = (CmdOrigin){ 0 };
+  vatom.frame = 0;
   mc_vsel_clear();
 }
 
@@ -930,6 +917,13 @@ static void atom_visual_reset(void)
 static bool atom_visual_pending(void)
 {
   return vatom.state != kVatomNone;
+}
+
+/// True if the selection started as user input, or received typed input (`maptick`).
+static bool atom_visual_typed(void)
+{
+  return atom_visual_pending()
+         && ((vatom.state & kVatomTyped) || maptick != vatom.origin.maptick);
 }
 
 /// Pending Visual atom is replayable (not voided).
@@ -970,7 +964,7 @@ static bool atom_visual_end_suffix(char *suffix, const CmdSpec *spec, bool redoa
     }
     // A poisoned selection is still a user action: emit it with lhs + empty keys, like a mapping
     // whose commands captured nothing (atom_composite_end()).
-    bool emit = (vatom.state & kVatomVoid) && (vatom.state & kVatomTyped) && spec != NULL
+    bool emit = (vatom.state & kVatomVoid) && atom_visual_typed() && spec != NULL
                 && suffix != NULL && atom_is_user_cmd();
     char *label = NULL;
     if (emit) {
@@ -995,8 +989,8 @@ static bool atom_visual_end_suffix(char *suffix, const CmdSpec *spec, bool redoa
     prep_redo_visual(vkeys, prefix, (CmdSpec){ 0 });
     redo_append_str(suffix, -1);
   }
-  if (!atom_is_user_cmd() || !(vatom.state & kVatomTyped)) {
-    // Not user input (":normal! vjd", fed keys): the redo prep above is the only effect; no emit.
+  if (!atom_is_user_cmd() || !atom_visual_typed()) {
+    // Internal input (":norm! vjd", fed keys): the redo prep above is the only effect; no emit.
     xfree(vkeys);
     xfree(suffix);
     atom_visual_reset();
@@ -1030,6 +1024,9 @@ static bool atom_visual_end_suffix(char *suffix, const CmdSpec *spec, bool redoa
 /// @return  True if redo was prepped.
 bool atom_visual_end(CmdSpec spec, bool redoable)
 {
+  if (mc_replaying()) {
+    return false;
+  }
   return atom_visual_end_suffix(atom_redo_keys(spec), &spec, redoable);
 }
 
@@ -1169,17 +1166,18 @@ InsSession atom_ins_start(int cmd, long count, VisualIns vis, bool vblock)
                                : cur_frame != NULL ? cur_frame->origin : atom_origin(),
   };
   if (vis != kVInsNone && !mc_replaying()) {
-    if (vis == kVInsKeys && !(atom_visual_replayable() && (vatom.state & kVatomTyped))) {
-      // The selection came from fed keys (":norm", scheduled feedkeys).
-      session.typed = false;
+    if (vis == kVInsKeys) {
+      // Internal (non-user) keys (":norm", scheduled feedkeys) are not user-input.
+      // But a Visual-mode operator mapping ("xnoremap c c") is user-input. #41605
+      session.typed = atom_visual_replayable() && atom_visual_typed();
     }
     // The selection is consumed: already in the redo body. Also clears selection display.
     atom_visual_reset();
   }
-  // bool repl = cmd == 'R' || cmd == 'V' || cmd == 'r' || cmd == 'v';
-  // mc_ins_cascade_start(session.typed && count <= 1 && !repl
-  //                      && (vis == kVInsNone || (vis == kVInsKeys && !vblock)),
-  //                      session.origin.tick);
+  bool repl = cmd == 'R' || cmd == 'V' || cmd == 'r' || cmd == 'v';
+  mc_ins_cascade_start(session.typed && count <= 1 && !repl
+                       && (vis == kVInsNone || (vis == kVInsKeys && !vblock)),
+                       session.origin.tick);
   return session;
 }
 
@@ -1193,6 +1191,17 @@ void atom_ins_end(const InsSession *session, bool busy)
   bool user_input = session->typed
                     // A session is user input, if user input occurred during it. #41516
                     || maptick != session->origin.maptick;
+  if (mc_replaying()) {
+    return;
+  }
+  if (mc_ins_commit()) {
+    curcmd.ins_cascaded = true;
+    // Not during a mapping: there the spans are subatoms of its composite.
+    if (has_event(EVENT_CMDATOM) && !atom_composite_active()) {
+      atom_ins_push(session, false);
+    }
+    return;
+  }
   if (!user_input || busy || restart_edit != 0 || !atom_buf_has_consumers()
       || (visual && session->vis != kVInsKeys)) {
     if (user_input && (busy || restart_edit != 0) && atom_composite_active()) {
@@ -1201,7 +1210,7 @@ void atom_ins_end(const InsSession *session, bool busy)
     }
     return;
   }
-  atom_ins_push(session, true);
+  atom_ins_push(session, mc_buf_has_cursors(curbuf));
 }
 
 /// Pushes the ended insert-session as one atom. Skips a session not ending in <Esc>, except
@@ -1231,9 +1240,10 @@ void atom_cmd_start(CmdFrame *old)
   old->visual = Visual;
   old->keytyped = KeyTyped;
   old->captures = atom_captures;
+  old->global_ops = global_ops;
   old->id = ++frame_id;
   // Sampled: "q=" toggled DURING a command must not apply to it retroactively.
-  old->follow = false;
+  old->follow = mc_following();
   old->consumers = atom_buf_has_consumers();
   // Diffed at command end: detects a register-write (yank).
   old->reg_ts = old->consumers ? reg_max_ts(true) : 0;
@@ -1242,7 +1252,6 @@ void atom_cmd_start(CmdFrame *old)
   old->payload_end = 0;
   old->parent = cur_frame;
   cur_frame = old;
-  curcmd.op_global = false;
   atom_redo_reset();
 }
 
@@ -1251,10 +1260,12 @@ void atom_cmd_start(CmdFrame *old)
 ///
 /// Skipped for a command that stuffed keys ("x" stuffs "dl": its resolution is the atom), or that
 /// already captured its own atom (do_pending_operator(), insert spans).
-static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
+///
+/// @return  True if the selection preview needs a refresh.
+static bool atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
 {
   if (mc_replaying() || atom_suppressed) {
-    return;
+    return false;
   }
 
   //
@@ -1277,16 +1288,18 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
                        || (equalpos(old->visual.start, Visual.start)
                            && old->visual.mode == Visual.mode));
   if (opaque && unchanged
+      // Nested selection keys can differ at other cursors ("iw" vs "iW").
+      && vatom.frame <= old->id
       // Operator atom? (non-edit Lua/<Cmd> 'operatorfunc'). #41482
       && curcmd.redo_frame != old->id) {
-    return;
+    return false;
   }
   bool ins_cascaded = user && curcmd.ins_cascaded;
   // Command from a mapping's RHS (typed keys have KeyTyped set).
   bool mapped = user && !old->keytyped && !synthetic;
   if (mapped
-      // NOT if cursor-global op: cascading (e.g. vim-repeat "nmap u") would undo at every cursor.
-      && !curcmd.op_global
+      // NOT if cursor-global op (cascading per-cursor would be nonsense).
+      && global_ops == old->global_ops
       // NOT if it ended in another buffer: a navigation mapping ("nnoremap <M-l> <C-w>l")
       // entering a buffer with cursors must not cascade.
       && ((curbuf == old->origin.buf.br_buf && atom_origin_changed(old->origin)) || ins_cascaded)) {
@@ -1298,12 +1311,14 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
   //
   bool vis = false;
   if (Visual.active) {
-    if (!old->visual.active) {
+    if (!old->visual.active && vatom.frame <= old->id) {
       atom_visual_reset();
-      // Decided once, at session start.
-      vatom.state = (old->keytyped || (atom_composite_active() && atom_is_user_cmd()))
-                    ? kVatomTyped : kVatomFed;
+      vatom.state = kVatomFed;  // Promoted below if this frame is user input.
       vatom.origin = old->origin;
+    }
+    if (atom_visual_pending() && user && !synthetic && (old->keytyped || atom_composite_active())) {
+      // Recalculated on every frame.
+      vatom.state = (vatom.state & kVatomVoid) | kVatomTyped;
     }
     // Decided by the session (not atom_capturable()), so fed selections (":normal! vjd") still
     // accumulate for redo-prep. Recording/replay commands are meta (not part of the edit).
@@ -1317,9 +1332,9 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
       vatom.state |= kVatomVoid;
     }
   } else if (old->visual.active) {
-    if (user && old->follow && atom_visual_replayable() && kv_size(vatom.atoms) > 0) {
-      // Follow-motion ("q="): a selection abandoned without an operator (<Esc>, "v" toggle) still
-      // moved the primary cursor to the selection end: replay it at every cursor.
+    if (user && atom_visual_replayable() && kv_size(vatom.atoms) > 0) {
+      // Cursor moved to selection-end after ESC/"v"-toggle. Even though this is technically
+      // a "motion", it's more intuitive to always replay it? #41631
       char suffix[2] = { ESC, NUL };
       atom_visual_end_suffix(xstrdup(suffix), NULL, false);
     } else {
@@ -1330,7 +1345,8 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
   //
   // Capture: does this command own an atom?
   //
-  if ((vis && atom_captures == old->captures && ca->oap->op_type == OP_NOP)
+  if ((vis && vatom.frame <= old->id && atom_captures == old->captures
+       && ca->oap->op_type == OP_NOP)
       || (!Visual.active
           && !old->visual.active
           && atom_capturable(old->consumers, old->keytyped)
@@ -1346,11 +1362,10 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
     bool scroll_cmd = (keycls & (kKeyScrollMove | kKeyScrollView)) != 0;
     bool mouse_cmd = (keycls & kKeyMouse) != 0;
     bool jump_cmd = (keycls & kKeyJump) != 0;
-    // Replayable? Register prefix ('"x') is captured as part of the command it prefixes; "@x"/"Q"
-    // are translations, their resolution is the atom stream.
+    // Replayable? Register prefix ('"x') is captured as part of the command it prefixes; "@x" is
+    // a translation, its resolution is the atom stream.
     bool replayable = (ca->cmdchar > 0 && ca->cmdchar < 0x100
-                       && ca->cmdchar != '"' && ca->cmdchar != '@' && ca->cmdchar != 'Q'
-                       && !scroll_cmd)
+                       && ca->cmdchar != '"' && ca->cmdchar != '@' && !scroll_cmd)
                       || special_motion;
     bool changed = atom_origin_changed(old->origin);
     // Note: an operator's motion belongs to the operator (`finish_op`).
@@ -1367,9 +1382,11 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
       CmdAtom atom = atom_from_redo(kAOperator);
       // The payload ('operatorfunc' getchar()) is not in the captured redo, append it.
       atom_payload_append(&atom, old);
-      // Cascade only on an OBSERVABLE effect: an edit or register write. A redoable operator that
-      // did neither is a no-op (vim-surround "ysa[" whose surround char was <Esc>).
-      bool effect = changed || reg_max_ts(true) > old->reg_ts;
+
+      // Cascade only an observable "effect": edit, register-write, or cursor-move (only during
+      // follow-mode).
+      bool effect = changed || reg_max_ts(true) > old->reg_ts
+                    || (mc_following() && atom_origin_moved(old->origin));
       if (atom.keys != NULL && *atom.keys != NUL) {
         atom.origin = old->origin;
         atom_push(effect, &atom);
@@ -1419,16 +1436,14 @@ static void atom_capture_cmd(cmdarg_T *ca, CmdFrame *old)
     // Not replayable: edited buffer during selection, so the keys do not describe the change.
     vatom.state |= kVatomVoid;
   }
-  if (Visual.active && user && old->parent == NULL) {
-    mc_vsel_refresh();
-  }
+  return Visual.active && user && old->parent == NULL;
 }
 
 /// Completes a normal_execute(): captures its atom, pushes its staged one, ends the composite.
 /// Pops the frame.
 void atom_cmd_end(cmdarg_T *ca, CmdFrame *old)
 {
-  atom_capture_cmd(ca, old);
+  const bool refresh_visual = atom_capture_cmd(ca, old);
   atom_stage_flush(old);
   if (atom_composite_active() && old->payload_start != SIZE_MAX
       && old->payload_end > old->payload_start) {
@@ -1441,7 +1456,8 @@ void atom_cmd_end(cmdarg_T *ca, CmdFrame *old)
   // likewise while stuffed keys are pending (i_CTRL-O dance, or exec_stuffed() deferred under
   // textlock).
   if (old->parent == NULL && !mc_replaying() && typebuf_typed() && stuff_empty()) {
-    mc_clock_edge(map_edit);
+    bool map_moved = atom_composite_active() && atom_origin_moved(composite.origin);
+    mc_clock_edge(map_edit, map_moved);
     map_edit = false;
     // One atom spans its continuation: while op-pending, selection-active, or insert-will-resume
     // (i_CTRL-O), it stays open. ",Dw" (":nnoremap ,D d") is one atom, `keys="dw"`.
@@ -1449,6 +1465,9 @@ void atom_cmd_end(cmdarg_T *ca, CmdFrame *old)
       atom_composite_end();
       composite.open = false;  // Resolved.
     }
+  }
+  if (refresh_visual) {
+    mc_vsel_refresh();
   }
   cur_frame = old->parent;
 }

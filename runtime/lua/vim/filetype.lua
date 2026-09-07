@@ -1492,6 +1492,7 @@ local extension = {
   yy = 'yacc',
   ['y++'] = 'yacc',
   yxx = 'yacc',
+  cff = 'yaml',
   yml = 'yaml',
   yaml = 'yaml',
   eyaml = 'yaml',
@@ -3254,7 +3255,7 @@ end
 ---                     (i.e., ".conf"), which indicates the filetype should be set with
 ---                     `:setf FALLBACK conf`. See |:setfiletype|.
 function M.match(args)
-  vim.validate('arg', args, 'table')
+  vim.validate('args', args, 'table')
 
   if not (args.buf or args.filename or args.contents) then
     error('At least one of "buf", "filename", or "contents" must be given')

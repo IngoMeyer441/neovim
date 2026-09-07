@@ -2204,6 +2204,8 @@ void scroll_cursor_halfway(win_T *wp, bool atend, bool prefer_above)
   }
 
   int topfill = 0;
+  int above = 0;
+  int below = 0;
   while (topline > 1) {
     // If using smoothscroll, we can precisely scroll to the
     // exact point where the cursor is halfway down the screen.
@@ -2238,8 +2240,6 @@ void scroll_cursor_halfway(win_T *wp, bool atend, bool prefer_above)
     // Depending on "prefer_above" we add a line above or below first.
     // Loop twice to avoid duplicating code.
     bool done = false;
-    int above = 0;
-    int below = 0;
     for (int round = 1; round <= 2; round++) {
       if (prefer_above
           ? (round == 2 && below < above)
@@ -2326,9 +2326,9 @@ void cursor_correct(win_T *wp)
   validate_botline_win(wp);
   if (wp->w_botline == wp->w_buffer->b_ml.ml_line_count + 1
       && mouse_dragging == 0) {
-    if (!use_scrolloffpad(wp)) {
-      below_wanted = 0;
-    }
+    // Missing context below EOF must not move the cursor up.  Automatic
+    // scrolling handles the centering for 'scrolloffpad'.
+    below_wanted = 0;
     int max_off = (wp->w_view_height - 1) / 2;
     above_wanted = MIN(above_wanted, max_off);
   }

@@ -53,6 +53,7 @@
 #include "nvim/marktree_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/mbyte_defs.h"
+#include "nvim/mcursor.h"
 #include "nvim/memline.h"
 #include "nvim/memline_defs.h"
 #include "nvim/memory.h"
@@ -130,6 +131,7 @@ static kvec_t(char) replace_stack = KV_INITIAL_VALUE;
 // Otherwise trigger completion right away.
 #define TRIGGER_AUTOCOMPLETE() \
   do { \
+    mc_ins_cascade();  /* Multicursor: replay pending keys, since compl refused edit(). #41605 */ \
     redraw_later(curwin, UPD_VALID); \
     update_screen();  /* Show char deletion immediately */ \
     ui_flush(); \
@@ -380,6 +382,9 @@ static void insert_enter(InsertState *s)
 static int insert_check(VimState *state)
 {
   InsertState *s = (InsertState *)state;
+
+  // Multicursor: insert-cascade, before entry ("A"/"o"/"cw"/…), and after every executed key.
+  mc_ins_cascade();
 
   if (!Ins.revins_legal) {
     Ins.revins_scol = -1;     // reset on illegal motions
@@ -1338,23 +1343,21 @@ static void insert_handle_key_post(InsertState *s)
 
 /// edit(): Start inserting text.
 ///
-/// "cmdchar" can be:
-/// 'i' normal insert command
-/// 'a' normal append command
-/// 'R' replace command
-/// 'r' "r<CR>" command: insert one <CR>.
-///     Note: count can be > 1, for redo, but still only one <CR> is inserted.
-///           <Esc> is not used for redo.
-/// 'g' "gI" command.
-/// 'V' "gR" command for Virtual Replace mode.
-/// 'v' "gr" command for single character Virtual Replace mode.
+/// May nest: ":normal i…" and multicursor insert-cascade enters it while an outer edit() is
+/// suspended. But i_CTRL-O does not nest: edit() returns, and the caller runs the Normal-mode
+/// command.
 ///
-/// This function is not called recursively.  For CTRL-O commands, it returns
-/// and lets the caller handle the Normal-mode command.
-///
-/// @param  cmdchar  command that started the insert
-/// @param  startln  if true, insert at start of line
-/// @param  count    repeat count for the command
+/// @param  cmdchar  Command that started the insert:
+///   - 'i'
+///   - 'a'
+///   - 'R'
+///   - 'r': "r<CR>" command: insert one <CR>. Note: count can be > 1, for redo, but still only one
+///     <CR> is inserted. <Esc> is not used for redo.
+///   - 'g': "gI" command.
+///   - 'V': "gR" command: Virtual Replace mode.
+///   - 'v': "gr" command: single-character Virtual Replace mode.
+/// @param  startln  If true, insert at start of line.
+/// @param  count    Repeat count for the command.
 ///
 /// @return true if a CTRL-O command caused the return (insert mode pending).
 bool edit(int cmdchar, bool startln, int count)
@@ -1377,10 +1380,10 @@ bool edit(int cmdchar, bool startln, int count)
     return false;
   }
 
-  // Don't allow changes in the buffer while editing the cmdline.  The
-  // caller of getcmdline() may get confused.
-  // Don't allow recursive insert mode when busy with completion.
-  // Allow in dummy buffers since they are only used internally
+  // Disallow edit() (insert-mode) when:
+  // - ins-completion is active
+  // - textlock (the caller of getcmdline() may get confused)
+  // - <expr> mapping eval
   if (textlock != 0 || ins_compl_active() || compl_busy || pum_visible()
       || expr_map_locked()) {
     emsg(_(e_textlock));
@@ -2240,6 +2243,7 @@ int stop_arrow(void)
       // The count is a spec field (not body bytes), so "[count]." replaces it ("3i…").
       prep_redo(false, false, (CmdSpec){ .count = 1, .cmd = 'i' });
       Ins.new_insert_skip = 2;
+      mc_ins_cascade_restart();
     } else {
       // Cursor-move was captured (start_arrow()): the atom mc-cascade will replay it.
       // Only `last_insert` (the ". register, i_CTRL-A) restarts here, like Vim.
@@ -2332,12 +2336,11 @@ static void stop_insert(pos_T *end_insert_pos, int esc, int nomove)
     // If a space was inserted for auto-formatting, remove it now.
     check_auto_format(true);
 
-    // If we just did an auto-indent, remove the white space from the end
-    // of the line, and put the cursor back.
+    // If we just did an auto-indent, remove the whitespace from EOL, and put the cursor back.
     // Do this when ESC was used or moving the cursor up/down.
-    // Check for the old position still being valid, just in case the text
-    // got changed unexpectedly.
-    if (!nomove && Ins.did_ai
+    // Check for the old position still being valid, just in case the text changed unexpectedly.
+    // Not for span replay during a mc-session: its synthetic <Esc> ends the nested session early.
+    if (!nomove && Ins.did_ai && !mc_ins_replaying()
         && (esc || (vim_strchr(p_cpo, kCpoIndent) == NULL
                     && curwin->w_cursor.lnum != end_insert_pos->lnum))
         && end_insert_pos->lnum <= curbuf->b_ml.ml_line_count) {
@@ -3361,6 +3364,7 @@ static void ins_del(void)
         || do_join(2, false, true, false, false) == FAIL) {
       vim_beep(kOptBoFlagBackspace);
     } else {
+      mc_ins_join();
       curwin->w_cursor.col = temp;
       // Adjust orig_line_count in case more lines have been deleted than
       // have been added. That makes sure, that open_line() later
@@ -3443,6 +3447,7 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
 
   // Delete newline!
   if (curwin->w_cursor.col == 0) {
+    mc_ins_join();
     linenr_T lnum = Ins.start.lnum;
     if (curwin->w_cursor.lnum == lnum || Ins.revins_on) {
       if (u_save((linenr_T)(curwin->w_cursor.lnum - 2),

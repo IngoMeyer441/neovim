@@ -71,7 +71,7 @@ function M.range(buf, ns, hlgroup, start, finish, opts)
     or {
       buf,
       finish[1] + 1,
-      finish[2] ~= -1 and start[2] ~= v_maxcol and finish[2] + 1 or v_maxcol,
+      finish[2] ~= -1 and finish[2] ~= v_maxcol and finish[2] + 1 or v_maxcol,
       0,
     }
 
@@ -198,7 +198,9 @@ function M.hl_op(opts)
   local winid = api.nvim_get_current_win()
 
   local state = hl_op_state[state_key]
-  if state ~= nil and state.timer and not state.timer:is_closing() then
+  -- Multicursor cascade: accumulate per-cursor, don't cancel the previous event's highlight.
+  local cascading = api.nvim__mcursor_cascading()
+  if state ~= nil and state.timer and not state.timer:is_closing() and not cascading then
     state.timer:close()
     assert(state.clear)
     state.clear()
