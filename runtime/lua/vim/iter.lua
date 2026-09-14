@@ -64,13 +64,11 @@
 --- -- { "a", "b" }
 --- ```
 
--- LuaLS cannot model the variadic EmmyLua generics used by this module.
----@diagnostic disable: no-unknown, undefined-doc-name, luadoc-miss-symbol, missing-return, missing-return-value, param-type-mismatch, return-type-mismatch, redundant-return-value, undefined-field
-
+-- `never` represents an empty tail for single-value iterators.
 --- @nodoc
 --- @class vim.IterModule
 --- @operator call: vim.Iter<any, any...>
---- @overload fun<T>(src: T[]): vim.IterArray<T>
+--- @overload fun<T>(src: T[]): vim.IterArray<T, never>
 --- @overload fun<K, V>(src: table<K, V>): vim.Iter<K, V>
 --- @overload fun(src: table, ...): vim.Iter<any, any...>
 --- @overload fun(src: function, ...): vim.Iter<any, any...>
@@ -278,7 +276,7 @@ function Iter:unique(key)
 end
 
 --- @nodoc
---- @diagnostic disable-next-line:unused-local
+--- @diagnostic disable-next-line:unused
 function Iter:flatten(depth)
   error('flatten() requires an array-like table')
 end
@@ -468,7 +466,7 @@ end
 ---
 ---
 --- @since 12
---- @overload fun<T>(self: vim.Iter<T>): T[]
+--- @overload fun<T>(self: vim.Iter<T, never>): T[]
 --- @overload fun<V1, V2, V...>(self: vim.Iter<V1, V2, V...>): [V1, V2, V...][]
 --- @return any[]
 function Iter:totable()
@@ -486,7 +484,7 @@ function Iter:totable()
 end
 
 --- @nodoc
---- @overload fun<T>(self: vim.IterArray<T>): T[]
+--- @overload fun<T>(self: vim.IterArray<T, never>): T[]
 --- @overload fun<V1, V2, V...>(self: vim.IterArray<V1, V2, V...>): [V1, V2, V...][]
 --- @return any[]
 function IterArray:totable()
@@ -631,7 +629,7 @@ function IterArray:next()
 end
 
 --- @nodoc
---- @diagnostic disable-next-line: unused-local
+--- @diagnostic disable-next-line: unused
 function Iter:rev()
   error('rev() requires an array-like table')
 end
@@ -745,7 +743,7 @@ function Iter:find(f)
 end
 
 --- @nodoc
---- @diagnostic disable-next-line:unused-local
+--- @diagnostic disable-next-line:unused
 function Iter:rfind(f)
   error('rfind() requires an array-like table')
 end
@@ -868,7 +866,7 @@ function IterArray:take(n)
 end
 
 --- @nodoc
---- @diagnostic disable-next-line: unused-local
+--- @diagnostic disable-next-line: unused
 function Iter:pop()
   error('pop() requires an array-like table')
 end
@@ -896,7 +894,7 @@ function IterArray:pop()
 end
 
 --- @nodoc
---- @diagnostic disable-next-line: unused-local
+--- @diagnostic disable-next-line: unused
 function Iter:rpeek()
   error('rpeek() requires an array-like table')
 end
@@ -1005,7 +1003,7 @@ function IterArray:skip(n)
 end
 
 --- @nodoc
---- @diagnostic disable-next-line:unused-local
+--- @diagnostic disable-next-line:unused
 function Iter:rskip(n)
   error('rskip() requires an array-like table')
 end
@@ -1066,7 +1064,7 @@ function Iter:nth(n)
 end
 
 --- @nodoc
---- @diagnostic disable-next-line:unused-local
+--- @diagnostic disable-next-line:unused
 function Iter:slice(first, last)
   error('slice() requires an array-like table')
 end
@@ -1250,7 +1248,7 @@ end
 --- @generic R1, R...
 --- @param src table<R1, R>|fun(s: table, v: any): R1, R... Table or iterator to drain values from
 --- @return vim.Iter<R1, R...>
---- @overload fun<T>(src: T[]): vim.IterArray<T>
+--- @overload fun<T>(src: T[]): vim.IterArray<T, never>
 --- @overload fun<K, V>(src: table<K, V>): vim.Iter<K, V>
 --- @private
 function Iter.new(src, ...)
@@ -1315,8 +1313,11 @@ function IterArray.new(t)
   }, IterArray)
 end
 
-return setmetatable(M, {
+setmetatable(M, {
   __call = function(_, ...)
     return Iter.new(...)
   end,
 })
+
+-- Return M separately to work around EmmyLuaLs/emmylua-analyzer-rust#1240.
+return M

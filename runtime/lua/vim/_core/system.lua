@@ -147,6 +147,8 @@ function SystemObj:wait(timeout)
     end, nil, true)
   end
 
+  -- TODO: A short timeout can leave result nil even after sending SIGKILL.
+  ---@diagnostic disable-next-line: return-type-mismatch
   return state.result
 end
 
@@ -237,6 +239,7 @@ local function setup_output(output, text)
     end
   end
 
+  --- @diagnostic disable-next-line:missing-fields luvit/luv#827
   local pipe_fd = assert(uv.pipe({ nonblock = true }, {}))
   local pipe = assert(uv.new_pipe(false))
   pipe:open(pipe_fd.read)
@@ -268,6 +271,7 @@ local function setup_input(input)
     towrite = input
   end
 
+  --- @diagnostic disable-next-line:missing-fields luvit/luv#827
   local pipe_fd = assert(uv.pipe({}, { nonblock = true }))
   local pipe = assert(uv.new_pipe(false))
   pipe:open(pipe_fd.write)

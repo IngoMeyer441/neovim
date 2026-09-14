@@ -88,7 +88,7 @@ local function tokens_to_ranges(data, bufnr, client, request, ranges)
   local encoding = client.offset_encoding
   local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
   -- For all encodings, \r\n takes up two code points, and \n (or \r) takes up one.
-  local eol_offset = vim.bo.fileformat[bufnr] == 'dos' and 2 or 1
+  local eol_offset = vim.bo[bufnr].fileformat == 'dos' and 2 or 1
   local version = request.version
   local request_id = request.request_id
   local last_insert_idx = 1
@@ -111,6 +111,7 @@ local function tokens_to_ranges(data, bufnr, client, request, ranges)
           -- If it's stale, we don't resume the coroutine so it'll be garbage collected.
           if
             version == util.buf_versions[bufnr]
+            ---@diagnostic disable-next-line: preferred-local-alias
             and request_id == request.request_id
             and api.nvim_buf_is_valid(bufnr)
           then
@@ -163,7 +164,7 @@ local function tokens_to_ranges(data, bufnr, client, request, ranges)
 
       if last_insert_idx < #ranges then
         local needs_insert = true
-        local idx = vim.list.bisect(ranges, { line = range.line }, {
+        local idx = vim.list.bisect(ranges, range, {
           lo = last_insert_idx,
           key = function(highlight)
             return highlight.line
@@ -457,7 +458,7 @@ end
 --- @return lsp.Range
 function STHighlighter:get_overscan_range()
   local wins = vim.fn.win_findbuf(self.bufnr)
-  local num_lines = vim.api.nvim_buf_line_count(self.bufnr)
+  local num_lines = api.nvim_buf_line_count(self.bufnr)
   local min_start, max_end = nil, nil
 
   for _, win in ipairs(wins) do
@@ -775,7 +776,7 @@ end
 
 ---@private
 ---@param state STClientState
-function STHighlighter:reset_timer(state)
+function STHighlighter.reset_timer(_, state)
   local timer = state.timer
   if timer then
     state.timer = nil

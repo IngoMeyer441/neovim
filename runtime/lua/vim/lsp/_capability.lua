@@ -48,11 +48,11 @@ local buf_capabilities = {}
 local M = {}
 M.__index = M
 
----@generic T : vim.lsp.Capability
+---@generic T: vim.lsp.Capability
 ---@param self T
 ---@param bufnr integer
 ---@return T
-function M:new(bufnr)
+function M.new(self, bufnr)
   -- `self` in the `new()` function refers to the concrete type (i.e., the metatable).
   -- `Class` may be a subtype of `Capability`, as it supports inheritance.
   ---@type vim.lsp.Capability
@@ -65,7 +65,7 @@ function M:new(bufnr)
     all_capabilities[Class.name] = Class
   end
 
-  ---@type vim.lsp.Capability
+  ---@type T
   self = setmetatable({}, Class)
   self.bufnr = bufnr
   self.augroup = api.nvim_create_augroup(string.format('nvim.lsp.%s:%s', self.name, bufnr), {
@@ -118,18 +118,18 @@ end
 
 --- Callback invoked when textDocument/didClose is sent for a client.
 ---@param client_id integer
----@diagnostic disable-next-line: unused-local
+---@diagnostic disable-next-line: unused
 function M:on_close(client_id) end
 
 --- Callback invoked when textDocument/didChange or textDocument/didOpen is sent for a client.
 ---@param client_id integer
----@diagnostic disable-next-line: unused-local
+---@diagnostic disable-next-line: unused
 function M:on_change(client_id) end
 
 --- Callback invoked on every redraw.
 ---@param topline integer
 ---@param botline integer
----@diagnostic disable-next-line: unused-local
+---@diagnostic disable-next-line: unused
 function M:on_win(topline, botline) end
 
 ---@param name vim.lsp.capability.Name

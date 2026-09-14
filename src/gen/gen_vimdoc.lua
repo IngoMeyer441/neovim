@@ -257,6 +257,11 @@ local config = {
         fun.table = nil
       end
 
+      -- Render the callable version module as ordinary module functions.
+      if fun.class == 'vim.VersionModule' then
+        fun.classvar = nil
+      end
+
       if fun.classvar or vim.startswith(fun.name, 'vim.') or fun.module == 'vim.iter' then
         return
       end
@@ -345,6 +350,9 @@ local config = {
     },
     fn_xform = function(fun)
       fun.name = fun.name:gsub('result%.', '')
+      if fun.module == 'vim.lsp' and fun.name == 'config' then
+        fun.table = nil
+      end
       if fun.module == 'vim.lsp.protocol' then
         fun.classvar = nil
       end
@@ -377,7 +385,7 @@ local config = {
       return 'Lua module: vim.async'
     end,
     helptag_fmt = function()
-      return 'lua-async'
+      return { 'lua-async', 'vim.async' }
     end,
     fn_xform = function(fun)
       if fun.module == 'vim.async._core' or fun.module == 'vim.async._semaphore' then
@@ -674,7 +682,7 @@ local function get_class(ty, classes)
     return
   end
 
-  local cty = ty:gsub('%s*|%s*nil', '?'):gsub('?$', ''):gsub('%[%]$', '')
+  local cty = ty:gsub('%s*|%s*nil', '?'):gsub('?$', ''):gsub('%[%]$', ''):gsub('%b<>$', '')
 
   return classes[cty]
 end
@@ -692,27 +700,7 @@ local function inline_type(obj, classes)
 
   local cls = get_class(ty, classes)
 
-  if not cls or cls.nodoc then
-    return
-  end
-
-  if not cls.inlinedoc then
-    -- Not inlining so just add a: "See |tag|."
-    local tag = fmt('|%s|', cls.name)
-    if obj.desc and obj.desc:find(tag) then
-      -- Tag already there
-      return
-    end
-
-    -- TODO(lewis6991): Aim to remove this. Need this to prevent dead
-    -- references to types defined in runtime/lua/vim/lsp/_meta/protocol.lua
-    if not vim.startswith(cls.name, 'vim.') then
-      return
-    end
-
-    obj.desc = obj.desc or ''
-    local period = (obj.desc == '' or vim.endswith(obj.desc, '.')) and '' or '.'
-    obj.desc = obj.desc .. fmt('%s See %s.', period, tag)
+  if not cls or cls.nodoc or not cls.inlinedoc then
     return
   end
 

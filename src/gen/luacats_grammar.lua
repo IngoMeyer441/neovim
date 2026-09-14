@@ -91,14 +91,14 @@ local v = setmetatable({}, {
 --- @field generics? string[]
 --- @field parent? string
 --- @field parent_generics? string[]
---- @field access? 'private'|'protected'|'package'
+--- @field access? 'private'|'protected'|'package'|'internal'
 
 --- @class nvim.luacats.Field
 --- @field kind 'field'
 --- @field name string
 --- @field type string
 --- @field desc? string
---- @field access? 'private'|'protected'|'package'
+--- @field access? 'private'|'protected'|'package'|'internal'
 
 --- @class nvim.luacats.Note
 --- @field desc? string
@@ -145,14 +145,15 @@ local typedef = P({
   'typedef',
   typedef = C(v.type),
 
-  type = v.ty * rep_array_opt_postfix * rep(Pf('|') * v.ty * rep_array_opt_postfix),
+  type = v.ty * rep_array_opt_postfix * rep(Sf('|&') * v.ty * rep_array_opt_postfix),
   ty = v.composite + paren(v.typedef),
   composite = (v.types * array_postfix)
     + (v.types * opt_postfix)
     + (P(ty_ident) * P('...')) -- Generic vararg
     + v.types,
-  types = v.fun + v.generics + v.kv_table + v.tuple + v.dict + v.table_literal + ty_prims,
+  types = v.keyof + v.fun + v.generics + v.kv_table + v.tuple + v.dict + v.table_literal + ty_prims,
 
+  keyof = P('keyof') * ws * v.ty,
   tuple = Pf('[') * comma1(v.type) * Plf(']'),
   dict = Pf('{') * comma1(Pf('[') * v.type * Pf(']') * colon * v.type) * Plf('}'),
   kv_table = Pf('table') * Pf('<') * v.type * Pf(',') * v.type * Plf('>'),
@@ -173,7 +174,7 @@ local function generic_opt(name)
   return (Pf('<') * Cg(Ct(comma1(typedef)), name) * Plf('>')) + -Plf('<')
 end
 
-local access = P('private') + P('protected') + P('package')
+local access = P('private') + P('protected') + P('package') + P('internal')
 local caccess = Cg(access, 'access')
 local cattr = Cg(comma(access + P('exact')), 'access')
 local desc_delim = Sf '#:' + ws

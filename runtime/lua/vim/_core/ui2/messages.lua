@@ -33,10 +33,10 @@ local M = {
   },
   virt = { -- Stored virt_text state.
     last = { {}, {}, {}, {} }, ---@type MsgContent[] status in last cmdline row.
-    cmd = { {}, {} }, ---@type MsgContent[] [(x)] indicators in cmd window.
-    msg = { {}, {} }, ---@type MsgContent[] [(x)] indicators in msg window.
-    top = { {} }, ---@type MsgContent[] [+x] top indicator in dialog window.
-    bot = { {} }, ---@type MsgContent[] [+x] bottom indicator in dialog window.
+    cmd = { {}, {} }, ---@type MsgContent[] # [(x)] indicators in cmd window.
+    msg = { {}, {} }, ---@type MsgContent[] # [(x)] indicators in msg window.
+    top = { {} }, ---@type MsgContent[] # [+x] top indicator in dialog window.
+    bot = { {} }, ---@type MsgContent[] # [+x] bottom indicator in dialog window.
     idx = { mode = 1, search = 2, cmd = 3, ruler = 4, spill = 1, dupe = 2 },
     ids = {}, ---@type { ['last'|'cmd'|'msg'|'top'|'bot']: integer? } Table of mark IDs.
     delayed = false, -- Whether placement of 'last' virt_text is delayed.
@@ -228,7 +228,7 @@ local function pager_shown()
   return api.nvim_win_is_valid(ui.wins.pager) and not api.nvim_win_get_config(ui.wins.pager).hide
 end
 
-local hlopts = { undo_restore = false, invalidate = true, priority = 1 }
+local hlopts = { undo_restore = false, invalidate = true, priority = 1, strict = false }
 --- Move messages to expanded cmdline, dialog or pager to show in full.
 --- Return updated target+buffer in case it differs from 'src'.
 ---
@@ -240,7 +240,6 @@ function M.expand_msg(src, tgt, focus)
   local hidden = not pager_shown()
   tgt = tgt or not hidden and 'pager' or 'cmd' ---@type 'cmd'|'dialog'|'msg'|'pager'
   if tgt ~= src then
-    local srow = hidden and 0 or api.nvim_buf_line_count(ui.bufs.pager)
     local opts = { details = true, type = 'highlight' }
     local marks = api.nvim_buf_get_extmarks(ui.bufs[src], -1, 0, -1, opts)
     local lines = api.nvim_buf_get_lines(ui.bufs[src], 0, -1, false)
@@ -252,6 +251,8 @@ function M.expand_msg(src, tgt, focus)
       M.virt[src] = { {}, {} }
     end
 
+    -- Append to visible pager, replace any other target. msg_clear() events may have edited pager.
+    local srow = (not hidden and tgt == 'pager') and api.nvim_buf_line_count(ui.bufs.pager) or 0
     api.nvim_buf_set_lines(ui.bufs[tgt], srow, -1, false, lines)
     for _, m in ipairs(marks) do
       hlopts.hl_group, hlopts.end_col, hlopts.end_row =
@@ -737,13 +738,14 @@ end
 ---@param focus? boolean Enter the pager: it was explicitly requested.
 function M.set_pos(tgt, focus)
   for t, win in pairs(ui.wins) do
-    local cfg = (t == tgt or (tgt == nil and t ~= 'cmd'))
+    local current_cfg = (t == tgt or (tgt == nil and t ~= 'cmd'))
       and api.nvim_win_is_valid(win)
       and api.nvim_win_get_config(win)
-    if cfg and (tgt or not cfg.hide) then
+    if current_cfg and (tgt or not current_cfg.hide) then
       local texth = api.nvim_win_text_height(win, { max_height = o.lines })
       local top = { mopt.msgsep, 'MsgSeparator' }
-      cfg = { hide = false, relative = 'laststatus', col = 10000 } ---@type table
+      ---@type vim.api.keyset.win_config
+      local cfg = { hide = false, relative = 'laststatus', col = 10000 }
       cfg.row, cfg.height, cfg.border = win_row_height_border(t, texth.all)
       cfg.border = cfg.border and t ~= 'msg' and { '', top, '', '', '', '', '', '' } or nil
       cfg.mouse = tgt == 'cmd' or t == 'msg' or nil

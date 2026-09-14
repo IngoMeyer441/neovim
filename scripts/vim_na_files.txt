@@ -57,6 +57,7 @@ runtime/macros/swapmous.vim
 runtime/pack/dist/opt/editexisting/plugin/editexisting.vim
 runtime/pack/dist/opt/shellmenu/plugin/shellmenu.vim
 runtime/plugin/README.txt
+runtime/plugin/colorresp.vim
 runtime/plugin/logiPat.vim
 runtime/plugin/manpager.vim
 runtime/plugin/rrhelper.vim
@@ -106,6 +107,7 @@ src/testdir/Make_amiga.mak
 src/testdir/Make_dos.mak
 src/testdir/Make_ming.mak
 src/testdir/Make_mvc.mak
+src/testdir/commondumps.vim
 src/testdir/crash/heap_overflow3
 src/testdir/lsan-suppress.txt
 src/testdir/samples/combining_chars.txt
@@ -127,6 +129,7 @@ src/testdir/test_json.vim
 src/testdir/test_listener.vim
 src/testdir/test_mswin_event.vim
 src/testdir/test_mzscheme.vim
+src/testdir/test_plugin_colorresp.vim
 src/testdir/test_plugin_comment.vim
 src/testdir/test_plugin_glvs.vim
 src/testdir/test_plugin_osc52.vim
@@ -151,6 +154,7 @@ src/testdir/util/amiga.vim
 src/testdir/util/dos.vim
 src/testdir/util/socketserver.vim
 src/testdir/util/vms.vim
+src/testdir/viewdumps.vim
 src/typemap
 src/uninstall.c
 src/version.h

@@ -36,7 +36,7 @@ local function ctx_is_valid(ctx)
     not bufnr
     or not api.nvim_buf_is_valid(bufnr)
     or api.nvim_get_current_buf() ~= bufnr
-    or vim.lsp.util.buf_versions[bufnr] ~= ctx.version
+    or lsp.util.buf_versions[bufnr] ~= ctx.version
   then
     return false
   end
@@ -580,8 +580,11 @@ end
 --- See https://microsoft.github.io/language-server-protocol/specification/#formattingOptions
 --- @field formatting_options? lsp.FormattingOptions
 ---
---- Time in milliseconds to block for formatting requests. No effect if async=true.
---- (default: `1000`)
+--- Time in milliseconds allowed for each formatting request. On timeout, cancels
+--- the request and continues with the next client. With async=true, there is no
+--- timeout unless this option is set. Responses received after the request times
+--- out are ignored.
+--- (default: `1000` for synchronous requests)
 --- @field timeout_ms? integer
 ---
 --- Restrict formatting to the clients attached to the given buffer.
@@ -675,14 +678,15 @@ function M.format(opts)
       return util.make_given_range_params(r.start, r['end'], bufnr, client.offset_encoding).range
     end
 
-    local ret = params --[[@as lsp.DocumentFormattingParams|lsp.DocumentRangeFormattingParams|lsp.DocumentRangesFormattingParams]]
+    --- @type lsp.DocumentFormattingParams|lsp.DocumentRangeFormattingParams|lsp.DocumentRangesFormattingParams
+    local ret = params
     if passed_multiple_ranges then
       --- @cast range {start:[integer,integer],end:[integer, integer]}[]
-      ret = params --[[@as lsp.DocumentRangesFormattingParams]]
+      --- @cast ret lsp.DocumentRangesFormattingParams
       ret.ranges = vim.tbl_map(to_lsp_range, range)
     elseif range then
       --- @cast range {start:[integer,integer],end:[integer, integer]}
-      ret = params --[[@as lsp.DocumentRangeFormattingParams]]
+      --- @cast ret lsp.DocumentRangeFormattingParams
       ret.range = to_lsp_range(range)
     end
     return ret
@@ -696,11 +700,39 @@ function M.format(opts)
         return
       end
       local params = set_range(client, util.make_formatting_params(opts.formatting_options))
-      client:request(method, params, function(...)
+      local timer = opts.timeout_ms and assert(vim.uv.new_timer())
+      local success, request_id = client:request(method, params, function(...)
+        if timer then
+          if timer:is_closing() then
+            return
+          end
+          timer:close()
+        end
         local handler = client.handlers[method] or lsp.handlers[method]
         handler(...)
         do_format(next(clients, idx))
       end, bufnr)
+      if timer and not timer:is_closing() then
+        if not success then
+          timer:close()
+          return
+        end
+        timer:start(
+          assert(opts.timeout_ms),
+          0,
+          vim.schedule_wrap(function()
+            if timer:is_closing() then
+              return
+            end
+            timer:close()
+            if request_id and client.requests[request_id] then
+              client:cancel_request(request_id)
+            end
+            vim.notify(string.format('[LSP][%s] timeout', client.name), vim.log.levels.WARN)
+            do_format(next(clients, idx))
+          end)
+        )
+      end
     end
     do_format(next(clients))
   else
@@ -795,7 +827,7 @@ function M.rename(new_name, opts)
 
     if client:supports_method('textDocument/prepareRename') then
       local params = util.make_position_params(win, client.offset_encoding)
-      ---@param result? lsp.Range|{ range: lsp.Range, placeholder: string }
+      ---@param result? lsp.PrepareRenameResult
       client:request('textDocument/prepareRename', params, function(err, result)
         if err or result == nil then
           if next(clients, idx) then
@@ -815,10 +847,8 @@ function M.rename(new_name, opts)
 
         local range ---@type vim.Range?
         if result.start then
-          ---@cast result lsp.Range
           range = vim.range.lsp(bufnr, result, client.offset_encoding)
         elseif result.range then
-          ---@cast result { range: lsp.Range, placeholder: string }
           range = vim.range.lsp(bufnr, result.range, client.offset_encoding)
         end
         if range then
@@ -840,8 +870,6 @@ function M.rename(new_name, opts)
           prompt_opts.default = result.placeholder
         elseif result.start then
           prompt_opts.default = get_text_at_range(result, client.offset_encoding)
-        elseif result.range then
-          prompt_opts.default = get_text_at_range(result.range, client.offset_encoding)
         else
           prompt_opts.default = cword
         end
@@ -1272,6 +1300,8 @@ local function on_code_action_results(results, opts)
       return
     end
 
+    -- Work around incorrect union narrowing: EmmyLuaLs/emmylua-analyzer-rust#1239.
+    ---@cast action lsp.CodeAction
     if action.disabled then
       vim.notify(action.disabled.reason, vim.log.levels.ERROR)
       return

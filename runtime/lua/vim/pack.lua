@@ -268,7 +268,8 @@
 
 local api = vim.api
 local uv = vim.uv
-local async = require('vim._async')
+---@diagnostic disable-next-line: no-unknown
+local async = require('vim.async')
 local util = require('vim._core.util')
 local nvim_on = util.nvim_on
 local N_ = vim.fn.gettext
@@ -650,14 +651,24 @@ local function new_progress_report(action)
 end
 
 local copcall = package.loaded.jit and pcall or require('coxpcall').pcall
+local max_timeout = 120000
 
+--- @param funs (async fun())[]
 local function async_join_run_wait(funs)
   local n_threads = 2 * (uv.available_parallelism() or 1)
   --- @async
   local function joined_f()
-    async.join(n_threads, funs)
+    ---@diagnostic disable-next-line: no-unknown
+    local semaphore = async.semaphore(n_threads)
+    local function run_one(f)
+      -- Isolate job failures. Task return still observes cancellation.
+      copcall(semaphore.with, semaphore, f)
+    end
+    for _, f in ipairs(funs) do
+      async.run(run_one, f)
+    end
   end
-  async.run(joined_f):wait()
+  async.run(joined_f):wait(max_timeout)
 end
 
 --- Execute function in parallel for each non-errored plugin in the list
@@ -675,7 +686,8 @@ local function run_list(plug_list, f, progress_action)
     if p.info.err == '' then
       --- @async
       funs[#funs + 1] = function()
-        local ok, err = copcall(f, p) --[[@as string]]
+        ---@diagnostic disable-next-line: no-unknown
+        local ok, err = async.pawait(async.run(f, p))
         if not ok then
           p.info.err = err --- @as string
         end
@@ -767,7 +779,8 @@ local function resolve_version(p)
   local tags = git_get_tags(p.path)
   if type(version) == 'string' then
     local is_branch = vim.tbl_contains(branches, version)
-    local is_tag_or_hash = copcall(git_get_hash, version, p.path)
+    ---@diagnostic disable-next-line: no-unknown
+    local is_tag_or_hash = async.pawait(async.run(git_get_hash, version, p.path))
     if not (is_branch or is_tag_or_hash) then
       local err = ('`%s` is not a branch/tag/commit. Available:'):format(version)
         .. list_in_line('Tags', tags)
@@ -865,7 +878,7 @@ local function install_list(plug_list, confirm)
     trigger_events(plug_list, 'PackChangedPre', 'install')
     run_list(plug_list, do_install, 'Installing plugins')
     local installed = vim.tbl_filter(function(p) --- @param p vim.pack.Plug
-      return p.info.installed
+      return p.info.installed == true
     end, plug_list)
     trigger_events(installed, 'PackChanged', 'install')
   end
@@ -940,6 +953,7 @@ local function pack_add(plug, load)
   active_plugins[plug.path] = { plug = plug, id = n_active_plugins }
 
   if vim.is_callable(load) then
+    ---@cast load -boolean
     load({ spec = vim.deepcopy(plug.spec), path = plug.path })
     return
   end
@@ -992,7 +1006,7 @@ local function lock_repair(names, plug_dir)
       plugin_lock.plugins[name] = data
     end
   end
-  async.run(f):wait()
+  async.run(f):wait(max_timeout)
 end
 
 --- Sync lockfile data and installed plugins:
@@ -1009,7 +1023,7 @@ local function lock_sync(confirm, specs)
 
   -- Compute installed plugins
   local plug_dir = get_plug_dir()
-  if vim.uv.fs_stat(plug_dir) == nil then
+  if uv.fs_stat(plug_dir) == nil then
     vim.fn.mkdir(plug_dir, 'p')
   end
 
@@ -1337,7 +1351,7 @@ end
 --- @param bufnr integer
 --- @return table<string,boolean>
 local function get_update_map(bufnr)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
   --- @type table<string,boolean>, boolean
   local res, is_in_update = {}, false
   for _, l in ipairs(lines) do
@@ -1369,13 +1383,14 @@ local function update_list(plug_list)
   run_list(plug_list, do_update, 'Applying updates')
 
   local updated = vim.tbl_filter(function(p) --- @param p vim.pack.Plug
-    return p.info.updated
+    return p.info.updated == true
   end, plug_list)
   trigger_events(updated, 'PackChanged', 'update')
 end
 
 --- @class vim.pack.keyset.update
 --- @inlinedoc
+--- @field package _ex? boolean
 --- @field force? boolean Whether to skip confirmation and make updates immediately. Default `false`.
 ---
 --- @field offline? boolean Whether to skip downloading new updates. Default: `false`.
@@ -1507,6 +1522,7 @@ end
 
 --- @class vim.pack.keyset.del
 --- @inlinedoc
+--- @field package _ex? boolean
 --- @field force? boolean Whether to allow deleting an active plugin. Default `false`.
 
 --- Remove plugins from disk

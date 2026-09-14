@@ -148,9 +148,8 @@ function TSTreeView:new(buf, lang)
     },
   }
 
-  setmetatable(t, self)
   self.__index = self
-  return t
+  return setmetatable(t, self)
 end
 
 local decor_ns = api.nvim_create_namespace('nvim.treesitter.dev')
@@ -314,6 +313,8 @@ end
 ---@return integer
 ---@package
 function TSTreeView:iter()
+  -- TODO(lewis6991): EmmyLua 0.25.1's ipairs annotation omits the table and initial index.
+  --- @diagnostic disable-next-line: missing-return-value
   return ipairs(self.opts.anon and self.nodes or self.named)
 end
 

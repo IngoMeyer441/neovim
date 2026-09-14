@@ -197,9 +197,12 @@ function M.cmd_errmsg(err)
   return (err:gsub('^Lua:%s*', ''))
 end
 
---- Utility function for displaying vim error codes (EXX)
+--- Display a Vim error code (EXX), or raise an error without editor APIs.
 --- @param msg string
 function M.echo_err(msg)
+  if not vim.api then
+    error(msg, 2)
+  end
   vim.api.nvim_echo({ { msg } }, true, { err = true })
 end
 
@@ -209,9 +212,11 @@ end
 --- @param name string Plugin name, e.g. "zip".
 --- @param msg string
 --- @param level? integer Level from |vim.log.levels|. Defaults to ERROR.
-function M.notify(name, msg, level)
+--- @param once? boolean Only show the message once.
+function M.notify(name, msg, level, once)
   vim.schedule(function()
-    vim.notify(('%s: %s'):format(name, msg), level or vim.log.levels.ERROR)
+    local notify = once and vim.notify_once or vim.notify
+    notify(('%s: %s'):format(name, msg), level or vim.log.levels.ERROR)
   end)
 end
 

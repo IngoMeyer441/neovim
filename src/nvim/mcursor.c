@@ -462,8 +462,6 @@ static void mc_cascade(void)
       return;
     }
   }
-  // Optimization: one clipboard-provider sync for the whole cascade.
-  start_batch_changes();
   McSandbox sb;
   mc_sandbox_enter(&sb, edits);
 
@@ -489,7 +487,6 @@ static void mc_cascade(void)
 done:
   atoms_free(&g_atoms);
   mc_sandbox_leave(&sb);
-  end_batch_changes();
   mc_cleanup(true);
   if (handle_get_buffer(sb.bufnr) == curbuf && !curbuf->b_u_synced
       && curbuf->b_u_newhead != NULL) {
@@ -503,9 +500,10 @@ done:
 ///
 /// @param map_edit  The composite edited the buffer (or insert-cascaded).
 /// @param map_moved  The composite moved the cursor.
-void mc_clock_edge(bool map_edit, bool map_moved)
+/// @param follow  Follow-mode ("q=") when the queued motions ran.
+void mc_clock_edge(bool map_edit, bool map_moved, bool follow)
 {
-  if ((map_edit || (mc_follow_motion && map_moved && !Visual.active))
+  if ((map_edit || (follow && map_moved && !Visual.active))
       && !atom_composite_queued() && kv_size(g_atoms) == 0
       && atom_composite_active() && mc_buf_has_cursors(curbuf)) {
     // XXX: Fallback to LHS-replay if the mapping edited the buffer or moved the cursor (in
@@ -517,7 +515,7 @@ void mc_clock_edge(bool map_edit, bool map_moved)
     for (size_t i = 0; !has_edit && i < kv_size(g_atoms); i++) {
       has_edit = kv_A(g_atoms, i).type != kAMotion;
     }
-    if (has_edit || mc_follow_motion
+    if (has_edit || follow
         // Cascade if a mapping left a selection open ("nn x w<Cmd>norm! viw<CR>").
         || Visual.active) {
       mc_cascade();
@@ -561,7 +559,7 @@ static void mc_cleanup(bool dedupe)
   kv_size(mc_cursors) = n;
   if (n == 0) {
     // Session ended implicitly ("q=" + "G" deduped all cursors). Reset "q=".
-    mc_follow_motion = false;
+    mc_follow_set(kFalse);
     if (had_cursors) {
       ctx_free(&mc_start.regs);
       mc_start.regs = (Context)CONTEXT_INIT;
@@ -604,6 +602,24 @@ void mc_ins_cascade_start(bool cascade, varnumber_T tick)
   mc_ins_span.tick = tick;
   mc_ins_span.region = 0;
   mc_ins_regions_clear();
+
+  if (mc_ins_span.active) {
+    // Cover the line-range of all cursors with one undo-entry. #41822
+    //
+    // Undo entries apply in reverse save-order, so this entry (saved first) "wins", even though
+    // per-cursor newline-shifting edits may record conflicting undo entries. Same approach is used
+    // by Vim for linewise-op/range-command (see u_save in op_shift, ex_sort, …).
+    linenr_T lo = curwin->w_cursor.lnum;
+    linenr_T hi = curwin->w_cursor.lnum;
+    for (size_t i = 0; i < kv_size(mc_cursors); i++) {
+      pos_T pos;
+      if (mc_ctx_resolve(&kv_A(mc_cursors, i), &pos)) {
+        lo = MIN(lo, pos.lnum);
+        hi = MAX(hi, pos.lnum);
+      }
+    }
+    (void)u_save(lo - 1, hi + 1);  // Ignore FAIL result: only relevant if undo is unavailable.
+  }
 }
 
 /// True during a span replay. The replay's synthetic <Esc> does not end the primary insert-session,
@@ -1033,6 +1049,10 @@ static void mc_reg_gather(void)
     if (gather[i] && kv_size(joined[i]) > 0) {
       write_reg_contents_ex(MC_REGS[i], joined[i].items, (ssize_t)kv_size(joined[i]), false,
                             kMTLineWise, 0);
+      if (MC_REGS[i] == '"') {
+        // If implicit clipboard is enabled (clipboard=unnamed[plus]): write the joined result.
+        set_clipboard(NUL, get_y_previous());
+      }
     }
     kv_destroy(joined[i]);
   }
@@ -1266,19 +1286,16 @@ void mc_counter(long count1)
   nlua_call_typval("vim._core.mcursor", "number", tv_args, NULL);
 }
 
-/// "q=": toggles "follow motion" mode; [count] forces it: "1q=" on, "2q=" off.
+/// Sets "follow motion" mode ("q="), and applies the change to the executing CmdAtom.
 ///
-/// @return  false on an invalid count (> 2).
-bool mc_follow_toggle(long count0)
+/// @param on  kNone: toggle. kTrue/kFalse: force it ("1q=" on, "2q=" off).
+void mc_follow_set(TriState on)
 {
-  if (count0 == 0) {
-    mc_follow_motion = !mc_follow_motion;
-  } else if (count0 <= 2) {
-    mc_follow_motion = count0 == 1;
-  } else {
-    return false;
+  bool follow = on == kNone ? !mc_follow_motion : on == kTrue;
+  if (mc_follow_motion != follow) {
+    mc_follow_motion = follow;
+    atom_follow_changed();
   }
-  return true;
 }
 
 /// Places an mcursor, or removes the cursor already at the given position.
@@ -1289,7 +1306,7 @@ void mc_toggle(buf_T *buf, pos_T pos, bool end_follow)
     return;
   }
   if (end_follow) {
-    mc_follow_motion = false;
+    mc_follow_set(kFalse);
   }
   uint32_t mark = mc_mark_at(buf, pos);
   if (mark != 0) {

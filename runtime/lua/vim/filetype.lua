@@ -3,7 +3,7 @@ local fn = vim.fn
 
 local M = {}
 
---- @alias vim.filetype.mapfn fun(path:string,bufnr:integer, ...):string?, fun(b:integer)?
+--- @alias vim.filetype.mapfn fun(path:string,bufnr:integer, ...):string?, fun(b:integer)?, boolean?
 --- @alias vim.filetype.mapopts { priority: number }
 --- @alias vim.filetype.maptbl [string|vim.filetype.mapfn, vim.filetype.mapopts]
 --- @alias vim.filetype.mapping.value string|vim.filetype.mapfn|vim.filetype.maptbl
@@ -109,7 +109,7 @@ end
 --- @return table<string,true>
 function M._get_known_filetypes()
   local known = {} --- @type table<string,true>
-  for _, ft in ipairs(vim.fn.getcompletion('', 'filetype')) do
+  for _, ft in ipairs(fn.getcompletion('', 'filetype')) do
     known[ft] = true
   end
   local registry = vim.filetype.inspect()
@@ -2644,6 +2644,36 @@ local pattern = {
     ['/%.init/.*%.conf$'] = 'upstart',
     ['/xorg%.conf%.d/.*%.conf$'] = detect.xfree86_v4,
   },
+  ['%.txt'] = {
+    ['/doc/.*%.txt$'] = function(_, bufnr)
+      local line = M._getline(bufnr, -1)
+      if
+        M._findany(line, {
+          '^vim:ft=help[:%s]',
+          '^vim:ft=help$',
+          '^vim:filetype=help[:%s]',
+          '^vim:filetype=help$',
+          '^vim:.*[:%s]ft=help[:%s]',
+          '^vim:.*[:%s]ft=help$',
+          '^vim:.*[:%s]filetype=help[:%s]',
+          '^vim:.*[:%s]filetype=help$',
+          '%svim:ft=help[:%s]',
+          '%svim:ft=help$',
+          '%svim:filetype=help[:%s]',
+          '%svim:filetype=help$',
+          '%svim:.*[:%s]ft=help[:%s]',
+          '%svim:.*[:%s]ft=help$',
+          '%svim:.*[:%s]filetype=help[:%s]',
+          '%svim:.*[:%s]filetype=help$',
+        })
+      then
+        return 'help'
+      end
+    end,
+    ['^hg%-editor%-.*%.txt$'] = 'hgcommit',
+    ['^ae%d+%.txt$'] = 'mail',
+    ['/evcxr/history%.txt$'] = 'rust',
+  },
   ['sst%.meta'] = {
     ['%.%-sst%.meta$'] = 'sisu',
     ['%._sst%.meta$'] = 'sisu',
@@ -2772,6 +2802,7 @@ local pattern = {
     ['%.%.ch$'] = 'chill',
     ['%.cmake%.in$'] = 'cmake',
     ['^crontab%.'] = starsetf('crontab'),
+    ['^crontabs%.'] = starsetf('crontab'),
     ['^cvs%d+$'] = 'cvs',
     ['/DEBIAN/control$'] = 'debcontrol',
     ['^php%.ini%-'] = starsetf('dosini'),
@@ -2796,32 +2827,6 @@ local pattern = {
     ['/boot/grub/menu%.lst$'] = 'grub',
     -- gtkrc* and .gtkrc*
     ['^%.?gtkrc'] = starsetf('gtkrc'),
-    ['/doc/.*%.txt$'] = function(_, bufnr)
-      local line = M._getline(bufnr, -1)
-      if
-        M._findany(line, {
-          '^vim:ft=help[:%s]',
-          '^vim:ft=help$',
-          '^vim:filetype=help[:%s]',
-          '^vim:filetype=help$',
-          '^vim:.*[:%s]ft=help[:%s]',
-          '^vim:.*[:%s]ft=help$',
-          '^vim:.*[:%s]filetype=help[:%s]',
-          '^vim:.*[:%s]filetype=help$',
-          '%svim:ft=help[:%s]',
-          '%svim:ft=help$',
-          '%svim:filetype=help[:%s]',
-          '%svim:filetype=help$',
-          '%svim:.*[:%s]ft=help[:%s]',
-          '%svim:.*[:%s]ft=help$',
-          '%svim:.*[:%s]filetype=help[:%s]',
-          '%svim:.*[:%s]filetype=help$',
-        })
-      then
-        return 'help'
-      end
-    end,
-    ['^hg%-editor%-.*%.txt$'] = 'hgcommit',
     ['^JAM.*%.'] = starsetf('jam'),
     ['^Prl.*%.'] = starsetf('jam'),
     ['^${HOME}/.*/Code/User/.*%.json$'] = 'jsonc',
@@ -2837,7 +2842,6 @@ local pattern = {
     ['lftp/rc$'] = 'lftp',
     ['/LiteStep/.*/.*%.rc$'] = 'litestep',
     ['^/tmp/SLRN[0-9A-Z.]+$'] = 'mail',
-    ['^ae%d+%.txt$'] = 'mail',
     ['^pico%.%d+$'] = 'mail',
     ['^reportbug%-'] = starsetf('mail'),
     ['^snd%.%d+$'] = 'mail',

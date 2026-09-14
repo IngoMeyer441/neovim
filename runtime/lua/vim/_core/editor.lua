@@ -493,9 +493,8 @@ vim.cmd = setmetatable({}, {
   --- @param t table<string,function>
   __index = function(t, cmd)
     t[cmd] = function(...)
-      local opts --- @type vim.api.keyset.cmd
+      local opts --- @type vim.api.keyset.cmd & { [integer]: any }
       if select('#', ...) == 1 and type(select(1, ...)) == 'table' then
-        --- @type vim.api.keyset.cmd
         opts = select(1, ...)
 
         -- Move indexed positions in opts to opt.args
@@ -506,7 +505,6 @@ vim.cmd = setmetatable({}, {
               break
             end
             opts.args[i] = opts[i]
-            --- @diagnostic disable-next-line: no-unknown
             opts[i] = nil
           end
         end
@@ -537,10 +535,10 @@ do
   local function make_dict_accessor(scope, handle)
     vim.validate('scope', scope, 'string')
     local mt = {}
-    function mt:__newindex(k, v)
+    function mt.__newindex(_, k, v)
       return vim._setvar(scope, handle or 0, k, v)
     end
-    function mt:__index(k)
+    function mt.__index(_, k)
       if handle == nil and type(k) == 'number' then
         return make_dict_accessor(scope, k)
       end
@@ -565,7 +563,7 @@ end
 ---@param bufnr integer Buffer number, or 0 for current buffer
 ---@param pos1 integer[]|string Start of region as a (line, column) tuple or |getpos()|-compatible string
 ---@param pos2 integer[]|string End of region as a (line, column) tuple or |getpos()|-compatible string
----@param regtype string [setreg()]-style selection type
+---@param regtype string # [setreg()]-style selection type
 ---@param inclusive boolean Controls whether the ending column is inclusive (see also 'selection').
 ---@return table region Dict of the form `{linenr = {startcol,endcol}}`. `endcol` is exclusive, and
 ---whole lines are returned as `{startcol,endcol} = {0,-1}`.
@@ -928,7 +926,7 @@ function vim.str_utfindex(s, encoding, index, strict_indexing)
 
   if encoding == 'utf-8' then
     local len = #s
-    return index <= len and index or (strict_indexing and error('index out of range') or len)
+    return (index <= len and index or (strict_indexing and error('index out of range') or len)) --[[@as integer]]
   end
   local col32, col16 = vim._str_utfindex(s, index) --[[@as integer?,integer?]]
   local col = encoding == 'utf-16' and col16 or col32

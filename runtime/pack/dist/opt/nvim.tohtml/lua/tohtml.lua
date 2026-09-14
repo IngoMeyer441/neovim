@@ -243,6 +243,8 @@ local function cterm_to_hex(colorstr)
       cterm_color_cache = cterm_16_to_hex
     end
   end
+  -- EmmyLua retains the failed lookup narrowing after the cache is updated.
+  ---@diagnostic disable-next-line: return-type-mismatch
   return cterm_color_cache[color]
 end
 
@@ -465,8 +467,7 @@ local function styletable_treesitter(state)
       query:iter_captures(root, buf_highlighter.bufnr, state.start - 1, state.end_)
     do
       local srow, scol, erow, ecol = node:range()
-      --- @diagnostic disable-next-line: invisible
-      local c = q._query.captures[capture]
+      local c = query.captures[capture]
       if c ~= nil then
         local hlid = register_hl(state, '@' .. c .. '.' .. tree:lang())
         if metadata.conceal and state.opt.conceallevel ~= 0 then
@@ -1338,16 +1339,7 @@ local styletable_funcs = {
 local function state_generate_style(state)
   vim._with({ win = state.winid }, function()
     for _, fn in ipairs(styletable_funcs) do
-      --- @type string?
-      local cond
-      if type(fn) == 'table' then
-        cond = fn[2] --[[@as string]]
-        --- @type function
-        fn = fn[1]
-      end
-      if not cond or cond(state) then
-        fn(state)
-      end
+      fn(state)
     end
   end)
 end

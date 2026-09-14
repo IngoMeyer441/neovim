@@ -548,6 +548,7 @@ local predicate_handlers = {
     return impl['contains'](match, source, predicate, true)
   end,
 
+  --- @param predicate any[] & { string_set?: table<string, boolean> }
   ['any-of?'] = function(match, _, source, predicate)
     local nodes = match[predicate[2]]
     if not nodes or #nodes == 0 then
@@ -559,7 +560,7 @@ local predicate_handlers = {
 
       -- Since 'predicate' will not be used by callers of this function, use it
       -- to store a string set built from the list of words to check against.
-      local string_set = predicate['string_set'] --- @type table<string, boolean>
+      local string_set = predicate['string_set']
       if not string_set then
         string_set = {}
         for i = 3, #predicate do
@@ -829,7 +830,7 @@ end
 ---@param captures table<integer, TSNode[]>
 ---@param source integer|string
 ---@return boolean whether the predicates match
-function Query:_match_predicates(predicates, pattern_i, captures, source)
+function Query._match_predicates(predicates, pattern_i, captures, source)
   for _, predicate in ipairs(predicates) do
     local processed_name = predicate[1]
     local should_match = predicate[2]
@@ -855,7 +856,7 @@ end
 ---@param source integer|string
 ---@param captures table<integer, TSNode[]>
 ---@return vim.treesitter.query.TSMetadata metadata
-function Query:_apply_directives(directives, pattern_i, captures, source)
+function Query._apply_directives(_, directives, pattern_i, captures, source)
   ---@type vim.treesitter.query.TSMetadata
   local metadata = {}
 
@@ -978,7 +979,7 @@ function Query:iter_captures(node, source, start_row, end_row, opts)
         local captures = match:captures()
 
         local predicates = processed_pattern.predicates
-        if not self:_match_predicates(predicates, pattern_i, captures, source) then
+        if not self._match_predicates(predicates, pattern_i, captures, source) then
           cursor:remove_match(match_id)
 
           local row, col = captured_node:range()
@@ -1080,7 +1081,7 @@ function Query:iter_matches(node, source, start, stop, opts)
     local metadata = {}
     if processed_pattern then
       local predicates = processed_pattern.predicates
-      if not self:_match_predicates(predicates, pattern_i, captures, source) then
+      if not self._match_predicates(predicates, pattern_i, captures, source) then
         cursor:remove_match(match_id)
         return iter() -- tail call: try next match
       end

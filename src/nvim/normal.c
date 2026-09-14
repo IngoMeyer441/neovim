@@ -3121,11 +3121,23 @@ static void nv_Q(cmdarg_T *cap)
     // Not allowed while recording/executing a macro. |mcursor-limitations|
     vim_beep(0);
   } else if (!checkclearop(cap->oap)) {
-    if (Visual.active) {
+    if (Visual.active && cap->count0 == 0) {
+      // {Visual}Q: a cursor per selected line.
       typval_T tv_args[] = { { .v_type = VAR_UNKNOWN } };
       nlua_call_typval("vim._core.mcursor", "visual", tv_args, NULL);
     } else if (cap->count0 > 0) {
-      typval_T tv_args[] = { { .v_type = VAR_UNKNOWN } };
+      // [count]Q / {Visual}[count]Q: a cursor at each match (limited to Visual lines, if any).
+      linenr_T first = 0;
+      linenr_T last = 0;
+      if (Visual.active) {
+        first = MIN(Visual.start.lnum, curwin->w_cursor.lnum);
+        last = MAX(Visual.start.lnum, curwin->w_cursor.lnum);
+      }
+      typval_T tv_args[] = {
+        { .v_type = VAR_NUMBER, .vval.v_number = first },  // 0: whole buffer.
+        { .v_type = VAR_NUMBER, .vval.v_number = last },
+        { .v_type = VAR_UNKNOWN },
+      };
       nlua_call_typval("vim._core.mcursor", "matches", tv_args, NULL);
     } else {
       mc_toggle(curbuf, curwin->w_cursor, true);
@@ -6443,10 +6455,10 @@ static void nv_q(cmdarg_T *cap)
     return;
   }
 
-  if (cap->nchar == '=') {
-    if (!mc_follow_toggle(cap->count0)) {
-      clearopbeep(cap->oap);
-    }
+  if (cap->nchar == '=' && cap->count0 > 2) {
+    clearopbeep(cap->oap);
+  } else if (cap->nchar == '=') {  // "1q=" on, "2q=" off.
+    mc_follow_set(cap->count0 == 0 ? kNone : cap->count0 == 1 ? kTrue : kFalse);
   } else if (cap->nchar == ':' || cap->nchar == '/' || cap->nchar == '?') {
     if (cmdwin_buf != NULL) {
       emsg(_(e_cmdline_window_already_open));
@@ -6748,10 +6760,11 @@ static void nv_event(cmdarg_T *cap)
   }
 }
 
-/// Executes one normal-mode command from pending input, outside the main state machine.
+/// Executes one MODE_NORMAL command (Normal, Visual, Select and Op-pending, see get_real_state())
+/// from pending input, outside the main state machine.
 ///
-/// Called in a loop; a count/register prefix or a pending operator travels into the next call via
-/// `oap` ("3dl" is three calls, one command).
+/// Called in a loop. A pending op/register travels into the next call via `oap`; a count prefix via
+/// `opcount` ("3dl" is two calls, one command).
 ///
 /// @param toplevel  `NormalState.toplevel` (full interactive-command treatment).
 void normal_cmd(oparg_T *oap, bool toplevel)

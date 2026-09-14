@@ -145,7 +145,7 @@ local compute_new_average = exp_avg(10, 10)
 ---
 --- @param last_request_time integer?
 --- @param current_rtt_ms number
---- @return integer
+--- @return number
 local function adaptive_debounce(last_request_time, current_rtt_ms)
   if not last_request_time then
     return current_rtt_ms
@@ -231,7 +231,9 @@ local function get_completion_word(item, prefix, match)
     word = word:match('([^\n]*)') or word
     return fallback_filtertext(item, word, prefix, match)
   elseif item.insertText and item.insertText ~= '' then
-    return fallback_filtertext(item, item.insertText, prefix, match)
+    local word = string.gsub(item.insertText, '\r\n?', '\n')
+    word = word:match('([^\n]*)') or word
+    return fallback_filtertext(item, word, prefix, match)
   end
   return item.label
 end
@@ -296,6 +298,7 @@ local function get_items(result)
     return result.items
   else
     -- Else just return the items as they are.
+    ---@cast result lsp.CompletionItem[]
     return result
   end
 end
@@ -306,7 +309,7 @@ end
 ---@return lsp.MarkupKind
 local function get_doc(item)
   local doc = item.documentation
-  local default_kind = vim.lsp.protocol.MarkupKind.Markdown
+  local default_kind = protocol.MarkupKind.Markdown
   if not doc then
     return '', default_kind
   end
@@ -347,11 +350,11 @@ end
 ---@return string? kind text or "■" for colors
 ---@return string? highlight group for colors
 local function generate_kind(item)
-  if not lsp.protocol.CompletionItemKind[item.kind] then
+  if not protocol.CompletionItemKind[item.kind] then
     return 'Unknown'
   end
-  if item.kind ~= lsp.protocol.CompletionItemKind.Color then
-    return lsp.protocol.CompletionItemKind[item.kind]
+  if item.kind ~= protocol.CompletionItemKind.Color then
+    return protocol.CompletionItemKind[item.kind] --[[@as string]]
   end
   local doc = get_doc(item)
   if #doc == 0 then
@@ -467,6 +470,22 @@ local function edit_start_char(item, lnum)
   end
 end
 
+--- Completion options for a buffer, fields from a dynamic registration.
+---
+--- @param client vim.lsp.Client
+--- @param bufnr integer
+--- @return lsp.CompletionOptions
+local function completion_options(client, bufnr)
+  local static = client.server_capabilities.completionProvider or {}
+  for _, reg in ipairs(client:_get_registrations('completionProvider', bufnr) or {}) do
+    local opts = reg.registerOptions
+    if type(opts) == 'table' then
+      return vim.tbl_extend('keep', opts, static)
+    end
+  end
+  return static
+end
+
 --- Turns the result of a `textDocument/completion` request into vim-compatible
 --- |complete-items|.
 ---
@@ -495,7 +514,7 @@ function M._lsp_to_complete_items(
     return {}
   end
 
-  ---@type fun(item: lsp.CompletionItem, item_prefix: string):boolean
+  ---@type fun(item: lsp.CompletionItem, item_prefix: string): boolean, integer?
   local matches
   if not prefix:find('%w') then
     matches = function(_, _)
@@ -524,7 +543,8 @@ function M._lsp_to_complete_items(
   local user_convert = vim.tbl_get(buf_handles, bufnr, 'convert')
   local user_cmp = vim.tbl_get(buf_handles, bufnr, 'cmp')
   local client = client_id and lsp.get_client_by_id(client_id)
-  local server_supports_resolve = client and client:supports_method('completionItem/resolve')
+  local server_supports_resolve = client
+    and completion_options(client, bufnr).resolveProvider == true
   local use_commit = vim.tbl_get(buf_handles, bufnr, 'commit_characters') ~= false
   local commit_support = client
     and vim.tbl_get(
@@ -535,8 +555,7 @@ function M._lsp_to_complete_items(
       'commitCharactersSupport'
     )
 
-  local all_commit_chars = client
-    and vim.tbl_get(client.server_capabilities or {}, 'completionProvider', 'allCommitCharacters')
+  local all_commit_chars = client and completion_options(client, bufnr).allCommitCharacters
   local all_commit_str = all_commit_chars and commit_chars_str(all_commit_chars) or nil
 
   for _, item in ipairs(items) do
@@ -557,6 +576,7 @@ function M._lsp_to_complete_items(
 
       local hl_group = ''
       if
+        ---@diagnostic disable-next-line: deprecated
         item.deprecated
         or vim.list_contains((item.tags or {}), protocol.CompletionTag.Deprecated)
       then
@@ -768,7 +788,7 @@ end
 --- @param kind? string
 local function update_popup_window(winid, bufnr, kind)
   if winid and api.nvim_win_is_valid(winid) and bufnr and api.nvim_buf_is_valid(bufnr) then
-    if kind == lsp.protocol.MarkupKind.Markdown then
+    if kind == protocol.MarkupKind.Markdown then
       vim.wo[winid].conceallevel = 2
       vim.treesitter.start(bufnr, kind)
     end
@@ -838,9 +858,9 @@ end
 --- @return boolean, table Validity of the request and the completion info
 function CompletionResolver:is_valid()
   local cmp_info = vim.fn.complete_info({ 'selected', 'completed' })
-  return vim.api.nvim_buf_is_valid(self.bufnr)
-    and vim.api.nvim_get_current_buf() == self.bufnr
-    and vim.startswith(vim.api.nvim_get_mode().mode, 'i')
+  return api.nvim_buf_is_valid(self.bufnr)
+    and api.nvim_get_current_buf() == self.bufnr
+    and vim.startswith(api.nvim_get_mode().mode, 'i')
     and vim.fn.pumvisible() ~= 0
     and (vim.tbl_get(cmp_info, 'completed', 'word') or '') == self.word,
     cmp_info
@@ -869,8 +889,10 @@ function CompletionResolver:request(bufnr, param, selected_word)
     self:cancel_pending_requests()
 
     local client_id = vim.tbl_get(cmp_info.completed, 'user_data', 'nvim', 'lsp', 'client_id')
-    local client = client_id and vim.lsp.get_client_by_id(client_id)
-    if not client or not client:supports_method('completionItem/resolve') then
+    local client = client_id and lsp.get_client_by_id(client_id)
+    -- completionItem/resolve is not registrable, so supports_method() would
+    -- only see the static capability.
+    if not client or not completion_options(client, bufnr).resolveProvider then
       return
     end
 
@@ -897,7 +919,7 @@ function CompletionResolver:request(bufnr, param, selected_word)
 
       local info, kind = complete_item_info(result)
       if info ~= '' and info ~= cmp_info.completed.info then
-        local windata = vim.api.nvim__complete_set(cmp_info.selected, { info = info })
+        local windata = api.nvim__complete_set(cmp_info.selected, { info = info })
         update_popup_window(windata.winid, windata.bufnr, kind)
       end
     end, bufnr)
@@ -956,7 +978,7 @@ local function on_complete_done()
   end
 
   local position_encoding = client.offset_encoding or 'utf-16'
-  local resolve_provider = (client.server_capabilities.completionProvider or {}).resolveProvider
+  local resolve_provider = completion_options(client, bufnr).resolveProvider
 
   -- Keep reference to avoid race where completion/resolve response arrives after on_insert_leave
   -- and Context.cursor got cleared before clear_word() gets called
@@ -978,47 +1000,54 @@ local function on_complete_done()
     )
   end
 
-  local function apply_snippet_and_command()
-    if expand_snippet then
-      apply_snippet(completion_item)
-    end
-
+  local function exec_command()
     local command = completion_item.command
     if command then
       client:exec_cmd(command, { bufnr = bufnr })
     end
   end
 
-  if completion_item.additionalTextEdits and next(completion_item.additionalTextEdits) then
-    clear_word()
-    lsp.util.apply_text_edits(completion_item.additionalTextEdits, bufnr, position_encoding)
-    apply_snippet_and_command()
-  elseif resolve_provider and type(completion_item) == 'table' then
-    local changedtick = vim.b[bufnr].changedtick
-
-    --- @param result lsp.CompletionItem
-    client:request('completionItem/resolve', completion_item, function(err, result)
-      if changedtick ~= vim.b[bufnr].changedtick then
-        return
-      end
-
-      clear_word()
-      if err then
-        vim.notify_once(err.message, vim.log.levels.WARN)
-      elseif result then
-        if result.additionalTextEdits then
-          lsp.util.apply_text_edits(result.additionalTextEdits, bufnr, position_encoding)
-        end
-        if result.command then
-          completion_item.command = result.command
-        end
-      end
-      apply_snippet_and_command()
-    end, bufnr)
-  else
-    clear_word()
-    apply_snippet_and_command()
+  --- @param edits lsp.TextEdit[]
+  local function apply_additional_edits(edits)
+    -- The edits can move the cursor; keep it where it was.
+    lsp.util.apply_text_edits(edits, bufnr, position_encoding, nil, { keep_cursor = true })
   end
+
+  clear_word()
+
+  local edits = completion_item.additionalTextEdits
+  local has_edits = edits ~= nil and next(edits) ~= nil
+  if has_edits then
+    apply_additional_edits(assert(edits))
+  end
+  if expand_snippet then
+    apply_snippet(completion_item)
+  end
+
+  -- Nothing to gain if the item carried its edits, or it cannot be resolved.
+  if has_edits or not resolve_provider or type(completion_item) ~= 'table' then
+    exec_command()
+    return
+  end
+
+  --- @param result lsp.CompletionItem
+  client:request('completionItem/resolve', completion_item, function(err, result)
+    if not api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    if err then
+      vim.notify_once(err.message, vim.log.levels.WARN)
+    elseif result then
+      if result.additionalTextEdits then
+        apply_additional_edits(result.additionalTextEdits)
+      end
+      -- A resolved command replaces the one the item came with.
+      if result.command then
+        completion_item.command = result.command
+      end
+    end
+    exec_command()
+  end, bufnr)
 end
 
 ---@param bufnr integer
@@ -1290,11 +1319,7 @@ local function enable_completions(client_id, bufnr, opts)
 
     -- Add the new client to the clients that should be triggered by its trigger characters.
     --- @type string[]
-    local triggers = vim.tbl_get(
-      client.server_capabilities,
-      'completionProvider',
-      'triggerCharacters'
-    ) or {}
+    local triggers = completion_options(client, bufnr).triggerCharacters or {}
     for _, char in ipairs(triggers) do
       local clients_for_trigger = buf_handle.triggers[char]
       if not clients_for_trigger then

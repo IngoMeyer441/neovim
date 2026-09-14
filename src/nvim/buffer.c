@@ -636,8 +636,8 @@ bool close_buffer(win_T *win, buf_T *buf, int action, bool abort_if_last, bool i
   if (win_valid && win->w_buffer == buf && buf->b_nwindows == 1) {
     buf->b_locked++;
     buf->b_locked_split++;
-    if (apply_autocmds(EVENT_BUFWINLEAVE, buf->b_fname, buf->b_fname, false,
-                       buf) && !bufref_valid(&bufref)) {
+    if (apply_autocmds_win(EVENT_BUFWINLEAVE, buf->b_fname, buf->b_fname, false,
+                           buf, win) && !bufref_valid(&bufref)) {
       // Autocommands deleted the buffer.
       emsg(_(e_auabort));
       return false;
@@ -2217,6 +2217,9 @@ void free_buf_options(buf_T *buf, bool free_p_ff)
   clear_string_option(&buf->b_p_cinw);
   clear_string_option(&buf->b_p_cot);
   clear_string_option(&buf->b_p_cpt);
+#ifdef BACKSLASH_IN_FILENAME
+  clear_string_option(&buf->b_p_csl);
+#endif
   callback_free(&buf->b_p_cfu);
   callback_free(&buf->b_p_ofu);
   callback_free(&buf->b_p_tsrfu);
