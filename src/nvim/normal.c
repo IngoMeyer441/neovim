@@ -1509,6 +1509,18 @@ static void set_vcount_ca(cmdarg_T *cap, bool *set_prevcount)
   *set_prevcount = false;    // only set v:prevcount once
 }
 
+/// The active Visual area: `Visual.start` to the cursor. What `b_visual` saves for '< and '> marks,
+/// and "gv".
+visualinfo_T visualinfo(void)
+{
+  return (visualinfo_T){
+    .vi_start = Visual.start,
+    .vi_end = curwin->w_cursor,
+    .vi_mode = Visual.mode,
+    .vi_curswant = curwin->w_curswant,
+  };
+}
+
 /// End Visual mode.
 /// This function should ALWAYS be called to end Visual mode, except from
 /// do_pending_operator().
@@ -1520,10 +1532,7 @@ void end_visual_mode(void)
   mouse_dragging = 0;
 
   // Save the current Visual area for '< and '> marks, and "gv"
-  curbuf->b_visual.vi_mode = Visual.mode;
-  curbuf->b_visual.vi_start = Visual.start;
-  curbuf->b_visual.vi_end = curwin->w_cursor;
-  curbuf->b_visual.vi_curswant = curwin->w_curswant;
+  curbuf->b_visual = visualinfo();
   curbuf->b_visual_mode_eval = Visual.mode;
   if (!virtual_active(curwin)) {
     curwin->w_cursor.coladd = 0;
@@ -2727,8 +2736,8 @@ static void nv_zet(cmdarg_T *cap)
 {
   colnr_T col;
   int nchar = cap->nchar;
-  int old_fdl = (int)curwin->w_p_fdl;
-  int old_fen = curwin->w_p_fen;
+  OptInt foldlevel = -1;
+  int foldenable = kNone;
 
   int64_t siso = get_sidescrolloff_value(curwin);
 
@@ -2902,13 +2911,7 @@ static void nv_zet(cmdarg_T *cap)
     if (foldManualAllowed(true)) {
       cap->nchar = 'f';
       nv_operator(cap);
-      curwin->w_p_fen = true;
-
-      // "zF" is like "zfzf"
-      if (nchar == 'F' && cap->oap->op_type == OP_FOLD) {
-        nv_operator(cap);
-        finish_op = true;
-      }
+      foldenable = true;
     } else {
       clearopbeep(cap->oap);
     }
@@ -2942,17 +2945,17 @@ static void nv_zet(cmdarg_T *cap)
 
   // "zn": fold none: reset 'foldenable'
   case 'n':
-    curwin->w_p_fen = false;
+    foldenable = false;
     break;
 
   // "zN": fold Normal: set 'foldenable'
   case 'N':
-    curwin->w_p_fen = true;
+    foldenable = true;
     break;
 
   // "zi": invert folding: toggle 'foldenable'
   case 'i':
-    curwin->w_p_fen = !curwin->w_p_fen;
+    foldenable = !curwin->w_p_fen;
     break;
 
   // "za": open closed fold or close open fold at cursor
@@ -2961,7 +2964,7 @@ static void nv_zet(cmdarg_T *cap)
       openFold(curwin->w_cursor, cap->count1);
     } else {
       closeFold(curwin->w_cursor, cap->count1);
-      curwin->w_p_fen = true;
+      foldenable = true;
     }
     break;
 
@@ -2971,7 +2974,7 @@ static void nv_zet(cmdarg_T *cap)
       openFoldRecurse(curwin->w_cursor);
     } else {
       closeFoldRecurse(curwin->w_cursor);
-      curwin->w_p_fen = true;
+      foldenable = true;
     }
     break;
 
@@ -3000,7 +3003,7 @@ static void nv_zet(cmdarg_T *cap)
     } else {
       closeFold(curwin->w_cursor, cap->count1);
     }
-    curwin->w_p_fen = true;
+    foldenable = true;
     break;
 
   // "zC": close fold recursively
@@ -3010,7 +3013,7 @@ static void nv_zet(cmdarg_T *cap)
     } else {
       closeFoldRecurse(curwin->w_cursor);
     }
-    curwin->w_p_fen = true;
+    foldenable = true;
     break;
 
   // "zv": open folds at the cursor
@@ -3020,48 +3023,42 @@ static void nv_zet(cmdarg_T *cap)
 
   // "zx": re-apply 'foldlevel' and open folds at the cursor
   case 'x':
-    curwin->w_p_fen = true;
+    foldenable = true;
     curwin->w_foldinvalid = true;               // recompute folds
-    newFoldLevel();                             // update right now
-    foldOpenCursor();
+    foldlevel = curwin->w_p_fdl;                // re-apply even when unchanged
     break;
 
   // "zX": undo manual opens/closes, re-apply 'foldlevel'
   case 'X':
-    curwin->w_p_fen = true;
+    foldenable = true;
     curwin->w_foldinvalid = true;               // recompute folds
-    old_fdl = -1;                               // force an update
+    foldlevel = curwin->w_p_fdl;                // re-apply even when unchanged
     break;
 
   // "zm": fold more
   case 'm':
-    if (curwin->w_p_fdl > 0) {
-      curwin->w_p_fdl -= cap->count1;
-      curwin->w_p_fdl = MAX(curwin->w_p_fdl, 0);
-    }
-    old_fdl = -1;                       // force an update
-    curwin->w_p_fen = true;
+    foldlevel = MAX(curwin->w_p_fdl - cap->count1, 0);
+    foldenable = true;
     break;
 
   // "zM": close all folds
   case 'M':
-    curwin->w_p_fdl = 0;
-    old_fdl = -1;                       // force an update
-    curwin->w_p_fen = true;
+    foldlevel = 0;
+    foldenable = true;
     break;
 
   // "zr": reduce folding
-  case 'r':
-    curwin->w_p_fdl += cap->count1;
-    {
-      int d = getDeepestNesting(curwin);
-      curwin->w_p_fdl = MIN(curwin->w_p_fdl, d);
+  case 'r': {
+    const int depth = getDeepestNesting(curwin);
+    OptInt level = MIN(curwin->w_p_fdl + cap->count1, depth);
+    if (level != curwin->w_p_fdl) {
+      foldlevel = level;
     }
     break;
+  }
 
   case 'R':     //  "zR": open all folds
-    curwin->w_p_fdl = getDeepestNesting(curwin);
-    old_fdl = -1;                       // force an update
+    foldlevel = getDeepestNesting(curwin);
     break;
 
   case 'j':     // "zj" move to next fold downwards
@@ -3092,23 +3089,28 @@ static void nv_zet(cmdarg_T *cap)
     clearopbeep(cap->oap);
   }
 
-  // Redraw when 'foldenable' changed
-  if (old_fen != curwin->w_p_fen) {
-    if (foldmethodIsDiff(curwin) && curwin->w_p_scb) {
-      // Adjust 'foldenable' in diff-synced windows.
-      FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-        if (wp != curwin && foldmethodIsDiff(wp) && wp->w_p_scb) {
-          wp->w_p_fen = curwin->w_p_fen;
-          changed_window_setting(wp);
-        }
-      }
+  // Use the same validation, redraw and synchronization as explicit option assignments.
+  const handle_T win_handle = curwin->handle;
+  const handle_T buf_handle = curbuf->handle;
+  if (foldenable != kNone && foldenable != curwin->w_p_fen) {
+    set_option_value(kOptFoldenable, BOOLEAN_OBJ(foldenable), OPT_LOCAL);
+    if (curwin->handle != win_handle || curbuf->handle != buf_handle) {
+      // OptionSet left the command's window or buffer; don't finish a pending fold there.
+      clearop(cap->oap);
+      return;
     }
-    changed_window_setting(curwin);
   }
-
-  // Redraw when 'foldlevel' changed.
-  if (old_fdl != curwin->w_p_fdl) {
-    newFoldLevel();
+  // "zF" is like "zfzf": enable folding before counting lines.
+  if (nchar == 'F' && cap->oap->op_type == OP_FOLD) {
+    nv_operator(cap);
+    finish_op = true;
+  }
+  if (foldlevel >= 0) {
+    // Re-apply even an unchanged value to undo manual opens/closes.
+    set_option_value(kOptFoldlevel, INTEGER_OBJ(foldlevel), OPT_LOCAL);
+  }
+  if (nchar == 'x' && curwin->handle == win_handle && curbuf->handle == buf_handle) {
+    foldOpenCursor();
   }
 }
 
@@ -5224,27 +5226,16 @@ static void nv_gv_cmd(cmdarg_T *cap)
     return;
   }
 
-  pos_T tpos;
   // set w_cursor to the start of the Visual area, tpos to the end
+  const visualinfo_T prev = curbuf->b_visual;
   if (Visual.active) {
-    int i = Visual.mode;
-    Visual.mode = curbuf->b_visual.vi_mode;
-    curbuf->b_visual.vi_mode = i;
-    curbuf->b_visual_mode_eval = i;
-    i = curwin->w_curswant;
-    curwin->w_curswant = curbuf->b_visual.vi_curswant;
-    curbuf->b_visual.vi_curswant = i;
-
-    tpos = curbuf->b_visual.vi_end;
-    curbuf->b_visual.vi_end = curwin->w_cursor;
-    curwin->w_cursor = curbuf->b_visual.vi_start;
-    curbuf->b_visual.vi_start = Visual.start;
-  } else {
-    Visual.mode = curbuf->b_visual.vi_mode;
-    curwin->w_curswant = curbuf->b_visual.vi_curswant;
-    tpos = curbuf->b_visual.vi_end;
-    curwin->w_cursor = curbuf->b_visual.vi_start;
+    curbuf->b_visual = visualinfo();
+    curbuf->b_visual_mode_eval = Visual.mode;
   }
+  Visual.mode = prev.vi_mode;
+  curwin->w_curswant = prev.vi_curswant;
+  pos_T tpos = prev.vi_end;
+  curwin->w_cursor = prev.vi_start;
 
   Visual.active = true;
   Visual.reselect = true;
@@ -6565,6 +6556,7 @@ static void nv_put_opt(cmdarg_T *cap, bool fix_indent)
   if (cap->oap->op_type != OP_NOP) {
     // "dp" is ":diffput"
     if (cap->oap->op_type == OP_DELETE && cap->cmdchar == 'p') {
+      atom_capture_op(cap->oap, cap, false);  // Atom + dot-repeat for "dp".
       clearop(cap->oap);
       assert(cap->opcount >= 0);
       nv_diffgetput(true, (size_t)cap->opcount);
@@ -6718,6 +6710,7 @@ static void nv_open(cmdarg_T *cap)
 {
   // "do" is ":diffget"
   if (cap->oap->op_type == OP_DELETE && cap->cmdchar == 'o') {
+    atom_capture_op(cap->oap, cap, false);  // Atom + dot-repeat for "do".
     clearop(cap->oap);
     assert(cap->opcount >= 0);
     nv_diffgetput(false, (size_t)cap->opcount);

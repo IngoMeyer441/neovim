@@ -20,7 +20,7 @@ local atoms_start = t_atom.atoms_start
 local atoms = t_atom.atoms
 local atoms_tail = t_atom.atoms_tail
 local atom_last = t_atom.atom_last
-local pick = t_atom.pick
+local pick = t.pick
 local subatoms = t_atom.subatoms
 
 describe('dot-repeat', function()
@@ -168,6 +168,10 @@ describe('CmdAtom', function()
       fn.setline(1, 'reset')
       n.exec_lua(([[vim.api.nvim_feedkeys(%q, 'nx', false)]]):format(cmdev.keys))
       eq('N3', fn.getline(1))
+      -- "<Cmd>" text is raw, a trailing "0" is not CTRL-V escaped (as for a ":" cmdline).
+      command([[nnoremap ,z <Cmd>call setline(1, 'Z') <Bar> let g:z = 10<CR>]])
+      feed(',z')
+      eq(k([[<Cmd>call setline(1, 'Z') | let g:z = 10<NL>]]), atom_last().keys)
 
       -- <expr> mapping that returns a "<Cmd>lua …<CR>" (dot-repeat idiom #41387) captures the same
       -- way: the constructed command is the atom.
@@ -841,14 +845,78 @@ describe('CmdAtom', function()
       feed('.')
       eq('l3', fn.getline(1))
 
-      -- "gv" (absolute region) is unreplayable, but emitted in `lhs`.
-      api.nvim_buf_set_lines(0, 0, -1, true, { 'aaa bbb' })
+      --
+      -- Visual selection moved by a Lua mapping (via API): captured as the mapping cmd. #41956
+      --
+      n.exec_lua(function()
+        vim.keymap.set('x', 'gh', function()
+          local cursor = vim.api.nvim_win_get_cursor(0)
+          vim.api.nvim_win_set_cursor(0, { cursor[1], cursor[2] + 1 })
+          vim.cmd('normal! o')
+          vim.api.nvim_win_set_cursor(0, { cursor[1], cursor[2] + 3 })
+        end)
+      end)
+      api.nvim_buf_set_lines(0, 0, -1, true, { 'aaaaaaa', 'bbb' })
+      feed('gg0vghd')
+      eq('aaaa', fn.getline(1))
+      eq('visual', atom_last().type)
+      feed('j0.')
+      eq('b', fn.getline(2)) -- The API move clamps on the short line; "1v" would have emptied it.
+      -- Also when only the fed key follows the API move: "o" alone would replay a 1-char selection.
+      -- Defined >=10 times: at least 1 mapping-id ends in "0" (exercises redobuf encoding...).
+      for _ = 1, 10 do
+        n.exec_lua(function()
+          vim.keymap.set('x', 'gH', function()
+            local cursor = vim.api.nvim_win_get_cursor(0)
+            vim.api.nvim_win_set_cursor(0, { cursor[1], cursor[2] + 1 })
+            vim.cmd('normal! o')
+          end)
+        end)
+        api.nvim_buf_set_lines(0, 0, -1, true, { 'aaaaaaa', 'bbbbbbb' })
+        feed('gg0vgHd')
+        eq('aaaaa', fn.getline(1))
+        feed('j0.')
+        eq('bbbbb', fn.getline(2))
+      end
+      -- A fed "gv" reselects marks the mapping set.
+      n.exec_lua(function()
+        vim.keymap.set('x', 'gs', function()
+          local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+          vim.fn.setpos("'<", { 0, row, col + 1, 0 })
+          vim.fn.setpos("'>", { 0, row, vim.fn.col('$') - 1, 0 })
+          vim.cmd.normal({ 'gv', bang = true })
+        end)
+      end)
+      api.nvim_buf_set_lines(0, 0, -1, true, { 'aaaaaaa', 'bbbbbbbbbb' })
+      feed('gg0vgsd')
+      eq('', fn.getline(1))
+      feed('j0.')
+      eq('', fn.getline(2)) -- To end of line again; "1v" would have left 3 chars.
+
+      -- Textobject mapping that ends selection and reselects by "norm! <linenr>GV…". #41754
+      n.exec_lua(function()
+        vim.keymap.set('x', '<M-m>', function()
+          local cur_line = vim.fn.line('.')
+          vim.cmd('normal! \27')
+          vim.cmd(('normal! %dGV%dG'):format(cur_line, 2 * cur_line))
+        end)
+      end)
+      api.nvim_buf_set_lines(0, 0, -1, true, { '1', '2', '3', '4', '5', '6', '7', '8' })
+      feed('ggv<M-m>d')
+      eq({ '3', '4', '5', '6', '7', '8' }, get_lines())
+      feed('j.')
+      eq({ '3', '7', '8' }, get_lines())
+
+      -- "gv" is replayable, but "." redoes a fixed-size region ("1v"), like Vim.
+      api.nvim_buf_set_lines(0, 0, -1, true, { 'aaa bbb ccc' })
       feed('gg0viw<Esc>')
       before = #atoms()
       feed('gvd')
-      eq(' bbb', fn.getline(1))
+      eq(' bbb ccc', fn.getline(1))
       eq(before + 1, #atoms())
-      eq({ type = 'visual', keys = '', lhs = 'gvd' }, pick(atom_last(), 'type', 'keys', 'lhs'))
+      eq({ type = 'visual', keys = 'gvd', lhs = 'gvd' }, pick(atom_last(), 'type', 'keys', 'lhs'))
+      feed('.')
+      eq('b ccc', fn.getline(1))
 
       -- A fed (":normal!") Visual-put preps the selection keysequence, like any fed visual
       -- operator (":normal! vjd"): "." re-executes "Vjp", not a bare "p".
@@ -1558,6 +1626,11 @@ describe('CmdAtom', function()
     eq(0, #take())
     n.exec_lua([[vim.api.nvim_feedkeys('x', '', false)]]) -- feedkeys without "t"
     eq(0, #take())
+    command('nnoremap gj i<c-j><esc>k$')
+    n.exec_lua([[vim.api.nvim_feedkeys('gj', 'm', false)]]) -- remapped feedkeys without "t"
+    eq({}, take())
+    n.exec_lua([[vim.api.nvim_feedkeys('ihello\27', '', false)]]) -- insert session without "t"
+    eq({}, take())
     command('normal! @q') -- macro played programmatically, not typed
     eq(0, #take())
     n.exec_lua([[vim.api.nvim_feedkeys('@q', '', false)]])
@@ -1757,7 +1830,7 @@ describe('CmdAtom', function()
     eq(true, atom_last().changed)
   end)
 
-  it('captures non-edit operators (zfap) and fold/view commands', function()
+  it('captures prep-exempt operators (zfap) and fold/view commands', function()
     fn.setline(1, { 'aa', 'aa', '' })
     feed('gg0')
     atoms_start()
@@ -1770,6 +1843,27 @@ describe('CmdAtom', function()
     -- Neither an operator nor a motion: its own kind.
     eq('normal', atom_last().type)
     eq(-1, fn.foldclosed(1))
+  end)
+
+  it('captures "do"/"dp" (:diffget/:diffput); "." repeats them (unlike Vim)', function()
+    atoms_start()
+    command('new')
+    fn.setline(1, { 'a', 'b', 'c', 'd' })
+    command('diffthis | vnew')
+    fn.setline(1, { 'a', 'XY', 'c', 'ZW' })
+    command('diffthis')
+    feed('2G')
+    local before = #atoms()
+    feed('do')
+    eq(before + 1, #atoms())
+    eq({ { type = 'operator', keys = 'do' } }, atoms_tail(1, 'type', 'keys'))
+    eq('b', fn.getline(2))
+    feed('2j.') -- Repeats "do" at the next hunk.
+    eq('d', fn.getline(4))
+    feed('2Gx')
+    feed('dp')
+    eq({ { type = 'operator', keys = 'dp' } }, atoms_tail(1, 'type', 'keys'))
+    eq({ '' }, fn.getbufline(fn.bufnr('#'), 2))
   end)
 
   it("operatorfunc atom includes the getchar()'d payload", function()

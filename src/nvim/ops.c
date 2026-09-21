@@ -3282,14 +3282,15 @@ static VisualIns op_ins_visual(oparg_T *oap, cmdarg_T *cap)
   if (!oap->is_VIsual) {
     return kVInsNone;
   }
-  if (is_ex_cmdchar(cap) || cap->cmdchar == K_LUA || oap->motion_force != NUL
-      || op_self_select(cap)) {
-    // The selection came from a self-selecting motion (gn/gN/gv, an omap running ":normal", a Lua
-    // motion) or a forced-motion operator: the redo replays the motion's own keys instead.
+  if (is_ex_cmdchar(cap) || cap->cmdchar == K_LUA) {
+    return kVInsMotion;  // An omap selected it (Lua, or ":norm"): redo replays the omap.
+  }
+  if (oap->motion_force != NUL || op_self_select(cap)) {
+    // A self-selecting motion (gn/gN/gv) or a forced-motion operator: redo replays its keys.
     return kVInsOther;
   }
-  // Unreplayable (void/absent) selection: the redo falls back to an equal-size reselect ("1v").
-  return atom_visual_replayable() ? kVInsKeys : kVInsOther;
+  // Unreplayable (void/absent/"gv") selection: the redo falls back to an equal-size reselect ("1v").
+  return atom_visual_redoable() ? kVInsKeys : kVInsOther;
 }
 
 /// Handle an operator after Visual mode or when the movement is finished.
@@ -3343,11 +3344,8 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
     if (Visual.active) {
       if (!gui_yank) {
         // Save the current Visual area for '< and '> marks, and "gv"
-        curbuf->b_visual.vi_start = Visual.start;
-        curbuf->b_visual.vi_end = curwin->w_cursor;
-        curbuf->b_visual.vi_mode = Visual.mode;
+        curbuf->b_visual = visualinfo();
         restore_visual_mode();
-        curbuf->b_visual.vi_curswant = curwin->w_curswant;
         curbuf->b_visual_mode_eval = Visual.mode;
       }
 
