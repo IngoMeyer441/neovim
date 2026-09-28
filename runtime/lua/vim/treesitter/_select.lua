@@ -356,7 +356,8 @@ local function get_selection()
     pos1, pos2 = pos2, pos1
   end
 
-  if vim.o.selection == 'exclusive' then
+  -- selection=exclusive excludes end char, except for empty selection (op-pending, or a new "v").
+  if vim.o.selection == 'exclusive' and (pos1[2] ~= pos2[2] or pos1[3] ~= pos2[3]) then
     pos2[3] = pos2[3] - 1
   end
 
@@ -444,8 +445,7 @@ local function get_child_from_range(range)
     and history.changedtick == vim.b.changedtick
     and history.current_node_id == node_id(node)
   then
-    --- @type {id:string,range:Range4}
-    local child = table.remove(history)
+    local child = table.remove(history) --[[@as {id:string,range:Range4}?]]
     if child then
       history.current_node_id = child.id
 

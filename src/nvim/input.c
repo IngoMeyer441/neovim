@@ -86,6 +86,7 @@
 #include "nvim/mapping_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/mbyte_defs.h"
+#include "nvim/mcursor.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/memory_defs.h"
@@ -535,7 +536,12 @@ void flush_buffers(flush_buffers_T flush_typeahead)
 void beep_flush(void)
 {
   if (emsg_silent == 0) {
-    flush_buffers(FLUSH_MINIMAL);
+    // Don't flush during mc-replay. A failed motion ("vt;" where there is no ";") should not eat
+    // the keys typed after it ("c"). This matches Helix multiselection: each action during a Visual
+    // selection proceeds or fails, without canceling the next action.
+    if (!mc_replaying()) {
+      flush_buffers(FLUSH_MINIMAL);
+    }
     vim_beep(kOptBoFlagError);
   }
 }
@@ -2879,8 +2885,9 @@ static int vgetorpeek(bool advance)
                   if (!ascii_iswhite(ci.chr.value)) {
                     curwin->w_wcol = vcol;
                   }
-                  vcol += win_charsize(cstype, vcol, ci.ptr, ci.chr.value, &csarg).width;
-                  ci = utfc_next(ci);
+                  ClusterInfo cli = utf_ClusterInfo(ci);
+                  vcol += win_charsize(cstype, vcol, ci.ptr, ci.chr.value, &csarg, cli.cells).width;
+                  ci = cli.next;
                 }
 
                 curwin->w_wrow = curwin->w_cline_row

@@ -151,22 +151,6 @@ static inline void normal_state_init(NormalState *s)
 /// The argument is a cmdarg_T.
 typedef void (*nv_func_T)(cmdarg_T *cap);
 
-// Values for cmd_flags.
-#define NV_NCH      0x01          // may need to get a second char
-#define NV_NCH_NOP  (0x02|NV_NCH)  // get second char when no operator pending
-#define NV_NCH_ALW  (0x04|NV_NCH)  // always get a second char
-#define NV_LANG     0x08        // second char needs language adjustment
-
-#define NV_SS       0x10        // may start selection
-#define NV_SSS      0x20        // may start selection with shift modifier
-#define NV_STS      0x40        // may stop selection without shift modif.
-#define NV_RL       0x80        // 'rightleft' modifies command
-#define NV_KEEPREG  0x100       // don't clear regname
-#define NV_NCW      0x200       // not allowed in command-line window
-#define NV_NCH_ARG  0x400       // second char is a typed operand (mark/register name),
-                                // not part of the command name (see NV_LANG for f/t/r)
-#define NV_MOTION   0x800       // Motion command.
-
 // Generally speaking, every Normal mode command should either clear any
 // pending operator (with *clearop*()), or set the motion type variable
 // oap->motion_type.
@@ -193,18 +177,18 @@ static const struct nv_cmd {
   { Ctrl_F,    nv_page,        NV_STS,                 FORWARD },
   { Ctrl_G,    nv_ctrlg,       0,                      0 },
   { Ctrl_H,    nv_ctrlh,       NV_MOTION,              0 },
-  { Ctrl_I,    nv_pcmark,      0,                      0 },
+  { Ctrl_I,    nv_pcmark,      NV_JUMP,                0 },
   { NL,        nv_down,        NV_MOTION,              false },
   { Ctrl_K,    nv_error,       0,                      0 },
   { Ctrl_L,    nv_clear,       0,                      0 },
   { CAR,       nv_down,        NV_MOTION,              true },
   { Ctrl_N,    nv_down,        NV_STS|NV_MOTION,       false },
-  { Ctrl_O,    nv_ctrlo,       0,                      0 },
+  { Ctrl_O,    nv_ctrlo,       NV_JUMP,                0 },
   { Ctrl_P,    nv_up,          NV_STS|NV_MOTION,       false },
   { Ctrl_Q,    nv_visual,      0,                      false },
   { Ctrl_R,    nv_redo_or_register, 0,                      0 },
   { Ctrl_S,    nv_ignore,      0,                      0 },
-  { Ctrl_T,    nv_tagpop,      NV_NCW,                 0 },
+  { Ctrl_T,    nv_tagpop,      NV_NCW|NV_JUMP,         0 },
   { Ctrl_U,    nv_halfpage,    0,                      0 },
   { Ctrl_V,    nv_visual,      0,                      false },
   { 'V',       nv_visual,      0,                      false },
@@ -221,14 +205,14 @@ static const struct nv_cmd {
   { ' ',       nv_right,       NV_MOTION,              0 },
   { '!',       nv_operator,    0,                      0 },
   { '"',       nv_regname,     NV_NCH_NOP|NV_NCH_ARG|NV_KEEPREG, 0 },
-  { '#',       nv_ident,       0,                      0 },
+  { '#',       nv_ident,       NV_MOTION,              0 },
   { '$',       nv_dollar,      NV_MOTION,              0 },
   { '%',       nv_percent,     NV_MOTION,              0 },
   { '&',       nv_optrans,     0,                      0 },
-  { '\'',      nv_gomark,      NV_NCH_ALW|NV_NCH_ARG,  true },
+  { '\'',      nv_gomark,      NV_NCH_ALW|NV_NCH_ARG|NV_JUMP, true },
   { '(',       nv_brace,       NV_MOTION,              BACKWARD },
   { ')',       nv_brace,       NV_MOTION,              FORWARD },
-  { '*',       nv_ident,       0,                      0 },
+  { '*',       nv_ident,       NV_MOTION,              0 },
   { '+',       nv_down,        NV_MOTION,              true },
   { ',',       nv_csearch,     NV_MOTION,              true },
   { '-',       nv_up,          NV_MOTION,              true },
@@ -257,13 +241,13 @@ static const struct nv_cmd {
   { 'D',       nv_abbrev,      NV_KEEPREG,             0 },
   { 'E',       nv_wordcmd,     NV_MOTION,              true },
   { 'F',       nv_csearch,     NV_NCH_ALW|NV_LANG|NV_MOTION, BACKWARD },
-  { 'G',       nv_goto,        NV_MOTION,              true },
-  { 'H',       nv_scroll,      NV_MOTION,              0 },
+  { 'G',       nv_goto,        NV_JUMP,                true },
+  { 'H',       nv_scroll,      NV_JUMP,                0 },
   { 'I',       nv_edit,        0,                      0 },
   { 'J',       nv_join,        0,                      0 },
   { 'K',       nv_ident,       0,                      0 },
-  { 'L',       nv_scroll,      NV_MOTION,              0 },
-  { 'M',       nv_scroll,      NV_MOTION,              0 },
+  { 'L',       nv_scroll,      NV_JUMP,                0 },
+  { 'M',       nv_scroll,      NV_JUMP,                0 },
   { 'N',       nv_next,        NV_MOTION,              SEARCH_REV },
   { 'O',       nv_open,        0,                      0 },
   { 'P',       nv_put,         0,                      0 },
@@ -281,7 +265,7 @@ static const struct nv_cmd {
   { ']',       nv_brackets,    NV_NCH_ALW,             FORWARD },
   { '^',       nv_beginline,   NV_MOTION,              BL_WHITE | BL_FIX },
   { '_',       nv_lineop,      NV_MOTION,              0 },
-  { '`',       nv_gomark,      NV_NCH_ALW|NV_NCH_ARG,  false },
+  { '`',       nv_gomark,      NV_NCH_ALW|NV_NCH_ARG|NV_JUMP, false },
   { 'a',       nv_edit,        NV_NCH,                 0 },
   { 'b',       nv_bck_word,    NV_MOTION,              0 },
   { 'c',       nv_operator,    0,                      0 },
@@ -425,20 +409,13 @@ void init_normal_cmds(void)
   nv_max_linear = i - 1;
 }
 
-/// True if a command's second char (cmdarg_T.nchar) is a typed operand ("fx", "ma") rather than
-/// the second char of its name ("gJ", "iw").
-bool nv_nchar_is_arg(int cmdchar)
+/// True if command `cmdchar` has any of the given NV_XX `flags`.
+///
+/// Multiplexed commands (g/[/]/z) have one entry for all their second chars, see atom_key_class().
+bool nv_is(int cmdchar, int flags)
 {
   int idx = find_command(cmdchar);
-  return idx >= 0 && (nv_cmds[idx].cmd_flags & (NV_LANG|NV_NCH_ARG)) != 0;
-}
-
-/// True if `cmdchar` is a motion command. Multiplexed handlers (g, [, ], z) are classified by
-/// atom_key_class().
-bool nv_is_motion(int cmdchar)
-{
-  int idx = find_command(cmdchar);
-  return idx >= 0 && (nv_cmds[idx].cmd_flags & NV_MOTION) != 0;
+  return idx >= 0 && (nv_cmds[idx].cmd_flags & flags) != 0;
 }
 
 /// Search for a command in the commands table.
@@ -984,7 +961,7 @@ static bool normal_get_command_count(NormalState *s)
   return false;
 }
 
-static void normal_finish_command(NormalState *s)
+static void normal_finish_command(NormalState *s, CmdFrame *frame)
 {
   bool did_visual_op = false;
 
@@ -1045,11 +1022,6 @@ normal_end:
     ui_cursor_shape();                  // may show different cursor shape
   }
 
-  if (s->oa.op_type == OP_NOP && s->oa.regname == 0
-      && s->ca.cmdchar != K_EVENT) {
-    clear_showcmd();
-  }
-
   checkpcmark();                // check if we moved since setting pcmark
 
   mb_check_adjust_col(curwin);  // #6203
@@ -1091,12 +1063,19 @@ normal_end:
 
   // Save count before an operator for next time
   opcount = s->ca.opcount;
+
+  atom_cmd_end(&s->ca, frame);
+
+  // Redraw 'showcmd' AFTER all multicursor effects have settled (atom_cmd_end).
+  if (s->oa.op_type == OP_NOP && s->oa.regname == 0 && s->ca.cmdchar != K_EVENT) {
+    clear_showcmd();
+  }
 }
 
 static int normal_execute(VimState *state, int key)
 {
   CmdFrame frame;
-  atom_cmd_start(&frame);
+  atom_cmd_start(&frame, key);
 
   NormalState *s = (NormalState *)state;
   s->command_finished = false;
@@ -1269,8 +1248,7 @@ static int normal_execute(VimState *state, int key)
   (nv_cmds[s->idx].cmd_func)(&s->ca);
 
 finish:
-  normal_finish_command(s);
-  atom_cmd_end(&s->ca, &frame);
+  normal_finish_command(s, &frame);
   xfree(s->ca.searchbuf);
   return 1;
 }
@@ -2029,6 +2007,10 @@ void showcmd_update_clear_state(void)
 /// Displays 'showcmd' info, and a ("2×") hint if multicursor is active.
 void display_showcmd(void)
 {
+  if (mc_replaying()) {
+    return;  // Skip useless/broken redraws (n * cursors) during multicursor cascade.
+  }
+
   showcmd_update_clear_state();
 
   if (*p_sloc == 's') {
@@ -3093,7 +3075,7 @@ static void nv_zet(cmdarg_T *cap)
   const handle_T win_handle = curwin->handle;
   const handle_T buf_handle = curbuf->handle;
   if (foldenable != kNone && foldenable != curwin->w_p_fen) {
-    set_option_value(kOptFoldenable, BOOLEAN_OBJ(foldenable), OPT_LOCAL);
+    set_option_value(kOptFoldenable, BOOLEAN_OBJ(foldenable), OPT_LOCAL, true, NULL);
     if (curwin->handle != win_handle || curbuf->handle != buf_handle) {
       // OptionSet left the command's window or buffer; don't finish a pending fold there.
       clearop(cap->oap);
@@ -3107,7 +3089,7 @@ static void nv_zet(cmdarg_T *cap)
   }
   if (foldlevel >= 0) {
     // Re-apply even an unchanged value to undo manual opens/closes.
-    set_option_value(kOptFoldlevel, INTEGER_OBJ(foldlevel), OPT_LOCAL);
+    set_option_value(kOptFoldlevel, INTEGER_OBJ(foldlevel), OPT_LOCAL, true, NULL);
   }
   if (nchar == 'x' && curwin->handle == win_handle && curbuf->handle == buf_handle) {
     foldOpenCursor();

@@ -274,6 +274,7 @@ EXTERN char *p_fcl;             ///< 'foldclose'
 EXTERN OptInt p_fdls;           ///< 'foldlevelstart'
 EXTERN char *p_fdo;             ///< 'foldopen'
 EXTERN unsigned fdo_flags;
+EXTERN int p_follow;            ///< 'follow'
 EXTERN Callback p_fex;          ///< 'formatexpr'
 EXTERN char *p_flp;             ///< 'formatlistpat'
 EXTERN char *p_fo;              ///< 'formatoptions'
@@ -305,7 +306,6 @@ EXTERN char *p_icm;             ///< 'inccommand'
 EXTERN char *p_isf;             ///< 'isfname'
 EXTERN char *p_isi;             ///< 'isident'
 EXTERN char *p_isk;             ///< 'iskeyword'
-EXTERN char *p_isp;             ///< 'isprint'
 EXTERN int p_js;                ///< 'joinspaces'
 EXTERN char *p_jop;             ///< 'jumpooptions'
 EXTERN unsigned jop_flags;
@@ -520,7 +520,7 @@ EXTERN int p_cdh;               ///< 'cdhome'
 #define NO_LOCAL_UNDOLEVEL (-123456)
 
 // Buffer for an option-set error message. Large enough to list an option's valid values (see
-// opt_invalid_value_err()); the value is appended separately into IObuff.
+// opt_values_err()); the value is appended separately into IObuff.
 #define ERR_BUFLEN 256
 
 #define SB_MAX 1000000  // Maximum 'scrollback' value.

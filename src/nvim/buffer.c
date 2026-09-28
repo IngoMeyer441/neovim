@@ -374,7 +374,7 @@ int open_buffer(bool read_stdin, exarg_T *eap, int flags_arg)
 
   // if first time loading this buffer, init b_chartab[]
   if (curbuf->b_flags & BF_NEVERLOADED) {
-    buf_init_chartab(curbuf, false);
+    buf_init_isk_chartab(curbuf);
     parse_cino(curbuf);
   }
 
@@ -3441,6 +3441,7 @@ void maketitle(void)
   char *title_str = NULL;
   char *icon_str = NULL;
   char buf[IOSIZE];
+  const CharBuf outbuf = { buf, sizeof(buf) };
 
   if (!redrawing()) {
     // Postpone updating the title when 'lazyredraw' is set.
@@ -3462,7 +3463,7 @@ void maketitle(void)
 
     if (*p_titlestring != NUL) {
       if (stl_syntax & STL_IN_TITLE) {
-        build_stl_str_hl(curwin, buf, sizeof(buf), p_titlestring,
+        build_stl_str_hl(curwin, outbuf, p_titlestring,
                          kOptTitlestring, 0, 0, maxlen, NULL, NULL, NULL, NULL);
         title_str = buf;
       } else {
@@ -3475,7 +3476,7 @@ void maketitle(void)
       p_ssl = true;
 #endif
       char *default_titlestring = "%t%( %M%)%( (%{expand('%:p:~:h')})%)%a - Nvim";
-      build_stl_str_hl(curwin, buf, sizeof(buf), default_titlestring,
+      build_stl_str_hl(curwin, outbuf, default_titlestring,
                        kOptTitlestring, 0, 0, maxlen, NULL, NULL, NULL, NULL);
       title_str = buf;
 #ifdef MSWIN
@@ -3489,7 +3490,7 @@ void maketitle(void)
     icon_str = buf;
     if (*p_iconstring != NUL) {
       if (stl_syntax & STL_IN_ICON) {
-        build_stl_str_hl(curwin, icon_str, sizeof(buf), p_iconstring,
+        build_stl_str_hl(curwin, outbuf, p_iconstring,
                          kOptIconstring, 0, 0, 0, NULL, NULL, NULL, NULL);
       } else {
         icon_str = p_iconstring;

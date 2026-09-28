@@ -98,11 +98,13 @@ describe('multicursor', function()
       eq({ 'aa', 'bb', 'ccc' }, get_lines())
     end)
 
-    it('clearing mcursors also disables q= follow-mode', function()
+    it("clearing mcursors keeps 'follow'; Q disables it", function()
       cursors({ 'aaa', 'bbb', 'ccc' }, 'QjQ')
       feed('q=')
       clear_cursors()
+      eq(true, api.nvim_get_option_value('follow', {}))
       feed('Q')
+      eq(false, api.nvim_get_option_value('follow', {}))
       eq(1, ncursors())
       feed('l')
       eq(1, ncursors())
@@ -174,17 +176,24 @@ describe('multicursor', function()
 
     it('gQ restores the cleared cursors (like gv)', function()
       cursors({ 'aaa', 'bbb', 'ccc', 'ddd' }, 'QjQ')
+      eq({ { 0, 0 }, { 1, 0 } }, anchors())
+      eq({ 2, 0 }, api.nvim_win_get_cursor(0))
       clear_cursors()
       eq(0, ncursors())
+      feed('G$') -- Move the primary away.
       feed('gQ')
-      eq(2, ncursors())
-      feed('Gx') -- the restored cursors cascade
+      eq({ { 0, 0 }, { 1, 0 } }, anchors())
+      eq({ 2, 0 }, api.nvim_win_get_cursor(0)) -- Primary cursor position is restored too.
+      feed('Gx') -- The restored cursors cascade.
       eq({ 'aa', 'bb', 'ccc', 'dd' }, get_lines())
-      -- The snapshot is extmark-tracked: edits in between shift it.
+      -- The snapshot extmarks are shifted by intervening edits.
       clear_cursors()
-      feed('ggO<Esc>') -- new line on top shifts the snapshot down
+      feed('ggO<Esc>') -- New line on top shifts the snapshot down.
       feed('gQ')
       eq({ { 1, 0 }, { 2, 0 } }, anchors())
+      -- No-op if multicursor is already active.
+      feed('gQ')
+      eq('gQ: multicursor session is active', n.exec_capture('1messages'))
     end)
 
     it(':g//normal! Q places a cursor at each match', function()
@@ -206,13 +215,24 @@ describe('multicursor', function()
       eq({ 'one wo' }, get_lines())
     end)
 
-    it('Q then non-moving edit applies once (cursor merges into primary)', function()
-      fn.setline(1, { 'ab' })
+    it('Q then edit applies once; primary-overlapping cursor stays synced', function()
+      fn.setline(1, { 'ab', 'cd' })
       feed('Q')
       eq(1, ncursors())
-      feed('x')
-      eq({ 'b' }, get_lines())
-      eq(0, ncursors()) -- merged at the cascade; multicursor mode ended
+      feed('x') -- The primary's own edit covers the cursor under it, applied only once.
+      eq({ 'b', 'cd' }, get_lines())
+      eq({ { 0, 0 } }, anchors())
+      feed('jx') -- Move with follow=OFF, the cursor is no longer "primary-overlapping".
+      eq({ '', 'd' }, get_lines())
+
+      -- Insert-session ESC moves the primary; the primary-overlapping cursor stays synced.
+      for _, keys in ipairs({ 'i<Esc>', 'a<Esc>', 'aX<Esc>', 'A<Esc>', 'cwX<Esc>', 'oX<Esc>' }) do
+        clear_cursors()
+        cursors({ 'abcd', 'efgh' }, 'lQjQ')
+        feed(keys)
+        local cur = api.nvim_win_get_cursor(0)
+        eq({ cur[1] - 1, cur[2] }, anchors()[2], keys)
+      end
     end)
 
     it('Q on an existing cursor removes it (toggle)', function()
@@ -314,8 +334,8 @@ describe('multicursor', function()
       eq({ 1, 8 }, api.nvim_win_get_cursor(0))
       feed('cwXXX<Esc>')
       eq({ 'XXX bar XXX', 'baz XXX qux', 'foobar XXX' }, get_lines())
-      -- The cursor under the primary merged at the cascade (no double-apply).
-      eq(3, ncursors())
+      -- Primary-overlapping cursor is not replayed (no double-apply).
+      eq(4, ncursors())
       -- A "/" search likewise, also with several matches per line.
       clear_cursors()
       api.nvim_buf_set_lines(0, 0, -1, true, { 'ab ab ab', 'xx ab' })
@@ -642,6 +662,69 @@ describe('multicursor', function()
       -- "Q" is excluded: it is cursor-management, not part of the edit.
       eq({ '01i\27ibad\27' }, atoms_tail(1))
     end)
+
+    it('jump (absolute motion) in a mapping is not replayed, like a mark', function()
+      -- "G" would move every cursor to the same line; only the edit replays per-cursor.
+      command('nnoremap X Gdd')
+      cursors({ 'a', 'b', 'c', 'd' }, 'jQ')
+      feed('X')
+      eq({ 'a', 'c' }, get_lines())
+    end)
+
+    it('global op (undo/redo, g CTRL-A) does not cascade', function()
+      -- Mapping that performs a "global op" must not cascade.
+
+      -- vim-repeat maps u/U/<C-R> to undo/redo wrappers.
+      fn.setline(1, { 'aaa', 'bbb', 'ccc' })
+      feed('gg0Qj0Qj0') -- 3 cursors
+      feed('x') -- one cascade: aa,bb,cc
+      eq({ 'aa', 'bb', 'cc' }, get_lines())
+      command('nnoremap <silent> u :<C-U>undo<CR>')
+      command('nnoremap <silent> <C-R> :<C-U>redo<CR>')
+      feed('u') -- One undo of the cascade, not per-cursor.
+      eq({ 'aaa', 'bbb', 'ccc' }, get_lines())
+      feed('<C-R>') -- Redo mapping does not cascade.
+      eq({ 'aa', 'bb', 'cc' }, get_lines())
+      -- Nested normal_execute() after the undo, in the same mapping.
+      command('nnoremap <silent> u :<C-U>undo <Bar> normal! l<CR>')
+      feed('u')
+      eq({ 'aaa', 'bbb', 'ccc' }, get_lines())
+
+      -- Follow-mode, where the undo's cursor-move would attempt LHS-replay. #42037
+      clear_cursors()
+      command('nnoremap u u<Cmd>let g:did_u = 1<CR>') -- Multi-command RHS.
+      command('nnoremap <C-R> <C-R>')
+      command('nnoremap gm yiwp')
+      cursors({ 'aa', 'bb' }, 'vipQ')
+      feed('gmgm')
+      eq({ 'aaaaaaaa', 'bbbbbbbb' }, get_lines())
+      feed('u')
+      eq({ 'aaaa', 'bbbb' }, get_lines())
+      feed('u')
+      eq({ 'aa', 'bb' }, get_lines())
+      feed('<C-R>')
+      eq({ 'aaaa', 'bbbb' }, get_lines())
+      feed('0x') -- Cursors are still in place.
+      eq({ 'aaa', 'bbb' }, get_lines())
+
+      -- "U" (line-undo) is also treated as a "global op".
+      clear_cursors()
+      command('nnoremap U U<Cmd>let g:did_U = 1<CR>')
+      cursors({ 'aaa', 'bbb' }, 'Qj0')
+      feed('x')
+      eq({ 'aa', 'bb' }, get_lines())
+      feed('U')
+      eq({ 'aaa', 'bb' }, get_lines())
+
+      -- g CTRL-A (counter) applies once, not per-cursor. Also in follow-mode.
+      command('nnoremap ,n g<C-A><Cmd>let g:did_n = 1<CR>')
+      for _, place in ipairs({ 'Qj0Qj0', 'VGQ' }) do
+        clear_cursors()
+        cursors({ 'a', 'b', 'c' }, place)
+        feed(',n')
+        eq({ '1a', '2b', '3c' }, get_lines(), place)
+      end
+    end)
   end)
 
   describe('. (dot-repeat)', function()
@@ -687,6 +770,24 @@ describe('multicursor', function()
       feed('yy')
       feed('p')
       eq({ 'aaa', 'aaa', 'bbb', 'bbb' }, get_lines())
+    end)
+
+    it('insert-mode <C-R>x #41933', function()
+      for _, case in ipairs({
+        { '0', 'yiw', { 'aaa x-aaa', 'ccc y-ccc' } },
+        { 'a', '"ayiw', { 'aaa x-aaa', 'ccc y-ccc' } },
+        { '"', 'yiw', { 'aaa x-aaa', 'ccc y-ccc' } },
+        { '-', 'diw', { ' x-aaa', ' y-ccc' } },
+      }) do
+        local reg, fill, want = case[1], case[2], case[3]
+        clear_cursors()
+        cursors({ 'aaa x', 'ccc y' }, 'Qj0')
+        feed(fill)
+        feed(('A-<C-R>%s'):format(reg))
+        eq(want, get_lines(), reg) -- Live, before <Esc>.
+        feed('Z<Esc>')
+        eq({ want[1] .. 'Z', want[2] .. 'Z' }, get_lines(), reg)
+      end
     end)
 
     it('empty at cursor init restores as empty', function()
@@ -891,13 +992,6 @@ describe('multicursor', function()
       feed('gg0g<C-A>')
       eq({ '1x', '2y', 'z' }, get_lines())
       eq(2, ncursors())
-    end)
-
-    it('via a mapping applies ONCE (cursor-global: no avalanche)', function()
-      cursors({ 'a', 'b', 'c' })
-      command('nnoremap ,n g<C-A>')
-      feed(',n')
-      eq({ '1a', '2b', '3c' }, get_lines())
     end)
 
     it('without cursors, g CTRL-A is not a command', function()
@@ -1114,6 +1208,36 @@ describe('multicursor', function()
   end)
 
   describe('insert-mode', function()
+    it('"cgn" cascades live; failed cursor is removed #41960', function()
+      -- "gn" searches per-cursor. Insert-entry cascades, and typed text previews live, before ESC.
+      cursors({ 'a x foo', 'b foo', 'c y z foo' }, 'QjQj0')
+      feed('/foo<CR>')
+      feed('cgn')
+      eq({ 'a x ', 'b ', 'c y z ' }, get_lines())
+      eq({ { 0, 4 }, { 1, 2 } }, anchors()) -- Each cursor moved to its match.
+      feed('X')
+      eq({ 'a x X', 'b X', 'c y z X' }, get_lines())
+      feed('<Esc>')
+      eq({ 'a x X', 'b X', 'c y z X' }, get_lines())
+      feed('u') -- One undo step.
+      eq({ 'a x foo', 'b foo', 'c y z foo' }, get_lines())
+
+      -- Cursor is removed when insert-entry fails at a cursor ("ct;" where there is no ";").
+      clear_cursors()
+      cursors({ 'a;b', 'cd', 'e;f' }, 'QjQj0')
+      eq(2, ncursors())
+      feed('ct;X<Esc>')
+      eq({ 'X;b', 'cd', 'X;f' }, get_lines())
+      eq(1, ncursors())
+      -- Same for "cgn" at a cursor with no match left (the primary's replay consumed it).
+      clear_cursors()
+      cursors({ 'a foo', 'b', 'c' }, 'jQjQgg0')
+      feed('/foo<CR>')
+      feed('cgnX<Esc>')
+      eq({ 'a X', 'b', 'c' }, get_lines())
+      eq(0, ncursors())
+    end)
+
     it('CTRL-U cascades before <Esc> (deletion crossing the session anchor)', function()
       -- Deleting typed text cascades live (the region shrinks). But CTRL-U here eats the "o"
       -- autoindent, which precedes the tracked region, invisible to the preview diff.
@@ -1743,19 +1867,30 @@ describe('multicursor', function()
   end)
 
   describe('visual-mode cascade', function()
-    it('failed command mid-replay does not leak Visual mode into the next replay', function()
+    it('failed motion mid-replay does not eat the keys after it', function()
       fn.setline(1, { 'alpha bravo', 'golf hotel', 'mike november' })
       feed('ggVjjQ') -- cursor on each line; enables "q=" follow-mode
       feed('gg0')
-      -- The abandoned selection replays "vlo h <Esc>" at each cursor ("q=" follow). The "h" fails
-      -- (col 0 after "o" swapped to the selection start), which flushes the rest of the replay,
-      -- eating the terminating <Esc>. Visual mode must not leak into the next cursor's replay.
+      -- The abandoned selection replays "vloh<Esc>" at each cursor ("q=" follow). The "h" fails
+      -- (col 0 after "o" swap); Visual mode must not leak into next cursor replay.
       feed('vloh<Esc>')
       eq({ 'alpha bravo', 'golf hotel', 'mike november' }, get_lines())
       eq('n', api.nvim_get_mode().mode)
+
+      -- Per-cursor behavior: "t;" fails if cursor-line has no ";". The op still applies to the
+      -- existing Visual selection.
+      clear_cursors()
+      cursors({ 'a;b', 'cd', 'e;f' }, 'jQjQgg0')
+      feed('vt;d')
+      eq({ ';b', 'd', ';f' }, get_lines())
+      eq(2, ncursors()) -- The cursor where "t;" failed is kept.
+      clear_cursors()
+      cursors({ 'a;b', 'cd', 'e;f' }, 'jQjQgg0')
+      feed('vt;cX<Esc>')
+      eq({ 'X;b', 'Xd', 'X;f' }, get_lines())
     end)
 
-    it('shows per-cursor selection', function()
+    it('per-cursor selection', function()
       local screen = Screen.new(30, 6)
       cursors({ 'longword x', 'ab y', 'medium z' })
       -- Each cursor shows its own selection ("iw" = that cursor's word), previewed live.
@@ -1763,7 +1898,7 @@ describe('multicursor', function()
       screen:expect([[
         {17:longword} x                    |
         {17:ab} y                          |
-        {17:mediu}^m z                      |
+        {17:mediu^m} z                      |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
@@ -1772,7 +1907,7 @@ describe('multicursor', function()
       screen:expect([[
         {17:longword x}                    |
         {17:ab y}                          |
-        {17:medium }^z                      |
+        {17:medium ^z}                      |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
@@ -1788,7 +1923,7 @@ describe('multicursor', function()
       eq('normal', screen.mode)
     end)
 
-    it('shows linewise/blockwise selections', function()
+    it('linewise/blockwise selections', function()
       local screen = Screen.new(30, 6)
       cursors({ 'aaaa', 'bbbb', 'cccc', 'dddd' }, 'Q2j')
       feed('Vj') -- linewise: primary lines 3-4, fake lines 1-2
@@ -1796,7 +1931,7 @@ describe('multicursor', function()
         {17:aaaa}                          |
         {17:bbbb}                          |
         {17:cccc}                          |
-        ^d{17:ddd}                          |
+        {17:^dddd}                          |
         {1:~                             }|
         {5:-- VISUAL LINE --}             |
       ]])
@@ -1808,7 +1943,7 @@ describe('multicursor', function()
         {17:aa}aa                          |
         {17:bb}bb                          |
         c{17:cc}c                          |
-        d{17:d}^dd                          |
+        d{17:d^d}d                          |
         {1:~                             }|
         {5:-- VISUAL BLOCK --}            |
       ]])
@@ -1823,7 +1958,7 @@ describe('multicursor', function()
       screen:expect([[
         {17:aa b}b cc dd                   |
         {17:ee f}f gg hh                   |
-        {17:ii }^jj kk ll                   |
+        {17:ii ^j}j kk ll                   |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
@@ -1848,7 +1983,7 @@ describe('multicursor', function()
       feed('gv')
       screen:expect([[
         {17:c}                             |
-        ^f                             |
+        {17:^f}                             |
         {1:~                             }|*3
         {5:-- VISUAL LINE --}             |
       ]])
@@ -1862,9 +1997,29 @@ describe('multicursor', function()
       feed('gvd')
       eq({ ' bb', ' dd', 'ee ff' }, get_lines())
       eq(2, ncursors())
+      clear_cursors()
+      cursors({ 'aa bb', 'cc dd', 'ee ff' }, 'Qj')
+      feed('viw<Esc>')
+      feed('jQk')
+      feed('gvrZ') -- Not Normal-mode "rZ".
+      eq({ 'ZZ bb', 'ZZ dd', 'ee ff' }, get_lines())
+
+      -- Per-cursor "gv" + Insert-entering cmd ("gvc…").
+      clear_cursors()
+      cursors({ 'aa bb', 'cc dd', 'ee ff' })
+      feed('viw<Esc>')
+      feed('gvcX<Esc>')
+      eq({ 'X bb', 'X dd', 'X ff' }, get_lines())
+      -- Cursor without a previous area is skipped.
+      clear_cursors()
+      cursors({ 'aa bb', 'cc dd', 'ee ff' }, 'Qj')
+      feed('<C-v>l<Esc>')
+      feed('jQk') -- Cursor on line 3: no area.
+      feed('gvIX<Esc>')
+      eq('ee ff', fn.getline(3))
     end)
 
-    it('selection moved by API/Lua inside a mapping #41956', function()
+    it('selection moved by mapping via API/Lua #41956', function()
       local screen = Screen.new(30, 6)
       n.exec_lua(function()
         -- Extends the selection by 2 via the API, around a fed "o".
@@ -1883,32 +2038,31 @@ describe('multicursor', function()
       end)
       cursors({ 'aaaaaaa', 'bbbbbbb', 'ccccccc' })
       atoms_start()
-      -- The fed "o" does not describe the selection the mapping leaves, so the mapping itself is
-      -- the subatom: it replays at each cursor, for the preview and the cascade alike.
+      -- Fed "o" does not describe the resulting selection, so the mapping itself is the subatom.
       feed('vgh')
       screen:expect([[
         a{17:aaa}aaa                       |
         b{17:bbb}bbb                       |
-        c{17:cc}^cccc                       |
+        c{17:cc^c}ccc                       |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
       feed('d')
       eq({ 'aaaa', 'bbbb', 'cccc' }, get_lines())
       eq({ { type = 'visual' } }, atoms_tail(1, 'type'))
-      -- A mapping that starts the selection: same.
+      -- Mapping that starts the selection: same.
       feed('gL')
       screen:expect([[
         a{17:aaa}                          |
         b{17:bbb}                          |
-        c{17:cc}^c                          |
+        c{17:cc^c}                          |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
       feed('d')
       eq({ 'a', 'b', 'c' }, get_lines())
 
-      -- A fed "gv" reselects marks the mapping set: the mapping is the subatom, not "gv".
+      -- Fed "gv" reselects marks set by the mapping.
       n.exec_lua(function()
         vim.keymap.set('x', 'gs', function()
           local row, col = unpack(vim.api.nvim_win_get_cursor(0))
@@ -1923,15 +2077,15 @@ describe('multicursor', function()
       screen:expect([[
         {17:aaa}aaaa                       |
         {17:bbb}bbbb                       |
-        {17:cc}^ccccc                       |
+        {17:cc^c}cccc                       |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
       feed('d')
       eq({ 'aaaa', 'bbbb', 'cccc' }, get_lines())
 
-      -- A mapping that ends the selection with an operator and starts a new one elsewhere: the
-      -- session is kept across the operator, the mapping replaces what it fed.
+      -- Mapping that ends the selection by operator and starts a new one: session is kept across
+      -- the operator.
       n.exec_lua(function()
         vim.keymap.set('x', 'gl', function()
           vim.cmd('normal! "_y')
@@ -1945,12 +2099,115 @@ describe('multicursor', function()
       screen:expect([[
         aa{17:aa}aaa                       |
         bb{17:bb}bbb                       |
-        cc{17:c}^cccc                       |
+        cc{17:c^c}ccc                       |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
       feed('d')
       eq({ 'aaaaa', 'bbbbb', 'ccccc' }, get_lines())
+    end)
+
+    it('mapping that edits during the selection #42005', function()
+      local screen = Screen.new(30, 6)
+      -- "Shift right": the mapping edits, then reselects the moved text.
+      command([[xnoremap gl <Cmd>normal! xp`[1v<CR>]])
+      cursors({ 'abcd', 'efgh', 'ijkl' })
+      feed('vgl')
+      screen:expect([[
+        b{17:a}cd                          |
+        f{17:e}gh                          |
+        j{17:^i}kl                          |
+        {1:~                             }|*2
+        {5:-- VISUAL --}                  |
+      ]])
+      eq({ 'bacd', 'fegh', 'jikl' }, get_lines())
+      feed('gl') -- span 2 continues from each cursor's own selection.
+      eq({ 'bcad', 'fgeh', 'jkil' }, get_lines())
+      feed('d') -- Operator completes the session as the last span.
+      eq({ 'bcd', 'fgh', 'jkl' }, get_lines())
+
+      -- Mapping that acts only in Visual mode ("mini.move").
+      n.exec_lua(function()
+        vim.keymap.set('x', 'gm', function()
+          if vim.fn.mode() ~= 'v' then
+            return
+          end
+          vim.cmd('normal! xp`[1v')
+        end)
+      end)
+      clear_cursors()
+      cursors({ 'abcd', 'efgh', 'ijkl' })
+      feed('vgm')
+      eq({ 'bacd', 'fegh', 'jikl' }, get_lines())
+    end)
+
+    it('primary-overlapping cursor is not replayed; stays synced #42025', function()
+      -- The command may move the primary before the cascade ("yiwp")!
+      command('nnoremap gm yiwp') -- "Multiply" the word at cursor.
+      cursors({ 'aa', 'bb' }, 'QjQ') -- Primary-overlapping cursor.
+      feed('gm')
+      eq({ 'aaaa', 'bbbb' }, get_lines())
+      -- Primary-overlapping cursor settles on the primary's new position (the paste moved it).
+      local cur = api.nvim_win_get_cursor(0)
+      eq({ { 0, 2 }, { cur[1] - 1, cur[2] } }, anchors())
+
+      -- Also when the edit displaces the overlapping cursor's (right-gravity) mark.
+      for _, place in ipairs({ 'QjQ', 'vipQ' }) do
+        for _, case in ipairs({
+          { 'rx', { 'xa', 'xb' } },
+          { '~', { 'Aa', 'Bb' } },
+          { 'g~~', { 'AA', 'BB' } },
+        }) do
+          clear_cursors()
+          cursors({ 'aa', 'bb' }, place)
+          feed(case[1])
+          eq(case[2], get_lines(), place .. ' ' .. case[1])
+          local cur = api.nvim_win_get_cursor(0)
+          eq({ cur[1] - 1, cur[2] }, anchors()[2], place .. ' ' .. case[1]) -- Re-synced.
+        end
+      end
+
+      -- Also for LHS-replayed mapping.
+      n.exec_lua(function()
+        -- "rx" via API, which also samples the cursors when replayed at the other cursor.
+        _G.peek = function()
+          local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+          vim.api.nvim_buf_set_text(0, row - 1, col, row - 1, col + 1, { 'x' })
+          if row == 1 then
+            local ns = vim.api.nvim_create_namespace('nvim.multicursor')
+            _G.seen = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {})[2]
+          end
+        end
+      end)
+      command('nnoremap gr <Cmd>lua _G.peek()<CR>')
+      clear_cursors()
+      cursors({ 'aa', 'bb' }, 'QjQ')
+      feed('gr')
+      eq({ 'xa', 'xb' }, get_lines())
+      eq({ 1, 0 }, n.exec_lua('return { _G.seen[2], _G.seen[3] }'))
+
+      -- Same for a Visual span: the primary sits at selection-end.
+      command([[xnoremap gl <Cmd>normal! xp`[1v<CR>]])
+      clear_cursors()
+      cursors({ 'abcd', 'efgh', 'ijkl' }, 'QjQjQ')
+      feed('0vgl')
+      eq({ 'bacd', 'fegh', 'jikl' }, get_lines())
+      -- Also when Visual selection moves the primary first.
+      for _, keys in ipairs({ 'va)d', 'va)cX<Esc>', 'ca)X<Esc>' }) do
+        feed('<Esc>')
+        clear_cursors()
+        cursors({ 'aa (bb) (cc)', 'aa (bb) (cc)' }, 'vipQ')
+        feed(keys)
+        local x = keys:find('X') and 'X' or ''
+        eq({ ('aa %s (cc)'):format(x), ('aa %s (cc)'):format(x) }, get_lines(), keys)
+        local cur = api.nvim_win_get_cursor(0)
+        eq({ cur[1] - 1, cur[2] }, anchors()[2], keys) -- Primary-overlapping cursor stays synced.
+      end
+      -- Motion does not cascade, so it must not dedupe the cursor under the primary.
+      clear_cursors()
+      cursors({ 'abc', 'def' }, 'Q')
+      feed('l')
+      eq(1, ncursors())
     end)
 
     it('replays the full visual keysequence', function()
@@ -1971,18 +2228,18 @@ describe('multicursor', function()
       eq({ 'Vd' }, atoms_tail(1))
     end)
 
-    it('shows selections opened by :normal #41705', function()
+    it('selections opened by :normal #41705', function()
       local screen = Screen.new(30, 6)
       command('nnoremap <F2> <Cmd>normal! viw<CR>')
       n.exec_lua(function()
+        vim.keymap.set('x', 'Z', '<Cmd>normal! iw<CR>')
         vim.keymap.set('n', '<F3>', function()
           vim.cmd.normal('vZ')
         end)
-        vim.keymap.set('x', 'Z', '<Cmd>normal! iw<CR>')
       end)
       atoms_start()
       -- Each entry opens the selection from a different enclosing frame: typed cmdline, <Cmd>
-      -- mapping, Lua mapping (nested x-mapping), RPC. Result does not depend on the follow-mode.
+      -- mapping, Lua mapping (nested x-mapping), RPC. Result does not depend on follow-mode.
       for i, keys in ipairs({ ':normal! viw<CR>', '<F2>', '<F3>', 'api' }) do
         clear_cursors()
         cursors({ 'longword x', 'ab y', 'medium z' })
@@ -1995,7 +2252,7 @@ describe('multicursor', function()
         screen:expect([[
           {17:longword} x                    |
           {17:ab} y                          |
-          {17:mediu}^m z                      |
+          {17:mediu^m} z                      |
           {1:~                             }|*2
           {5:-- VISUAL --}                  |
         ]])
@@ -2003,7 +2260,20 @@ describe('multicursor', function()
         eq({ { 0, 0 }, { 1, 0 } }, anchors(), keys)
         feed('d')
         eq({ ' x', ' y', ' z' }, get_lines(), keys)
-        eq({ 'viwd' }, atoms_tail(1))
+
+        -- The atom is the literal input: a command is captured as itself, not any keys it "feeds".
+        -- But fed input with no enclosing command (RPC) collects its own keys.
+        local expected = ({
+          [':normal! viw<CR>'] = k(':normal! viw<NL>d'),
+          ['<F2>'] = k('<Cmd>normal! viw<NL>d'),
+          ['api'] = 'viwd',
+        })[keys]
+        if expected then
+          eq({ expected }, atoms_tail(1), keys)
+        else
+          t.matches('^\128\253g%d+\nd$', atoms_tail(1)[1]) -- "<F3>": K_LUA + mapping id.
+        end
+
         screen:expect({
           condition = function()
             eq('normal', screen.mode)
@@ -2012,7 +2282,7 @@ describe('multicursor', function()
       end
     end)
 
-    it('previews selections after mapping motions', function()
+    it('selections after mapping motions', function()
       local screen = Screen.new(30, 6)
       cursors({ 'a longword x', 'bbbb ab y', 'cc medium z' })
       command('nnoremap <F2> w<Cmd>normal! viw<CR>')
@@ -2023,13 +2293,13 @@ describe('multicursor', function()
       screen:expect([[
         a {17:longword} x                  |
         bbbb {17:ab} y                     |
-        cc {17:mediu}^m z                   |
+        cc {17:mediu^m} z                   |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
       feed('d')
       eq({ 'a  x', 'bbbb  y', 'cc  z' }, get_lines())
-      eq({ 'wviwd' }, atoms_tail(1))
+      eq({ k('w<Cmd>normal! viw<NL>d') }, atoms_tail(1))
     end)
 
     it('refreshes a nested selection even if the primary selection is unchanged', function()
@@ -2043,14 +2313,14 @@ describe('multicursor', function()
       feed('viw')
       screen:expect([[
         {17:foo}.bar tail                  |
-        {17:wor}^d tail                     |
+        {17:wor^d} tail                     |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
       feed('Z')
       screen:expect([[
         {17:foo.bar} tail                  |
-        {17:wor}^d tail                     |
+        {17:wor^d} tail                     |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
@@ -2112,7 +2382,7 @@ describe('multicursor', function()
       screen:expect([[
         aaa {100:b}{30:b}b ccc                             |
         ddd {100:e}{30:e}e fff                             |
-        ggg {17:h}^hh iii                             |
+        ggg {17:h^h}h iii                             |
         {1:~                                       }|*2
         {5:-- VISUAL --}                            |
       ]])
@@ -2120,7 +2390,7 @@ describe('multicursor', function()
       screen:expect([[
         aaa {30:b}{100:b}b ccc                             |
         ddd {30:e}{100:e}e fff                             |
-        ggg ^h{17:h}h iii                             |
+        ggg {17:^hh}h iii                             |
         {1:~                                       }|*2
         {5:-- VISUAL --}                            |
       ]])
@@ -2160,6 +2430,29 @@ describe('multicursor', function()
   end)
 
   describe('q= (follow-mode)', function()
+    it("'follow' option", function()
+      -- :setlocal is the same as "q=".
+      cursors({ 'abcd', 'efgh' }, 'Qj')
+      command('setlocal follow')
+      feed('lx')
+      eq({ 'acd', 'egh' }, get_lines())
+      -- Buffer-local.
+      command('new')
+      eq(false, api.nvim_get_option_value('follow', {}))
+      command('bwipe!')
+      eq(true, api.nvim_get_option_value('follow', {}))
+      -- LHS-replay does not re-run "q=" (toggle) at each cursor.
+      clear_cursors()
+      command('setlocal nofollow')
+      command('let g:optionset = 0 | autocmd OptionSet follow let g:optionset += 1')
+      command([[nnoremap gx <Cmd>exe 'normal! q='<Bar>call setline('.', 'X'..getline('.'))<CR>]])
+      cursors({ 'aa', 'bb' }, 'Qj')
+      feed('gx')
+      eq({ 'Xaa', 'Xbb' }, get_lines())
+      eq(true, api.nvim_get_option_value('follow', {}))
+      eq(1, n.eval('g:optionset'))
+    end)
+
     it('cursors follow primary-cursor motions', function()
       cursors({ 'abcd', 'efgh' }, 'Q')
       feed('j') -- No cascade/follow.
@@ -2186,14 +2479,15 @@ describe('multicursor', function()
       eq({ 'b', '!' }, get_lines())
     end)
 
-    it('implicit exit (cursors deduped) resets follow-mode', function()
+    it("implicit exit (cursors deduped) keeps 'follow'; Q disables it", function()
       cursors({ 'aaa', 'bbb', 'ccc' })
       eq(2, ncursors())
       feed('q=')
-      feed('gg') -- Absolute motion: every cursor lands on the primary, all deduped.
+      feed('9k') -- Every cursor clamps to line 1, onto the primary: all deduped.
       eq(0, ncursors())
-      -- Exited implicitly: "q=" resets, else the next "Q" would dedupe on "j".
-      feed('Q')
+      eq(true, api.nvim_get_option_value('follow', {}))
+      feed('Q') -- Disables follow-mode, else it would dedupe on "j".
+      eq(false, api.nvim_get_option_value('follow', {}))
       feed('j')
       eq(1, ncursors())
     end)
@@ -2240,7 +2534,7 @@ describe('multicursor', function()
       eq({ '(aa', '(bb', '(cc' }, get_lines())
     end)
 
-    it('q= toggle is synchronous within a mapping #41836', function()
+    it("is decided at a mapping's first move #41836", function()
       -- Cursors on lines 2-4, primary line 5, follow=ON.
       cursors({ 'l1', 'l2', 'l3', 'l4', 'l5' }, 'jQjQjQj1q=')
       -- Mapping toggles follow OFF, moves, then toggles ON: the move should NOT cascade.
@@ -2287,7 +2581,7 @@ describe('multicursor', function()
       eq({ 2, 0 }, api.nvim_win_get_cursor(0))
     end)
 
-    it('jumps are not followed (CTRL-O, backtick)', function()
+    it('jumps (absolute motions) are not followed', function()
       cursors({ 'abcd', 'efgh', 'ijkl' }, 'Q')
       feed('3G') -- Jumps fill the jumplist; no cascade.
       feed('2G')
@@ -2296,7 +2590,35 @@ describe('multicursor', function()
       eq({ { 0, 1 } }, anchors())
       feed('<C-o>') -- Jump.
       feed('``') -- Jump.
+      feed('G')
+      feed('gg')
+      feed('L')
       eq({ { 0, 1 } }, anchors())
+
+      -- Jump from a mapping (no LHS-replay fallback). #41995
+      command('nnoremap <Down> ]C')
+      clear_cursors()
+      cursors({ 'a', 'b', 'c', 'd' }, 'QjQjQj')
+      feed('1q=')
+      eq({ { 0, 0 }, { 1, 0 }, { 2, 0 } }, anchors())
+      eq(4, fn.line('.'))
+      for _, line in ipairs({ 1, 2, 3, 1 }) do
+        feed('<Down>')
+        eq(line, fn.line('.')) -- The primary jumps to the next cursor (wraps)...
+        eq({ { 0, 0 }, { 1, 0 }, { 2, 0 } }, anchors()) -- ...the cursors stay put.
+      end
+    end)
+
+    it('"*" follows per-cursor (its own word); keeps the primary search pattern', function()
+      cursors({ 'foo bar', 'bar baz', 'foo', 'bar', 'baz' }, 'Qj0')
+      feed('q=')
+      feed('*') -- Each cursor goes to the next occurrence of its own word.
+      eq({ { 2, 0 } }, anchors())
+      eq({ 4, 1 }, { fn.line('.'), fn.col('.') })
+      eq([[\<bar\>]], fn.getreg('/'))
+      feed('n') -- The primary's pattern, at each cursor.
+      eq({ { 3, 0 } }, anchors())
+      eq({ 1, 5 }, { fn.line('.'), fn.col('.') })
     end)
 
     it('cursors follow j/k, gj/gk, arrow keys, and $', function()
@@ -2680,26 +3002,6 @@ describe('multicursor', function()
       eq({ 'bc', 'ef', 'ghi' }, get_lines())
     end)
 
-    it('a mapped undo/redo (vim-repeat "nmap u") does not cascade', function()
-      -- vim-repeat maps u/U/<C-R> to undo/redo wrappers. Such a mapping changes the buffer, but an
-      -- undo/redo is buffer-global, not a per-cursor edit: it must NOT cascade, or every cursor
-      -- would undo again, over-undoing the whole session (the reported bug).
-      fn.setline(1, { 'aaa', 'bbb', 'ccc' })
-      feed('gg0Qj0Qj0') -- 3 cursors
-      feed('x') -- one cascade: aa,bb,cc
-      eq({ 'aa', 'bb', 'cc' }, get_lines())
-      command('nnoremap <silent> u :<C-U>undo<CR>')
-      command('nnoremap <silent> <C-R> :<C-U>redo<CR>')
-      feed('u') -- ONE undo of the cascade, not one-per-cursor (would reach the empty buffer)
-      eq({ 'aaa', 'bbb', 'ccc' }, get_lines())
-      feed('<C-R>') -- redo mapping likewise does not cascade
-      eq({ 'aa', 'bb', 'cc' }, get_lines())
-      -- The guard survives a nested normal_execute() after the undo, in the same mapped command.
-      command('nnoremap <silent> u :<C-U>undo <Bar> normal! l<CR>')
-      feed('u')
-      eq({ 'aaa', 'bbb', 'ccc' }, get_lines())
-    end)
-
     it('u/CTRL-R ping-pong toggles without drift', function()
       -- Repeated undo/redo of one cascade must stabilize (no extmark drift).
       cursors({ 'aaa', 'bbb', 'ccc' }, 'QjQ')
@@ -2815,9 +3117,9 @@ describe('multicursor', function()
     it('coincident cursors merge', function()
       cursors({ 'aaa', 'bbb', 'ccc' }, 'QjQ')
       feed('q=')
-      feed('G') -- all cursors land on the last line
+      feed('9j') -- All cursors to the last line.
       feed('q=')
-      feed('x') -- one deletion, not three
+      feed('x') -- One deletion, not three.
       eq({ 'aaa', 'bbb', 'cc' }, get_lines())
     end)
   end)
@@ -3137,25 +3439,35 @@ describe('multicursor', function()
       screen:expect({ any = 'ine 30' }) -- ("l" is under the painted cursor cell)
     end)
 
-    it('cycle through the cursors, wrapping; the old position keeps a cursor', function()
+    it('cycle through the cursors, wrapping', function()
       cursors({ 'aaa', 'bbb', 'ccc', 'ddd' }, 'Q2jllQ')
       feed('gg0j')
       feed(']C')
       eq({ 3, 2 }, cur())
-      eq({ { 0, 0 }, { 1, 0 }, { 2, 2 } }, anchors())
+      eq({ { 0, 0 }, { 2, 2 } }, anchors())
       feed(']C') -- wraps
       eq({ 1, 0 }, cur())
       feed('2]C') -- count
+      eq({ 1, 0 }, cur())
+      feed('[C')
       eq({ 3, 2 }, cur())
       feed('[C')
-      eq({ 2, 0 }, cur())
-      feed('[C')
       eq({ 1, 0 }, cur())
-      -- The set of positions is invariant: an edit applies once at each (the cursor under the
-      -- primary merges into it).
-      feed('x')
-      eq({ 'aa', 'bb', 'cc', 'ddd' }, get_lines())
-      eq({ { 1, 0 }, { 2, 1 } }, anchors())
+      feed(']CQ') -- "]CQ" removes the cursor it lands on.
+      eq({ { 0, 0 } }, anchors())
+      -- |mcursor-examples| mapping: ]C lays an egg before jumping.
+      n.exec_lua([[
+        vim.keymap.set('n', ']C', function()
+          vim.api.nvim_mcursor(0, vim.api.nvim_win_get_cursor(0))
+          vim.cmd('normal! ]C')
+        end)
+      ]])
+      feed(']C')
+      eq({ 1, 0 }, cur())
+      eq({ { 0, 0 }, { 2, 2 } }, anchors())
+      feed(']C')
+      eq({ 3, 2 }, cur())
+      eq({ { 0, 0 }, { 2, 2 } }, anchors())
     end)
 
     it('does not move the other cursors in q= mode', function()
@@ -3163,7 +3475,7 @@ describe('multicursor', function()
       feed('q=')
       feed(']C')
       eq({ 1, 0 }, cur())
-      eq({ { 0, 0 }, { 1, 0 } }, anchors()) -- (1,0): left behind by the jump.
+      eq({ { 0, 0 } }, anchors())
       feed('q=')
     end)
 
@@ -3191,7 +3503,7 @@ describe('multicursor', function()
       screen:expect([[
         foo(one, {17:two})                 |
         bar(three, {17:four})              |
-        baz(five, {17:si}^x)                |
+        baz(five, {17:si^x})                |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
@@ -3199,7 +3511,7 @@ describe('multicursor', function()
       screen:expect([[
         foo{17:(one, two)}                 |
         bar{17:(three, four)}              |
-        baz{17:(five, six}^)                |
+        baz{17:(five, six^)}                |
         {1:~                             }|*2
         {5:-- VISUAL --}                  |
       ]])
@@ -3280,7 +3592,7 @@ describe('multicursor', function()
         }
         vim.o.clipboard = 'unnamedplus'
       ]])
-      cursors({ '', 'aa' }, 'Qj') -- Cursor on the empty line, primary on the non-empty line.
+      cursors({ '', 'aa' }, 'QjQ') -- Cursors on both lines, primary on the non-empty line.
       feed(']C') -- Make the empty-line cursor primary.
       feed('C')
       n.assert_alive()
@@ -3397,6 +3709,51 @@ describe('multicursor', function()
       feed('q=') -- Follow mode: "=" prefix.
       feed('l') -- Tickle showcmd redraw.
       screen:expect({ any = '=2×' })
+
+      -- ui2 redraws on 'showcmd', which should only update AFTER cascade, not during. #42081 #41659
+      n.exec_lua(function()
+        _G.seen = {}
+        local ns = vim.api.nvim_create_namespace('nvim.multicursor.cursor')
+        vim.ui_attach(vim.api.nvim_create_namespace('test'), { ext_messages = true }, function(ev)
+          if ev == 'msg_showcmd' then
+            -- Buffer text, cursor column, and selection-end columns.
+            local ends = vim.tbl_map(function(m)
+              return m[3]
+            end, vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {}))
+            _G.seen[#_G.seen + 1] = ('%s %d %s'):format(
+              table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, true), ','),
+              vim.fn.col('.') - 1,
+              table.concat(ends, ',')
+            )
+          end
+        end)
+      end)
+      clear_cursors()
+      cursors({ 'aaa', 'bbb', 'ccc' }, 'QjQjQ')
+      screen:expect({ any = '3×' }) -- Input processed, before resetting `seen`.
+      n.exec_lua('_G.seen = {}')
+      feed('rx')
+      screen:expect([[
+        {17:x}aa                           |
+        {17:x}bb                           |
+        {17:^x}cc                           |
+        {1:~                             }|
+                            3×        |
+      ]])
+      eq({ 'aaa,bbb,ccc 0 ', 'xaa,xbb,xcc 0 ' }, n.exec_lua('return _G.seen'))
+      n.exec_lua('_G.seen = {}')
+      feed('vl')
+      screen:expect([[
+        {17:xa}a                           |
+        {17:xb}b                           |
+        {17:x^c}c                           |
+        {1:~                             }|
+        {5:-- VISUAL --}        3× 2      |
+      ]])
+      eq(
+        { 'xaa,xbb,xcc 0 0,0,0', 'xaa,xbb,xcc 1 1,1,1', 'xaa,xbb,xcc 1 1,1,1' },
+        n.exec_lua('return _G.seen')
+      )
     end)
   end)
 

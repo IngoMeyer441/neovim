@@ -599,7 +599,7 @@ describe(':terminal buffer', function()
       api.nvim_input_mouse('right', 'release', '', 0, 1, 27)
       screen:expect([[
         rows: 6, cols: 25       │rows: 6, cols: 25        |
-        mo{108:use enabled}           │mo^u{108:se enabled}            |
+        mo{108:use enabled}           │mo{108:^use enabled}            |
         {108: }                       │{108: }                        |*3
         [Process suspended]     │[Process suspended]      |
         {5:-- VISUAL --}                                      |
@@ -1631,7 +1631,9 @@ describe('terminal input', function()
       '<BS>',
       '<S-Tab>',
       '<Insert>',
+      '<S-Insert>',
       '<Del>',
+      '<S-Del>',
       '<PageUp>',
       '<PageDown>',
       '<S-Up>',
@@ -1703,6 +1705,7 @@ describe('terminal input', function()
     }
     -- FIXME: The escape sequence to enable kitty keyboard mode doesn't work on Windows
     if not is_os('win') then
+      table.insert(keys, '<S-BS>')
       table.insert(keys, '<C-I>')
       table.insert(keys, '<C-M>')
       table.insert(keys, '<C-[>')

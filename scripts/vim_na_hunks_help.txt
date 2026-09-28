@@ -84,6 +84,7 @@
 \*:Vimuntar\*
 \*:X\*
 \*:behave\*
+\*:<client>\*
 \*:fixdel\*
 \*:helpfind\*
 \*:open\*
@@ -107,7 +108,9 @@
 \*SigUSR1\*
 \*TerminalOpen\*
 \*TerminalWinOpen\*
+\*X11\*
 \*XLFD\*
+\*\(job\|sound\|term\|test_gui\)_[_a-zA-Z0-9]\+()\*
 \*autocommand-events\*
 \*blowfish\*
 \*builtin-function-list\*
@@ -117,18 +120,14 @@
 \*global-ime\*
 \*gui-start\*
 \*help-toc-install\*
-\*job_[a-zA-Z0-9]\+()\*
 \*multibyte-ime\*
 \*os-support\*
 \*patches-\(after-\)\?[0-9].*\*
 \*pkzip\*
 \*popup-window-functions\*
 \*sound-functions\*
-\*sound_[a-zA-Z0-9]\+()\*
 \*tabpanel[-a-z]*\*
 \*term++\(close\|open\)\*
-\*term_start()\*
-\*terminal-\(bufname\|nospecial\)\*
-\*test_gui_[a-zA-Z0-9_]\+()\*
+\*terminal-\(api\|bufname\|nospecial\)\*
 \*v:none\*
 \*v:sizeof[a-z]\+\*

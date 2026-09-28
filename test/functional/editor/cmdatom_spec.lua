@@ -273,7 +273,7 @@ describe('CmdAtom', function()
       feed('gg')
       eq({
         { type = 'mapping', lhs = ',f' },
-        { type = 'motion', lhs = 'gg', keys = 'gg' },
+        { type = 'jump', lhs = 'gg', keys = 'gg' },
       }, atoms_tail(2, 'type', 'lhs', 'keys'))
     end)
 
@@ -471,7 +471,7 @@ describe('CmdAtom', function()
       feed('<F2>')
       eq({
         { type = 'normal', lhs = 'i', keys = 'i' },
-        { type = 'motion', lhs = k('<F2>'), keys = 'gg' }, -- Labeled with the mapping.
+        { type = 'jump', lhs = k('<F2>'), keys = 'gg' }, -- Labeled with the mapping.
       }, atoms_tail(2, 'type', 'lhs', 'keys'))
       eq('nt', api.nvim_get_mode().mode)
 
@@ -484,7 +484,7 @@ describe('CmdAtom', function()
       eq(before + 2, #atoms())
       eq({
         { type = 'normal', lhs = 'i', keys = 'i' },
-        { type = 'motion', lhs = k('<F3>'), keys = 'gg' },
+        { type = 'jump', lhs = k('<F3>'), keys = 'gg' },
       }, atoms_tail(2, 'type', 'lhs', 'keys'))
       eq('t', api.nvim_get_mode().mode)
     end)
@@ -915,8 +915,18 @@ describe('CmdAtom', function()
       eq(' bbb ccc', fn.getline(1))
       eq(before + 1, #atoms())
       eq({ type = 'visual', keys = 'gvd', lhs = 'gvd' }, pick(atom_last(), 'type', 'keys', 'lhs'))
-      feed('.')
-      eq('b ccc', fn.getline(1))
+      feed('w.') -- "." containing "gv" replays "1v" fallback at the cursor ("bbb").
+      eq('  ccc', fn.getline(1))
+      -- Visual-entered Insert. The atom has "gv" (as typed), not redo's "1v" fallback.
+      api.nvim_buf_set_lines(0, 0, -1, true, { 'aaa bbb ccc' })
+      feed('gg0viw<Esc>')
+      before = #atoms()
+      feed('gvcX<Esc>')
+      eq('X bbb ccc', fn.getline(1))
+      eq(before + 1, #atoms())
+      eq({ type = 'visual', keys = k('gvcX<Esc>') }, pick(atom_last(), 'type', 'keys'))
+      feed('w.')
+      eq('X X ccc', fn.getline(1))
 
       -- A fed (":normal!") Visual-put preps the selection keysequence, like any fed visual
       -- operator (":normal! vjd"): "." re-executes "Vjp", not a bare "p".
@@ -946,16 +956,16 @@ describe('CmdAtom', function()
       eq('n', fn.mode()) -- Not in Visual.
       eq({ '' }, get_lines())
 
-      -- <Cmd> ":norm" captured as nested subatoms: the atom is "ved", not the <Cmd>.
+      -- <Cmd> ":norm" captured as itself (not its subatoms).
       command('xmap <M-w> <Cmd>normal! e<CR>')
       api.nvim_buf_set_lines(0, 0, -1, true, { 'one two three', 'four five six' })
       feed('gg0v<M-w>d')
       eq({ ' two three', 'four five six' }, get_lines())
-      eq({ type = 'visual', keys = 'ved' }, pick(atom_last(), 'type', 'keys'))
+      eq({ type = 'visual', keys = k('v<Cmd>normal! e<NL>d') }, pick(atom_last(), 'type', 'keys'))
       feed('j0.')
       eq({ ' two three', ' five six' }, get_lines())
 
-      -- A nested command can replace the pending selection, not just extend it. #41705
+      -- Nested command can replace the pending selection, not just extend it. #41705
       n.exec_lua(function()
         vim.keymap.set('x', 'Z', function()
           -- Mapping ends with the selection "open".
@@ -969,21 +979,47 @@ describe('CmdAtom', function()
       eq({ ' tail' }, get_lines())
       eq({ type = 'visual', keys = 'viWd' }, pick(atom_last(), 'type', 'keys'))
 
-      -- Buffer-editing <Cmd> is unreplayable (void), so "." fallsback to equal-size reselect.
+      -- Buffer-editing <Cmd> is captured as itself.
       command('xmap <M-a> <Cmd>call append(1, "X")<CR>')
       api.nvim_buf_set_lines(0, 0, -1, true, { 'ab', 'cd' })
       feed('gg0vl<M-a>d')
       eq({ '', 'X', 'cd' }, get_lines())
+      eq(
+        { type = 'visual', keys = k('vl<Cmd>call append(1, "X")<NL>d') },
+        pick(atom_last(), 'type', 'keys')
+      )
       feed('3gg0.')
       eq({ '', 'X', '' }, get_lines())
 
-      -- A search-extended selection re-executes: the payload travels in the collected keys.
+      -- Search-extended selection: the payload travels in the collected keys.
       api.nvim_buf_set_lines(0, 0, -1, true, { 'ab META x', 'cdef META y' })
       feed('gg0v/META<CR>d')
       eq({ 'ETA x', 'cdef META y' }, get_lines())
       eq({ type = 'visual', keys = k('v/META<NL>d') }, pick(atom_last(), 'type', 'keys'))
       feed('j0.')
       eq({ 'ETA x', 'ETA y' }, get_lines())
+
+      -- Excmd that visually-selects. Replaying ":" prefills "'<,'>"; keys place <C-U> internally.
+      exec([[
+        func SelectWord()
+          normal! viw
+        endfunc
+      ]])
+      api.nvim_buf_set_lines(0, 0, -1, true, { 'foo bar', 'longword bar' })
+      feed('gg0v:<C-U>call SelectWord()<CR>d')
+      eq({ ' bar', 'longword bar' }, get_lines())
+      eq(
+        { type = 'visual', keys = k('v:<C-U>call SelectWord()<NL>d') },
+        pick(atom_last(), 'type', 'keys')
+      )
+      feed('j0.')
+      eq({ ' bar', ' bar' }, get_lines())
+
+      -- Nothing typed a <C-U> here: this ":" keeps the prefilled range.
+      api.nvim_buf_set_lines(0, 0, -1, true, { 'a xx', 'b xx', 'c xx' })
+      feed('gg0Vj:s/xx/YY/<CR>')
+      eq({ 'a YY', 'b YY', 'c xx' }, get_lines())
+      eq(k("Vj:<C-U>'<,'>s/xx/YY/<NL>"), atom_last().keys)
     end)
 
     it('|visual-fixed-size| example in visual.txt', function()
@@ -1720,15 +1756,19 @@ describe('CmdAtom', function()
     feed('gg0f(')
     atom('%', '%', nil, 'motion')
     fn.setline(1, 'alpha beta gamma delta epsilon zeta')
-    -- G/gg (absolute line), H/M/L (viewport) are motions: multicursor replay is meaningful? (but
-    -- cursors may be "merged").
+    -- "*" is cursor-relative, reads the word per-cursor.
     feed('gg0')
-    atom('G', 'G', nil, 'motion')
-    atom('gg', 'gg', nil, 'motion')
-    atom('L', 'L', nil, 'motion')
-    atom('H', 'H', nil, 'motion')
-    atom('M', 'M', nil, 'motion')
-    -- Jumps: absolute/shared-state navigation, their own kind.
+    atom('*', '*', nil, 'motion')
+    atom('g#', 'g#', nil, 'motion')
+    -- Jumps: absolute, the target is independent of the cursor.
+    feed('gg0')
+    atom('G', 'G', nil, 'jump')
+    atom('gg', 'gg', nil, 'jump')
+    atom('go', 'go', nil, 'jump')
+    atom('50%', '50%', nil, 'jump') -- "[count]%" is absolute, unlike "%".
+    atom('L', 'L', nil, 'jump')
+    atom('H', 'H', nil, 'jump')
+    atom('M', 'M', nil, 'jump')
     atom('ma', 'ma', nil, 'normal') -- "m" sets state; it does not jump
     atom('`a', '`a', nil, 'jump')
     atom('<C-o>', '<C-O>', nil, 'jump')

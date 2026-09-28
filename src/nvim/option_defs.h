@@ -6,6 +6,7 @@
 #include "nvim/api/private/defs.h"
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/regexp_defs.h"
+#include "nvim/types_defs.h"
 
 #include "options_enum.generated.h"
 
@@ -28,11 +29,11 @@ typedef enum {
   kOptFlagOneComma  = (1 << 11) | kOptFlagComma,  ///< Comma-separated list that cannot have two consecutive commas.
   kOptFlagNoDup     = 1 << 12,  ///< Don't allow duplicate strings.
   kOptFlagFlagList  = 1 << 13,  ///< List of single-char flags.
-  kOptFlagSecure    = 1 << 14,  ///< Cannot change in modeline or secure mode.
+  kOptFlagSecure    = 1 << 14,  ///< Cannot change in modelines, secure mode, or the sandbox.
   kOptFlagGettext   = 1 << 15,  ///< Expand default value with _().
   kOptFlagNoGlob    = 1 << 16,  ///< Do not use local value for global vimrc.
   kOptFlagNFname    = 1 << 17,  ///< Only normal file name chars allowed.
-  kOptFlagInsecure  = 1 << 18,  ///< Option was set from a modeline.
+  kOptFlagInsecure  = 1 << 18,  ///< Value contains untrusted content; evaluate it in the sandbox.
   kOptFlagPriMkrc   = 1 << 19,  ///< Priority for :mkvimrc (setting option has side effects).
   kOptFlagCurswant  = 1 << 20,  ///< Update curswant required; not needed when there is a redraw flag.
   kOptFlagNDname    = 1 << 21,  ///< Only normal directory name chars allowed.
@@ -114,12 +115,10 @@ typedef struct {
   /// If the value specified for an option is not valid and the error message
   /// is parameterized, then the "os_errbuf" buffer is used to store the error
   /// message (when it is not NULL).
-  char *os_errbuf;
-  /// length of the error buffer
-  size_t os_errbuflen;
+  const CharBuf *os_errbuf;
 
-  void *os_win;
-  void *os_buf;
+  win_T *os_win;
+  buf_T *os_buf;
 } optset_T;
 
 /// Check a candidate value without changing option variables or derived state,
