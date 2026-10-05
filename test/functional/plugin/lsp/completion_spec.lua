@@ -964,6 +964,31 @@ describe('vim.lsp.completion: protocol', function()
     end)
   end
 
+  it('does not error on :checktime after client restart', function()
+    local fname = 'Xtest-lsp-completion-reload'
+    t.write_file(fname, 'foo')
+    t.finally(function()
+      os.remove(fname)
+    end)
+    local mtime = os.time() - 10
+    vim.uv.fs_utime(fname, mtime, mtime)
+    n.command('edit ' .. fname)
+    n.command('set autoread')
+
+    local client_id = create_server('dummy', { isIncomplete = false, items = {} })
+    exec_lua(function()
+      vim.lsp.get_client_by_id(client_id):stop(true)
+      vim.wait(1000, function()
+        return vim.lsp.get_client_by_id(client_id) == nil
+      end)
+    end)
+    create_server('dummy', { isIncomplete = false, items = {} })
+
+    t.write_file(fname, 'bar')
+    n.command('checktime')
+    eq({ 'bar' }, n.api.nvim_buf_get_lines(0, 0, -1, true))
+  end)
+
   it('fetches completions and shows them using complete on trigger', function()
     create_server('dummy', {
       isIncomplete = false,
@@ -1060,6 +1085,27 @@ describe('vim.lsp.completion: protocol', function()
       eq('hallo', matches[2].word)
       eq('hallo', matches[3].word)
     end)
+  end)
+
+  it('requests only from the given clients', function()
+    local id1 = create_server('dummy1', { isIncomplete = false, items = { { label = 'hello' } } })
+    local id2 = create_server('dummy2', { isIncomplete = false, items = { { label = 'hallo' } } })
+    local id3 = create_server('dummy3', { isIncomplete = false, items = { { label = 'hola' } } })
+    feed('ih')
+
+    for _, case in ipairs({ { id2, { 'hallo' } }, { { id1, id3 }, { 'hello', 'hola' } } }) do
+      exec_lua(function()
+        vim.lsp.completion.get({ client_id = case[1] })
+      end)
+      assert_matches(function(matches)
+        eq(
+          case[2],
+          vim.tbl_map(function(m)
+            return m.word
+          end, matches)
+        )
+      end)
+    end
   end)
 
   it('insert char triggers clients matching trigger characters', function()

@@ -13,6 +13,7 @@ local feed = n.feed
 local api = n.api
 local request = n.request
 local pcall_err = t.pcall_err
+local assert_alive = n.assert_alive
 local uv = vim.uv
 
 describe('nvim_ui_attach()', function()
@@ -24,6 +25,16 @@ describe('nvim_ui_attach()', function()
     local _ = Screen.new(999, 999)
     eq(999, eval('&lines'))
     eq(999, eval('&columns'))
+  end)
+
+  it('does not crash on self-attach', function()
+    local rv = exec_lua(function()
+      local chan = vim.fn.sockconnect('pipe', vim.v.servername, { rpc = true })
+      return { pcall(vim.fn.rpcrequest, chan, 'nvim_ui_attach', 80, 24, { ext_linegrid = true }) }
+    end)
+    eq(false, rv[1])
+    t.matches('failed to parse redraw event$', rv[2])
+    assert_alive()
   end)
 
   it('validation', function()

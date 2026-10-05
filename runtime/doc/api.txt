@@ -1279,20 +1279,6 @@ nvim_load_context({dict})                                *nvim_load_context()*
     Return: ~
         (`any`)
 
-nvim_mcursor({buf}, {pos})                                    *nvim_mcursor()*
-    Adds a multicursor in the given buffer.
-
-    Attributes: ~
-        Since: 0.13.0
-
-    Parameters: ~
-      • {buf}  (`integer`) Buffer handle, or 0 for current buffer
-      • {pos}  (`[integer, integer]`) (row, col) (1,0)-indexed cursor position
-               (byte offset)
-
-    Return: ~
-        (`integer`) Total number of extra cursors.
-
 nvim_open_term({buf}, {opts})                               *nvim_open_term()*
     Open a terminal instance in a buffer
 
@@ -1767,9 +1753,9 @@ nvim__complete_set({index}, {opts})                     *nvim__complete_set()*
                  • info: (string) info text.
 
     Return: ~
-        (`table<string,number>`) Dict containing these keys:
-        • winid: (number) floating window id
-        • bufnr: (number) buffer id in floating window
+        (`table<string,integer>`) Dict containing these keys:
+        • winid: (integer) floating window id
+        • bufnr: (integer) buffer id in floating window
 
 nvim__exec_lua_fast({code}, {args})                    *nvim__exec_lua_fast()*
     WARNING: This feature is experimental/unstable.
@@ -3400,7 +3386,8 @@ nvim_buf_set_extmark({buf}, {ns_id}, {line}, {col}, {opts})
                    'nowrap' or 'smoothscroll'. Currently only affects
                    "overlay" virt_text.
                  • virt_text_pos: Position of virtual text:
-                   • "eol": Right after EOL character (default).
+                   • "eol": One cell after the line text or its displayed
+                     'listchars' EOL character (default).
                    • "eol_right_align": Display right-aligned in the window
                      unless the virtual text is longer than the space
                      available. If the virtual text is too long, it is

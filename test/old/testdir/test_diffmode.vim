@@ -843,6 +843,21 @@ func Test_diffpatch()
   bwipe!
 endfunc
 
+" FIXME: test fails, the Xresult file can't be read
+func No_Test_diffpatch_restricted()
+  let lines =<< trim END
+    call assert_fails('diffpatch NoSuchDiff', 'E145:')
+
+    call writefile(v:errors, 'Xresult')
+    qa!
+  END
+  call writefile(lines, 'Xrestricted', 'D')
+  if RunVim([], [], '-Z --clean -S Xrestricted')
+    call assert_equal([], readfile('Xresult'))
+  endif
+  call delete('Xresult')
+endfunc
+
 func Test_diff_too_many_buffers()
   for i in range(1, 8)
     exe "new Xtest" . i
@@ -999,6 +1014,13 @@ func VerifyInternal(buf, dumpfile, extra)
 endfunc
 
 func Test_diff_screen()
+  if has('bsd')
+    CheckExecutable gdiff
+  endif
+  if has('osxdarwin') && system('diff --version') =~ '^Apple diff'
+    throw 'Skipped: unified diff does not work properly on this macOS version'
+  endif
+
   let g:test_is_flaky = 1
   CheckScreendump
   CheckFeature menu
@@ -1007,7 +1029,8 @@ func Test_diff_screen()
       func UnifiedDiffExpr()
         " Prepend some text to check diff type detection
         call writefile(['warning', '  message'], v:fname_out)
-        silent exe '!diff -U0 ' .. v:fname_in .. ' ' .. v:fname_new .. '>>' .. v:fname_out
+        let diff = has('bsd') ? 'gdiff' : 'diff'
+        silent exe $'!{diff} -U0 {v:fname_in} {v:fname_new}>>{v:fname_out}'
       endfunc
       func SetupUnified()
         set diffexpr=UnifiedDiffExpr()
@@ -2425,6 +2448,29 @@ func Test_diff_inline_multibuffer_empty_block()
   call StopVimInTerminal(buf)
 endfunc
 
+" An inline:word diff block that starts with inserted words has df_count zero
+" for the first buffer, then the index of its last line is negative.  This
+" caused a heap-buffer underflow
+func Test_diff_inline_word_empty_block()
+  set diffopt=internal,filler,inline:word
+  enew!
+  call setline(1, ['b c', 'y z'])
+  diffthis
+  vnew
+  call setline(1, ['a b c d e', 'x y z w v'])
+  diffthis
+  redraw
+
+  " Part of the line is highlighted, not all of it.
+  let attrs = map(range(1, 9), 'screenattr(1, v:val)')
+  call assert_true(len(uniq(sort(attrs))) > 1)
+
+  diffoff!
+  set diffopt&
+  bwipe!
+  bwipe!
+endfunc
+
 func Test_diffget_diffput_linematch()
   CheckScreendump
   call delete('.Xdifile1.swp')
@@ -3413,6 +3459,37 @@ func Test_diff_cursorbind_after_undo()
   call assert_equal(1, line('.', w1))
   call assert_equal(1, line('.', w2))
 
+  %bw!
+endfunc
+
+func Test_diffupdated_close_window_fails()
+  new
+  only
+  call setline(1, ['one', 'two', 'three'])
+  let w1 = win_getid()
+  vnew
+  call setline(1, ['one', 'Two', 'three'])
+  windo diffthis
+  call win_gotoid(w1)
+
+  augroup TestDiffUpdated
+    autocmd!
+    autocmd DiffUpdated * bw!
+  augroup END
+
+  try
+  diffupdate
+  catch
+  endtry
+
+  augroup TestDiffUpdated
+    autocmd!
+  augroup END
+  augroup! TestDiffUpdated
+
+  call assert_equal(2, winnr('$'))
+
+  diffoff!
   %bw!
 endfunc
 

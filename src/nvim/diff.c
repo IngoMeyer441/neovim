@@ -1163,7 +1163,9 @@ theend:
   // are diffs now, which means they got updated.
   if (had_diffs || curtab->tp_first_diff != NULL) {
     diff_redraw(true);
+    window_layout_lock();
     apply_autocmds(EVENT_DIFFUPDATED, NULL, NULL, false, curbuf);
+    window_layout_unlock();
   }
 }
 
@@ -3075,18 +3077,23 @@ static void diff_refine_inline_word_highlight(diff_T *dp_orig, garray_T *linemap
     diff_T *dp = dp_orig;
 
     while (dp != NULL && dp->df_next != NULL) {
+      // Index of the last line of this block and of the first line of the
+      // next one.  When this block is empty, which happens for inserted
+      // lines, it has no last line and "idx_entry1" is negative.
+      linenr_T idx_entry1 = dp->df_lnum[idx1] + dp->df_count[idx1] - 2;
+      linenr_T idx_entry2 = dp->df_next->df_lnum[idx1] - 1;
+
       // Only merge blocks on the same line
-      if (dp->df_lnum[idx1] + dp->df_count[idx1] - 1 >= linemap[idx1].ga_len
-          || dp->df_next->df_lnum[idx1] - 1 >= linemap[idx1].ga_len) {
+      if (idx_entry1 < 0 || idx_entry1 >= linemap[idx1].ga_len
+          || idx_entry2 < 0 || idx_entry2 >= linemap[idx1].ga_len) {
         dp = dp->df_next;
         continue;
       }
 
       linemap_entry_T *entry1 =
-        &((linemap_entry_T *)linemap[idx1].ga_data)[dp->df_lnum[idx1]
-                                                    + dp->df_count[idx1] - 2];
+        &((linemap_entry_T *)linemap[idx1].ga_data)[idx_entry1];
       linemap_entry_T *entry2 =
-        &((linemap_entry_T *)linemap[idx1].ga_data)[dp->df_next->df_lnum[idx1] - 1];
+        &((linemap_entry_T *)linemap[idx1].ga_data)[idx_entry2];
 
       // Skip if blocks are on different lines
       if (entry1->lineoff != entry2->lineoff) {
@@ -3839,7 +3846,9 @@ theend:
   } else {
     // Also need to redraw the other buffers.
     diff_redraw(false);
+    window_layout_lock();
     apply_autocmds(EVENT_DIFFUPDATED, NULL, NULL, false, curbuf);
+    window_layout_unlock();
   }
 }
 
