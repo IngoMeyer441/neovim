@@ -20,8 +20,8 @@
             .lazy = true,
         },
         .treesitter = .{
-            .url = "git+https://github.com/tree-sitter/tree-sitter?ref=v0.27.0#6070dbfefd326bd735e5683eb128cc1b57dad0c0",
-            .hash = "tree_sitter-0.27.0-Tw2sRzbJDQAI0igzBO7QpcYZiblLoFMNjSLLHKbx1ck3",
+            .url = "git+https://github.com/tree-sitter/tree-sitter?ref=v0.27.1#10eb5ac119eec9cb4267a8e035066473983f5f3a",
+            .hash = "tree_sitter-0.27.1-Tw2sR6zNDQDfaX4mIqMnve2vLRi1xxb2YeeMU7c2h34P",
             .lazy = true,
         },
         .libuv = .{
@@ -32,10 +32,12 @@
         .utf8proc = .{
             .url = "git+https://github.com/juliastrings/utf8proc?ref=v2.12.0#79cdd5ab40c79afa559f689ffc13b76812dee1ac",
             .hash = "utf8proc-2.12.0-xFSJu938JQDM47JNh9SNXvUSz3ZN6cErXn_Ji3XU0I1_",
+            .lazy = true,
         },
         .unibilium = .{
             .url = "git+https://github.com/neovim/unibilium?ref=v2.1.4#b0567db6a30898d8b25d206223960a8be2795fa8",
             .hash = "unibilium-2.1.4-INdqiXdRAQAKcGtWWj0Pb85VOTw07W3TDjMv6jrwUXgx",
+            .lazy = true,
         },
         .uncrustify = .{
             .url = "git+https://codeberg.org/allyourcodebase/uncrustify#2cdf880e4ffbe438a7946368cd45fca2df9f0f7a",

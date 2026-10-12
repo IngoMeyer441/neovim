@@ -818,8 +818,8 @@ end
 ---@generic T: table
 ---@param dst T List which will be modified and appended to
 ---@param src table List from which values will be inserted
----@param start integer? Start index on src. Defaults to 1
----@param finish integer? Final index on src. Defaults to `#src`
+---@param start integer? (default: 1) Start index on src.
+---@param finish integer? (default: `#src`) Final index on src.
 ---@return T dst
 function vim.list_extend(dst, src, start, finish)
   vim.validate('dst', dst, 'table')
@@ -1553,8 +1553,7 @@ end
 --- Notes:
 --- - Context `{ buf = buf }` has no guarantees about current window when
 ---   inside context.
---- - Context `{ buf = buf, win = win }` is yet not allowed, but this seems
----   to be an implementation detail.
+--- - Context `{ buf = buf, win = win }` requires `win` to show `buf`.
 --- - There should be no way to revert currently set `context.sandbox = true`
 ---   (like with nested `vim._with()` calls). Otherwise it kind of breaks the
 ---   whole purpose of sandbox execution.
