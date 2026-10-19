@@ -4,7 +4,8 @@
 		     VIM USER MANUAL	by Bram Moolenaar
 
 
-			   Finding the file to edit
+==============================================================================
+Finding the file to edit
 
 
 Files can be found everywhere.  So how do you find them?  Vim offers various
@@ -42,8 +43,7 @@ Directories end in "/".
 
 You can use Normal mode Vim commands to move around in the text.  For example,
 move the cursor atop a file and press <Enter>; you will then be editing that
-file.  Press "-" to open the parent directory of the current file or
-directory.  CTRL-O also works.
+file.  To go back to the listing use ":edit ." again.  CTRL-O also works.
 
 Try using <Enter> while the cursor is atop a directory name.  The result is
 that the file browser moves into that directory and displays the items found
@@ -258,12 +258,11 @@ shorter to type: >
 
 	:ls
 
-The output could look like this:
-
-  1 #h   "help.txt"			line 62 ~
-  2 %a + "usr_21.txt"			line 1 ~
-  3      "usr_toc.txt"			line 1 ~
-
+The output could look like this: >
+  1 #h   "help.txt"			line 62
+  2 %a + "usr_21.txt"			line 1
+  3      "usr_toc.txt"			line 1
+<
 The first column contains the buffer number.  You can use this to edit the
 buffer without having to type the name, see below.
    After the buffer number come the flags.  Then the name of the file
@@ -276,7 +275,7 @@ and the line number where the cursor was the last time.
 	  a	Buffer is loaded and displayed.
 	  h	Buffer is loaded but hidden.
 	   =	Buffer is read-only.
-	   -	Buffer is not modifiable, the 'modifiable' option is off.
+	   `-`	Buffer is not modifiable, the 'modifiable' option is off.
 	    +	Buffer has been modified.
 
 

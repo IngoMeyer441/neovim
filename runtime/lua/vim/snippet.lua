@@ -58,7 +58,7 @@ local function resolve_variable(var, default)
   elseif var == 'TM_FILENAME_BASE' then
     return expand_or_default('%:t:r')
   elseif var == 'TM_DIRECTORY' then
-    return expand_or_default('%:p:h:t')
+    return expand_or_default('%:p:h')
   elseif var == 'TM_FILEPATH' then
     return expand_or_default('%:p')
   end
@@ -390,6 +390,7 @@ local function select_tabstop(tabstop)
       ('<Cmd>call cursor(%s,%s)<CR>'):format(range[1] + 1, range[2] + 1),
       'v',
       ('<Cmd>call cursor(%s,%s)<CR>'):format(range[3] + 1, range[4]),
+      vim.o.selection == 'exclusive' and 'l' or '',
       'o<c-g><c-r>_',
     }
     feedkeys(table.concat(keys))

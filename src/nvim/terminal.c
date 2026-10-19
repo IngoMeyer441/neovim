@@ -691,6 +691,15 @@ void terminal_close(Terminal **termpp, int status)
   } else {
     // flush any pending changes to the buffer
     if (!exiting) {
+      int height, width;
+      vterm_get_size(term->vt, &height, &width);
+      if (status != -1 && term->cursor.row == height - 1) {
+        fetch_row(term, term->cursor.row, width);
+        if (term->textbuf[0] != NUL) {
+          // Start a new line, else "[Process exited]" (line after cursor) hides the last line.
+          terminal_receive(term, "\r\n", 2);
+        }
+      }
       block_autocmds();
       refresh_terminal(term);
       unblock_autocmds();
@@ -1547,7 +1556,7 @@ void terminal_notify_theme(Terminal *term, bool dark)
   }
 
   char buf[10];
-  ssize_t ret = snprintf(buf, sizeof(buf), "\x1b[997;%cn", dark ? '1' : '2');
+  ssize_t ret = snprintf(buf, sizeof(buf), "\x1b[?997;%cn", dark ? '1' : '2');
   assert(ret > 0);
   assert((size_t)ret <= sizeof(buf));
   terminal_send(term, buf, (size_t)ret);

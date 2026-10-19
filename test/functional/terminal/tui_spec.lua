@@ -39,7 +39,9 @@ local testlog = 'Xtest-tui-log'
 local env_notermguicolors = { COLORTERM = 'xterm-256color' }
 
 describe('TUI', function()
-  it('exit status 1 and error message with server --listen error #34365', function()
+  -- FLAKY: the server writes to the inherited tty, which may happen before TUI enters the alternate
+  -- screen. #40557
+  it('exit status 1 and error message with --listen error #34365', { retries = 2 }, function()
     clear()
     local addr_in_use = api.nvim_get_vvar('servername')
     local screen = tt.setup_child_nvim(
@@ -178,6 +180,8 @@ describe('TUI :detach', function()
     t.retry(nil, 2000, function()
       assert(vim.uv.fs_stat(child_server))
     end)
+    -- Wait for the TUI to attach (socket may exist before the TUI attaches).
+    screen:expect({ any = vim.pesc('[No Name]') })
   end
 
   it('does not stop server', function()
@@ -262,8 +266,21 @@ describe('TUI :detach', function()
       end)
     end)
 
+    -- :detach! must emit ChanInfo with the current UI channel's updated detach flag.
+    local _, uis = child_session:request('nvim_list_uis')
+    eq(1, #uis)
+    local _, info = child_session:request('nvim_get_chan_info', uis[1].chan)
+    eq(false, info.detach)
+    child_session:request('nvim_command', 'autocmd ChanInfo * let g:info_event = deepcopy(v:event)')
+
     feed_data('\027\027:detach!\013')
     screen:expect({ any = vim.pesc('Nvim will continue running') })
+
+    info.detach = true
+    retry(nil, nil, function()
+      local _, event = child_session:request('nvim_get_var', 'info_event')
+      eq({ info = info }, event)
+    end)
 
     -- Unlike ":detach", the UI is still attached.
     eq(1, #({ child_session:request('nvim_list_uis') })[2])
@@ -1389,7 +1406,7 @@ describe('TUI', function()
     ]])
   end)
 
-  it('does not interpret ESC preceding repeat/release event as ALT #41763', function()
+  it('does not interpret ESC preceding repeat/release event/response as ALT #41763', function()
     child_session:request('nvim_command', 'noremap <M-Esc> <Nop>')
     child_session:request('nvim_command', 'noremap! <M-Esc> <Nop>')
     feed_data('i\015')
@@ -1399,6 +1416,10 @@ describe('TUI', function()
     feed_data('\015')
     wait_for_mode('niI')
     feed_data('\027\027[27;1:2u\027[27;1:3u') -- ESC, ESC repeat, ESC release
+    wait_for_mode('n')
+    feed_data('i')
+    wait_for_mode('i')
+    feed_data('\027\027P1$r0m\027\\') -- ESC, DECRQSS response
     wait_for_mode('n')
   end)
 
@@ -2229,6 +2250,16 @@ describe('TUI', function()
     screen:expect([[
       tty ready                                         |
       hallo^                                             |
+                                                        |*2
+      {109:^^^^^^^                                           }|
+      {5:-- TERMINAL --}                                    |*2
+    ]])
+
+    -- Default 'termpastefilter' keeps TAB chars.
+    feed_data('\027[200~\ttab\027[201~')
+    screen:expect([[
+      tty ready                                         |
+      hallo   tab^                                       |
                                                         |*2
       {109:^^^^^^^                                           }|
       {5:-- TERMINAL --}                                    |*2
