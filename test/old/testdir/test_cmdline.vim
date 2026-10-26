@@ -568,6 +568,13 @@ func Test_getcompletion()
   let l = getcompletion('det', 'filetypecmd')
   call assert_equal(['detect'], l)
 
+  command -nargs=1 -complete=filetypecmd DoFiletype :
+  let l = getcompletion('filetype plugin indent ', 'cmdline')
+  call assert_equal(['off', 'on'], l)
+  let l = getcompletion('DoFiletype ', 'cmdline')
+  call assert_equal(['detect', 'indent', 'off', 'on', 'plugin'], l)
+  delcommand DoFiletype
+
   let l = getcompletion('tag', 'function')
   call assert_true(index(l, 'taglist(') >= 0)
   let l = getcompletion('paint', 'function')
@@ -1259,6 +1266,12 @@ func Test_cmdline_complete_various()
   " completion for a range followed by a comment
   call feedkeys(":1,2\"\<C-A>\<C-B>\"\<CR>", 'xt')
   call assert_equal("\"1,2\"\<C-A>", @:)
+
+  " completion for command after a pattern address (containing delimiter)
+  call feedkeys(":/foo[/]bar\\/baz/num\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal("\"/foo[/]bar\\/baz/number", @:)
+  call feedkeys(":?foo[?]bar\\?baz?num\<C-A>\<C-B>\"\<CR>", 'xt')
+  call assert_equal("\"?foo[?]bar\\?baz?number", @:)
 
   " completion for :k command
   call feedkeys(":ka\<C-A>\<C-B>\"\<CR>", 'xt')
@@ -2659,6 +2672,18 @@ func Test_zero_line_search()
   0;/pattern/d
   call assert_equal(["2, ", "3, pattern"], getline(1,'$'))
   q!
+endfunc
+
+func Test_pattern_address_with_command()
+  new
+  call setline(1, ["one", "two - foo/bar/baz", "three - foo?bar?baz", "four"])
+  call cursor(1, 1)
+  :/foo[/]bar\/baz/print
+  call assert_equal("two - foo/bar/baz", getline('.'))
+  call cursor("$", 1)
+  :?foo[?]bar\?baz?print
+  call assert_equal("three - foo?bar?baz", getline('.'))
+  bwipe!
 endfunc
 
 func Test_read_shellcmd()
@@ -4248,6 +4273,13 @@ func Test_cmdline_complete_breakadd()
   call assert_equal(['expr', 'file', 'func', 'here'], getcompletion('', 'breakpoint'))
   let l = getcompletion('not', 'breakpoint')
   call assert_equal([], l)
+
+  command -nargs=1 -complete=breakpoint DoBreak :
+  call getcompletion('breakdel ', 'cmdline')
+  call assert_equal(['expr', 'file', 'func', 'here'], getcompletion('DoBreak ', 'cmdline'))
+  call getcompletion('breakdel ', 'cmdline')
+  call assert_equal(['expr', 'file', 'func', 'here'], getcompletion('', 'breakpoint'))
+  delcommand DoBreak
 
   " Test for :breakadd file [lnum] <file>
   call writefile([], 'Xscript')
