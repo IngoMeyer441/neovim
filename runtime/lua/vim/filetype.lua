@@ -1,5 +1,6 @@
 local api = vim.api
 local fn = vim.fn
+local is_url = vim._core.path_is_url
 
 local M = {}
 
@@ -293,6 +294,7 @@ local extension = {
   bass = 'bass',
   bi = detect.bas,
   bm = detect.bas,
+  bats = 'bats',
   bazelrc = 'bazelrc',
   bc = 'bc',
   bdf = 'bdf',
@@ -683,6 +685,8 @@ local extension = {
   int = detect.int,
   ms = detect_seq(detect.nroff, 'xmath'),
   ipkg = 'ipkg',
+  ispc = 'ispc',
+  isph = 'ispc',
   iss = 'iss',
   mst = 'ist',
   ist = 'ist',
@@ -914,6 +918,7 @@ local extension = {
   nimble = 'nim',
   ninja = 'ninja',
   nix = 'nix',
+  nlp = 'nlp',
   norg = 'norg',
   nq = 'nq',
   nqc = 'nqc',
@@ -1215,7 +1220,6 @@ local extension = {
   sexp = 'sexplib',
   sgf = 'sgf',
   bash = detect.bash,
-  bats = detect.bash,
   cygport = detect.bash,
   ebuild = detect.bash,
   eclass = detect.bash,
@@ -3283,7 +3287,7 @@ function M.match(args)
   end
 
   if name then
-    if name:sub(-1) == '/' and not name:find('^%a[%w+.-]*://') then
+    if name:sub(-1) == '/' and not is_url(name) then
       return 'directory'
     end
     name = normalize_path(name)

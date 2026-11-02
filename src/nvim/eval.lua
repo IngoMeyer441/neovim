@@ -4771,7 +4771,7 @@ M.funcs = {
       	Key		Description ~
       	regcontents	List of lines contained in register
       			{regname}, like
-      			getreg({regname}, 1, 1).
+      			getreg({regname}, 1, 1), see |getreg()|.
       	regtype		the type of register {regname}, as in
       			|getregtype()|.
       	isunnamed	Boolean flag, v:true if this register
@@ -7508,7 +7508,7 @@ M.funcs = {
       { 'dict', 'table' },
     },
     signature = 'matchbufline({buf}, {pat}, {lnum}, {end}, [, {dict}])',
-    returns = 'string[]',
+    returns = 'table',
   },
   matchdelete = {
     args = { 1, 2 },
@@ -14106,6 +14106,8 @@ M.funcs = {
       (yes, that is 5), while all other settings will remain the
       same.  This is useful, if you set the cursor position
       manually.
+      A different "topline" resets "skipcol" and "topfill", unless
+      {dict} contains them.
 
       If you have changed the values the result is unpredictable.
       If the window size changed the result won't be the same.

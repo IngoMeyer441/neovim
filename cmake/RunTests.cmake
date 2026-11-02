@@ -9,6 +9,8 @@ else()
 endif()
 
 set(ENV{NVIM_TEST} "1")
+# Test runner should use the runtime from the build, not the system install (if any).
+set(ENV{VIMRUNTIME} ${ROOT_DIR}/runtime)
 # Set LC_ALL to meet expectations of some locale-sensitive tests.
 set(ENV{LC_ALL} "en_US.UTF-8")
 set(TEST_XDG_PREFIX ${BUILD_DIR}/Xtest_xdg${TEST_SUFFIX})

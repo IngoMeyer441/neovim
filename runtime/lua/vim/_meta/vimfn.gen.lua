@@ -3859,7 +3859,7 @@ function vim.fn.getreg(regname, expr, list) end
 ---   Key    Description ~
 ---   regcontents  List of lines contained in register
 ---       {regname}, like
----       getreg({regname}, 1, 1).
+---       getreg({regname}, 1, 1), see |getreg()|.
 ---   regtype    the type of register {regname}, as in
 ---       |getregtype()|.
 ---   isunnamed  Boolean flag, v:true if this register
@@ -6147,7 +6147,7 @@ function vim.fn.matcharg(nr) end
 --- @param lnum string|integer
 --- @param end_ string|integer
 --- @param dict? table
---- @return string[]
+--- @return table
 function vim.fn.matchbufline(buf, pat, lnum, end_, dict) end
 
 --- Deletes a match with ID {id} previously defined by |matchadd()|
@@ -11645,6 +11645,8 @@ function vim.fn.winrestcmd() end
 --- (yes, that is 5), while all other settings will remain the
 --- same.  This is useful, if you set the cursor position
 --- manually.
+--- A different "topline" resets "skipcol" and "topfill", unless
+--- {dict} contains them.
 ---
 --- If you have changed the values the result is unpredictable.
 --- If the window size changed the result won't be the same.

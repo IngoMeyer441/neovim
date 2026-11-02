@@ -266,7 +266,7 @@ describe('vim.lsp.util', function()
       }
       for _, params in ipairs(test_params) do
         local actual = exec_lua(function(params0)
-          local bufnr = vim.uri_to_bufnr('file:///fake/uri')
+          local bufnr = vim.uri.to_buf('file:///fake/uri')
           local lines = { 'testing', '123' }
           vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
           return vim.lsp.util.locations_to_items(params0, 'utf-16')
@@ -300,12 +300,12 @@ describe('vim.lsp.util', function()
         },
       }
       local actual = exec_lua(function()
-        local bufnr = vim.uri_to_bufnr('file:///fake/uri')
+        local bufnr = vim.uri.to_buf('file:///fake/uri')
         local lines = { 'testing', '123' }
         vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
         local locations = {
           {
-            targetUri = vim.uri_from_bufnr(bufnr),
+            targetUri = vim.uri.from_buf(bufnr),
             targetRange = {
               start = { line = 0, character = 2 },
               ['end'] = { line = 0, character = 3 },
@@ -688,14 +688,14 @@ describe('vim.lsp.util', function()
 
     before_each(function()
       target_bufnr = exec_lua(function()
-        local bufnr = vim.uri_to_bufnr('file:///fake/uri')
+        local bufnr = vim.uri.to_buf('file:///fake/uri')
         local lines = { '1st line of text', 'å å ɧ 汉语 ↥ 🤦 🦄' }
         vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
         return bufnr
       end)
 
       target_bufnr2 = exec_lua(function()
-        local bufnr = vim.uri_to_bufnr('file:///fake/uri2')
+        local bufnr = vim.uri.to_buf('file:///fake/uri2')
         local lines = { '1st line of text', 'å å ɧ 汉语 ↥ 🤦 🦄' }
         vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, lines)
         return bufnr
@@ -1099,7 +1099,7 @@ describe('vim.lsp.util', function()
     describe('stylize_markdown', function()
       local stylize_markdown = function(content, opts)
         return exec_lua(function()
-          local bufnr = vim.uri_to_bufnr('file:///fake/uri')
+          local bufnr = vim.uri.to_buf('file:///fake/uri')
           vim.fn.bufload(bufnr)
           return vim.lsp.util.stylize_markdown(bufnr, content, opts)
         end)
@@ -1536,6 +1536,21 @@ describe('vim.lsp.util', function()
       {1:~                                                    }|*8
                                                            |
     ]])
+
+      -- A link counts its concealed width, not its raw width.
+      command('close')
+      feed('<Ignore>')
+      eq(
+        1,
+        exec_lua(function()
+          local _, win = vim.lsp.util.open_floating_preview(
+            { ('[x](https://example.com/%s) tail'):format(('a'):rep(50)) },
+            'markdown',
+            { width = 10, focus = false }
+          )
+          return vim.api.nvim_win_get_height(win)
+        end)
+      )
     end)
 
     it('open_floating_preview height does not exceed max_height', function()

@@ -31,13 +31,9 @@ for k, v in pairs({
 end
 
 -- There are things which have special rules in vim._init_packages
--- for legacy reasons (uri) or for performance (_inspector).
+-- for performance (_inspector).
 -- most new things should go into a submodule namespace ( vim.foobar.do_thing() )
 vim._extra = {
-  uri_from_fname = true,
-  uri_from_bufnr = true,
-  uri_to_fname = true,
-  uri_to_bufnr = true,
   show_pos = true,
   inspect_pos = true,
 }
@@ -145,6 +141,7 @@ function vim.wait(time, callback, interval, fast_only)
   -- Flush screen updates before blocking.
   vim._core.ui_flush()
 
+  local expired = false
   while true do
     if vim._core.check_interrupt() then
       cleanup()
@@ -162,6 +159,11 @@ function vim.wait(time, callback, interval, fast_only)
       end
     end
 
+    if expired then
+      cleanup()
+      return false, -1
+    end
+
     local poll_timeout = -1
     if has_deadline then
       local remaining_ms = time - (vim.uv.hrtime() - start) / 1e6
@@ -175,16 +177,9 @@ function vim.wait(time, callback, interval, fast_only)
     -- polling would only resume for unrelated events or the final timeout.
     vim._core.loop_poll(poll_timeout, fast_only)
 
-    -- Check deadline AFTER polling (mirrors LOOP_PROCESS_EVENTS_UNTIL behavior).
-    -- `got_int` may have been set during poll; let check_interrupt() catch it.
-    if has_deadline and time - (vim.uv.hrtime() - start) / 1e6 <= 0 then
-      if vim._core.check_interrupt() then
-        cleanup()
-        return false, -2
-      end
-      cleanup()
-      return false, -1
-    end
+    -- Checks `callback` after the last poll, which may have run past the deadline (same as
+    -- LOOP_PROCESS_EVENTS_UNTIL).
+    expired = has_deadline and time - (vim.uv.hrtime() - start) / 1e6 <= 0
   end
 end
 
@@ -650,6 +645,7 @@ function vim.defer_fn(fn, timeout)
   vim.validate('fn', fn, 'callable', true)
 
   local timer = assert(vim.uv.new_timer())
+  vim.uv.update_time() -- See time_watcher_start().
   timer:start(timeout, 0, function()
     local _, err = vim.schedule(function()
       if not timer:is_closing() then
@@ -800,6 +796,11 @@ end
 --- If {strict_indexing} is false
 --- then an out of range index will return byte length
 --- instead of throwing an error.
+---
+--- Use `"utf-32"` to convert Unicode code-point indices to byte indices.
+--- `"utf-8"` is Nvim's native string encoding, so this function is
+--- idempotent for that encoding: {index} is already a byte index and is
+--- returned unchanged.
 ---
 --- Invalid UTF-8 and NUL is treated like in |vim.str_utfindex()|.
 --- An {index} in the middle of a UTF-16 sequence is rounded upwards to

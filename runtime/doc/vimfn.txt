@@ -4397,7 +4397,7 @@ getreginfo([{regname}])                                           *getreginfo()*
 			Key		Description ~
 			regcontents	List of lines contained in register
 					{regname}, like
-					getreg({regname}, 1, 1).
+					getreg({regname}, 1, 1), see |getreg()|.
 			regtype		the type of register {regname}, as in
 					|getregtype()|.
 			isunnamed	Boolean flag, v:true if this register
@@ -6923,7 +6923,7 @@ matchbufline({buf}, {pat}, {lnum}, {end}, [, {dict}])           *matchbufline()*
                   • {dict} (`table?`)
 
                 Return: ~
-                  (`string[]`)
+                  (`table`)
 
 matchdelete({id} [, {win}])                            *matchdelete()* *E802* *E803*
 		Deletes a match with ID {id} previously defined by |matchadd()|
@@ -13144,6 +13144,8 @@ winrestview({dict})                                              *winrestview()*
 		(yes, that is 5), while all other settings will remain the
 		same.  This is useful, if you set the cursor position
 		manually.
+		A different "topline" resets "skipcol" and "topfill", unless
+		{dict} contains them.
 
 		If you have changed the values the result is unpredictable.
 		If the window size changed the result won't be the same.
