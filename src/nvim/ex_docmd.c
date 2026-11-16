@@ -5917,41 +5917,50 @@ static void ex_detach(exarg_T *eap)
 ///
 /// Connects the current UI to a different server
 ///
-/// ":connect <address>" detaches the current UI and connects to the given server.
+/// ":connect" shows a menu of discovered servers.
+/// ":connect <addr>" detaches the UI and connects to <addr>, then stops the current server.
 /// ":connect ssh://<uri>" bootstraps a remote Nvim over SSH, then connects.
-/// ":connect! <address>" stops the current server if no other UIs are attached, then connects to the given server.
+///
+/// Fails if this is the last UI and ":qall" would fail (e.g. unsaved changes).
 static void ex_connect(exarg_T *eap)
 {
   char *addr = eap->arg;
   typval_T ssh_rettv = { .v_type = VAR_UNKNOWN };
   char *full_addr = NULL;  // "foo.sock" => "/home/me/foo.sock"
   bool is_tcp = socket_address_tcp_host_end(addr) != NULL;
+  bool is_ssh = STRNICMP(addr, "ssh://", 6) == 0;
   const char *error = NULL;
 
-  // SSH URI: bootstrap remote Nvim, get local forwarded socket.
-  if (STRNICMP(addr, "ssh://", 6) == 0) {
-    // XXX: ":connect!" not supported. The tunnel is owned by this server, stopping it would kill the session.
-    if (eap->forceit) {
-      emsg(_(e_nobang));
-      return;
-    }
-    if (!remote_ui_attached(current_ui)) {
-      emsg(_(e_noui));
-      return;
-    }
+  // XXX: No "!" for no-args, SSH (tunnel owned by this server, stopping it would kill the session).
+  if (eap->forceit && (*addr == NUL || is_ssh)) {
+    emsg(_(e_nobang));
+    return;
+  }
+  if (!remote_ui_attached(current_ui)) {
+    emsg(_(e_noui));
+    return;
+  }
+  // Abort if this is the last UI and a buffer has unsaved changes.
+  if (ui_active() == 1 && check_changed_any(false, false)) {
+    return;
+  }
 
+  // No address: let the user select from a menu of known servers.
+  if (*addr == NUL) {
+    typval_T no_args[] = { { .v_type = VAR_UNKNOWN } };
+    nlua_call_typval("vim._core.server", "select_connect", no_args, NULL);
+    return;
+  }
+
+  // SSH URI: bootstrap remote Nvim, get local forwarded socket.
+  if (is_ssh) {
     typval_T argvars[] = { { .v_type = VAR_STRING, .vval.v_string = addr },
                            { .v_type = VAR_NUMBER, .vval.v_number = (varnumber_T)current_ui },
                            { .v_type = VAR_UNKNOWN } };
     nlua_call_typval("vim.net._ssh", "connect", argvars, &ssh_rettv);
-
-    if (ssh_rettv.v_type == VAR_SPECIAL) {
-      return;  // User declined the prompt, or interrupted (CTRL-C).
-    }
     if (ssh_rettv.v_type != VAR_STRING || ssh_rettv.vval.v_string == NULL) {
-      emsg(_("E6101: SSH connection failed"));
       tv_clear(&ssh_rettv);
-      return;
+      return;  // Declined, interrupted (CTRL-C), or failed (E6101 shown).
     }
 
     addr = ssh_rettv.vval.v_string;
@@ -5965,9 +5974,26 @@ static void ex_connect(exarg_T *eap)
       xfree(full_addr);
       return;
     }
+
+    // remote-ssh: UI reconnects through same tunnel, relinked to `addr` (vim.net._ssh.relink()).
+    Channel *chan = find_channel(current_ui);
+    if (!is_tcp && chan && chan->addr) {
+      typval_T argvars[] = { { .v_type = VAR_STRING, .vval.v_string = chan->addr },
+                             { .v_type = VAR_STRING, .vval.v_string = addr },
+                             { .v_type = VAR_UNKNOWN } };
+      typval_T relinked = { .v_type = VAR_UNKNOWN };
+      nlua_call_typval("vim.net._ssh", "relink", argvars, &relinked);
+      if (relinked.v_type != VAR_BOOL) {  // Error (already shown).
+        xfree(full_addr);
+        return;
+      }
+      if (relinked.vval.v_bool == kBoolVarTrue) {
+        addr = chan->addr;
+      }
+    }
   }
 
-  bool stop_server = eap->forceit ? (ui_active() == 1) : false;
+  bool stop_server = !is_ssh && ui_active() == 1;
 
   Error err = ERROR_INIT;
   remote_ui_connect(current_ui, addr, &err);
@@ -7014,19 +7040,21 @@ static void ex_redraw(exarg_T *eap)
   } else if (Visual.active) {
     redraw_curbuf_later(UPD_INVERTED);
   }
-  update_screen();
+  const bool redrawn = update_screen() == OK;
   if (need_maketitle) {
     maketitle();
   }
   RedrawingDisabled = r;
   p_lz = p;
 
-  // Reset msg_didout, so that a message that's there is overwritten.
-  msg_didout = false;
-  msg_col = 0;
+  if (redrawn) {  // Else postponed (e.g. at the hit-enter prompt): keep the messages.
+    // Reset msg_didout, so that a message that's there is overwritten.
+    msg_didout = false;
+    msg_col = 0;
 
-  // No need to wait after an intentional redraw.
-  need_wait_return = false;
+    // No need to wait after an intentional redraw.
+    need_wait_return = false;
+  }
 
   ui_flush();
 }

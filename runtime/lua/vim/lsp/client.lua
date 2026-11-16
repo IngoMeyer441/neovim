@@ -611,6 +611,7 @@ function Client:initialize()
     init_params,
     config
   )
+  self.settings = config.settings or {}
 
   log.trace(self._log_prefix, 'init_params', init_params)
 

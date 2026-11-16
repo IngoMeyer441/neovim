@@ -133,6 +133,7 @@ EDITOR
 • After a motion forced blockwise (|o_CTRL-V|), |']| is on the last column
   of the block: "g@<C-v>l" gives 'operatorfunc' the block that "y<C-v>l"
   yanks.
+• ":connect!" (with bang "!") was removed.
 • |cmdwin| (|q:|, |q/|, |q?|, |c_CTRL-F|):
   • Only supports one "cmdline level", not "infinite recursion".
   • Expr-register (|i_CTRL-R_=|, |c_CTRL-R_=|) no longer supports opening
@@ -325,6 +326,9 @@ EDITOR
   • |:restart!| (with a bang "!") does not save/restore the session.
 • |ZR| restarts Nvim (|:restart|).
 • |:connect| supports `ssh://` URIs. |remote-ssh|
+• |:connect| without arguments shows a menu of known servers and ssh hosts.
+• |:connect| stops the current server if no other UI is attached, or fails if
+  :qall would fail (unsaved changes). ":connect!" (with bang "!") was removed.
 • |:detach| with range "%" detaches all UIs except the current one.
 • |:detach!| (with bang "!") marks the current UI as detachable: Nvim will
   continue running if the UI disconnects unexpectedly (e.g. if you
@@ -355,6 +359,9 @@ EDITOR
 
 EVENTS
 
+• The |hit-enter| prompt processes events (|vim.schedule()| callbacks, timers,
+  RPC requests) while waiting, like |getchar()|, so |nvim_get_mode()| reports
+  `blocking=false`. Redrawing is postponed until the prompt is dismissed.
 • |:delmarks| now triggers the |MarkSet| autocommand with line==col==0, same
   as |nvim_buf_del_mark()|
 • |ChanClose| is triggered after a channel is closed, before it is removed.
@@ -365,6 +372,8 @@ EVENTS
 • |TabMoved| is triggered when tabs are reordered.
 • |DirReadPost| is triggered after each |dir| listing is rendered, so it can
   be sorted or filtered. See |dir-render|.
+• CTRL-C sends SIGINT to ":!" and "system()" child processes (before
+  escalating to SIGTERM/SIGKILL, as usual).
 
 HIGHLIGHTS
 
@@ -529,6 +538,7 @@ PERFORMANCE
   linewise regions.
 • The display of multibyte text with grapheme clusters has been optimized,
   by calculating byte length and cell width of clusters in a single loop.
+• |:sort| is up to 10x faster on large buffers.
 
 PLUGINS
 

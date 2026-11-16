@@ -100,6 +100,18 @@ describe('vim.system', function()
               return { obj:wait(100).code, obj:wait() }
             end)
           )
+          -- Also if the process handles SIGTERM and exits with another code (e.g. ssh: 255).
+          eq(
+            { code = 124, signal = 0, stdout = 'ready\n', stderr = '' },
+            exec_lua(function()
+              local cmd = 'trap "exit 255" TERM; echo ready; while :; do sleep 0.1; done'
+              local obj = vim.system({ 'sh', '-c', cmd })
+              obj:wait(nil, function(stdout)
+                return stdout ~= '' -- The TERM trap is set (before `echo ready`).
+              end)
+              return obj:wait(1)
+            end)
+          )
         end
 
         eq({
@@ -107,7 +119,7 @@ describe('vim.system', function()
           signal = 15,
           stdout = '',
           stderr = '',
-        }, system({ 'sleep', '10' }, { timeout = 1000 }))
+        }, system({ 'sleep', '10' }, { timeout = 1 }))
       end)
     end)
   end
@@ -147,10 +159,11 @@ describe('vim.system', function()
   end)
 
   it('SystemObj:wait(): CTRL-C stops the process, fails with "interrupted"', function()
-    exec_lua(function(nvim_prog)
+    exec_lua(function()
       function _G.Wait()
         local signal --- @type integer?
-        local cmd = vim.system({ nvim_prog, '--clean', '--headless' }, nil, function(r)
+        -- "nvim" handles SIGTERM, which is unwanted here, so use "cat" instead.
+        local cmd = vim.system({ 'cat', '-' }, { stdin = true }, function(r)
           signal = r.signal
         end)
         vim.rpcnotify(1, 'ready')
@@ -160,7 +173,7 @@ describe('vim.system', function()
         end)
         vim.rpcnotify(1, 'wait', err, signal)
       end
-    end, n.nvim_prog)
+    end)
     n.feed(':lua _G.Wait()<CR>')
     eq({ 'notification', 'ready', {} }, n.next_msg(5000))
     n.feed('<C-C>')
