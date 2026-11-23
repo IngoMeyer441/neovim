@@ -9575,6 +9575,7 @@ function vim.fn.slice(expr, start, end_) end
 --- |luv-tcp-handle|.
 ---
 --- Returns a |channel| ID. Close the socket with |chanclose()|.
+--- The channel is closed when the peer closes the connection (EOF).
 --- Use |chansend()| to send data over a bytes socket, and
 --- |vim.rpcrequest()| and |vim.rpcnotify()| to communicate with a RPC
 --- socket.
@@ -10711,7 +10712,7 @@ function vim.fn.tabpagenr(arg) end
 --- <When {tabarg} is invalid zero is returned.
 ---
 --- @param tabarg integer
---- @param arg? '$'|'#'
+--- @param arg? string
 --- @return integer
 function vim.fn.tabpagewinnr(tabarg, arg) end
 

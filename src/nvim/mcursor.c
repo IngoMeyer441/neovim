@@ -88,6 +88,12 @@ typedef struct {
   varnumber_T last_changedtick_i;
 } McInsSaved;
 
+/// Per-cursor insert preview.
+typedef struct {
+  uint32_t region;  ///< Preview text (`mc_session_ns`), like the primary's `region`.
+  uint32_t cursor;  ///< Cursor-mark (`mc_ns`) of this preview.
+} McInsPreview;
+
 #include "mcursor.c.generated.h"
 
 /// Insert-cascade state.
@@ -97,6 +103,8 @@ typedef struct {
 /// at each cursor; at session-end the previews are deleted and typed keys (batch) replay at each
 /// cursor (the COMMIT: abbreviations, 'textwidth', … re-execute per cursor).
 ///
+/// RESIDUAL text: preview text that persists, i.e. no replay replaces it (opaque edit, deleted cursor).
+///
 /// XXX: Why text preview instead of LHS-replay? Two things cannot LHS-replay:
 /// 1. ins-completion
 /// 2. pending keys are not an append-only stream (compl/abbrevs rewrite them mid-session)
@@ -104,12 +112,14 @@ typedef struct {
 /// The boundary:
 /// - literal text is previewed
 /// - non-literal keys (mc_ins_keys_nonliteral) have per-cursor effects, so flush (early commit).
-/// - non-captured cursor-moves and edits keep the previews (see mc_ins_cascade_restart).
+/// - non-captured cursor-moves flush (start_arrow() appends <Esc>), then the cascade re-anchors.
+/// - opaque edits: the preview text persists (see mc_ins_cascade_restart).
 static struct {
   CmdOrigin origin;  ///< State at session start: the session's atoms diff against it.
-  kvec_t(uint32_t) regions;  ///< Per-cursor preview regions (`mc_session_ns`).
+  kvec_t(McInsPreview) previews;  ///< Per-cursor previews.
   bool active;      ///< Current insert-session is cascading.
   bool first;       ///< Entry-command not yet cascaded (no span pushed yet).
+  bool restart;     ///< Restart the capture when completion ends.
   uint64_t frame;   ///< Root frame that started the insert-session.
   size_t done_len;  ///< Bytes of the capture already consumed by replayed spans; tail is pending.
   uint32_t region;  ///< Primary cursor's inserted text.
@@ -289,24 +299,64 @@ static void mc_sandbox_leave(McSandbox *sb)
   set_vim_var_bool(VV_CASCADING, kBoolVarFalse);
 }
 
+/// Loads cursor `ctx` to replay (or dry-run) `atom` there. Drops a cursor that cannot replay (e.g.
+/// "gv" without a Visual area).
+///
+/// @param overlap  Primary-overlapping cursor-mark. 0: none.
+/// @return  Flags of the loaded state, for ctx_save() after the replay. 0: cursor does not replay.
+static CtxStateFlags mc_ctx_load(Context *ctx, const CmdAtom *atom, uint32_t overlap)
+{
+  if (!mc_cur_resolve(ctx->buf, ctx->mark, &ctx->pos)  // Skip if other-buffer, or mark disappeared.
+      || (overlap != 0 && ctx->mark == overlap)) {  // Skip primary-overlapping cursor.
+    return 0;
+  }
+  if (ctx->visual.vi_start.lnum == 0 && !atom->remap  // Not a mapping LHS ("gvs").
+      && strncmp(skipdigits(atom->keys), "gv", 2) == 0) {  // "[count]gv"
+    // Cascading "gv", but no Visual-reselect is defined for this cursor, so drop it.
+    extmark_del_id(curbuf, mc_ns(), ctx->mark);  // Swept by mc_cleanup().
+    return 0;
+  }
+
+  // Perf: motions never set cursor-local marks; skip save/restore.
+  // Except motions (`.) that read them, and LHS-replay.
+  const int mark_cmd = atom->spec.cmd == 'g' ? atom->spec.cmd2 : atom->spec.cmd;  // g`. like `.
+  const bool swap_marks = atom->type != kAMotion || atom->remap || mark_cmd == '\''
+                          || mark_cmd == '`';
+  const CtxStateFlags flags = swap_marks ? kCtxVisual | kCtxMarks | kCtxCursor : kCtxCursor;
+  ctx_load(ctx, flags, 0);
+
+  // Edits by other cursors may have invalidated this cursor's position.
+  if (atom->type == kAInsertSpan) {
+    // The anchor may be one past EOL (the insertion point); edit() accepts that.
+    // Not check_cursor(): would clamp onto last char (a previous span may have set MODE_NORMAL).
+    check_pos(curbuf, &curwin->w_cursor);
+  } else {
+    check_cursor(curwin);
+  }
+
+  // The active selection is global (ctx_load() does not swap it per cursor).
+  if (atom->type == kAVisualSpan) {
+    Visual.active = false;  // A leading "v" would toggle it OFF.
+    Visual.select = false;
+  }
+
+  if (atom->type == kAInsertSpan) {
+    // exec_normal() clamps a past-EOL cursor via check_cursor() unless Insert-mode; a previous span
+    // replay may have left MODE_NORMAL, making later cursors insert one char left of their anchor.
+    State = MODE_INSERT;
+  }
+  return flags;
+}
+
 /// Cascade step: replays an atom at `cursoridx` and updates Context.
-static void mc_execute(size_t cursoridx, size_t atomidx)
+///
+/// @param overlap  Primary-overlapping cursor-mark. 0: none.
+static void mc_execute(size_t cursoridx, size_t atomidx, uint32_t overlap)
 {
   Context ctx = kv_A(mc_cursors, cursoridx);
   CmdAtom atom = kv_A(g_atoms, atomidx);
-
-  if (handle_get_buffer(ctx.buf) != curbuf) {
-    // Cursors cascade only if their buffer is the current buffer.
-    return;
-  }
-
-  // Get the tracked position: edits by other cursors (etc) may have shifted it since last update.
-  if (ctx.mark != 0 && !extmark_get_pos(curbuf, mc_ns(), ctx.mark, &ctx.pos)) {
-    // The extmark was deleted, thus the cursor is deleted (swept by mc_cleanup()).
-    return;
-  }
-  if (ctx.visual.vi_start.lnum == 0 && strncmp(atom.keys, "gv", 2) == 0) {
-    // Replaying "gv", but Visual-reselect area is not defined for this cursor.
+  const CtxStateFlags loaded = mc_ctx_load(&ctx, &atom, overlap);
+  if (loaded == 0) {
     return;
   }
 
@@ -322,35 +372,6 @@ static void mc_execute(size_t cursoridx, size_t atomidx)
       ctx_load(&ctx, kCtxRegs, kCtxMergeReg);  // This cursor's own writes; merge w/ baseline.
     }
     regs_ts = reg_max_ts(false);
-  }
-
-  // Perf: motions never set cursor-local marks; skip save/restore.
-  // Except motions (`.) that read them, and LHS-replay.
-  const int mark_cmd = atom.spec.cmd == 'g' ? atom.spec.cmd2 : atom.spec.cmd;  // g`. like `.
-  const bool swap_marks = atom.type != kAMotion || atom.remap || mark_cmd == '\''
-                          || mark_cmd == '`';
-
-  ctx_load(&ctx, swap_marks ? kCtxVisual | kCtxMarks | kCtxCursor : kCtxCursor, 0);
-
-  // Edits by other cursors may have invalidated this cursor's position.
-  if (atom.type == kAInsertSpan) {
-    // The anchor may be one past EOL (the insertion point); edit() accepts that.
-    // Not check_cursor(): would clamp onto last char (a previous span may have set MODE_NORMAL).
-    check_pos(curbuf, &curwin->w_cursor);
-  } else {
-    check_cursor(curwin);
-  }
-
-  // The active selection is global (ctx_load() does not swap it per cursor).
-  if (atom.type == kAVisualSpan) {
-    Visual.active = false;  // A leading "v" would toggle it OFF.
-    Visual.select = false;
-  }
-
-  if (atom.type == kAInsertSpan) {
-    // exec_normal() clamps a past-EOL cursor via check_cursor() unless Insert-mode; a previous span
-    // replay may have left MODE_NORMAL, making later cursors insert one char left of their anchor.
-    State = MODE_INSERT;
   }
 
   // Replay the atom using wholesome, tasty feedkeys. Usually noremap ("nix"), but `atom.remap=true`
@@ -393,7 +414,7 @@ static void mc_execute(size_t cursoridx, size_t atomidx)
     api_free_string(ctx.regs);
     ctx.regs = shada_encode_regs(false, mc_start.time);
   }
-  ctx_save(&ctx, swap_marks ? kCtxVisual | kCtxMarks | kCtxCursor : kCtxCursor);
+  ctx_save(&ctx, loaded);
 
   if (atom.type == kAInsertSpan && curbuf->b_last_insert.mark.lnum > 0) {
     // Anchor at the insertion point ('^ mark): this is where the primary cursor, still in Insert
@@ -410,8 +431,6 @@ static void mc_cascade(void)
 {
   assert(kv_size(g_atoms) >= 1);
   const CmdOrigin *origin = &kv_A(g_atoms, 0).origin;
-  // Primary-overlapping cursor (if any). Its replay is skipped, pos follows primary.
-  const uint32_t mcursor = origin->buf.br_buf == curbuf ? origin->mcursor : 0;
   assert(kv_size(mc_cursors) > 0);
   assert(!mc_replaying());
 
@@ -433,10 +452,11 @@ static void mc_cascade(void)
     }
   }
 
-  // Sync the primary-overlapping cursor (if any) to primary. Edit may have displaced it. #42081
-  pos_T mcursor_pos;
-  if (mcursor != 0 && extmark_get_pos(curbuf, mc_ns(), mcursor, &mcursor_pos)) {
-    uint32_t mark = mcursor;
+  // Primary-overlapping cursor (if any). Replay is skipped.
+  const uint32_t overlap = mc_cur_resolve(origin->buf.br_fnum, origin->mcursor, NULL)
+                           ? origin->mcursor : 0;
+  if (overlap != 0) {  // Sync to primary, edit may have displaced it. #42081
+    uint32_t mark = overlap;
     mc_mark_upd(curbuf, &mark, curwin->w_cursor);
   }
 
@@ -459,9 +479,7 @@ static void mc_cascade(void)
         // Interrupted (CTRL-C), abort the cascade. Keep the partial edit; a "u" will undo it.
         goto done;
       }
-      if (mcursor == 0 || kv_A(mc_cursors, ci).mark != mcursor) {  // Skip cursor at primary.
-        mc_execute(ci, ai);
-      }
+      mc_execute(ci, ai, overlap);
     }
   }
 done:
@@ -469,7 +487,7 @@ done:
   const handle_T bufnr = sb.primary.buf;  // mc_sandbox_leave() frees `sb.primary`.
   mc_sandbox_leave(&sb);
 
-  mc_cleanup(true, &curwin->w_cursor, mcursor);
+  mc_cleanup(true, &curwin->w_cursor, overlap);
   if (handle_get_buffer(bufnr) == curbuf && !curbuf->b_u_synced
       && curbuf->b_u_newhead != NULL) {
     // Store the primary's post-cascade position in the still-open undo block; redo restores it.
@@ -513,7 +531,7 @@ void mc_clock_edge(bool map_edit, bool map_moved, bool follow)
 ///
 /// @param dedupe  Also removes overlapping cursors at cascade boundaries.
 /// @param primary  Primary cursor pos, for `dedupe`. NULL: dedupe cursors only among themselves.
-/// @param keep_mark  Primary-overlapping cursor (mark id). 0: none.
+/// @param keep_mark  Primary-overlapping cursor-mark. 0: none.
 static void mc_cleanup(bool dedupe, const pos_T *primary, uint32_t keep_mark)
 {
   const bool had_cursors = kv_size(mc_cursors) > 0;
@@ -581,11 +599,12 @@ void mc_ins_cascade_start(bool cascade, CmdOrigin origin, uint64_t root_frame, c
   mc_ins_joined = false;
   mc_ins_span.active = cascade && mc_buf_has_cursors(curbuf);
   mc_ins_span.first = true;
+  mc_ins_span.restart = false;
   mc_ins_span.frame = root_frame;
   mc_ins_span.done_len = 0;
   mc_ins_span.origin = origin;
   mc_ins_span.region = 0;
-  mc_ins_regions_clear();
+  mc_ins_previews_clear();
 
   if (mc_ins_span.active) {
     // Cover the line-range of all cursors with one undo-entry. #41822
@@ -598,7 +617,8 @@ void mc_ins_cascade_start(bool cascade, CmdOrigin origin, uint64_t root_frame, c
     linenr_T hi = curwin->w_cursor.lnum;
     for (size_t i = 0; i < kv_size(mc_cursors); i++) {
       pos_T pos;
-      if (mc_ctx_resolve(&kv_A(mc_cursors, i), &pos)) {
+      const Context *ctx = &kv_A(mc_cursors, i);
+      if (mc_cur_resolve(ctx->buf, ctx->mark, &pos)) {
         lo = MIN(lo, pos.lnum);
         hi = MAX(hi, pos.lnum);
       }
@@ -657,20 +677,20 @@ static void mc_ins_span_push(char *keys, char *text)
 }
 
 /// Deletes the per-cursor preview-region marks.
-static void mc_ins_regions_clear(void)
+static void mc_ins_previews_clear(void)
 {
-  while (kv_size(mc_ins_span.regions) > 0) {
-    extmark_del_id(curbuf, mc_session_ns(), kv_pop(mc_ins_span.regions));
+  while (kv_size(mc_ins_span.previews) > 0) {
+    extmark_del_id(curbuf, mc_session_ns(), kv_pop(mc_ins_span.previews).region);
   }
 }
 
-/// Resolves cursor's tracked position.
+/// Resolves the tracked position of the cursor identified by `mark`.
 ///
-/// @return  False: the cursor is in another buffer, or its mark is gone.
-static bool mc_ctx_resolve(const Context *ctx, pos_T *pos)
+/// @return  false if `buf` is another buffer, or `mark` disappeared.
+static bool mc_cur_resolve(handle_T buf, uint32_t mark, pos_T *pos)
 {
-  return handle_get_buffer(ctx->buf) == curbuf && ctx->mark != 0
-         && extmark_get_pos(curbuf, mc_ns(), ctx->mark, pos);
+  return handle_get_buffer(buf) == curbuf && mark != 0
+         && extmark_get_pos(curbuf, mc_ns(), mark, pos);
 }
 
 /// Places a paired session mark at `pos` (left-gravity anchor .. right-gravity end): text
@@ -683,55 +703,53 @@ static void mc_region_mark_set(uint32_t *mark, pos_T pos)
               false, true, true, false, NULL);
 }
 
-/// (Re)places the primary text-region mark at the cursor, and a per-cursor paired mark tracking
-/// each cursor's preview region. The preview text lands between the pair, exactly like the
-/// primary's `region` mark).
+/// (Re)places the primary text-region mark at the cursor, and a preview region at each cursor. The
+/// preview text lands in the region, exactly like the primary's `region` mark.
 static void mc_ins_preview_rebase(void)
 {
   mc_region_mark_set(&mc_ins_span.region, curwin->w_cursor);
-  mc_ins_regions_clear();
+  mc_ins_previews_clear();
   for (size_t i = 0; i < kv_size(mc_cursors); i++) {
     Context *ctx = &kv_A(mc_cursors, i);
     pos_T pos = { 0 };
     uint32_t mark = 0;
-    if (mc_ctx_resolve(ctx, &pos) && ctx->mark != mc_ins_span.origin.mcursor) {
+    if (mc_cur_resolve(ctx->buf, ctx->mark, &pos) && ctx->mark != mc_ins_span.origin.mcursor) {
       mc_region_mark_set(&mark, pos);
-      kv_push(mc_ins_span.regions, mark);
+      kv_push(mc_ins_span.previews, ((McInsPreview){ .region = mark, .cursor = ctx->mark }));
     }
   }
 }
 
-/// First live per-cursor preview region, or `start.id == 0` if none. A live region's buffer
-/// content is the applied preview text, and `start == end` means no preview is applied.
-/// All live regions hold the same preview, so any one represents the batch.
-static MTPair mc_ins_region_first(void)
-{
-  for (size_t i = 0; i < kv_size(mc_ins_span.regions); i++) {
-    MTPair p = extmark_from_id(curbuf, mc_session_ns(), kv_A(mc_ins_span.regions, i));
-    if (p.start.id != 0) {
-      return p;
-    }
-  }
-  return (MTPair){ 0 };
-}
-
-/// The buffer range (start/end positions) of region mark `p`.
-static void mc_region_range(MTPair p, pos_T *start, pos_T *end)
-{
-  *start = (pos_T){ .lnum = p.start.pos.row + 1, .col = p.start.pos.col };
-  *end = (pos_T){ .lnum = p.end_pos.row + 1, .col = p.end_pos.col };
-}
-
-/// Resolves a session extmark to its buffer range (start/end). Returns false if the mark is gone
-/// (deleted mid-session by a script?).
+/// Resolves a session extmark to its buffer range. Returns false if the mark disappeared (deleted
+/// mid-session by a script?).
 static bool mc_region_mark_range(uint32_t mark, pos_T *start, pos_T *end)
 {
   MTPair p = extmark_from_id(curbuf, mc_session_ns(), mark);
   if (p.start.id == 0) {
     return false;
   }
-  mc_region_range(p, start, end);
+  *start = (pos_T){ .lnum = p.start.pos.row + 1, .col = p.start.pos.col };
+  *end = (pos_T){ .lnum = p.end_pos.row + 1, .col = p.end_pos.col };
   return true;
+}
+
+/// Range of preview `p`. False if its cursor/region disappeared (deleted mid-session by a script?),
+/// its text persists (a half-baked edit, requested by #42502).
+static bool mc_ins_preview_range(McInsPreview p, pos_T *start, pos_T *end)
+{
+  return extmark_get_pos(curbuf, mc_ns(), p.cursor, NULL)
+         && mc_region_mark_range(p.region, start, end);
+}
+
+/// Range of the first preview (all have the same text/dimensions), or false if none.
+static bool mc_ins_preview_first(pos_T *start, pos_T *end)
+{
+  for (size_t i = 0; i < kv_size(mc_ins_span.previews); i++) {
+    if (mc_ins_preview_range(kv_A(mc_ins_span.previews, i), start, end)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// Replaces buffer text (end-exclusive) with `text` (multiline), preserving marks and undo.
@@ -750,9 +768,22 @@ static void mc_ins_preview_replace(pos_T start, pos_T end, const String *text)
   arena_mem_free(arena_finish(&arena));
 }
 
-/// Sets the preview at every cursor, replacing the previous one.
+/// Sets the preview at every cursor, replacing the previous one. No-op if unchanged.
 static void mc_ins_preview_set(const String *new)
 {
+  pos_T fs, fe;
+  if (!mc_ins_preview_first(&fs, &fe)) {
+    return;
+  }
+  String cur = ml_region_text(curbuf, fs, fe);
+  // Preview-text unchanged?
+  const bool same = cur.size == new->size
+                    && (cur.size == 0 || memcmp(cur.data, new->data, cur.size) == 0);
+  api_free_string(cur);
+  if (same) {
+    return;
+  }
+
   // The primary's own insert session must not notice the preview edits.
   McInsSaved saved = mc_ins_save_state();
   // Track the primary cursor across the preview edits.
@@ -761,10 +792,10 @@ static void mc_ins_preview_set(const String *new)
   const int save_cmod_flags = cmdmod.cmod_flags;
   cmdmod.cmod_flags |= CMOD_KEEPJUMPS;  // Not a change of the user: keeps '. and the changelist.
   set_vim_var_bool(VV_CASCADING, kBoolVarTrue);  // Listeners (on_bytes, …) see cascade edits.
-  for (size_t i = 0; i < kv_size(mc_ins_span.regions); i++) {
+  for (size_t i = 0; i < kv_size(mc_ins_span.previews); i++) {
     pos_T rs, re;
     // Re-resolve each region, previous loop iterations may have shifted it.
-    if (!mc_region_mark_range(kv_A(mc_ins_span.regions, i), &rs, &re)) {
+    if (!mc_ins_preview_range(kv_A(mc_ins_span.previews, i), &rs, &re)) {
       continue;
     }
     // Cursor display mark (right-gravity) is pushed by the replacement to the new preview end.
@@ -797,8 +828,9 @@ static bool mc_ins_keys_nonliteral(const char *keys, size_t len)
 }
 
 /// Capture restarted mid insert-session, after a non-captured cursor-move (stop_arrow(): mouse,
-/// <PageUp>, …) or edit (<Cmd>, Lua mapping, RPC, …). The previews stay; rebase and continue the
-/// insert-cascade.
+/// <PageUp>, …) or opaque change. The previews take the primary's text and cursor-placement
+/// (a snippet placeholder, before an autopaired ")"), and that text persists: only keys typed after
+/// the restart replay at commit. Rebase and continue the insert-cascade.
 void mc_ins_cascade_restart(void)
 {
   if (!mc_ins_span.active || mc_replaying() || !(State & MODE_INSERT)
@@ -808,7 +840,53 @@ void mc_ins_cascade_restart(void)
   String ins = redo_keys(NULL);
   mc_ins_span.done_len = ins.size;
   api_free_string(ins);
+
+  pos_T rs, re;
+  if (mc_region_mark_range(mc_ins_span.region, &rs, &re)) {  // Previews take the primary's text.
+    String text = ml_region_text(curbuf, rs, re);
+    mc_ins_preview_set(&text);
+    api_free_string(text);
+  }
+  const pos_T c = curwin->w_cursor;
+  // If primary is inside its text: same offset per-preview, only first line column shifts.
+  if (mc_region_mark_range(mc_ins_span.region, &rs, &re) && !lt(c, rs) && lt(c, re)) {
+    for (size_t i = 0; i < kv_size(mc_ins_span.previews); i++) {
+      McInsPreview p = kv_A(mc_ins_span.previews, i);
+      pos_T ps, pe;
+      if (mc_ins_preview_range(p, &ps, &pe)) {
+        pos_T pos = { .lnum = ps.lnum + c.lnum - rs.lnum, .col = c.col };
+        if (c.lnum == rs.lnum) {
+          pos.col += ps.col - rs.col;  // First line: shift to the preview's column.
+        }
+        mc_mark_upd(curbuf, &p.cursor, pos);
+      }
+    }
+  }
   mc_ins_preview_rebase();
+}
+
+/// Copies an opaque change (see atom_ins_opaque_end()) to the previews, as residual text.
+/// Restarts capture thereafter. Waits for completion-end (mc_ins_compl_done()): only
+/// then can redo capture the compl text (restarting earlier would keep that text AND replay it).
+void mc_ins_opaque_change(void)
+{
+  if (!mc_ins_span.active || mc_replaying()) {
+    return;
+  }
+  if (ins_compl_active()) {
+    mc_ins_span.restart = true;
+    return;
+  }
+  mc_ins_cascade_restart();
+}
+
+/// Called when completion has ended, after redo captured its text.
+void mc_ins_compl_done(void)
+{
+  if (mc_ins_span.restart) {
+    mc_ins_span.restart = false;
+    mc_ins_opaque_change();
+  }
 }
 
 /// True during a span replay. The replay's synthetic <Esc> does not end the primary insert-session,
@@ -876,30 +954,18 @@ void mc_ins_cascade(void)
     }
   } else if (mc_region_mark_range(mc_ins_span.region, &start, &end)) {
     // Live preview: mirror the primary's inserted text, without replay.
-    // Skip if unchanged, or if completion-preview could shift/overlap the primary's span.
-
-    String text = ml_region_text(curbuf, start, end);
+    // Skip if completion-preview could shift/overlap the primary's span.
     bool update = true;
-    MTPair fp = mc_ins_region_first();
-    if (fp.start.id != 0) {
-      pos_T frs, fre;
-      mc_region_range(fp, &frs, &fre);
-      String cur = ml_region_text(curbuf, frs, fre);
-      // Preview-text changed?
-      update = cur.size != text.size
-               || (text.size > 0 && memcmp(cur.data, text.data, text.size) != 0);
-      api_free_string(cur);
-    }
-    if (update && (ins_compl_active() || pum_visible())) {
+    if (ins_compl_active() || pum_visible()) {
       // Completion active. check all cursor-preview regions; if one would disturb completion, defer
-      // (skip) the entire preview update (all-or-none: mc_ins_region_first() assumes all previews
+      // (skip) the entire preview update (all-or-none: mc_ins_preview_first() assumes all previews
       // have the same text).
       //
       // TODO(justinmk): if completion positions (e.g. `compl_col`) followed extmarks, we wouldn't
       // have this problem, and live-preview could allow (non-conflicting) text-shifts. #41719
-      for (size_t i = 0; i < kv_size(mc_ins_span.regions); i++) {
+      for (size_t i = 0; i < kv_size(mc_ins_span.previews); i++) {
         pos_T rs, re;
-        if (!mc_region_mark_range(kv_A(mc_ins_span.regions, i), &rs, &re)) {
+        if (!mc_ins_preview_range(kv_A(mc_ins_span.previews, i), &rs, &re)) {
           continue;
         }
         // A preview after `end` is safe. Otherwise, multiline old or new preview text could shift
@@ -912,9 +978,10 @@ void mc_ins_cascade(void)
       }
     }
     if (update) {
+      String text = ml_region_text(curbuf, start, end);
       mc_ins_preview_set(&text);
+      api_free_string(text);
     }
-    api_free_string(text);
   }
   api_free_string(ins);
 }
@@ -928,11 +995,7 @@ void mc_ins_cascade(void)
 static void mc_ins_span_flush(const String *ins, bool commit)
 {
   static const String empty = STRING_INIT;
-  MTPair fp = mc_ins_region_first();
-  if (fp.start.id != 0
-      && (fp.start.pos.row != fp.end_pos.row || fp.start.pos.col != fp.end_pos.col)) {
-    mc_ins_preview_set(&empty);  // Delete the preview at every cursor.
-  }
+  mc_ins_preview_set(&empty);  // Delete the preview at every cursor.
   size_t dlen = ins->size - mc_ins_span.done_len;
   StringBuilder keys = KV_INITIAL_VALUE;
   kv_push(keys, 'i');
@@ -1074,18 +1137,25 @@ static void mc_vsel_mark(linenr_T start_lnum, colnr_T start_col, linenr_T end_ln
   extmark_set(curbuf, mc_vsel_ns(), &mark, (int)start_lnum - 1, start_col,
               (int)end_lnum - 1, end_col, decor, MT_FLAG_DECOR_HL,
               false, false, true, false, NULL);
-  mc_vsel_buf = curbuf->handle;
 }
 
-/// Displays a fake Visual selection (dry-runs the primary's selection keys) at each cursor.
+/// Displays a fake Visual selection (dry-runs the pending `span`) at each cursor.
+/// May drop a cursor (see mc_ctx_load()).
 /// XXX: The keys must not edit the buffer. #42005
-void mc_vsel_refresh(void)
+void mc_vsel_refresh(const CmdAtom *span)
 {
   mc_vsel_clear();
-  String span = atom_visual_span();
-  if (span.data == NULL || span.size == 0 || !mc_buf_has_cursors(curbuf)) {
-    xfree(span.data);
+  if (span->keys == NULL || *span->keys == NUL || !mc_buf_has_cursors(curbuf)) {
     return;
+  }
+  mc_vsel_buf = curbuf->handle;
+  // Primary-overlapping cursor: not replayed, follows primary.
+  const uint32_t overlap = mc_cur_resolve(span->origin.buf.br_fnum, span->origin.mcursor, NULL)
+                           ? span->origin.mcursor : 0;
+  if (overlap != 0) {
+    // Display it at primary's selection-end (else w/ no other sel-ends it displays at its anchor).
+    uint32_t cmark = 0;
+    extmark_set_pos(curbuf, mc_vcur_ns(), &cmark, curwin->w_cursor, false, true, true);
   }
 
   McSandbox sb;  // Save the primary-cursor state (selection included), like a cascade replay.
@@ -1095,15 +1165,10 @@ void mc_vsel_refresh(void)
   emsg_silent++;
 
   for (size_t i = 0; i < kv_size(mc_cursors); i++) {
-    Context *ctx = &kv_A(mc_cursors, i);
-    if (!mc_ctx_resolve(ctx, &ctx->pos)) {
-      continue;
+    if (mc_ctx_load(&kv_A(mc_cursors, i), span, overlap) == 0) {
+      continue;  // Not replayed.
     }
-    ctx_load(ctx, kCtxCursor | kCtxVisual | kCtxMarks, 0);
-    check_cursor(curwin);
-    Visual.active = false;
-    Visual.select = false;
-    nvim_feedkeys(span, cstr_as_string("nix"), false);
+    nvim_feedkeys(cstr_as_string(span->keys), cstr_as_string("nix"), false);
     if (!Visual.active) {
       continue;
     }
@@ -1136,7 +1201,6 @@ void mc_vsel_refresh(void)
     // Selection-end cursor; the anchor extmark stays put (the eventual replay position).
     uint32_t cmark = 0;
     extmark_set_pos(curbuf, mc_vcur_ns(), &cmark, curwin->w_cursor, false, true, true);
-    mc_vsel_buf = curbuf->handle;
     Visual.active = false;
   }
 
@@ -1144,7 +1208,7 @@ void mc_vsel_refresh(void)
   unblock_on_key();
   unblock_autocmds();
   mc_sandbox_leave(&sb);
-  xfree(span.data);
+  mc_cleanup(false, NULL, 0);  // Sweep cursors dropped by mc_ctx_load().
 }
 
 /// Time-travel undo (g-/g+, :earlier/:later) crosses cascade boundaries, where per-cursor state is
@@ -1168,7 +1232,7 @@ bool mc_ins_commit(void)
     // COMMIT: replace the previews with a real replay: abbrev, 'textwidth', … re-exec per cursor.
     String ins = redo_keys(NULL);
     if (ins.data != NULL && ins.size > mc_ins_span.done_len
-        // Not <Esc>-terminated, e.g. CTRL-C: the previews stay.
+        // Not <Esc>-terminated (unexpected): the preview text persists, no replay.
         && (uint8_t)ins.data[ins.size - 1] == ESC) {
       mc_ins_span_flush(&ins, true);
     }
@@ -1181,7 +1245,7 @@ bool mc_ins_commit(void)
     extmark_del_id(curbuf, mc_session_ns(), mc_ins_span.region);
     mc_ins_span.region = 0;
   }
-  mc_ins_regions_clear();
+  mc_ins_previews_clear();
 
   if (active && buf_get_changedtick(curbuf) == mc_ins_span.origin.tick) {
     // Nothing changed; drop the "umbrella" undo-entry added by mc_ins_cascade_start. #41883
@@ -1199,7 +1263,7 @@ bool mc_ins_commit(void)
   // shift them onto the last-inserted char, like <Esc> did for the primary cursor.
   for (size_t i = 0; i < kv_size(mc_cursors); i++) {
     Context *ctx = &kv_A(mc_cursors, i);
-    if (!mc_ctx_resolve(ctx, &ctx->pos)) {
+    if (!mc_cur_resolve(ctx->buf, ctx->mark, &ctx->pos)) {
       continue;
     }
     if (ctx->mark == mc_ins_span.origin.mcursor) {
@@ -1572,6 +1636,7 @@ void mc_toggle(buf_T *buf, pos_T pos, bool end_follow, TriState on)
     // Replayed input ("Q" in a mapping's atom) must not manage cursors; see mc_add().
     return;
   }
+  atom_did_global_op();  // "Q" must not cascade, even via a mapping.
   if (end_follow) {
     mc_follow_set(kFalse);
   }
@@ -1613,13 +1678,14 @@ void mc_on_extmark_set(buf_T *buf, uint32_t ns_id, uint32_t id, pos_T pos)
     extmark_del_id(buf, ns_id, id);  // Can't add cursors while the cascade iterates them.
     return;
   }
+  // Discard the pending Visual atom, else it would cascade to the cursor created below.
+  atom_visual_reset();
+  atom_did_global_op();  // "Add cursor" must not cascade, even via a mapping.
   if (mc_mark_at(buf, pos, id) != 0) {
-    extmark_del_id(buf, ns_id, id);  // Duplicate cursor (e.g. repeated "1Q").
+    extmark_del_id(buf, ns_id, id);  // Duplicate cursor (e.g. nvim_buf_set_extmark() at a cursor).
     return;
   }
   mc_mark_upd(buf, &id, pos);  // Ensure our extmark flags.
-  // Discard the pending Visual atom, else it would cascade to the cursor created below.
-  atom_visual_reset();
   if (kv_size(mc_cursors) == 0) {
     // Session start: snapshot primary regs; delegate display to mcursor.lua.
     mc_start.time = (Timestamp)os_realtime();
@@ -1684,9 +1750,8 @@ void mc_ns_cleared(buf_T *buf, uint32_t ns_id)
   bool others = false;
   for (size_t i = 0; i < kv_size(mc_cursors) && !others; i++) {
     Context *ctx = &kv_A(mc_cursors, i);
-    pos_T pos;
     others = ctx->buf != buf->handle
-             || (ctx->mark != 0 && extmark_get_pos(buf, mc_ns(), ctx->mark, &pos));
+             || (ctx->mark != 0 && extmark_get_pos(buf, mc_ns(), ctx->mark, NULL));
   }
   if (!others) {
     // "DWIM yank": before the multicursor session ends, join per-cursor yanks to primary.
@@ -1725,7 +1790,7 @@ void mc_free_all(void)
     ctx_free(&ctx);
   }
   kv_destroy(mc_cursors);
-  kv_destroy(mc_ins_span.regions);
+  kv_destroy(mc_ins_span.previews);
   ctx_free(&mc_start.ctx);
 }
 #endif

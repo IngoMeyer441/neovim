@@ -928,10 +928,11 @@ int del_bytes(colnr_T count, bool fixpos_arg, bool use_delcombine)
   // delete the last combining character.
   if (p_deco && use_delcombine && utfc_ptr2len(oldp + col) >= count) {
     char *p0 = oldp + col;
+    int n = col + utf_ptr2len(p0);
     GraphemeState state = GRAPHEME_STATE_INIT;
-    if (utf_composinglike(p0, p0 + utf_ptr2len(p0), &state)) {
+    if (utf_composinglike(p0, oldp + n, &state)) {
       // Find the last composing char, there can be several.
-      int n = col;
+      // Continue from the second character: the first pair already advanced state.
       do {
         col = n;
         count = utf_ptr2len(oldp + n);
@@ -2083,7 +2084,9 @@ int get_leader_len(char *line, char **flags, bool backward, bool include_space)
 ///
 /// When "flags" is not null, it is set to point to the flags describing the
 /// recognized comment leader.
-int get_last_leader_offset(char *line, char **flags)
+/// When "skip_first" is true, ignore a leader with the 'f' flag, unless it is
+/// part of a three-piece comment.
+int get_last_leader_offset(char *line, char **flags, bool skip_first)
 {
   int result = -1;
   int j;
@@ -2110,6 +2113,11 @@ int get_last_leader_offset(char *line, char **flags)
       }
       *string++ = NUL;          // Isolate flags from string.
       com_leader = string;
+
+      if (skip_first && vim_strchr(part_buf, COM_FIRST) != NULL
+          && strpbrk(part_buf, "sme") == NULL) {
+        continue;
+      }
 
       // Line contents and string must match.
       // When string starts with white space, must have some white space

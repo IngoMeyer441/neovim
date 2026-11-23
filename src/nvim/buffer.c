@@ -2980,7 +2980,7 @@ void buflist_list(exarg_T *eap)
        buf != NULL && !got_int;
        buf = buflist_data != NULL
              ? (++p < buflist_data + buflist.ga_len ? *p : NULL) : buf->b_next) {
-    const bool is_terminal = buf->terminal;
+    const bool is_terminal = buf->terminal != NULL;
     const bool job_running = buf->terminal && terminal_running(buf->terminal);
 
     // skip unspecified buffers
@@ -3835,7 +3835,6 @@ void ex_buffer_all(exarg_T *eap)
 
     os_breakcheck();
     if (got_int) {
-      vgetc();            // only break the file loading, not the rest
       break;
     }
     // Autocommands deleted the buffer or aborted script processing!!!

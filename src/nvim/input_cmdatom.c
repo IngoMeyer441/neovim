@@ -18,6 +18,7 @@
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
+#include "nvim/context.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/eval/vars.h"
 #include "nvim/ex_docmd.h"
@@ -212,7 +213,7 @@ CmdSpec atom_cmd_spec(const cmdarg_T *cap)
 }
 
 /// Gets the current buffer/window/cursor state.
-static CmdOrigin atom_origin(void)
+CmdOrigin atom_origin(void)
 {
   CmdOrigin origin = { .win = curwin, .pos = curwin->w_cursor,
                        .tick = buf_get_changedtick(curbuf), .maptick = maptick,
@@ -222,7 +223,7 @@ static CmdOrigin atom_origin(void)
 }
 
 /// True if the buffer was edited. False if the buf disappeared.
-static bool atom_origin_changed(CmdOrigin origin)
+bool atom_origin_changed(CmdOrigin origin)
 {
   return bufref_valid(&origin.buf) && buf_get_changedtick(origin.buf.br_buf) != origin.tick;
 }
@@ -241,13 +242,17 @@ static int atom_origin_undoseq(CmdOrigin origin)
   return bufref_valid(&origin.buf) ? origin.buf.br_buf->b_u_seq_cur : 0;
 }
 
-/// Cursor position from the pending atom's start, or else `w_cursor`.
+/// Cursor position from the pending atom's start, or else `w_cursor` (if `buf` is the current
+/// buffer), or else an empty position.
 pos_T atom_origin_pos(buf_T *buf)
 {
   CmdOrigin o = composite.origin;
   if (composite.open && o.buf.br_buf == buf && bufref_valid(&o.buf)
       && buf_get_changedtick(buf) == o.tick) {
     return o.pos;
+  }
+  if (buf != curwin->w_buffer || is_ctx_win(curwin)) {
+    return (pos_T){ 0 };  // No meaningful cursor.
   }
   return curwin->w_cursor;
 }
@@ -874,7 +879,7 @@ void atom_typed_del(size_t len)
   kv_size(typed.keys) -= MIN(len, kv_size(typed.keys));
 }
 
-/// Flags the running command as already applying to every cursor. E.g.: undo, "g CTRL-A"
+/// Indicates the running cmd already "applied" to all cursors. E.g.: undo, "g CTRL-A", "Q" itself.
 void atom_did_global_op(void)
 {
   if (!mc_replaying()) {
@@ -1023,26 +1028,28 @@ bool atom_visual_redoable(void)
   return true;
 }
 
-/// The pending visual atom's uncascaded "tail" keys (allocated; NULL data if inactive/void).
+/// The pending visual atom's uncascaded "tail" (allocates `keys`, NULL if inactive/void).
 /// Replaying produces the per-cursor selection. Prefixed with "gv" if a span cascaded.
-String atom_visual_span(void)
+CmdAtom atom_visual_span(void)
 {
+  CmdAtom span = { .type = kAVisualSpan, .origin = vatom.origin };
   if (!atom_visual_replayable()) {
-    return (String)STRING_INIT;
+    return span;
   }
   String tail = atoms_concat_keys(vatom.atoms, vatom.done);
   if (vatom.done == 0) {
-    return tail;
+    span.keys = tail.data;
+    return span;
   }
 
   // Prefix with "gv".
   StringBuilder keys = KV_INITIAL_VALUE;
   kv_concat(keys, "gv");
   kv_concat_len(keys, tail.data, tail.size);
-  size_t len = kv_size(keys);
   kv_push(keys, NUL);
   api_free_string(tail);
-  return (String){ .data = keys.items, .size = len };
+  span.keys = keys.items;
+  return span;
 }
 
 /// Cascades the Visual session's uncascaded subatoms as a span, if one of them edited the buffer.
@@ -1063,9 +1070,9 @@ static void atom_visual_span_flush(void)
   if (!edited) {
     return;
   }
-  String span = atom_visual_span();
+  CmdAtom span = atom_visual_span();
   vatom.done = kv_size(vatom.atoms);
-  kv_push(g_atoms, ((CmdAtom){ .type = kAVisualSpan, .keys = span.data, .origin = vatom.origin }));
+  kv_push(g_atoms, span);
 }
 
 /// Ends the pending visual atom, appends `suffix`, and stages it. Or discards if unreplayable.
@@ -1152,8 +1159,7 @@ static bool atom_visual_end_suffix(char *suffix, const CmdSpec *spec, bool redoa
   atom.cascaded = vatom.done > 0;
   if (atom.cascaded && vatom.done < kv_size(vatom.atoms)) {
     // Spans cascaded the selection's edits. This last one completes it (the operator).
-    String span = atom_visual_span();
-    kv_push(g_atoms, ((CmdAtom){ .type = kAVisualSpan, .keys = span.data, .origin = origin }));
+    kv_push(g_atoms, atom_visual_span());
   }
   atom.atoms = vatom.atoms;
   vatom.atoms = (CmdAtomVec)KV_INITIAL_VALUE;
@@ -1276,12 +1282,12 @@ void atom_capture_op(oparg_T *oap, cmdarg_T *cap, bool redo_yank)
       // Visual-entered Insert: redo body opens with the selection's captured keys; appends the
       // op+text+<Esc>. Unreplayable (void, "gv") selection falls back to "1v" (fixed-size reselect).
       // (Ex/Lua-motion selections were already prepped above, as the motion's keys.)
-      String v = atom_visual_redoable() ? atom_visual_span() : (String)STRING_INIT;
-      prep_redo_visual(v.data != NULL ? v.data : "1v", v.data != NULL ? v.size : 2, (CmdSpec){
+      char *v = atom_visual_redoable() ? atom_visual_span().keys : NULL;
+      prep_redo_visual(v != NULL ? v : "1v", v != NULL ? strlen(v) : 2, (CmdSpec){
         .regname = oap->regname,
         .op = get_op_char(oap->op_type), .op_extra = get_extra_op_char(oap->op_type),
       });
-      xfree(v.data);
+      xfree(v);
     }
   }
 }
@@ -1311,7 +1317,7 @@ InsSession atom_ins_start(int cmd, long count, VisualIns vis, bool vblock)
 
   if (vis != kVInsNone && !mc_replaying() && !is_child_frame()) {
     if (vis == kVInsOther && atom_visual_replayable() && !atom_visual_redoable()) {
-      session.vsel = atom_visual_span().data;
+      session.vsel = atom_visual_span().keys;
       session.origin = vatom.origin;
     }
     if (vis == kVInsKeys || session.vsel != NULL) {
@@ -1330,6 +1336,16 @@ InsSession atom_ins_start(int cmd, long count, VisualIns vis, bool vblock)
                        session.origin, root_frame()->id, session.vsel);
 
   return session;
+}
+
+/// Detects an opaque change, i.e. an edit/cursor-move since `before` by an opaque action
+/// (kKeyOpaque: <Cmd>/Lua/RPC, or autocmd) during an insert-session, which capture (redo) misses.
+/// Multicursor copies it to its previews, as residual text (not replayed).
+void atom_ins_opaque_end(CmdOrigin before)
+{
+  if (curbuf == before.buf.br_buf && (atom_origin_changed(before) || atom_origin_moved(before))) {
+    mc_ins_opaque_change();
+  }
 }
 
 /// Ends the insert-session delimited by atom_ins_start(), capturing it as one atom. Replaying the
@@ -1675,7 +1691,9 @@ void atom_cmd_end(cmdarg_T *ca, CmdFrame *old)
     }
   }
   if (refresh_visual) {
-    mc_vsel_refresh();
+    CmdAtom span = atom_visual_span();
+    mc_vsel_refresh(&span);
+    xfree(span.keys);
   }
   XFREE_CLEAR(old->cmdline);
   cur_frame = old->parent;

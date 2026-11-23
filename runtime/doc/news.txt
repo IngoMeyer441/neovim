@@ -356,6 +356,13 @@ EDITOR
 <    Typing õõ in |Normal-mode| now invokes a mapping bound to ]].
 • New |complete-items| field "commit_chars": characters that accept the
   selected completion item when typed.
+• Improved CTRL-C handling:
+  • While Nvim is waiting for input, CTRL-C only does the current mode's
+    action (e.g. exit Insert-mode); it doesn't discard typeahead, and isn't
+    lost if events are pending.
+  • CTRL-C that interrupts a command only interrupts the command; it doesn't
+    "fallthrough" to the mapping subsystem and (redundantly) also act as a key.
+  • |vim.regex()| matching can be interrupted by CTRL-C.
 
 EVENTS
 
@@ -433,10 +440,10 @@ LUA
   and `end_col`. |:Inspect| accepts line ranges, including Visual selections.
 • |vim.ui.img| can display images. Use `:checkhealth vim.health` to confirm
   your terminal supports it.
-• |vim.net.request()| can specify custom headers by passing `opts.headers`.
-• |vim.net.request()| can now accept  `method` param overload for multiple HTTP methods.
-• |vim.net.request()| works with |vim.async.await()|: closing the task cancels
-  the request.
+• |vim.net.request()|:
+  • Works with |vim.async.await()|: closing the task cancels the request.
+  • Accepts `method` and `opts.headers` params. `url` can be |vim.Uri|.
+  • Response includes `status` and `headers`. `on_response` is scheduled.
 • |vim.rpcrequest()| can specify `opts.timeout`.
 • |SystemObj:wait()| accepts a `cond` predicate which allows you to wait for
   a condition instead of process termination.
@@ -539,6 +546,9 @@ PERFORMANCE
 • The display of multibyte text with grapheme clusters has been optimized,
   by calculating byte length and cell width of clusters in a single loop.
 • |:sort| is up to 10x faster on large buffers.
+• |:global| is up to 20x faster on large buffers.
+• |CTRL-C| responds much faster in various long-running loops (e.g. Vimscript
+  |:for| loop calling slow functions).
 
 PLUGINS
 
@@ -668,6 +678,8 @@ These existing features changed their behavior.
   can be used when printing to a terminal.
 • It is no longer allowed to change the window layout during a |DiffUpdated|
   autocommand.
+• |sockconnect()| channels are closed when the peer closes the connection
+  (EOF), like RPC channels.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*

@@ -52,6 +52,7 @@
 #include "nvim/mark_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/mbyte_defs.h"
+#include "nvim/mcursor.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
@@ -2168,7 +2169,7 @@ static void ins_compl_files(int count, char **files, bool thesaurus, int flags,
           }
         }
       }
-      line_breakcheck();
+      fast_breakcheck();
       ins_compl_check_keys(50, false);
     }
     fclose(fp);
@@ -2919,6 +2920,7 @@ static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
   do_autocmd_completedone(c, prev_mode, &word);
   xfree(word.data);
 
+  mc_ins_compl_done();
   return retval;
 }
 
@@ -6396,10 +6398,8 @@ int ins_complete(int c, bool enable_pum)
   compl_curr_match = compl_shown_match;
   compl_direction = compl_shows_dir;
 
-  // Eat the ESC that vgetc() returns after a CTRL-C to avoid leaving Insert
-  // mode.
-  if (got_int && !global_busy) {
-    vgetc();
+  // An interrupted completion stays in Insert mode.
+  if (!global_busy) {
     got_int = false;
   }
 

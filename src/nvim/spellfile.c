@@ -884,6 +884,9 @@ static void tree_count_words(const uint8_t *byts, int byts_len, idx_T *idxs)
       // Do one more byte at this node.
       idx_T n = arridx[depth] + curi[depth];
       curi[depth]++;
+      if (n >= byts_len) {
+        break;
+      }
 
       int c = byts[n];
       if (c == 0) {
@@ -4314,7 +4317,7 @@ static int node_compress(spellinfo_T *spin, wordnode_T *node, hashtab_T *ht, int
   node->wn_u1.hashkey[5] = NUL;
 
   // Check for CTRL-C pressed now and then.
-  veryfast_breakcheck();
+  fast_breakcheck();
 
   return compressed;
 }
@@ -5006,7 +5009,7 @@ static int sug_filltree(spellinfo_T *spin, slang_T *slang)
       }
 
       depth--;
-      line_breakcheck();
+      fast_breakcheck();
     } else {
       // Do one more byte at this node.
       idx_T n = arridx[depth] + curi[depth];

@@ -220,8 +220,33 @@ func Test_list_range_assign()
       call assert_equal([1, 2], l)
       LET l[-4 : -1] = [5, 6]
       call assert_equal([5, 6], l)
+
+      LET l = [0, 1, 2, 3]
+      LET l[-3 : -2] = [8, 9]
+      call assert_equal([0, 8, 9, 3], l)
+      LET l = [0, 1, 2, 3]
+      LET l[-3 : 2] = [8, 9]
+      call assert_equal([0, 8, 9, 3], l)
+      LET l = [0, 1, 2, 3]
+      LET l[1 : -2] = [8, 9]
+      call assert_equal([0, 8, 9, 3], l)
+      LET l = range(4)
+      LET l[-1 : -1] = [9]
+      call assert_equal([0, 1, 2, 9], l)
   END
   call CheckLegacyAndVim9Success(lines)
+
+  let lines =<< trim END
+      VAR l = [0, 1, 2, 3]
+      LET l[-1 : -2] = [8, 9]
+  END
+  call CheckLegacyAndVim9Failure(lines, 'E684:')
+
+  let lines =<< trim END
+      VAR l = [0, 1, 2, 3]
+      LET l[0 : -5] = [8, 9]
+  END
+  call CheckLegacyAndVim9Failure(lines, 'E684:')
 
   let lines =<< trim END
     var l = [7]
@@ -2094,6 +2119,26 @@ func Test_indexof()
   endfunc
   call assert_fails('let i = indexof(l, function("TestIdx"))', 'E605:')
   delfunc TestIdx
+endfunc
+
+" The indexof() expression cannot change the List.  Freeing the current item
+" was only detected with valgrind or ASan.
+func Test_indexof_change_list()
+  let g:il = [10, 20, 30]
+  call assert_fails('call indexof(g:il, {i, v -> remove(g:il, i) == 99})', 'E742:')
+  call assert_equal([10, 20, 30], g:il)
+  call assert_fails('call indexof(g:il, "add(g:il, 1)")', 'E742:')
+  call assert_fails('call indexof(g:il, {i, v -> execute("unlockvar g:il") .. remove(g:il, 0)})', 'E742:')
+  call assert_equal([10, 20, 30], g:il)
+  " the List is not locked afterwards
+  call add(g:il, 40)
+  call assert_equal(1, indexof(g:il, {i, v -> v == 20}))
+  call assert_equal(0, islocked('g:il'))
+  lockvar 1 g:il
+  call assert_equal(3, indexof(g:il, 'v:val == 40'))
+  call assert_equal(1, islocked('g:il'))
+  unlockvar g:il
+  unlet g:il
 endfunc
 
 func Test_extendnew_leak()

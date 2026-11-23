@@ -1771,9 +1771,10 @@ describe('lua stdlib', function()
         local res
         local timer = assert(vim.uv.new_timer())
         timer:start(10, 0, function()
-          -- Enough matches to reach BREAKCHECK_SKIP, which would abort (reentrant event loop).
+          vim.uv.sleep(30) -- Ensure that fast_breakcheck() would poll within 1024 calls.
+          -- Enough to exceed the fast_breakcheck() window: must not poll (reentrant eventloop).
           local ok = true
-          for _ = 1, 3000 do
+          for _ = 1, 100 do
             ok = ok and re:match_str('internal/config/config.go') ~= nil
           end
           res = { ok, vim.in_fast_event() }
@@ -1783,6 +1784,20 @@ describe('lua stdlib', function()
           return res ~= nil
         end)
         return res
+      end)
+    )
+
+    -- CTRL-C interrupts a slow match.
+    eq(
+      { false, 'interrupted' },
+      exec_lua(function()
+        local timer = assert(vim.uv.new_timer())
+        timer:start(0, 0, function()
+          timer:close()
+          vim.api.nvim_input('<C-C>')
+        end)
+        local re = vim.regex([[\%#=1\v^((a|aa)*c|.*b)]]) -- Backtracks for ~1s.
+        return { pcall(re.match_str, re, ('a'):rep(34) .. 'b') }
       end)
     )
   end)
@@ -2072,18 +2087,7 @@ describe('lua stdlib', function()
         KEYCB: key '^', typed '^'                                   |
         {6:Press ENTER or type command to continue}^                     |
       ]])
-      feed('<C-C>')
-      screen:expect([[
-                                                                    |
-        {1:~                                                           }|*3
-        {3:                                                            }|
-        key_cb                                                      |
-        KEYCB: key '^', typed '^'                                   |
-        key_cb                                                      |
-        KEYCB: key '{18:^C}', typed '{18:^C}'                                 |
-        {6:Press ENTER or type command to continue}^                     |
-      ]])
-      feed('<C-C>')
+      feed('<C-C>') -- Consumed by the prompt, not passed to the callback.
       screen:expect([[
         ^                                                            |
         {1:~                                                           }|*8

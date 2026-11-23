@@ -2424,7 +2424,6 @@ static void f_wait(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     rettv->vval.v_number = -3;
   } else if (got_int) {
     got_int = false;
-    vgetc();
     rettv->vval.v_number = -2;
   } else if (tv_get_number_chk(&exprval, &error)) {
     rettv->vval.v_number = 0;
@@ -2859,6 +2858,12 @@ static varnumber_T indexof_list(list_T *l, varnumber_T startidx, typval_T *expr)
 
   set_vim_var_type(VV_KEY, VAR_NUMBER);
 
+  // Disallow changing the List while "expr" is evaluated, it could free
+  // the current item.  VAR_FIXED, so that :unlockvar can't undo it.
+  const VarLockStatus prev_lock = tv_list_locked(l);
+  varnumber_T ret = -1;
+  tv_list_set_lock(l, VAR_FIXED);
+
   const int called_emsg_start = called_emsg;
   for (; item != NULL; item = TV_LIST_ITEM_NEXT(l, item), idx++) {
     set_vim_var_nr(VV_KEY, idx);
@@ -2868,15 +2873,17 @@ static varnumber_T indexof_list(list_T *l, varnumber_T startidx, typval_T *expr)
     tv_clear(get_vim_var_tv(VV_VAL));
 
     if (found) {
-      return idx;
+      ret = idx;
+      break;
     }
 
     if (called_emsg != called_emsg_start) {
-      return -1;
+      break;
     }
   }
 
-  return -1;
+  tv_list_set_lock(l, prev_lock);
+  return ret;
 }
 
 /// "indexof()" function
@@ -6547,6 +6554,7 @@ static void f_sockconnect(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     on_data.buffered = tv_dict_get_number(opts, "data_buffered");
     if (on_data.buffered && on_data.cb.type == kCallbackNone) {
       on_data.self = opts;
+      opts->dv_refcount++;  // Like common_job_callbacks().
     }
   }
 
@@ -6585,6 +6593,7 @@ static void f_stdioopen(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   on_stdin.buffered = tv_dict_get_number(opts, "stdin_buffered");
   if (on_stdin.buffered && on_stdin.cb.type == kCallbackNone) {
     on_stdin.self = opts;
+    opts->dv_refcount++;  // Like common_job_callbacks().
   }
 
   const char *error;
